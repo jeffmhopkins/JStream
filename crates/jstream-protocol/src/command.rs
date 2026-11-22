@@ -1726,7 +1726,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         gpu_mib: Option<u32>,
     },
-    /// Sets the 3D rendering switches (0.141, ADR-0170 decision 1): which of the costly
+    /// Sets the 3D rendering switches (0.147, ADR-0170 decision 1): which of the costly
     /// 3D effects the engine draws, for every scene at once. Each switch `change` names
     /// takes its value and the rest keep theirs. A switch that is off draws its effect
     /// nowhere, whatever a scene, light or filter asks for; turning it back on restores

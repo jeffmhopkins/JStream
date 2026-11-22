@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 16;
+pub const SCHEMA_VERSION: u32 = 17;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -64,7 +64,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
-    v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16,
+    v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16, v16_to_v17,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -422,6 +422,37 @@ fn v15_to_v16(value: &mut Value) -> Result<(), String> {
         }
         if scene.get("camera_anchor").is_some() {
             return Err("a version 15 scene has no `camera_anchor`".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 17 adds motion modifiers that drive a setting of their item's source
+/// (ADR-0171 decision 4): property `source` with its `source` target, on an item's motion
+/// or a keyframe override's. A version 16 file has none, so it upgrades unchanged; one
+/// there is refused, as version 16 refused it.
+fn v16_to_v17(value: &mut Value) -> Result<(), String> {
+    let drives = |motion: Option<&Value>| {
+        motion
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|m| {
+                m.get("source").is_some()
+                    || m.get("property").and_then(Value::as_str) == Some("source")
+            })
+    };
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let items = scene.get("items").and_then(Value::as_array);
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if items
+            .into_iter()
+            .flatten()
+            .chain(overrides.into_iter().flatten())
+            .any(|holder| drives(holder.get("motion")))
+        {
+            return Err("a version 16 motion modifier drives no source setting".into());
         }
     }
     Ok(())

@@ -273,7 +273,7 @@ Contents ([Design](#design) explains the choices):
   under Effects, each with one help line and an (i). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
-  engine that reports no `rendering` (older than 0.141) gets a line saying it has none.
+  engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
   `read`, `set` and each `Switch`'s change are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
   plugins page: the CLAP scan's folders, the effects found and the files that failed
@@ -638,7 +638,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
   (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
   picking a placement property for it drops its effect target; the section doesn't add
-  one yet). A scene shows its object
+  one yet). One that drives a setting of its item's source (ADR-0171) shows "Source
+  setting" the same way. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the

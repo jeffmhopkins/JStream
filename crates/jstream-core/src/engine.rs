@@ -372,7 +372,7 @@ impl Engine {
         self
     }
 
-    /// `studio.set_rendering` (0.141, ADR-0170 decision 1), or `None` for any other
+    /// `studio.set_rendering` (0.147, ADR-0170 decision 1), or `None` for any other
     /// call.
     fn rendering_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
         let Call::Action {

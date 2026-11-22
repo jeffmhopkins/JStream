@@ -710,7 +710,7 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         warm_gpu_mib: Option<u32>,
         /// The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170
-        /// decision 1, since 0.141). Omitted by an older server, which draws every effect.
+        /// decision 1, since 0.147). Omitted by an older server, which draws every effect.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rendering: Option<crate::RenderFeatures>,
     },
