@@ -2582,6 +2582,17 @@ fn WindowBody(
                     let target = target.clone();
                     move || scope.with(|s| *s == target)
                 };
+                // How many filters the scope holds, beside its name.
+                let count = {
+                    let target = target.clone();
+                    move || {
+                        studio.collection.with(|c| {
+                            c.as_ref()
+                                .and_then(|c| c.chains(&target))
+                                .map_or(0, |ch| ch.video.len() + ch.audio.len())
+                        })
+                    }
+                };
                 let pick = move |_| {
                     if scope.get_untracked() != target {
                         scope.set(target.clone());
@@ -2598,6 +2609,7 @@ fn WindowBody(
                         on:click=pick
                     >
                         {label}
+                        <span class="count">{count}</span>
                     </button>
                 }
             })
@@ -2659,7 +2671,9 @@ fn WindowBody(
                 </button>
             </div>
             {tabs.map(|tabs| view! {
-                <div class="filters-scopes" role="tablist" aria-label="Filter scope">{tabs}</div>
+                <div class="filters-scopes">
+                    <div class="segmented" role="tablist" aria-label="Filter scope">{tabs}</div>
+                </div>
             })}
             <div class="filters-window-body">
                 <div class="filters-window-list">{chains}</div>

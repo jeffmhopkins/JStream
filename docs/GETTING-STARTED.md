@@ -120,8 +120,8 @@ adds, which makes soft glows and veils brighter.
    window or webcam shows its live picture at the top of the dialog as you pick it,
    before you press **OK**.
 3. Drag the source on the canvas to move it, and its handles to resize it. To crop it,
-   hold Alt on a handle, or press C for crop mode (V leaves it). The **Inspector** and
-   **Transform** panels hold the exact numbers.
+   hold Alt on a handle, or press C for crop mode (V leaves it). The **Inspector** holds
+   the exact numbers, and the **Arrange** panel aligns and fits what you select.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red

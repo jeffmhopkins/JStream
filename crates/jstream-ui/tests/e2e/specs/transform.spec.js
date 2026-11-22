@@ -1,4 +1,4 @@
-// The Transform panel: the summary and Align to switch following the selection, an
+// The Arrange panel: the summary and Align to switch following the selection, an
 // arrange button sending one edit Ctrl+Z undoes, and the buttons that need two or three
 // items. The seed's Backdrop is 640 × 360; the Intro scene nested in it covers the
 // canvas.
@@ -31,7 +31,7 @@ async function selectOnly(page, i) {
 
 test('with one item, buttons work against the canvas and undo as one edit', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await showPanel(page, 'Transform');
+  await showPanel(page, 'Arrange');
   await expect(panel(page).locator('.summary'))
     .toHaveText('Nothing selected. Click or Shift-click items on the canvas.');
   await expect(panel(page).getByRole('button', { name: 'Stretch to canvas' })).toBeDisabled();
@@ -65,7 +65,7 @@ test('with one item, buttons work against the canvas and undo as one edit', asyn
 
 test('two items can align to their bounds and match sizes', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await showPanel(page, 'Transform');
+  await showPanel(page, 'Arrange');
   await nestScene(page, 'Intro');
   await expect(rows(page)).toHaveCount(2);
 
@@ -78,8 +78,8 @@ test('two items can align to their bounds and match sizes', async ({ page, daemo
   expect(first).not.toBe(second);
 
   await rows(page).nth(0).click({ modifiers: ['Shift'] });
-  // Add source showed the Inspector, a tab of the Transform panel's group.
-  await showPanel(page, 'Transform');
+  // Add source showed the Inspector, a tab of the Arrange panel's group.
+  await showPanel(page, 'Arrange');
   await expect(panel(page).locator('.summary')).toHaveText('2 items selected');
   const selection = panel(page).getByRole('button', { name: 'Selection', exact: true });
   await expect(selection).toBeEnabled();
