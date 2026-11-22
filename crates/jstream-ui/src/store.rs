@@ -374,6 +374,11 @@ impl Collection {
 /// source the engine knows no size for is absent.
 pub type Sizes = HashMap<SourceId, (u32, u32)>;
 
+/// The depth of each source with depth (a 3D model, ADR-0107 decision 8), in the
+/// pixels of its size, as `source.sizes` and `source.size_changed` report it. Every
+/// other source is absent.
+pub type SourceDepths = HashMap<SourceId, u32>;
+
 /// The sizes a `source.sizes` result reports.
 pub fn sizes_of(sources: Vec<SourceSize>) -> Sizes {
     sources
@@ -382,6 +387,14 @@ pub fn sizes_of(sources: Vec<SourceSize>) -> Sizes {
             let size = s.size?;
             Some((s.source_id, (size.width, size.height)))
         })
+        .collect()
+}
+
+/// The depths a `source.sizes` result reports.
+pub fn depths_of(sources: &[SourceSize]) -> SourceDepths {
+    sources
+        .iter()
+        .filter_map(|s| Some((s.source_id.clone(), s.depth?)))
         .collect()
 }
 
@@ -697,6 +710,8 @@ pub struct Studio {
     pub selection: RwSignal<Selection>,
     /// Each source's size, as the engine last reported it.
     pub sizes: RwSignal<Sizes>,
+    /// Each source's depth, for a source with depth, as the engine last reported it.
+    pub depths: RwSignal<SourceDepths>,
     /// Whether the canvas is in crop mode, where every handle crops (CV-08). The canvas
     /// and the item menu toggle it.
     pub crop_mode: RwSignal<bool>,
@@ -767,6 +782,7 @@ impl Studio {
             studio_mode: RwSignal::new(false),
             selection: RwSignal::new(Selection::default()),
             sizes: RwSignal::new(Sizes::new()),
+            depths: RwSignal::new(SourceDepths::new()),
             crop_mode: RwSignal::new(false),
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
@@ -788,6 +804,7 @@ impl Studio {
         self.preview.set(None);
         self.selection.set(Selection::default());
         self.sizes.set(Sizes::new());
+        self.depths.set(SourceDepths::new());
         self.crop_mode.set(false);
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
@@ -921,10 +938,25 @@ impl Studio {
                     studio.relist_kinds(&session).await;
                 });
             }
-            Event::SourceSizeChanged { source_id, size } => self.sizes.update(|sizes| match size {
-                Some(size) => _ = sizes.insert(source_id.clone(), (size.width, size.height)),
-                None => _ = sizes.remove(source_id),
-            }),
+            Event::SourceSizeChanged {
+                source_id,
+                size,
+                depth,
+            } => {
+                // Only a change of depth touches the depths, so a resize of a flat
+                // source doesn't re-lay the canvas twice.
+                let known = self.depths.with_untracked(|d| d.get(source_id).copied());
+                if known != *depth {
+                    self.depths.update(|depths| match depth {
+                        Some(depth) => _ = depths.insert(source_id.clone(), *depth),
+                        None => _ = depths.remove(source_id),
+                    });
+                }
+                self.sizes.update(|sizes| match size {
+                    Some(size) => _ = sizes.insert(source_id.clone(), (size.width, size.height)),
+                    None => _ = sizes.remove(source_id),
+                });
+            }
             Event::StudioChanged {
                 program_scene,
                 preview_scene,
@@ -956,7 +988,10 @@ impl Studio {
     /// the canvas can't crop by dragging until a size arrives.
     async fn read_sizes(&self, session: &Session) {
         match query(session, Query::SourceSizes).await {
-            Ok(QueryResult::SourceSizes { sources }) => self.sizes.set(sizes_of(sources)),
+            Ok(QueryResult::SourceSizes { sources }) => {
+                self.depths.set(depths_of(&sources));
+                self.sizes.set(sizes_of(sources));
+            }
             Ok(other) => self.report(&unexpected(other.name())),
             Err(error) => self.report(&error),
         }
@@ -1407,10 +1442,12 @@ mod tests {
                     width: 640,
                     height: 360,
                 }),
+                depth: None,
             },
             SourceSize {
                 source_id: SourceId::new("dark"),
                 size: None,
+                depth: None,
             },
         ]);
         assert_eq!(sizes.len(), 1, "a source with no size is left out");

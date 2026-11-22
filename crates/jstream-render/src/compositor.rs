@@ -82,6 +82,22 @@ struct Backdrop {
     bind: wgpu::BindGroup,
 }
 
+/// What a scene pass with a model's depth draws with (ADR-0107 decision 7), made the
+/// first time a scene has one: the blend pipelines of each space, tested against the
+/// depth target (`tested`, for items that test) or not (`untested`, for a model's own
+/// layer), and the pipeline that writes a model's depth.
+struct DepthPipelines {
+    tested: [BlendPipelines; 2],
+    untested: [BlendPipelines; 2],
+    writer: wgpu::RenderPipeline,
+}
+
+/// A scene pass's depth target, of the canvas size it was made for.
+struct SceneDepth {
+    size: (u32, u32),
+    view: wgpu::TextureView,
+}
+
 struct Targets {
     width: u32,
     height: u32,
@@ -107,6 +123,15 @@ pub struct Compositor {
     blends: BlendPipelines,
     /// The same, drawing into an sRGB-encoded target (ADR-0126 §3).
     encoded_blends: BlendPipelines,
+    /// The composite shader, which [`DepthPipelines`] are built from when first needed.
+    composite_shader: wgpu::ShaderModule,
+    depth_pipelines: Option<DepthPipelines>,
+    /// The depth target of the scene being drawn, when it places a model's depth
+    /// ([`crate::Item::depth`]); `None` for a scene that doesn't. Kept between scenes of
+    /// one size.
+    scene_depth: Option<SceneDepth>,
+    /// Whether the scene [`Self::load`] prepared draws with `scene_depth`.
+    depth_on: bool,
     /// The space every scene this compositor draws mixes in.
     blending: Blending,
     backdrop: Option<Backdrop>,
@@ -1271,10 +1296,12 @@ impl Compositor {
                     shader: &composite_shader,
                     encoded,
                 },
+                None,
             )
         };
         let blends = blends_for(false);
         let encoded_blends = blends_for(true);
+        let composite_shader_kept = composite_shader.clone();
         let resolve_shader = shader(
             &gpu.device,
             "jstream-render-resolve",
@@ -1316,6 +1343,10 @@ impl Compositor {
             image_layout,
             blends,
             encoded_blends,
+            composite_shader: composite_shader_kept,
+            depth_pipelines: None,
+            scene_depth: None,
+            depth_on: false,
             blending: Blending::Linear,
             backdrop: None,
             resolve_layout,
@@ -1671,6 +1702,14 @@ impl Compositor {
         if self.blending == Blending::Srgb || self.draws.iter().any(|draw| draw.rect.is_some()) {
             self.ensure_backdrop(scene.canvas.width(), scene.canvas.height());
         }
+        // A model's depth gives the pass a depth target (ADR-0107 decision 7).
+        self.depth_on = self
+            .draws
+            .iter()
+            .any(|draw| scene.items[draw.index].depth.is_some());
+        if self.depth_on {
+            self.ensure_scene_depth(scene.canvas.width(), scene.canvas.height());
+        }
         if !self.vertices.is_empty() {
             self.gpu
                 .queue
@@ -1705,6 +1744,53 @@ impl Compositor {
                 mips.record(encoder, &self.mip_pipelines, image);
             }
         }
+    }
+
+    /// Makes the depth pipelines once, and a depth target of `width` by `height`.
+    fn ensure_scene_depth(&mut self, width: u32, height: u32) {
+        if self.depth_pipelines.is_none() {
+            let device = &self.gpu.device;
+            let layouts = |encoded| Layouts {
+                image: &self.image_layout,
+                backdrop: &self.resolve_layout,
+                shader: &self.composite_shader,
+                encoded,
+            };
+            let set = |compare| {
+                [false, true]
+                    .map(|encoded| BlendPipelines::new(device, &layouts(encoded), Some(compare)))
+            };
+            self.depth_pipelines = Some(DepthPipelines {
+                tested: set(wgpu::CompareFunction::GreaterEqual),
+                untested: set(wgpu::CompareFunction::Always),
+                writer: blend::depth_writer(device, &layouts(false)),
+            });
+        }
+        if self
+            .scene_depth
+            .as_ref()
+            .is_some_and(|depth| depth.size == (width, height))
+        {
+            return;
+        }
+        let texture = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-render-scene-depth"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: blend::SCENE_DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        self.scene_depth = Some(SceneDepth {
+            size: (width, height),
+            view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+        });
     }
 
     /// Grows the backdrop to hold `width` by `height` texels at least.
@@ -1763,7 +1849,12 @@ impl Compositor {
         };
         // A target known transparent outside `prior` is loaded and made transparent over
         // that alone; any other is cleared whole.
-        let start = prior.map_or(Start::Clear(clear), Start::Wipe);
+        // A pass with a depth target clears it, and its colour too: the wipe's pipeline
+        // has no depth state.
+        let start = match prior {
+            Some(region) if !self.depth_on => Start::Wipe(region),
+            _ => Start::Clear(clear),
+        };
         let reads = |draw: &Draw| draw.rect.is_some();
         let count = self.draws.len();
         let mut cleared = false;
@@ -1839,10 +1930,27 @@ impl Compositor {
             Some(Start::Clear(clear)) => wgpu::LoadOp::Clear(clear),
             Some(Start::Wipe(_)) | None => wgpu::LoadOp::Load,
         };
+        // The scene's depth target: cleared to far by the pass that starts the target.
+        let depth = self
+            .scene_depth
+            .as_ref()
+            .filter(|_| self.depth_on)
+            .map(|depth| wgpu::RenderPassDepthStencilAttachment {
+                view: &depth.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: if start.is_some() {
+                        wgpu::LoadOp::Clear(0.0)
+                    } else {
+                        wgpu::LoadOp::Load
+                    },
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            });
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-composite"),
             color_attachments: &[Some(color_attachment(target, load))],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: depth,
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,
@@ -1863,9 +1971,16 @@ impl Compositor {
             };
             let vertices = draw.first_vertex..draw.first_vertex + draw.vertex_count;
             // `prepare` checked every item's mode.
-            let blends = match self.blending {
-                Blending::Srgb => &self.encoded_blends,
-                _ => &self.blends,
+            let encoded = self.blending == Blending::Srgb;
+            let model_depth = scene.items[draw.index].depth;
+            // With a depth target, a model's own layer draws untested and every other
+            // item tests against the models drawn before it (ADR-0107 decision 7).
+            let depths = self.depth_pipelines.as_ref().filter(|_| self.depth_on);
+            let blends = match depths {
+                Some(depths) if model_depth.is_some() => &depths.untested[usize::from(encoded)],
+                Some(depths) => &depths.tested[usize::from(encoded)],
+                None if encoded => &self.encoded_blends,
+                None => &self.blends,
             };
             let Ok(steps) = blends.steps(draw.blend) else {
                 continue;
@@ -1885,8 +2000,14 @@ impl Compositor {
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, bind_group, &[]);
                     pass.set_bind_group(1, &backdrop.bind, &[]);
-                    pass.draw(vertices, 0..1);
+                    pass.draw(vertices.clone(), 0..1);
                 }
+            }
+            // Then the model's depth, over the same triangles, for what draws after it.
+            if let (Some(depths), Some(model_depth)) = (depths, model_depth) {
+                pass.set_pipeline(&depths.writer);
+                pass.set_bind_group(0, model_depth.bind_group(), &[]);
+                pass.draw(vertices, 0..1);
             }
         }
     }

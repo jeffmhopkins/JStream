@@ -6,10 +6,10 @@
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0032-live-edits-and-undo.md
 
-use crate::store::{Collection, Sizes};
+use crate::store::{Collection, Sizes, SourceDepths};
 use jstream_control::protocol::{
     Action, Batch, Call, CallResult, Canvas, Crop, Edit, GestureId, HistoryCall, HistoryOp,
-    ItemGeometry, ItemId, PlacementForm, Rev, SceneCamera, SceneId,
+    ItemGeometry, ItemId, PlacementForm, Rev, SceneCamera, SceneId, SolidBounds,
 };
 use jstream_control::{Control, ControlError};
 use std::fmt;
@@ -63,6 +63,8 @@ pub struct CanvasItem {
     pub crop: Crop,
     /// Its source's own size in pixels, while the engine knows it.
     pub source_size: Option<(u32, u32)>,
+    /// Its source's depth in the same pixels, for a 3D model (ADR-0107 decision 8).
+    pub source_depth: Option<u32>,
     /// Whether its box is locked (ADR-0096): the canvas selects it but never drags it.
     pub locked: bool,
 }
@@ -86,12 +88,41 @@ pub struct Layout {
     pub camera: Option<SceneCamera>,
 }
 
+impl CanvasItem {
+    /// The bounds of the 3D model it shows, from its source's size and depth, which the
+    /// canvas outlines and hits it by in a 3D scene (ADR-0107 decision 8). `None` for
+    /// any other item, or while the engine knows no depth for its source.
+    pub fn solid(&self) -> Option<SolidBounds> {
+        let (width, height) = self.source_size?;
+        let depth = self.source_depth?;
+        Some(SolidBounds::of_size(
+            width as f32,
+            height as f32,
+            depth as f32,
+        ))
+    }
+}
+
 impl Layout {
     /// The items with a box, in stacking order.
     pub fn boxes(&self) -> impl DoubleEndedIterator<Item = (&ItemId, &ItemGeometry)> {
         self.items
             .iter()
             .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?)))
+    }
+
+    /// [`Self::boxes`], each with the bounds of the model it shows, if it shows one.
+    pub fn shapes(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&ItemId, &ItemGeometry, Option<SolidBounds>)> {
+        self.items
+            .iter()
+            .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?, item.solid())))
+    }
+
+    /// The bounds of the model the item shows, if it shows one ([`CanvasItem::solid`]).
+    pub fn solid_of(&self, item_id: &ItemId) -> Option<SolidBounds> {
+        self.item(item_id)?.solid()
     }
 
     /// How many items are in the legacy form, which the canvas can't show.
@@ -122,11 +153,17 @@ impl Layout {
     /// The layout of `scene_id` in `collection`, or an empty one with no scene when it
     /// names none or a scene the collection doesn't have. It knows no source's size.
     pub fn of(collection: &Collection, scene_id: Option<&SceneId>) -> Layout {
-        Layout::sized(collection, scene_id, &Sizes::new())
+        Layout::sized(collection, scene_id, &Sizes::new(), &SourceDepths::new())
     }
 
-    /// [`Layout::of`], with each item's source size taken from `sizes`.
-    pub fn sized(collection: &Collection, scene_id: Option<&SceneId>, sizes: &Sizes) -> Layout {
+    /// [`Layout::of`], with each item's source size taken from `sizes` and a model's
+    /// depth from `depths`.
+    pub fn sized(
+        collection: &Collection,
+        scene_id: Option<&SceneId>,
+        sizes: &Sizes,
+        depths: &SourceDepths,
+    ) -> Layout {
         let Some(scene) = scene_id.and_then(|id| collection.scene(id)) else {
             return Layout {
                 rev: collection.rev,
@@ -150,6 +187,7 @@ impl Layout {
                 visible: item.visible,
                 crop: item.crop,
                 source_size: collection.source_size(sizes, &item.source_id),
+                source_depth: depths.get(&item.source_id).copied(),
                 locked: item.locked,
             })
             .collect();
@@ -642,13 +680,20 @@ mod tests {
         };
         let collection = Collection::from_result(result).expect("a state.get result");
         let sizes = Sizes::from([(SourceId::new("cam"), (1280, 720))]);
-        let layout = Layout::sized(&collection, Some(&"s2".into()), &sizes);
+        let depths = SourceDepths::from([(SourceId::new("cam"), 300)]);
+        let layout = Layout::sized(&collection, Some(&"s2".into()), &sizes, &depths);
         assert_eq!(
             layout.item(&"box".into()).and_then(|i| i.source_size),
             Some((1280, 720))
         );
+        assert_eq!(
+            layout.solid_of(&"box".into()),
+            Some(SolidBounds::of_size(1280.0, 720.0, 300.0)),
+            "a source with depth is outlined as a model"
+        );
         let plain = Layout::of(&collection, Some(&"s2".into()));
         assert_eq!(plain.item(&"box".into()).and_then(|i| i.source_size), None);
+        assert_eq!(plain.solid_of(&"box".into()), None);
     }
 
     #[test]

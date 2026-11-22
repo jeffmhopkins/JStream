@@ -2123,6 +2123,13 @@ and a reflection whose picture isn't there leaves the environment. The graph ref
 map that reaches a scene showing the model as it refuses any reference cycle
 (`golden_a_model_shows_another_sources_picture_as_its_texture`,
 `a_models_texture_reaching_its_own_scene_is_a_cycle`).
+A model in a scene with a camera also gets a depth layer (`GpuKey::ModelDepth`, decision 7):
+`draw_model` clears it and draws the model's view depth into it with
+`Compositor::draw_model_depth`, and `layer_item` hands it to the scene pass as the
+model's `Item::depth` while the model is at least half opaque, so a card that stacks in
+front of the model but sits behind it is hidden where the model is nearer
+(`golden_a_card_behind_a_model_is_hidden_where_the_model_is_nearer`). A floor
+reflection's and a shadow's items carry none.
 A lit card ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
 10): a box in a 3D scene whose `ItemGeometry::surface` is `lit` and which shows its
 source's own frame, with its effects in its box, is boxed (`Boxed::lit`) even without a
@@ -2397,6 +2404,9 @@ stored frame's when `set_source_frame` gave one, as that frame is what it shows,
 live source's: the first frame's, which the `jstream-sources` thread reads when it
 builds the source (its frame at time zero, which a plan shows first anyway), then each
 new frame's that a plan takes, so a source no plan reaches keeps its first size. A
+source that shows a 3D model also has a depth (`model_depth`, ADR-0107 decision 8): its
+bounds front to back at the scale of its stand-in's size, kept beside the size and sent
+with it, so a change of depth alone is a size change too. A
 source drawn at a density reports its extent, the size its frames are placed at
 ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
 source's (`display`, `window`, `webcam`) is the frame size of the capture the program
