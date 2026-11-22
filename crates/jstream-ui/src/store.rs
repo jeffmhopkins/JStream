@@ -707,7 +707,7 @@ pub struct Studio {
     pub problem: RwSignal<Option<String>>,
     /// The confirmation the toast shows, numbered so a repeat of the same text restarts
     /// its timer (spec-workspace.md 6.7).
-    pub toast: RwSignal<Option<(u64, String)>>,
+    pub toast: RwSignal<Option<Toast>>,
     /// Bumped when an output's stream key was set or cleared, which no event reports, so
     /// the header re-reads the outputs Go Live may start.
     pub keys_changed: RwSignal<u64>,
@@ -724,6 +724,36 @@ pub struct Studio {
     /// The number the next toast takes. It only grows, so a timer left from an earlier
     /// toast never matches a later one.
     next_toast: StoredValue<u64>,
+}
+
+/// A confirmation in the toast (spec-workspace.md 6.7).
+#[derive(Clone)]
+pub struct Toast {
+    /// Its number: a repeat of the same text is a new toast, with its own timer.
+    pub n: u64,
+    /// What it says.
+    pub text: String,
+    /// Its buttons, most often none.
+    pub actions: Vec<ToastAction>,
+}
+
+/// A button in the toast, which hides the toast once pressed.
+#[derive(Clone)]
+pub struct ToastAction {
+    /// The button's label.
+    pub label: String,
+    /// What pressing it does.
+    pub run: std::sync::Arc<dyn Fn() + Send + Sync>,
+}
+
+impl ToastAction {
+    /// The button `label`, which runs `run`.
+    pub fn new(label: impl Into<String>, run: impl Fn() + Send + Sync + 'static) -> Self {
+        ToastAction {
+            label: label.into(),
+            run: std::sync::Arc::new(run),
+        }
+    }
 }
 
 impl Studio {
@@ -1056,9 +1086,20 @@ impl Studio {
 
     /// Shows `text` in the toast, in place of the one shown.
     pub fn notify(&self, text: impl Into<String>) {
+        self.notify_with(text, Vec::new());
+    }
+
+    /// Shows `text` in the toast with a button for each of `actions`, in place of the one
+    /// shown: a saved screenshot's Open and Show in folder. It shows longer than a toast
+    /// without buttons, so there is time to press one.
+    pub fn notify_with(&self, text: impl Into<String>, actions: Vec<ToastAction>) {
         let n = self.next_toast.get_value();
         self.next_toast.set_value(n + 1);
-        self.toast.set(Some((n, text.into())));
+        self.toast.set(Some(Toast {
+            n,
+            text: text.into(),
+            actions,
+        }));
     }
 
     /// Sends `edits` as one batch, as [`Studio::apply`] does, and once it is applied shows
