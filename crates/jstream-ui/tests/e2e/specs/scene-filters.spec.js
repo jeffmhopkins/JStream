@@ -102,6 +102,9 @@ test('the Scene properties dialog shows the scene\'s chain and adds to it', asyn
   await sceneRow(page, 'Intro').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Scene properties' });
+  const filtersTab = dialog.getByRole('tab', { name: /^Filters/ });
+  await expect(filtersTab).toHaveText('Filters0');
+  await filtersTab.click();
   await expect(dialog.locator('.props-side-note')).toHaveText('the whole scene');
   await expect(dialog).toContainText('No video filters.');
 
@@ -111,11 +114,12 @@ test('the Scene properties dialog shows the scene\'s chain and adds to it', asyn
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(add).toBeHidden();
   await expect(videoRows(dialog).locator('.filter-name')).toHaveText(['Sharpen']);
-  // The new filter's settings take the right side; the Properties entry brings the
-  // scene's own back.
+  // The new filter's settings show beside the list; Settings brings the scene's own
+  // back.
   await expect(dialog.getByRole('group', { name: 'Sharpen settings' })).toBeVisible();
   await expect(dialog.locator('.modal-footer').getByRole('button', { name: 'Defaults' })).toBeHidden();
-  await dialog.getByRole('button', { name: 'Properties', exact: true }).click();
+  await expect(filtersTab).toHaveText('Filters1');
+  await dialog.getByRole('tab', { name: 'Settings' }).click();
   await expect(dialog.getByRole('group', { name: 'Sharpen settings' })).toBeHidden();
   await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue('Intro');
 
@@ -129,6 +133,7 @@ test('the Scene properties dialog shows the scene\'s chain and adds to it', asyn
   // OK keeps what was added.
   await sceneRow(page, 'Intro').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
+  await filtersTab.click();
   await dialog.getByRole('button', { name: '+ Add filter…' }).click();
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(videoRows(dialog).locator('.filter-name')).toHaveText(['Sharpen']);

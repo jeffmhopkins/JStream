@@ -738,12 +738,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
-  its filters (#1219, `filters::PropertiesAndFilters`): on the left a Properties entry,
-  the source's filter chains (the Filters panel's rows, whose click picks a filter) and
-  Add filter; on the right the name and the same form, on a draft instead of the stored
-  settings, while Properties is picked, or the picked filter's pane, as the Filters
-  window draws it. The draft's pane stays mounted while a filter shows, so nothing typed
-  is lost. Filter edits apply at once and the dialog keeps a `FilterUndo`, the Filters
+  its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
+  (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source
+  by its ID), then a Settings | Filters segmented control. Settings holds the name and
+  the same form, on a draft instead of the stored settings; Filters holds the source's
+  filter chains (the Filters panel's rows, whose click picks a filter, the first picked
+  on entering) and Add filter beside the picked filter's pane, as the Filters window
+  draws it. The draft's pane stays mounted while Filters shows, so nothing typed is
+  lost. Filter edits apply at once and the dialog keeps a `FilterUndo`, the Filters
   window's log, so Cancel puts back each one it sent and OK keeps them. OK sends only what the user changed since the dialog
   opened, so another client's edit meanwhile stays: a rename (unless the name is blank
   or as it opened) and one `source.set_settings` with each changed value and `null` for
@@ -820,9 +822,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Duplicate scene copies the scene's options and camera with it, and its camera motion
   and the group item its camera rides with (ADR-0164), as the copy of that item;
   the follow camera, a filter on the item it follows, goes with the copy of that item. As in the source Properties dialog
-  (`PropertiesAndFilters`), the left side lists a Properties entry, then the scene's
-  video chain (a keyframe shows its parent's), whose rows pick a filter whose settings
-  then take the right side; filter edits apply at once and Cancel puts them back.
+  (`PropertiesAndFilters`), its Filters segment lists the scene's video chain (a
+  keyframe shows its parent's), whose rows pick a filter whose settings show beside
+  them; filter edits apply at once and Cancel puts them back.
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
   Filters panel shows the primary selected item's source's chains (ADR-0026): video
   unless the source is audio-only, audio when it has a mixer channel and isn't a
