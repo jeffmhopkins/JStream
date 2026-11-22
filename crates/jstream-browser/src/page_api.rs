@@ -47,6 +47,9 @@ pub struct PageApi {
     /// `jstream.midi()`: one MIDI input's tempo, held notes, controllers and latest
     /// notes (ADR-0147).
     pub midi: bool,
+    /// `jstream.data()`: one JTunnel sender's live state, every key's newest message
+    /// (ADR-0171 decision 10).
+    pub data: bool,
 }
 
 /// One update to a page's `window.jstream`: each field the engine sends is the latest of
@@ -70,6 +73,10 @@ pub struct PageData {
     pub midi: Option<String>,
     /// Shared values by name: each value's JSON text, or `None` for one removed.
     pub values: Vec<(String, Option<String>)>,
+    /// The granted sender's live data by key (ADR-0171 decision 10): each changed key's
+    /// message as JSON text, or `None` for a key that went. A key is 1 to 63 of letters,
+    /// digits, `/`, `_`, `.` and `-`, as JTunnel's state allows.
+    pub data: Vec<(String, Option<String>)>,
 }
 
 impl PageData {
@@ -81,6 +88,7 @@ impl PageData {
             && self.levels.is_none()
             && self.midi.is_none()
             && self.values.is_empty()
+            && self.data.is_empty()
     }
 
     /// The bytes its fields take, as [`MAX_PAGE_DATA_BYTES`] counts them.
@@ -94,6 +102,11 @@ impl PageData {
                 .iter()
                 .map(|(name, value)| 9 + name.len() + value.as_ref().map_or(0, String::len))
                 .sum::<usize>()
+            + self
+                .data
+                .iter()
+                .map(|(key, value)| 9 + key.len() + value.as_ref().map_or(0, String::len))
+                .sum::<usize>()
     }
 
     /// The update as one or more, each within [`MAX_PAGE_DATA_BYTES`]: the clock,
@@ -105,6 +118,7 @@ impl PageData {
         }
         let mut out = vec![PageData {
             values: Vec::new(),
+            data: Vec::new(),
             ..self.clone()
         }];
         for value in self.values {
@@ -117,6 +131,22 @@ impl PageData {
                 }
                 _ => out.push(PageData {
                     values: vec![value],
+                    ..PageData::default()
+                }),
+            }
+        }
+        // Live data the same way, each key whole in one update. A key over the bound on
+        // its own goes alone, and the helper drops it.
+        for entry in self.data {
+            let last = out.last_mut().map(|last| {
+                last.bytes() + 9 + entry.0.len() + entry.1.as_ref().map_or(0, String::len)
+            });
+            match (out.last_mut(), last) {
+                (Some(current), Some(bytes)) if bytes <= MAX_PAGE_DATA_BYTES => {
+                    current.data.push(entry)
+                }
+                _ => out.push(PageData {
+                    data: vec![entry],
                     ..PageData::default()
                 }),
             }
@@ -223,8 +253,8 @@ impl ApiHome {
 ))]
 pub(crate) fn shim(api: PageApi) -> String {
     let grant = format!(
-        "{{scenes:{},values:{},levels:{},midi:{}}}",
-        api.scenes, api.values, api.levels, api.midi
+        "{{scenes:{},values:{},levels:{},midi:{},data:{}}}",
+        api.scenes, api.values, api.levels, api.midi, api.data
     );
     include_str!("page_api.js").replace("__GRANT__", &grant)
 }
@@ -248,6 +278,7 @@ pub(crate) struct PageCache {
     levels: Option<String>,
     midi: Option<String>,
     values: std::collections::BTreeMap<String, String>,
+    data: std::collections::BTreeMap<String, String>,
 }
 
 #[cfg(any(
@@ -281,6 +312,12 @@ impl PageCache {
                 None => self.values.remove(name),
             };
         }
+        for (key, value) in &data.data {
+            match value {
+                Some(value) => self.data.insert(key.clone(), value.clone()),
+                None => self.data.remove(key),
+            };
+        }
     }
 
     /// Everything it holds as one update, the clock anchor moved on by the time since it
@@ -298,6 +335,11 @@ impl PageCache {
                 .values
                 .iter()
                 .map(|(name, value)| (name.clone(), Some(value.clone())))
+                .collect(),
+            data: self
+                .data
+                .iter()
+                .map(|(key, value)| (key.clone(), Some(value.clone())))
                 .collect(),
         }
     }
@@ -341,6 +383,15 @@ pub(crate) fn update_json(data: &PageData) -> String {
             .collect();
         fields.push(format!("\"values\":{{{}}}", values.join(",")));
     }
+    if !data.data.is_empty() {
+        let keys: Vec<String> = data
+            .data
+            .iter()
+            .filter(|(key, _)| is_data_key(key))
+            .map(|(key, value)| format!("\"{key}\":{}", value.as_deref().unwrap_or("null")))
+            .collect();
+        fields.push(format!("\"data\":{{{}}}", keys.join(",")));
+    }
     format!("{{{}}}", fields.join(","))
 }
 
@@ -358,6 +409,22 @@ fn is_value_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.')
+}
+
+/// Whether `key` is safe to write into JSON unescaped: a live data key is 1 to 63 of
+/// letters, digits, `/`, `_`, `.` and `-`, which the engine checked.
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
+fn is_data_key(key: &str) -> bool {
+    (1..=63).contains(&key.len())
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'.' | b'-'))
 }
 
 #[cfg(test)]
@@ -433,10 +500,15 @@ mod tests {
                 ("status.text".into(), Some(r#""On air""#.into())),
                 ("counter.a".into(), None),
             ],
+            data: vec![
+                ("track/0".into(), Some(r#"{"name":"Bass"}"#.into())),
+                ("meters".into(), None),
+                ("bad\"key".into(), Some("1".into())),
+            ],
         };
         assert_eq!(
             update_json(&data),
-            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"levels":{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]},"midi":{"input":"Keys","notes":[[1,60,100]]},"values":{"status.text":"On air","counter.a":null}}"#
+            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"levels":{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]},"midi":{"input":"Keys","notes":[[1,60,100]]},"values":{"status.text":"On air","counter.a":null},"data":{"track/0":{"name":"Bass"},"meters":null}}"#
         );
         assert_eq!(update_json(&PageData::default()), "{}");
         // A name that isn't a value's is never written.
@@ -501,8 +573,9 @@ mod tests {
             values: false,
             levels: true,
             midi: true,
+            data: true,
         });
-        assert!(shim.ends_with("})({scenes:true,values:false,levels:true,midi:true})\n"));
+        assert!(shim.ends_with("})({scenes:true,values:false,levels:true,midi:true,data:true})\n"));
         assert!(!shim.contains("__GRANT__"));
     }
 }

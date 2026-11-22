@@ -1100,6 +1100,19 @@ pub fn page_api_grant(source: &SourceInfo, buses: &[BusInfo]) -> Option<String> 
             format!("MIDI ({input})")
         });
     }
+    if on("page_api_data") {
+        // As the engine reads it: only an empty name means every sender.
+        let input = source
+            .settings
+            .get("page_api_data_input")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        kinds.push(if input.is_empty() {
+            "DAW data (every sender)".to_owned()
+        } else {
+            format!("DAW data ({input})")
+        });
+    }
     Some(format!("Page API: {}", kinds.join(", ")))
 }
 
@@ -1491,13 +1504,24 @@ mod tests {
             ("page_api_tempo", json!(true)),
             ("page_api_midi", json!(true)),
             ("page_api_midi_input", json!("Keys")),
+            ("page_api_data", json!(true)),
+            ("page_api_data_input", json!("Bitwig")),
         ]);
         assert_eq!(
             page_api_grant(&all, &[mic]).as_deref(),
             Some(
                 "Page API: clock, visibility, scenes, shared values (status.*), audio levels \
-                 (Mic), tempo, MIDI (Keys)"
+                 (Mic), tempo, MIDI (Keys), DAW data (Bitwig)"
             )
+        );
+        // The DAW data with no sender named reads every sender's keys.
+        assert_eq!(
+            page_api_grant(
+                &page(&[("page_api", json!(true)), ("page_api_data", json!(true))]),
+                &[]
+            )
+            .as_deref(),
+            Some("Page API: clock, visibility, DAW data (every sender)")
         );
     }
 }

@@ -11,6 +11,7 @@
   var values = new Map();
   var levels = null;
   var midi = "null";
+  var data = new Map();
 
   function emit(type, detail) {
     var set = listeners[type];
@@ -113,6 +114,18 @@
       return JSON.parse(midi);
     };
   }
+  if (grant.data) {
+    // The granted sender's live data, every key's newest message, as a fresh object
+    // each time: `{}` before the engine has sent any. It has no prototype, so a key named
+    // `__proto__` is a key like any other.
+    api.data = function () {
+      var out = Object.create(null);
+      data.forEach(function (text, key) {
+        out[key] = JSON.parse(text);
+      });
+      return out;
+    };
+  }
   Object.defineProperty(window, "jstream", {
     value: Object.freeze(api),
     enumerable: true,
@@ -120,8 +133,8 @@
     writable: false,
   });
 
-  // One update: JSON text with any of `clock`, `source`, `scenes`, `levels`, `midi` and
-  // `values`.
+  // One update: JSON text with any of `clock`, `source`, `scenes`, `levels`, `midi`,
+  // `values` and `data`.
   return function (text) {
     var update = JSON.parse(text);
     if (update.clock) {
@@ -163,6 +176,20 @@
         } else if (values.get(name) !== JSON.stringify(value)) {
           values.set(name, JSON.stringify(value));
           emit("value", { name: name, value: JSON.parse(values.get(name)) });
+        }
+      });
+    }
+    // Each key that changed is reported once, with its new message or `null` when it went.
+    if (grant.data && update.data) {
+      Object.keys(update.data).forEach(function (key) {
+        var value = update.data[key];
+        if (value === null) {
+          if (data.delete(key)) {
+            emit("data", { key: key, value: null });
+          }
+        } else if (data.get(key) !== JSON.stringify(value)) {
+          data.set(key, JSON.stringify(value));
+          emit("data", { key: key, value: JSON.parse(data.get(key)) });
         }
       });
     }

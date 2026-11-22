@@ -1056,7 +1056,7 @@ tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `src/tests/audio.rs`, and the page API's updates in `src/tests/page_api.rs`: a granted
 page's visibility on program and preview, directly and through a nested scene, the two
 scenes, only the values its grant covers and a removal, an update held to the next
-page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant; and a page given a bus reading `null`, then its levels and bands while an output runs, then `null` again), `jstream-crash` (the crash redaction's `Secrets` fed by the
+page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant; and a page given a bus reading `null`, then its levels and bands while an output runs, then `null` again; and a page granted live data reading its sender's keys as they land, and a key that goes as `null`), `jstream-crash` (the crash redaction's `Secrets` fed by the
 YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
 test plugins of `src/tests/automation.rs`), `jstream-midi` (the MIDI messages

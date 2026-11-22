@@ -427,6 +427,35 @@ source: crates/jstream-sources/tests/kinds.rs
           "equals": true
         },
         "live": false
+      },
+      {
+        "id": "page_api_data",
+        "type": "bool",
+        "default": false,
+        "label": "DAW data",
+        "description": "Also give the page one JTunnel sender's live DAW data, every key's newest message, with jstream.data() and a data event for each key that changes (ADR-0171).",
+        "warning": "A page given DAW data sees the sender's transport, mixer, clips and notes, and a page from the web can send that anywhere.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_data_input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 63,
+        "default": "",
+        "label": "DAW data sender",
+        "description": "The JTunnel sender whose data the page may read, by name. Empty gives it whichever sender has each key.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_data",
+          "equals": true
+        },
+        "live": false
       }
     ]
   },
