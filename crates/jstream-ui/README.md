@@ -127,7 +127,7 @@ Contents ([Design](#design) explains the choices):
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
   and the kind descriptors read so far, the last failed call, the toast's confirmation
-  (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
+  (`notify`, `notify_with` for one with buttons, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
   kind and reads `kind.list` again, as a `gpu.device_lost` or `gpu.effect_slow` that
   quarantined kinds does. `kinds.changed` (0.107), from a CLAP scan or the effect packs,
@@ -170,8 +170,12 @@ Contents ([Design](#design) explains the choices):
   Duplicate scene send; also the item menu's clipboards of one source's filters and one
   item's box and crop, and the edits their pastes send, tested natively),
   `screenshot.rs` (Screenshot (scene) and Screenshot (source), ADR-0096: a one-picture
-  PNG preview stream on a tap of the canvas's channel, saved through a download link;
-  the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
+  PNG preview stream on a tap of the canvas's channel, saved through a download link in
+  a browser, and in the desktop app by the app itself, in Downloads, with a toast that
+  says where and offers Open and Show in folder (`host::save_screenshot`,
+  `host::open_saved`, [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md));
+  the request, the frame's outcome, the file's name and the saved toast are tested
+  natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
   the tool bars' own and a cube for the 3D model type).
@@ -926,7 +930,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
   `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
-  4.5 s, a new one replacing it. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
+  4.5 s, a new one replacing it. A toast with buttons (`Studio::notify_with`, a saved
+  screenshot's Open and Show in folder) stays 10 s, and a button hides it. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. Menus, dialogs and the secondary
   panels share one design language on top of it: colour roles, buttons, menu anatomy,
   type and controls ([UI design language](../../docs/UI-DESIGN.md)); a menu item that

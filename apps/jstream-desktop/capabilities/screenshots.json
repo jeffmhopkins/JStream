@@ -1,0 +1,6 @@
+{
+  "identifier": "screenshots",
+  "description": "The app's own main window may save a screenshot in Downloads, never replacing a file, and open or show in its folder a file it saved this run. No other command is granted.",
+  "windows": ["main"],
+  "permissions": ["allow-save-screenshot", "allow-open-saved", "allow-show-saved"]
+}

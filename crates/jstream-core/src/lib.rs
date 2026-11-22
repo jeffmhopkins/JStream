@@ -99,7 +99,7 @@ pub use plugins::kinds::{CLAP_KIND_PREFIX, ClapKind, ClapScan};
 pub use plugins::supervisor::{
     HostEvent, HostStatus, HostSupervisor, STOP_GRACE, SupervisorPolicy,
 };
-pub use projects::recent_collections;
+pub use projects::{MOVED_SUFFIX, recent_collections, rename_recent_collection};
 pub use ptz::controller::{PtzController, PtzControllerSetup, PtzControllerTarget, PtzControllers};
 pub use ptz::{PtzCamera, PtzSetup};
 pub use runtime::{

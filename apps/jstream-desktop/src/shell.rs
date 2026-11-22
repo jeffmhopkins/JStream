@@ -190,7 +190,7 @@ pub fn run(
     ptz_controllers: Option<jstream_core::PtzControllers>,
 ) -> anyhow::Result<()> {
     let start = start_url()?;
-    let mut builder = tauri::Builder::default();
+    let mut builder = tauri::Builder::default().manage(crate::folders::Saved::default());
     if let Some(file) = network_file {
         builder = builder.manage(crate::network::Setting(file));
     }
@@ -205,7 +205,10 @@ pub fn run(
             crate::pick::pick_path,
             crate::network::set_network,
             crate::jtunnel::set_jtunnel,
-            crate::ptz::set_ptz_controllers
+            crate::ptz::set_ptz_controllers,
+            crate::screenshots::save_screenshot,
+            crate::screenshots::open_saved,
+            crate::screenshots::show_saved
         ])
         // Asynchronous so the update check's request to GitHub doesn't block the
         // window. File requests are answered on this call, as they were before.
