@@ -214,7 +214,6 @@ impl WeakEngine {
 impl Default for Engine {
     fn default() -> Self {
         let audio_scopes = Arc::new(AudioScopes::new());
-        let data = jstream_sources::LiveData::new();
         let gpu = Arc::new(SharedGpu::default());
         let data = jstream_sources::LiveData::new();
         Self {
