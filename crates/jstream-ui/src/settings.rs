@@ -145,14 +145,18 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
     let session = use_context::<SessionContext>();
     let studio = use_context::<Studio>();
     let video = studio.map(VideoDraft::new);
-    let drafting = move || {
-        video.is_some_and(|draft| {
-            page() == SettingsPage::Video || studio.is_some_and(|s| draft.dirty(s))
-        })
-    };
+    let drafting =
+        move || video.is_some_and(|draft| page() == SettingsPage::Video || draft.dirty());
+    // Disposed with this window, so a save that answers after the window closed (and
+    // perhaps opened again) closes nothing.
+    let alive = StoredValue::new(());
     let save = move || {
         if let (Some(draft), Some(session), Some(studio)) = (video, session, studio) {
-            draft.save(session, studio, move || dialog.close());
+            draft.save(session, studio, move || {
+                if alive.try_get_value().is_some() {
+                    dialog.close();
+                }
+            });
         }
     };
     let tab_keys = move |event: leptos::ev::KeyboardEvent| {

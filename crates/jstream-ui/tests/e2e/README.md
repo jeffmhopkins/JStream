@@ -561,7 +561,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   9/16 and keeps it at the centre. The footer reads Cancel and Save on Video and while
   another page is shown with a change kept, which Video still shows; Cancel sends nothing
   and the next opening reads the collection again; General with no change has Close
-  alone.
+  alone, and keeps it while another window saves 1280×720, which the untouched Video
+  page then shows.
 
 <a id="running"></a>
 ## Running them

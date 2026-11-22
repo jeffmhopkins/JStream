@@ -138,3 +138,28 @@ test('the Video page keeps its draft across pages, Cancel drops it, and other pa
   await dialog.getByRole('tab', { name: 'General' }).click();
   await expect(footer.getByRole('button')).toHaveText(['Close']);
 });
+
+test('an untouched Video page follows a change made elsewhere and offers nothing to save', async ({ page, context, daemon }) => {
+  await connect(page, daemon);
+  const other = await context.newPage();
+  await connect(other, daemon);
+  // Settings open on General in this window, with the Video page never touched.
+  await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Settings' });
+  const footer = dialog.locator('.modal-footer');
+  await expect(footer.getByRole('button')).toHaveText(['Close']);
+
+  // The other window saves 1280×720.
+  const there = await openVideoSettings(other);
+  await there.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '1280 × 720 (16:9)' });
+  await there.getByRole('button', { name: 'Save' }).click();
+  await expect(there).toHaveCount(0);
+
+  // Here General still has Close alone, and Video shows the new size.
+  await expect.poll(() => rev(page)).toBe(await rev(other));
+  await expect(footer.getByRole('button')).toHaveText(['Close']);
+  await dialog.getByRole('tab', { name: 'Video' }).click();
+  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1280');
+  await expect(dialog.getByRole('spinbutton', { name: 'Height' })).toHaveValue('720');
+});

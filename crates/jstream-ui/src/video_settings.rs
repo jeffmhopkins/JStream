@@ -357,10 +357,21 @@ pub struct VideoDraft {
     rate: RwSignal<u32>,
     blending: RwSignal<Blending>,
     scale_scenes: RwSignal<bool>,
+    /// The collection's settings the draft was last read from: it differs only when the
+    /// person changed it, not when the collection did.
+    base: RwSignal<Video>,
     /// Why Save was refused, if it was.
     pub error: RwSignal<Option<String>>,
     /// Whether a save is on its way to the engine.
     pub busy: RwSignal<bool>,
+}
+
+/// Whether a draft of `width`, `height`, `rate` and `blending` differs from `base`.
+pub fn differs(base: Video, width: &str, height: &str, rate: u32, blending: Blending) -> bool {
+    side(width) != Ok(base.canvas.width)
+        || side(height) != Ok(base.canvas.height)
+        || rate != base.fps
+        || blending != base.blending
 }
 
 /// The collection's video settings as they are now.
@@ -375,30 +386,60 @@ fn current(studio: Studio) -> Video {
 }
 
 impl VideoDraft {
-    /// A draft of the collection's settings as they are now.
+    /// A draft of the collection's settings as they are now. While it is untouched it
+    /// follows the collection, so a change made elsewhere (another window, an agent, an
+    /// undo) or a collection that arrives after the window opened shows here and is
+    /// never offered for saving back.
     pub fn new(studio: Studio) -> Self {
         let now = current(studio);
-        Self {
+        let draft = Self {
             width: RwSignal::new(now.canvas.width.to_string()),
             height: RwSignal::new(now.canvas.height.to_string()),
             rate: RwSignal::new(now.fps),
             blending: RwSignal::new(now.blending),
             scale_scenes: RwSignal::new(true),
+            base: RwSignal::new(now),
             error: RwSignal::new(None),
             busy: RwSignal::new(false),
-        }
+        };
+        Effect::new(move |_| {
+            studio.collection.track();
+            if !draft.dirty_untracked() {
+                draft.reset(current(studio));
+            }
+        });
+        draft
     }
 
-    /// Whether the draft differs from the collection: a side that can't be used counts
-    /// as a change, so Save stays offered to say why. Reactive.
-    pub fn dirty(self, studio: Studio) -> bool {
-        studio.collection.track();
-        let now = current(studio);
-        let (w, h) = (side(&self.width.get()), side(&self.height.get()));
-        w != Ok(now.canvas.width)
-            || h != Ok(now.canvas.height)
-            || self.rate.get() != now.fps
-            || self.blending.get() != now.blending
+    /// Reads `now` into the draft and its base.
+    fn reset(self, now: Video) {
+        self.width.set(now.canvas.width.to_string());
+        self.height.set(now.canvas.height.to_string());
+        self.rate.set(now.fps);
+        self.blending.set(now.blending);
+        self.base.set(now);
+    }
+
+    /// Whether the person changed the draft from what it was read from: a side that
+    /// can't be used counts as a change, so Save stays offered to say why. Reactive.
+    pub fn dirty(self) -> bool {
+        differs(
+            self.base.get(),
+            &self.width.get(),
+            &self.height.get(),
+            self.rate.get(),
+            self.blending.get(),
+        )
+    }
+
+    fn dirty_untracked(self) -> bool {
+        differs(
+            self.base.get_untracked(),
+            &self.width.get_untracked(),
+            &self.height.get_untracked(),
+            self.rate.get_untracked(),
+            self.blending.get_untracked(),
+        )
     }
 
     /// What the draft asks for, or why a side can't be used.
@@ -671,6 +712,16 @@ mod tests {
             .len(),
             3
         );
+    }
+
+    #[test]
+    fn a_draft_differs_only_from_its_base() {
+        let base = Video::default();
+        assert!(!differs(base, "1920", " 1080 ", 30, Blending::default()));
+        assert!(differs(base, "1280", "1080", 30, Blending::default()));
+        assert!(differs(base, "1920", "1080", 60, Blending::default()));
+        assert!(differs(base, "1920", "0", 30, Blending::default()));
+        assert!(differs(base, "1920", "1080", 30, Blending::Linear));
     }
 
     #[test]

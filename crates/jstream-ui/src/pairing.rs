@@ -526,6 +526,13 @@ fn PairDialog(panel: Panel, close: impl Fn() + Copy + Send + Sync + 'static) -> 
             </div>
         }
         .into_any(),
+        // A refused `pairing.start` shows its reason below, not a code on its way.
+        (None, None) if panel.problem.with(Option::is_some) => view! {
+            <div class="pairing-card" role="status">
+                <p class="pairing-ended">"No code. Press New code to try again."</p>
+            </div>
+        }
+        .into_any(),
         (None, None) => view! {
             <div class="pairing-card" role="status">
                 <p class="pairing-ended">"Asking for a code…"</p>

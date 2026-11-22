@@ -59,7 +59,8 @@ Contents ([Design](#design) explains the choices):
   page (File › Video settings… opens it), sets the collection's base resolution (the canvas, from presets or typed) and its base frame
   rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
   (sRGB) or Linear light (ADR-0126). Its `VideoDraft`, kept by the Settings window
-  across its pages, is saved by the window's Save, which sends only what changed, as one batch of
+  across its pages and following the collection until it is edited (`differs` from the
+  settings it was read from), is saved by the window's Save, which sends only what changed, as one batch of
   `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
   undo step. A new size also rescales every scene unless Scale existing scenes to fit
   is unchecked: `rescale` adds the placement and camera edits that keep each
@@ -1182,7 +1183,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   code shows until the countdown ends or a device pairs: every 3 seconds the panel
   re-reads `device.list`, and a device ID that wasn't listed when the code was drawn
   means the code was used; the dialog then says "A device paired.", or that the code
-  expired. A newer code replaces the shown one, and Done stops the countdown and
+  expired; a refused `pairing.start` gives its reason under a card that says to try
+  New code again. A newer code replaces the shown one, and Done stops the countdown and
   closes the dialog. Each device shows its
   name and its paired and last-used dates (UTC), with a button that calls
   `device.revoke` and re-reads the list. The code is never logged or stored by the page,

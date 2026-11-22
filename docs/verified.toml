@@ -6462,7 +6462,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:49dff58b8211095f", by = "agent:claude", note = "Edited the header, pairing and Audio plugins paragraphs for C11 (Settings pages, PairDialog with numbered steps, New code/Done, one-line CLAP callout, desktop-only Check for updates); re-read the rest against the item_menu Duplicate opener and style.css changes." }
+stamp = { hash = "b3:99510bb1a58d2377", by = "agent:claude", note = "Round 1 fixes: the pairing paragraph names the refused-code card (N1); the Settings and Video text holds against the base-tracking VideoDraft and the alive guard (B1, N3)." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:32ee7db398ae0fa2", by = "agent:smooth-paths", note = "scene_properties.rs: the UI's scene.switch constructors gain via, and after review round 1 a hotkey rebind keeps the old binding's via with its preset, as a_rebind_keeps_the_binding_s_preset checks; its dep, the control README's design, gained the mock's via checks, which the UI's tests don't lean on; the design text still holds | merge: main's #1591 (3D groups share their scene's space, a camera rides with one, protocol 0.127) added the share-space and anchor controls to scene_properties.rs and scenes.rs; the design text holds | kept from the merged side: Review round 1 N4: the Moves with picker lists a stored anchor that names no group here as '(ignored)', with a kept-but-ignored note, and notes a flat group's; rewrote the sentence to match scene_properties.rs." }
@@ -6558,7 +6558,7 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "Added that menus, dialogs and secondary panels follow docs/UI-DESIGN.md and that a deleting menu item uses Entry::danger; rest of the section (connecting, session, events, styles via classes) unaffected by the CSS restyle." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/pairing.rs"]
-stamp = { hash = "b3:f35bb978e01f05e8", by = "agent:claude", note = "Edited the header, pairing and Audio plugins paragraphs for C11 (Settings pages, PairDialog with numbered steps, New code/Done, one-line CLAP callout, desktop-only Check for updates); re-read the rest against the item_menu Duplicate opener and style.css changes." }
+stamp = { hash = "b3:2696a40719dcdcdb", by = "agent:claude", note = "Round 1 fixes: the pairing paragraph names the refused-code card (N1); the Settings and Video text holds against the base-tracking VideoDraft and the alive guard (B1, N3)." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/add_source.rs"]
 stamp = { hash = "b3:4fd1d2bfb215d037", by = "agent:ui-design", note = "Updated: the theme paragraph names the dialog shell, the .field.prop / .prop-grid property grid and dialog::Info; Video settings' checkbox is now Scale existing scenes to fit, General's settings are Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit; checked against updates.rs, agents.rs, warm.rs, video_settings.rs. | merge: The merge brought #1588 (a sky backdrop source kind, listed by add_source.rs) and #1591 (scene_properties.rs: a group's Share the 3D space check and the camera's Moves with; DL-03 describes both). DL-03 was a conflict: kept main's text with this branch's Keep ready rename, and DL-04/05/06's large-dialog sizes and Into scene subtitle. All hold against the merged code. | kept from the merged side: Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers." }
@@ -6663,7 +6663,7 @@ stamp = { hash = "b3:cb07004e872fb0bf", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/settings.rs"]
-stamp = { hash = "b3:e74143e68f4351d2", by = "agent:claude", note = "Edited the header, pairing and Audio plugins paragraphs for C11 (Settings pages, PairDialog with numbered steps, New code/Done, one-line CLAP callout, desktop-only Check for updates); re-read the rest against the item_menu Duplicate opener and style.css changes." }
+stamp = { hash = "b3:6471cf7860192d9c", by = "agent:claude", note = "Round 1 fixes: the pairing paragraph names the refused-code card (N1); the Settings and Video text holds against the base-tracking VideoDraft and the alive guard (B1, N3)." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
 stamp = { hash = "b3:b2441cf15d54414a", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via, and no panel shows camera_path beyond the generic preset settings form | merge: main's #1580 added the screenshot save location and project folder state to store.rs; this PR's via: Vec::new() on the store's scene.switch constructors is untouched, so the design text holds | kept from the merged side: Re-read: the store bullet names notify_with, and the shell bullet says a toast with buttons stays 10 s and a button hides it; matches store.rs, app.rs and style.css." }
@@ -6675,7 +6675,7 @@ stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "Hotkeys par
 stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/video_settings.rs"]
-stamp = { hash = "b3:f2191c2c4ab3ee7d", by = "agent:claude", note = "Edited the header, pairing and Audio plugins paragraphs for C11 (Settings pages, PairDialog with numbered steps, New code/Done, one-line CLAP callout, desktop-only Check for updates); re-read the rest against the item_menu Duplicate opener and style.css changes." }
+stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Round 1 fixes: the pairing paragraph names the refused-code card (N1); the Settings and Video text holds against the base-tracking VideoDraft and the alive guard (B1, N3)." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/views.rs"]
 stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "projector pictures and the canvas report their views; the projector bullet says so; device_preview keeps an unreported tally" }
@@ -6690,7 +6690,7 @@ stamp = { hash = "b3:63ac58d116477863", by = "agent:studio-two-up", note = "Stud
 stamp = { hash = "b3:c5978fa5879ca4af", by = "agent:claude", note = "Edited the header, pairing and Audio plugins paragraphs for C11 (Settings pages, PairDialog with numbered steps, New code/Done, one-line CLAP callout, desktop-only Check for updates); re-read the rest against the item_menu Duplicate opener and style.css changes." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:b4e12bdbd2d140f3", by = "agent:claude", note = "Edited the Header, Video settings, Settings, Audio plugins and Pairing bullets for C11: Video as a Settings page with a kept draft and Cancel/Save, the Audio page, the Pair a device dialog and Check for updates off in a browser; checked against settings.rs, video_settings.rs, pairing.rs, clap_plugins.rs, header.rs and filters.rs." }
+stamp = { hash = "b3:c7fa16a04dc11dab", by = "agent:claude", note = "Round 1 B1 fix: the Video settings bullet now says the VideoDraft follows the collection until edited (differs from its base); checked against video_settings.rs and settings.rs, including the alive guard on Save's close." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -6783,7 +6783,7 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "Re-read the contents list against the design-language change: menu items gained Entry::danger, View/Layout show checks, info dialogs' Close is secondary; no module, menu entry or component listed here changed, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/pairing.rs"]
-stamp = { hash = "b3:f35bb978e01f05e8", by = "agent:claude", note = "Edited the Header, Video settings, Settings, Audio plugins and Pairing bullets for C11: Video as a Settings page with a kept draft and Cancel/Save, the Audio page, the Pair a device dialog and Check for updates off in a browser; checked against settings.rs, video_settings.rs, pairing.rs, clap_plugins.rs, header.rs and filters.rs." }
+stamp = { hash = "b3:2696a40719dcdcdb", by = "agent:claude", note = "Round 1 B1 fix: the Video settings bullet now says the VideoDraft follows the collection until edited (differs from its base); checked against video_settings.rs and settings.rs, including the alive guard on Save's close." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/add_source.rs"]
 stamp = { hash = "b3:4fd1d2bfb215d037", by = "agent:ui-design", note = "Re-read the contents list: Settings/General now groups Updates, Hotkeys, Agents and Performance as prop-grid sections, dialog.rs gains Info, icons.rs an info icon; no module or component named here changed name or job, so it holds. | merge: The merge brought #1588 (a sky backdrop source kind, listed by add_source.rs) and #1591 (scene_properties.rs: a group's Share the 3D space check and the camera's Moves with; DL-03 describes both). DL-03 was a conflict: kept main's text with this branch's Keep ready rename, and DL-04/05/06's large-dialog sizes and Into scene subtitle. All hold against the merged code. | kept from the merged side: Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers." }
@@ -6888,7 +6888,7 @@ stamp = { hash = "b3:cb07004e872fb0bf", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/settings.rs"]
-stamp = { hash = "b3:e74143e68f4351d2", by = "agent:claude", note = "Edited the Header, Video settings, Settings, Audio plugins and Pairing bullets for C11: Video as a Settings page with a kept draft and Cancel/Save, the Audio page, the Pair a device dialog and Check for updates off in a browser; checked against settings.rs, video_settings.rs, pairing.rs, clap_plugins.rs, header.rs and filters.rs." }
+stamp = { hash = "b3:6471cf7860192d9c", by = "agent:claude", note = "Round 1 B1 fix: the Video settings bullet now says the VideoDraft follows the collection until edited (differs from its base); checked against video_settings.rs and settings.rs, including the alive guard on Save's close." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
 stamp = { hash = "b3:b2441cf15d54414a", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via | merge: main's #1580 added the screenshot save location and project folder state to store.rs; this PR's via: Vec::new() on the store's scene.switch constructors is untouched, so purpose holds | kept from the merged side: Re-read: screenshot.rs's entry now says the desktop app saves in Downloads with a toast naming the place and Open/Show in folder (host::save_screenshot, host::open_saved); matches screenshot.rs and host.rs." }
@@ -6900,7 +6900,7 @@ stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "updates.rs'
 stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/video_settings.rs"]
-stamp = { hash = "b3:f2191c2c4ab3ee7d", by = "agent:claude", note = "Edited the Header, Video settings, Settings, Audio plugins and Pairing bullets for C11: Video as a Settings page with a kept draft and Cancel/Save, the Audio page, the Pair a device dialog and Check for updates off in a browser; checked against settings.rs, video_settings.rs, pairing.rs, clap_plugins.rs, header.rs and filters.rs." }
+stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Round 1 B1 fix: the Video settings bullet now says the VideoDraft follows the collection until edited (differs from its base); checked against video_settings.rs and settings.rs, including the alive guard on Save's close." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/views.rs"]
 stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "Contents gained Views (views.rs); Screen::new now takes a tally; lib.rs Docs line names #views" }
@@ -7056,7 +7056,7 @@ stamp = { hash = "b3:38c578fbd67ef44c", by = "agent:ui-design", note = "Specs no
 stamp = { hash = "b3:31aad4cfa2eca475", by = "agent:claude-settings", note = "Re-read: the specs changed only by clicking the new Behaviour tab and adding a tabs test; the mock daemon, its seed and fixtures.js are unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/video-settings.spec.js"]
-stamp = { hash = "b3:5fa858ff8452436e", by = "agent:claude", note = "Re-read against the spec changes (video-settings, clap-plugins, plugins, menus) and the new pairing.spec.js, which routes the WebSocket as the other specs do; the harness itself is unchanged." }
+stamp = { hash = "b3:e182326757085ed7", by = "agent:claude", note = "Re-read against the new video-settings test, which opens a second page in the same context as groups.spec does; harness unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/wheel-chords.spec.js"]
 stamp = { hash = "b3:e81f81581b462e6d", by = "agent:claude-settings", note = "This branch: kinds.changed at protocol 0.107 (#1328), stacked on #1288 (0.106). #1288's newest head is merged in again, bringing wave/alpha5's #1399 (wheel chords, no protocol bump) and #1398. Neither touches the kinds, Add filter's refresh or this section's text, so it holds. | kept from the merged side: wheel-chords.spec.js's route now also answers kind.list/kind.describe and sends edits from outside the page; the harness's own-browser sentence holds." }
@@ -7071,7 +7071,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:f0138edd22f1dcfa", by = "agent:claude", note = "Edited Plugins, Audio plugins, Menus, Video settings and keyframes lines and added Pairing; each matches its spec after this change." }
+stamp = { hash = "b3:c7a1e76c6b540995", by = "agent:claude", note = "Added the untouched-Video-page-follows-another-window case to the Video settings line; checked against video-settings.spec.js." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7185,7 +7185,7 @@ stamp = { hash = "b3:38c578fbd67ef44c", by = "agent:ui-design", note = "Updated 
 stamp = { hash = "b3:31aad4cfa2eca475", by = "agent:claude-settings", note = "inspector.spec.js gains the tabs test (tab switching hides the other panels, arrow keys with focus, tab kept across reload, Properties & filters… opens the dialog); transitions.spec.js now opens the Behaviour tab before the Scene switches" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/video-settings.spec.js"]
-stamp = { hash = "b3:5fa858ff8452436e", by = "agent:claude", note = "Edited Plugins, Audio plugins, Menus, Video settings and keyframes lines and added Pairing; each matches its spec after this change." }
+stamp = { hash = "b3:e182326757085ed7", by = "agent:claude", note = "Added the untouched-Video-page-follows-another-window case to the Video settings line; checked against video-settings.spec.js." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/wheel-chords.spec.js"]
 stamp = { hash = "b3:e81f81581b462e6d", by = "agent:claude-settings", note = "This branch: kinds.changed at protocol 0.107 (#1328), stacked on #1288 (0.106). #1288's newest head is merged in again, bringing wave/alpha5's #1399 (wheel chords, no protocol bump) and #1398. Neither touches the kinds, Add filter's refresh or this section's text, so it holds. | kept from the merged side: Added to the Wheel chords bullet: the Filters window's Follow pointer keys offer the default Ctrl+wheel zoom, bind both, drop the offer, and Zoom out's Set key ignores a bare turn and binds Alt+WheelDown. Matches the new test." }
@@ -7587,7 +7587,7 @@ stamp = { hash = "b3:134f387287849ce3", by = "agent:claude", note = "Go Live ste
 stamp = { hash = "b3:d9c8886d388b0ec0", by = "agent:claude", note = '''Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds. | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Going live steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold.''' }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:811fff9d75ca7579", by = "agent:claude", note = "Re-read against the HD-01/HD-10/HD-11 edits: this section's steps use the Outputs panel and output settings, not the File or Help menus; holds." }
+stamp = { hash = "b3:d0ccce6b4a342657", by = "agent:claude", note = "Re-read against the HD-11 wording change only; this section doesn't use Video settings; holds." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:eac6f54446437f4a", by = "agent:ui-design", note = "Re-read against the outputs and header rows: the output settings dialog is now titled Output settings with its ID beneath, but the steps (double-click a row, OK or Apply, Go Live, Encoders & mixes…) are unchanged." }
@@ -7599,7 +7599,7 @@ stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recor
 stamp = { hash = "b3:d9c8886d388b0ec0", by = "agent:claude", note = '''Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds. | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Recording steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold.''' }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:811fff9d75ca7579", by = "agent:claude", note = "Re-read against the HD edits: recording steps use the Outputs panel; holds." }
+stamp = { hash = "b3:d0ccce6b4a342657", by = "agent:claude", note = "Re-read against the HD-11 wording change only; recording steps unaffected; holds." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:eac6f54446437f4a", by = "agent:ui-design", note = "Re-read: Record, Stop recording, the settings dialog by double-click and Browse… are unchanged; only the dialog's title wording moved, which this section doesn't quote." }
@@ -7629,7 +7629,7 @@ stamp = { hash = "b3:1c19e0936ac8d5d5", by = "agent:ui-design", note = "Step 3 n
 stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:811fff9d75ca7579", by = "agent:claude", note = "Edited: File › Video settings… opens Settings on Video with Save, and Check for updates is a desktop-app item; checked against header.rs and settings.rs." }
+stamp = { hash = "b3:d0ccce6b4a342657", by = "agent:claude", note = "Re-read against the HD-11 wording that the untouched Video draft follows the collection; the walkthrough's steps (Video settings…, Save) are unchanged and hold." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:f27799a4579b6988", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
@@ -8340,7 +8340,7 @@ stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "agents.r
 stamp = { hash = "b3:079faff276dab0c0", by = "agent:claude", note = "Re-read and edited: Jeff asked for Use this sender's state on by default once a sender is accepted; the Devices page entry says Use this sender's state is on once a sender is accepted, until unticked. | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/pairing.rs"]
-stamp = { hash = "b3:f35bb978e01f05e8", by = "agent:claude", note = "Edited the Pairing bullet for the Paired devices section and the Pair a device dialog; checked against pairing.rs." }
+stamp = { hash = "b3:2696a40719dcdcdb", by = "agent:claude", note = "Re-read the Pairing bullet against pairing.rs's refused-code card (N1); the bullet's description of the section and dialog still holds." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -8436,7 +8436,7 @@ stamp = { hash = "b3:57241f6a72463fc9", by = "agent:lane-d", note = "merged rows
 stamp = { hash = "b3:94aef34b4a8b32f8", by = "agent:claude", note = "Edited FL-08: Add filter's link opens Settings on Audio, whose Audio plugins section gives an unavailable engine's reason as one sentence in a callout; checked against filters.rs and clap_plugins.rs." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:811fff9d75ca7579", by = "agent:claude", note = "Edited HD-01 (pages General, Video, Audio, Plugins, Devices and the Video draft footer), HD-10 (Check for updates off in a browser), HD-11 (Video as a Settings page with Save/Cancel) and HD-12 (eyebrow head keeping the name's case); checked against header.rs, settings.rs and video_settings.rs." }
+stamp = { hash = "b3:d0ccce6b4a342657", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:3638d6f3cd7938fe", by = "agent:ui-design", note = "HD-02/HD-03 now say the shown panel and current layout are checked (menuitemradio for layouts), matching header.rs; About/Updates/Settings/libraries Close turned secondary, which no row states otherwise." }
@@ -8454,13 +8454,13 @@ stamp = { hash = "b3:0432f3ec2a2b6130", by = "agent:ui-design", note = "#1590 B1
 stamp = { hash = "b3:54264da4755dd02b", by = "agent:ui-design", note = "#1590 B1: HD-01 now names the General page's settings as they read (Check for updates, Global hotkeys, Ask before connecting, Keep ready, Memory limit, under Updates, Hotkeys, Agents and Performance) and HD-10 the Check for updates and Global hotkeys toggles; HD-11 Scale existing scenes to fit; HD-12's callout; checked against updates.rs, agents.rs, warm.rs, settings.rs, video_settings.rs, project.rs and outputs.rs." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/settings.rs"]
-stamp = { hash = "b3:e74143e68f4351d2", by = "agent:claude", note = "Edited HD-01 (pages General, Video, Audio, Plugins, Devices and the Video draft footer), HD-10 (Check for updates off in a browser), HD-11 (Video as a Settings page with Save/Cancel) and HD-12 (eyebrow head keeping the name's case); checked against header.rs, settings.rs and video_settings.rs." }
+stamp = { hash = "b3:6471cf7860192d9c", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1: HD-01 now names the General page's settings as they read (Check for updates, Global hotkeys, Ask before connecting, Keep ready, Memory limit, under Updates, Hotkeys, Agents and Performance) and HD-10 the Check for updates and Global hotkeys toggles; HD-11 Scale existing scenes to fit; HD-12's callout; checked against updates.rs, agents.rs, warm.rs, settings.rs, video_settings.rs, project.rs and outputs.rs." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/video_settings.rs"]
-stamp = { hash = "b3:f2191c2c4ab3ee7d", by = "agent:claude", note = "Edited HD-01 (pages General, Video, Audio, Plugins, Devices and the Video draft footer), HD-10 (Check for updates off in a browser), HD-11 (Video as a Settings page with Save/Cancel) and HD-12 (eyebrow head keeping the name's case); checked against header.rs, settings.rs and video_settings.rs." }
+stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#inspector"."body"]
 stamp = { hash = "b3:f27799a4579b6988", by = "agent:ui-design", note = "IN-01 kind falls back to its ID with a capital; IN-02 Position and size with the 88 px label column; IN-04 the 20 px chain between W and H; IN-06 crop two by two; IN-07 the opacity slider; IN-11 the segmented control. Checked against inspector.rs, number.rs and style.css." }
