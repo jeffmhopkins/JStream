@@ -173,7 +173,12 @@ impl ModelKind {
                     "Whether, lit by its scene, it is shadowed by the lights that cast them.",
                 )),
                 live(described(
-                    param("reflections", "Reflects the scene", ParamType::Bool, json!(true)),
+                    param(
+                        "reflections",
+                        "Reflects the scene",
+                        ParamType::Bool,
+                        json!(true),
+                    ),
                     "Whether, lit by its scene, it reflects the rest of the scene where \
                      the scene's reflections are on and a reflection probe's box holds \
                      it; off, it reflects only the environment.",

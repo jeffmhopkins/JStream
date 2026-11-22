@@ -40,7 +40,9 @@ use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
 };
-use jstream_sources::{CaptureSpec, LightType, ShownEnvironment, ShownLight, ShownModel};
+use jstream_sources::{
+    CaptureSpec, LightType, ShownEnvironment, ShownLight, ShownModel, ShownProbe,
+};
 
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
@@ -54,9 +56,11 @@ use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
 mod groups;
+mod probes;
 
 pub(crate) use groups::placed_camera;
 use groups::{GroupLink, Groups};
+pub(crate) use probes::ProbeState;
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -120,6 +124,9 @@ pub(crate) struct Frame {
     /// The light its source puts where an item places it (ADR-0143 decision 1), for
     /// the models of a 3D scene lit by their scene. The frame itself is transparent.
     light: Option<ShownLight>,
+    /// The reflection probe its source puts where an item places it (ADR-0170 decision
+    /// 3). The frame itself is transparent.
+    probe: Option<ShownProbe>,
 }
 
 /// A frame's tightly packed bytes, shared with whoever made them.
@@ -152,17 +159,19 @@ impl PartialEq for Frame {
             && self.extent == other.extent
             && model_key(self.model.as_ref()) == model_key(other.model.as_ref())
             && self.light == other.light
+            && self.probe == other.probe
     }
 }
 
 /// What tells two shown models apart: a new version is a new model to upload, the
 /// lighting is drawn with it, and a new pose (ADR-0151 decision 7) is a new frame of its
 /// animation. Cheaper than comparing the models.
-fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting, Option<*const u8>)> {
+fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting, bool, Option<*const u8>)> {
     model.map(|shown| {
         (
             shown.model.version(),
             shown.lighting,
+            shown.reflections,
             shown.pose.as_ref().map(|p| p.as_ptr().cast::<u8>()),
         )
     })
@@ -192,6 +201,7 @@ impl Frame {
             version,
             model: None,
             light: None,
+            probe: None,
         })
     }
 
@@ -224,6 +234,7 @@ impl Frame {
             version,
             model: None,
             light: None,
+            probe: None,
         })
     }
 
@@ -239,6 +250,7 @@ impl Frame {
             version,
             model: None,
             light: None,
+            probe: None,
         }
     }
 
@@ -253,6 +265,7 @@ impl Frame {
             version,
             model: None,
             light: None,
+            probe: None,
         }
     }
 
@@ -282,6 +295,7 @@ impl Frame {
             version,
             model: None,
             light: None,
+            probe: None,
         }
     }
 
@@ -295,6 +309,12 @@ impl Frame {
     /// scene (ADR-0143).
     pub(crate) fn with_light(self, light: Option<ShownLight>) -> Self {
         Self { light, ..self }
+    }
+
+    /// The same frame as the stand-in of `probe`, the reflection probe its source puts
+    /// in a 3D scene (ADR-0170 decision 3).
+    pub(crate) fn with_probe(self, probe: Option<ShownProbe>) -> Self {
+        Self { probe, ..self }
     }
 
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
@@ -690,6 +710,12 @@ pub(crate) struct Shot {
     /// The light items each scene places, bottom first (ADR-0143), whether it was copied
     /// whole or planned as a transition's end. A scene placing none isn't here.
     lights: BTreeMap<SceneId, Vec<Lit>>,
+    /// The reflection probe items each copied scene places (ADR-0170 decision 3), in
+    /// stacking order, as [`Self::lights`] holds its lights.
+    probes: BTreeMap<SceneId, Vec<Lit>>,
+    /// The copied scenes whose surfaces reflect each other (`reflections`, ADR-0170
+    /// decision 2): a keyframe scene's is its parent's.
+    reflective: BTreeSet<SceneId>,
     /// The background each copied scene has, by scene, straight sRGB (ADR-0089 §4): a
     /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
     /// scene without one isn't here, and is transparent.
@@ -1023,6 +1049,8 @@ impl Default for Shot {
             program: None,
             scenes: BTreeMap::new(),
             lights: BTreeMap::new(),
+            probes: BTreeMap::new(),
+            reflective: BTreeSet::new(),
             backgrounds: BTreeMap::new(),
             cameras: BTreeMap::new(),
             frames: BTreeMap::new(),
@@ -1620,6 +1648,8 @@ impl PartialEq for Shot {
             && self.mixes == other.mixes
             && self.scenes == other.scenes
             && self.lights == other.lights
+            && self.probes == other.probes
+            && self.reflective == other.reflective
             && self.backgrounds == other.backgrounds
             && self.cameras == other.cameras
             && self.frames == other.frames
@@ -2466,6 +2496,20 @@ impl<'a> Planner<'a, '_> {
         scene.options().background_rgba().map(Color::from_rgba8)
     }
 
+    /// Whether the planned scene `id`'s surfaces reflect each other (ADR-0170 decision
+    /// 2): its parent's option for a keyframe scene.
+    fn reflective(&self, id: &SceneId) -> bool {
+        let Some((scene, _)) = self.drawn(id) else {
+            return false;
+        };
+        scene
+            .variant_of()
+            .and_then(|parent| self.state.scene(parent))
+            .unwrap_or(scene)
+            .options()
+            .reflections
+    }
+
     /// The keyframe scene whose overrides the planned scene `id` shows, if any.
     fn keyframe_of(&self, id: &SceneId) -> Option<&'a GraphScene> {
         self.drawn(id).and_then(|(_, keyframe)| keyframe)
@@ -3270,6 +3314,9 @@ impl<'a> Planner<'a, '_> {
         if let Some(background) = self.background(id) {
             out.backgrounds.insert(id.clone(), background);
         }
+        if self.reflective(id) {
+            out.reflective.insert(id.clone());
+        }
         if let Some(mut camera) = self.camera(id) {
             camera.moves = self.camera_moves(id, out);
             out.cameras.insert(id.clone(), camera);
@@ -3560,6 +3607,14 @@ pub(crate) enum GpuKey {
     /// A 3D scene's sky backdrop (ADR-0167), drawn through its camera each frame it is
     /// drawn, at the canvas size, and placed under its items.
     Sky(SceneId),
+    /// A reflection probe's capture (ADR-0170 decision 3): its scene seen from its
+    /// box's centre, as a panorama four faces wide and two high, kept between captures.
+    ProbeMap(SceneId, ItemId),
+    /// One of the six square faces a scene's probe captures, before they are resampled
+    /// into its [`GpuKey::ProbeMap`].
+    ProbeFace(SceneId, u8),
+    /// A model item drawn through a probe's face camera, for that face.
+    ProbeModel(SceneId, ItemId),
 }
 
 /// A shadow map drawn for a scene in this run of the chains (ADR-0151 decision 3).
@@ -6154,6 +6209,16 @@ fn run_chains(
             }
         }
     }
+    // The reflection probes due, now that every item's layer is drawn (ADR-0170
+    // decision 3). A capture that can't be drawn leaves the last one.
+    if let Err(error) = probes::draw_probes(
+        compositor,
+        (&mut *cache, &mut *chains),
+        (shot, at),
+        (live, captures),
+    ) {
+        tracing::debug!(%error, "reflection probe not captured this frame");
+    }
     Ok(())
 }
 
@@ -6341,7 +6406,14 @@ fn light_card(
                     lights: &lights,
                     shadows: &maps,
                     environment,
-                    probe: None,
+                    // What the scene's probes saw, inside one (ADR-0170 decision 3).
+                    probe: probes::lookup(
+                        (&*cache, &*chains),
+                        shot,
+                        scene_id,
+                        probes::centre_of(geometry),
+                        (at, live),
+                    ),
                 },
                 layer,
             ))
@@ -6472,6 +6544,18 @@ fn draw_model(
         shot.source_value(&boxed.item, m, at)
     });
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
+    // What the scene's probes saw, inside one (ADR-0170 decision 3), unless it opts out.
+    let probe = (lit && shown.reflections)
+        .then(|| {
+            probes::lookup(
+                (&*cache, &*chains),
+                shot,
+                scene_id,
+                probes::centre_of(geometry),
+                (at, live),
+            )
+        })
+        .flatten();
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => Some(compositor.draw_model(
             &jstream_render::ModelDraw {
@@ -6486,7 +6570,7 @@ fn draw_model(
                 materials: &drives[..driving],
                 texture,
                 reflection,
-                probe: None,
+                probe,
             },
             layer,
         )),
@@ -6645,25 +6729,31 @@ fn note_light(
     let SourceRef::Frame(source) = source else {
         return;
     };
-    if out
-        .frames
-        .get(source)
-        .and_then(|frame| frame.light.as_ref())
-        .is_none()
-    {
+    let Some(frame) = out.frames.get(source) else {
         return;
-    }
-    if out
-        .lights
+    };
+    // A reflection probe is noted as a light is (ADR-0170 decision 3).
+    let light = match (&frame.light, &frame.probe) {
+        (Some(_), _) => true,
+        (None, Some(_)) => false,
+        (None, None) => return,
+    };
+    let noted = if light { &out.lights } else { &out.probes };
+    if noted
         .get(id)
         .is_some_and(|lights| lights.iter().any(|lit| &lit.item == item.id()))
     {
         return;
     }
-    if let Some(drives) = crate::sourced::of(item) {
+    if light && let Some(drives) = crate::sourced::of(item) {
         out.sourced.insert(item.id().clone(), drives);
     }
-    let lights = out.lights.entry(id.clone()).or_default();
+    let noted = if light {
+        &mut out.lights
+    } else {
+        &mut out.probes
+    };
+    let lights = noted.entry(id.clone()).or_default();
     lights.push(Lit {
         item: item.id().clone(),
         through: through.cloned(),
@@ -6765,6 +6855,81 @@ fn draw_shadows(
     Ok(drawn)
 }
 
+/// A model item a pass shows, to draw again through another camera: for the floor's
+/// reflection (ADR-0151 decision 4) and a reflection probe's capture (ADR-0170 decision
+/// 3).
+struct PassModel<'s> {
+    /// The layer the pass places for it.
+    layer: &'s GpuKey,
+    scene: &'s SceneId,
+    item: &'s ItemId,
+    model: &'s jstream_render::GpuModel,
+    shown: &'s jstream_sources::ShownModel,
+    /// Where it is placed in the scene now.
+    geometry: ItemGeometry,
+    /// The source that shows it.
+    source: &'s SourceId,
+}
+
+/// The models `pass` shows, placed as `camera` sees them now on a canvas of `size`.
+fn pass_models<'s>(
+    (cache, chains): (&ResourceCache<GpuKey>, &'s Chains),
+    shot: &'s Shot,
+    pass: &'s Pass,
+    (at, size): (MediaTime, [f32; 2]),
+    live: &LiveParams,
+    camera: SceneCamera,
+) -> Vec<PassModel<'s>> {
+    let mut models = Vec::new();
+    for layer in &pass.layers {
+        if !layer.boxed.is_some_and(|boxed| boxed.model) {
+            continue;
+        }
+        let (GpuKey::ItemBox(scene_id, item_id)
+        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
+        else {
+            continue;
+        };
+        let Some(geometry) =
+            layer_item(layer, (cache, chains), shot, (at, size), live, Some(camera)).and_then(
+                |item| match item.placement {
+                    Placement::Layer(geometry) => Some(geometry),
+                    _ => None,
+                },
+            )
+        else {
+            continue;
+        };
+        let Some((model, shown, source)) =
+            shot.boxes.iter().find_map(|(owner, boxed)| match owner {
+                ChainOwner::Item(scene, item) if scene == scene_id && item == item_id => {
+                    match &boxed.source {
+                        SourceRef::Frame(source) => Some((
+                            chains.model(source)?,
+                            shot.frames.get(source)?.model.as_ref()?,
+                            source,
+                        )),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+        else {
+            continue;
+        };
+        models.push(PassModel {
+            layer: &layer.image,
+            scene: scene_id,
+            item: item_id,
+            model,
+            shown,
+            geometry,
+            source,
+        });
+    }
+    models
+}
+
 /// Draws `pass`'s scene through `camera` mirrored in the floor `y = floor` (ADR-0151
 /// decision 4) into its [`GpuKey::Reflection`], with that picture's view depth in its
 /// [`GpuKey::ReflectionDepth`]: its cards with their cameras mirrored, and each model it
@@ -6797,73 +6962,24 @@ fn draw_reflection(
     // pass places for it.
     let size = [width as f32, height as f32];
     let mut models: Vec<(&GpuKey, GpuKey)> = Vec::new();
-    for layer in &pass.layers {
-        if !layer.boxed.is_some_and(|boxed| boxed.model) {
-            continue;
-        }
-        let (GpuKey::ItemBox(scene_id, item_id)
-        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
-        else {
-            continue;
-        };
-        let Some(geometry) = layer_item(
-            layer,
-            (&*cache, chains),
-            shot,
-            (at, size),
-            live,
-            Some(camera),
-        )
-        .and_then(|item| match item.placement {
-            Placement::Layer(geometry) => Some(geometry),
-            _ => None,
-        }) else {
-            continue;
-        };
-        let Some((model, shown)) = shot.boxes.iter().find_map(|(owner, boxed)| match owner {
-            ChainOwner::Item(scene, item) if scene == scene_id && item == item_id => {
-                match &boxed.source {
-                    SourceRef::Frame(source) => Some((
-                        chains.model(source)?,
-                        shot.frames.get(source)?.model.as_ref()?,
-                    )),
-                    _ => None,
-                }
-            }
-            _ => None,
-        }) else {
-            continue;
-        };
-        pose(compositor, model, shown);
-        let (drives, driving) = crate::sourced::materials(shot.source_drives(item_id), |m| {
-            shot.source_value(item_id, m, at)
+    for shown in pass_models((&*cache, chains), shot, pass, (at, size), live, camera) {
+        pose(compositor, shown.model, shown.shown);
+        let (drives, driving) = crate::sourced::materials(shot.source_drives(shown.item), |m| {
+            shot.source_value(shown.item, m, at)
         });
-        let source = shot
-            .boxes
-            .iter()
-            .find_map(|(owner, boxed)| match (owner, &boxed.source) {
-                (ChainOwner::Item(scene, item), SourceRef::Frame(source))
-                    if scene == scene_id && item == item_id =>
-                {
-                    Some(source)
-                }
-                _ => None,
-            });
-        let reflected = GpuKey::ReflectedModel(scene_id.clone(), item_id.clone());
+        let reflected = GpuKey::ReflectedModel(shown.scene.clone(), shown.item.clone());
         cache.layer(compositor, &reflected, width, height)?;
-        let (texture, reflection) = source.map_or((None, None), |source| {
-            model_maps(shot, &*cache, source, shown)
-        });
+        let (texture, reflection) = model_maps(shot, &*cache, shown.source, shown.shown);
         let Some(target) = cache.get(&reflected) else {
             continue;
         };
         compositor.draw_model(
             &jstream_render::ModelDraw {
-                model,
-                geometry,
+                model: shown.model,
+                geometry: shown.geometry,
                 camera: Some(mirrored),
-                lighting: shown.lighting,
-                lights: (shown.lighting == Lighting::Scene).then_some(lights),
+                lighting: shown.shown.lighting,
+                lights: (shown.shown.lighting == Lighting::Scene).then_some(lights),
                 shadows: &[],
                 environment: scene_environment((shot, &*cache), &pass.scene, at, live).0,
                 // Only what stands above the floor is reflected in it.
@@ -6875,7 +6991,7 @@ fn draw_reflection(
             },
             target,
         )?;
-        models.push((&layer.image, reflected));
+        models.push((shown.layer, reflected));
     }
     let mut items = Vec::new();
     if fill_items(

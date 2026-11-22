@@ -1195,7 +1195,8 @@ impl LiveSources {
             return Some((
                 frame
                     .with_model(running.source.model())
-                    .with_light(running.source.light()),
+                    .with_light(running.source.light())
+                    .with_probe(running.source.probe()),
                 None,
             ));
         }
@@ -1232,7 +1233,8 @@ impl LiveSources {
         // model in its place.
         let frame = frame
             .with_model(running.source.model())
-            .with_light(running.source.light());
+            .with_light(running.source.light())
+            .with_probe(running.source.probe());
         Some((frame, next))
     }
 

@@ -1916,17 +1916,21 @@ fn reflection_values(
     ]
 }
 
+/// The frame uniform's values after the lights: the shadow maps' matrices, the
+/// environment, the floor cut and the reflection probe.
+type FrameTail<'a> = (
+    &'a [[f32; 16]],
+    Option<&'a [f32; 24]>,
+    [f32; 4],
+    Option<&'a [f32; 20]>,
+);
+
 fn frame_bytes(
     (solid, mirrored): (&Solid, bool),
     clip: &[[f32; 4]; 4],
     lighting: Lighting,
     lights: Option<&SceneLighting>,
-    (shadows, environment, cut, probe): (
-        &[[f32; 16]],
-        Option<&[f32; 24]>,
-        [f32; 4],
-        Option<&[f32; 20]>,
-    ),
+    (shadows, environment, cut, probe): FrameTail<'_>,
 ) -> Vec<u8> {
     let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
