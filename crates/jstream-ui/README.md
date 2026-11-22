@@ -216,7 +216,7 @@ Contents ([Design](#design) explains the choices):
   opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
-  effects too), the window's scope tabs (`window_scopes`), its picture (`shown_by`),
+  own filters too, with their "Video" chain head and counts), the window's scope tabs (`window_scopes`), its picture (`shown_by`),
   its bar's steps (`stepped`), its undo keys (`history_key`) and the Properties
   dialogs' restore (`window_restore`, `restore_patch`) tested natively), the
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
@@ -964,10 +964,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `effects_owner`): the item's own until a change there, which the engine applies to a
   copy of them, gives the keyframe its own; a note says which, and Follow the item sends
   `item.clear_override` of `effects`. Their Uses the scene picker leaves out the scenes
-  whose picture holds the keyframe. Under an item's effects, an "Over the canvas" check
-  (`EffectsSpaceCheck`) sends `item.set_effects_space`
-  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
-  after the item is placed. It isn't shown under a keyframe's effects, since the space
+  whose picture holds the keyframe. The UI calls these item filters: with an item
+  selected, the panel's "Source | This item" segmented control picks which list shows,
+  and its header note and Open the Filters window follow it. Under an item's own
+  filters, an "Over the canvas" toggle row (`EffectsSpaceCheck`, a switch) sends
+  `item.set_effects_space`
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so they run
+  after the item is placed. It isn't shown under a keyframe's, since the space
   belongs to the item in every scene. The Add filter dialog lists the vignette, scanlines, bloom and border
   under Style. A kind with presets (`filter_presets.rs`: the vignette's Subtle, Cinematic
   and Spotlight, the border's Card, Neon and Broadcast frame, the scanlines' Monitor, CRT
