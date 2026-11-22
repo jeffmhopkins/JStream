@@ -44,7 +44,7 @@ test('a new agent waits until the person allows it, and is always allowed after'
   await page.locator('header.app-header').getByRole('button', { name: 'File' }).click();
   await page.getByRole('menuitem', { name: 'Settings…', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  await expect(settings.getByRole('checkbox', { name: 'Ask before a new agent connects' })).toBeChecked();
+  await expect(settings.getByRole('checkbox', { name: 'Ask before connecting' })).toBeChecked();
   await settings.getByRole('tab', { name: 'Devices' }).click();
   const approved = settings.locator('.approved-agents');
   await expect(approved.locator('.device-name')).toHaveText(['claude-code']);

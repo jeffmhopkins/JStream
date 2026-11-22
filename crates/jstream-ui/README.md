@@ -57,15 +57,15 @@ Contents ([Design](#design) explains the choices):
   rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
   (sRGB) or Linear light (ADR-0126). Apply sends only what changed, as one batch of
   `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
-  undo step. A new size also rescales every scene unless Scale scenes to the new
-  resolution is unchecked: `rescale` adds the placement and camera edits that keep each
+  undo step. A new size also rescales every scene unless Scale existing scenes to fit
+  is unchecked: `rescale` adds the placement and camera edits that keep each
   scene looking as it did, centred when the canvas changes shape, with the crops of boxes showing a scene mapped too; it is sent at the snapshot's revision, so a change from elsewhere since refuses it. Each
   output's video mix scales from that picture. Tested natively, the rescale through the
   mock engine with its undo.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
-  its release page. The Settings dialog's General page holds "Check for updates at launch", off until the
+  its release page. The Settings dialog's General page holds the "Check for updates" toggle under Updates, off until the
   user turns it on; the desktop app's main window then checks once as the workspace
   opens and shows a dismissable notice only when a newer release exists. A failure is
   quiet there and reported by the menu. A page that isn't the desktop app says the
@@ -154,7 +154,7 @@ Contents ([Design](#design) explains the choices):
   (`default_zoom_edits`, ADR-0112 §4). The desktop
   app also hears wheel chords on X11 while a follow camera is live
   ([jstream-desktop › Design](../../apps/jstream-desktop/README.md#design)). In the desktop app,
-  the Settings dialog's General page also holds "Hear hotkeys while another app has the focus", kept as
+  the Settings dialog's General page also holds the "Global hotkeys" toggle, kept as
   the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
   `false`), which the desktop app reads to register the bound chords with the OS
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
@@ -254,10 +254,10 @@ Contents ([Design](#design) explains the choices):
   plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
 - **Warm scenes** (`warm.rs`, ADR-0117 §7): `WarmScenesSetting`, the General page's
-  "Warm scenes" choice, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
+  "Keep ready" choice, under Performance, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
   reads the budget with `studio.get` each time the page opens and sets it with
   `studio.set_warm`, putting the old choice back with an error if the engine refuses;
-  it hides for an engine that reports no budget. Beside it, "Warm scenes' GPU memory"
+  it hides for an engine that reports no budget. Beside it, "Memory limit"
   ([ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md)) offers No limit
   and 512 MB to 16 GB, and the engine's own value when it is none of those; it sends
   `studio.set_warm` with the count and `gpu_mib`, and hides for an engine older than
@@ -289,7 +289,7 @@ Contents ([Design](#design) explains the choices):
   `agent.approval_requested` and gone on `agent.approval_resolved`. Closing it leaves
   the agent waiting and shows the next request in the queue. It holds no session of its
   own, so Disconnect still closes the socket;
-  `AskAgentsSetting`, the General page's "Ask before a new agent connects" (the UI
+  `AskAgentsSetting`, the General page's "Ask before connecting" toggle (the UI
   setting `agents.ask`); and `ApprovedAgents`, the Devices page's list of always-allowed
   agents with Remove. Each shows only where the server asks (`agent.approved`'s
   `asking`, answered `unsupported` elsewhere). The calls behind them and the texts are
@@ -935,7 +935,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   prototype's palette as CSS variables in `style.css`. Menus, dialogs and the secondary
   panels share one design language on top of it: colour roles, buttons, menu anatomy,
   type and controls ([UI design language](../../docs/UI-DESIGN.md)); a menu item that
-  deletes is built with `Entry::danger` and reads red. The fonts are IBM Plex Sans and
+  deletes is built with `Entry::danger` and reads red. Dialogs share one shell (three
+  widths, a 56 px header, a body that fades out above one footer), and their forms one
+  property grid: a setting descriptor's field (`.field.prop`) lays itself out, other forms
+  use `.prop-grid`, and the details that don't fit a setting's one helper line go behind
+  `dialog::Info`'s (i). The fonts are IBM Plex Sans and
   Mono, bundled in `fonts/` under the SIL OFL 1.1 and served from the page's own origin,
   since its policy loads fonts from nowhere else
   ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
