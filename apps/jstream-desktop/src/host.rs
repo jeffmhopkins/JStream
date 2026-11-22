@@ -965,6 +965,125 @@ fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
     Ok(Arc::new(keys))
 }
 
+/// The project file the app falls back on at startup (ADR-0163): `default`, in the
+/// person's Documents folder, once the collection file the app used before, `legacy` in
+/// the data folder, has moved there. It moves the first time the app starts with
+/// `legacy` there and nothing at `default`: the move is a save as made by the engine
+/// ([`Engine::move_collection_file`]), so asset references keep naming the same files
+/// and each stream key moves to the new path's scope, and the recent list names
+/// `default` where it named `legacy`. A move that fails is logged and the app keeps
+/// `legacy` for this start; the next start tries again. When `default` is `legacy` (a
+/// portable app, or no Documents folder) nothing moves.
+pub fn startup_project(default: &Path, legacy: &Path, data: &Path, secrets: &Secrets) -> PathBuf {
+    startup_project_with(default, legacy, data, || moving_keys(secrets))
+}
+
+/// [`startup_project`], taking the stream keys through the store `keys` opens, which it
+/// calls only when there is something to move.
+fn startup_project_with(
+    default: &Path,
+    legacy: &Path,
+    data: &Path,
+    keys: impl FnOnce() -> anyhow::Result<Option<Arc<dyn jstream_platform::StreamKeyStore>>>,
+) -> PathBuf {
+    if default == legacy {
+        return default.to_path_buf();
+    }
+    if !legacy.is_file() || default.exists() {
+        // A first start makes the default project's folder, where the engine creates
+        // the file; a folder that can't be made leaves the data folder's file for now.
+        return match default.parent().map(std::fs::create_dir_all) {
+            Some(Err(error)) => {
+                tracing::warn!(
+                    folder = ?default.parent().map(Path::display),
+                    %error,
+                    "could not make the default project's folder; the project stays in the data folder for now"
+                );
+                legacy.to_path_buf()
+            }
+            _ => default.to_path_buf(),
+        };
+    }
+    match move_project(legacy, default, data, keys) {
+        Ok(renamed) => {
+            tracing::info!(
+                from = %legacy.display(),
+                to = %default.display(),
+                kept = ?renamed.as_deref().map(Path::display),
+                "moved the default project to the Documents folder"
+            );
+            default.to_path_buf()
+        }
+        Err(error) => {
+            tracing::warn!(
+                error = format!("{error:#}"),
+                "could not move the default project to the Documents folder; it stays in the data folder for now"
+            );
+            legacy.to_path_buf()
+        }
+    }
+}
+
+/// [`startup_project`]'s move, on an engine of its own that holds only the collection
+/// and the stream key store, before the app's engine starts. Returns where the old file
+/// was kept, renamed.
+fn move_project(
+    legacy: &Path,
+    default: &Path,
+    data: &Path,
+    keys: impl FnOnce() -> anyhow::Result<Option<Arc<dyn jstream_platform::StreamKeyStore>>>,
+) -> anyhow::Result<Option<PathBuf>> {
+    if let Some(folder) = default.parent() {
+        std::fs::create_dir_all(folder)
+            .with_context(|| format!("could not create `{}`", folder.display()))?;
+    }
+    let engine = Engine::new()
+        .with_collection_file(legacy)
+        .context("could not open the collection")?;
+    let engine = match keys()? {
+        Some(keys) => engine.with_key_store(keys),
+        None => engine,
+    };
+    let renamed = engine
+        .move_collection_file(default)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    jstream_core::rename_recent_collection(
+        &data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE),
+        legacy,
+        default,
+    );
+    Ok(renamed)
+}
+
+/// The stream key store a move takes the keys through: the one the app's engine gets,
+/// behind the crash reports' redaction, or none where the app keeps no keys.
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
+fn moving_keys(secrets: &Secrets) -> anyhow::Result<Option<Arc<dyn StreamKeyStore>>> {
+    #[cfg(windows)]
+    let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_windows::WindowsCredentials);
+    #[cfg(target_os = "macos")]
+    let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_macos::MacosKeychain);
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    let keys = linux_keys()?;
+    Ok(Some(Arc::new(Redacting::new(secrets.clone(), keys))))
+}
+
+/// The stream key store a move takes the keys through: none where the app keeps no keys.
+#[cfg(not(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+)))]
+fn moving_keys(
+    _secrets: &Secrets,
+) -> anyhow::Result<Option<Arc<dyn jstream_platform::StreamKeyStore>>> {
+    Ok(None)
+}
+
 /// The engine with the collection it starts on: the most recent project in the recent
 /// list (ADR-0121 §6) if it still loads, else `default`, which is created when missing.
 /// A recent project that doesn't load is logged and skipped, so a moved or broken file
@@ -1047,7 +1166,10 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{Agents, Host, Network, VcamStatus, engine, finish_within, new_token, vcam_status};
+    use super::{
+        Agents, Host, Network, VcamStatus, engine, finish_within, new_token, startup_project_with,
+        vcam_status,
+    };
     use crate::ui::ORIGIN;
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
     use jstream_control::{Control, WsConfig, WsControl};
@@ -1469,5 +1591,145 @@ mod tests {
         );
         plain.stop();
         let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// A key store in memory, so the move's test touches no real one (R-TEST-004).
+    #[derive(Default)]
+    struct Keys(std::sync::Mutex<std::collections::HashMap<String, String>>);
+
+    impl jstream_platform::StreamKeyStore for Keys {
+        fn set(
+            &self,
+            name: &str,
+            key: &jstream_platform::Secret,
+        ) -> Result<(), jstream_platform::PlatformError> {
+            self.0
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(name.to_owned(), key.expose().to_owned());
+            Ok(())
+        }
+
+        fn get(
+            &self,
+            name: &str,
+        ) -> Result<Option<jstream_platform::Secret>, jstream_platform::PlatformError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(name)
+                .map(|key| jstream_platform::Secret::new(key.clone())))
+        }
+
+        fn clear(&self, name: &str) -> Result<(), jstream_platform::PlatformError> {
+            self.0
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(name);
+            Ok(())
+        }
+    }
+
+    /// #1559 (ADR-0163 §2): the collection file in the data folder moves to the default
+    /// project in Documents the first time, with its stream keys and its place in the
+    /// recent list, and the old file is kept renamed. After that, nothing moves.
+    #[test]
+    fn the_old_default_project_moves_to_documents_once() {
+        use jstream_platform::StreamKeyStore as _;
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-move-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        let data = scratch.join("data");
+        std::fs::create_dir_all(&data).unwrap_or_else(|e| panic!("{e}"));
+        let data = std::path::absolute(data).unwrap_or_else(|e| panic!("{e}"));
+        let legacy = data.join("collection.json");
+        let default = data
+            .parent()
+            .unwrap_or(&data)
+            .join("Documents")
+            .join("JStream")
+            .join("My project.json");
+        let recent = data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE);
+        // A fresh install has nothing to move, and opens no key store.
+        let unused = || -> anyhow::Result<Option<Arc<dyn jstream_platform::StreamKeyStore>>> {
+            panic!("no key store is needed")
+        };
+        assert_eq!(
+            startup_project_with(&default, &legacy, &data, unused),
+            default
+        );
+        assert!(
+            default.parent().is_some_and(std::path::Path::is_dir),
+            "a first start makes the folder the engine creates the file in"
+        );
+        std::fs::remove_dir_all(data.parent().unwrap_or(&data).join("Documents"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        // The app before #1559 saved here, with a key under the old path's scope.
+        let output = jstream_control::protocol::OutputId::new("yt");
+        let keys = Arc::new(Keys::default());
+        let old_key = {
+            let engine = jstream_core::Engine::new()
+                .with_collection_file(&legacy)
+                .unwrap_or_else(|e| panic!("{e}"))
+                .with_recent_collections(&recent)
+                .with_key_store(keys.clone());
+            let control = engine.connect();
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap_or_else(|e| panic!("{e}"));
+            runtime.block_on(async {
+                use jstream_control::protocol::{Batch, Call, Edit, OutputKind, RtmpTarget};
+                control
+                    .hello(Hello {
+                        protocol: PROTOCOL_VERSION,
+                        client_name: "desktop-test".into(),
+                    })
+                    .await
+                    .unwrap_or_else(|e| panic!("hello: {e}"));
+                control
+                    .call(Call::Batch(Batch::single(Edit::OutputCreate {
+                        output_id: output.clone(),
+                        kind: OutputKind::Rtmp {
+                            target: RtmpTarget::Generic {
+                                url: "rtmp://a.example/live".into(),
+                            },
+                        },
+                    })))
+                    .await
+                    .unwrap_or_else(|e| panic!("output: {e}"));
+            });
+            engine.stream_key_name(&output)
+        };
+        keys.set(&old_key, &jstream_platform::Secret::new("key"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let store = Arc::clone(&keys);
+        let moved = startup_project_with(&default, &legacy, &data, move || Ok(Some(store as _)));
+        assert_eq!(moved, default);
+        assert!(default.is_file() && !legacy.exists());
+        assert!(
+            data.join("collection.json.moved").is_file(),
+            "the old file is kept"
+        );
+        assert_eq!(
+            jstream_core::recent_collections(&recent),
+            std::slice::from_ref(&default)
+        );
+        let keys_now = keys.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        assert_eq!(keys_now.len(), 1, "{keys_now:?}");
+        assert!(!keys_now.contains_key(&old_key));
+        // A later start finds the moved file and moves nothing, even with a new file at
+        // the old path.
+        std::fs::write(&legacy, "{}").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            startup_project_with(&default, &legacy, &data, unused),
+            default
+        );
+        // A portable app's default is the old path itself: nothing moves.
+        assert_eq!(
+            startup_project_with(&legacy, &legacy, &data, unused),
+            legacy
+        );
+        let _ = std::fs::remove_dir_all(scratch);
     }
 }

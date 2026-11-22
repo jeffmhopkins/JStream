@@ -509,6 +509,13 @@ a.menuitem:focus-visible { outline: none; }
   font-size: 13px;
 }
 
+/* A toast's buttons (a saved screenshot's Open and Show in folder), after its text. */
+.toast-action {
+  margin-left: 10px;
+  padding: 2px 8px;
+  font: inherit;
+}
+
 /* Panels. */
 .muted { color: var(--muted); }
 .panel + .panel { margin-top: 1.25rem; }
