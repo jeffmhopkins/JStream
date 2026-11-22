@@ -178,6 +178,28 @@ pub(crate) fn depth_writer(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu
     )
 }
 
+/// The pipeline that adds a model's view depth, an item's image, to a scene's view depth
+/// (ADR-0143 decision 4): `fs_copy_depth`, keeping the larger value, as the cards'
+/// [`BlendPipelines::depth`] does.
+pub(crate) fn depth_copier(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu::RenderPipeline {
+    let largest = wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    };
+    pipeline(
+        device,
+        layouts,
+        "jstream-render-view-depth-copy",
+        "fs_copy_depth",
+        Some(wgpu::BlendState {
+            color: largest,
+            alpha: largest,
+        }),
+        None,
+    )
+}
+
 /// Whether `mode` is drawn by reading the backdrop.
 pub(crate) fn reads_backdrop(mode: BlendMode) -> bool {
     BACKDROP_MODES.iter().any(|(m, _)| *m == mode)

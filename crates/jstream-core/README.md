@@ -2016,9 +2016,14 @@ crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetri
 `floor_reflection` and `depth_bloom`) also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
 planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
-composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, then
-each model it shows at least half opaque, posed as its layer is, whether the pass places
-the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). `Chains::drew_depth`
+composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
+each model it shows at least half opaque, whether the pass places
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
+model's item carries its `GpuKey::ModelDepth` layer there (`Item::depth`), and
+`Compositor::render_view_depth` writes that layer into the view depth, so the model's
+geometry, drawn once into that layer with its colour, isn't drawn a second time for the
+scene's filters; a shadow map and a floor reflection, which see it through another
+camera, draw it posed as its layer is (`depth_models`). `Chains::drew_depth`
 keeps it with the camera's view and the scene's lights, as `scene_lights` gives them
 ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 1: the lights
 copied only when they change), and `run_one` hands it to the chain's

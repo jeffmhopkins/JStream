@@ -3683,7 +3683,7 @@ fn casters_of(
         true,
     )
     .into_iter()
-    .map(|(model, shown, geometry)| Caster::Model {
+    .map(|(model, shown, geometry, _)| Caster::Model {
         model: model.seen(),
         geometry,
         lighting: shown.lighting,
@@ -7801,13 +7801,18 @@ fn draw_view_depth(
     };
     compositor.render_view_depth(drawn, target)?;
     let casters = from.is_some_and(|(_, casters, _)| casters);
-    for (model, shown, geometry) in depth_models(
+    for (model, shown, geometry, in_layer) in depth_models(
         (cache, chains),
         (shot, pass),
         (at, canvas, camera),
         live,
         casters,
     ) {
+        // Through the scene's own camera, a model whose depth layer its item carries is
+        // already there: `render_view_depth` wrote that layer, as the pass tests it.
+        if from.is_none() && in_layer {
+            continue;
+        }
         pose(compositor, model, shown);
         compositor.draw_model_depth(
             &jstream_render::ModelDraw {
@@ -7832,7 +7837,8 @@ fn draw_view_depth(
 /// The models `pass` shows that write a view depth at `at`, each with what it shows and
 /// where its item places it through `camera`: every model whose layer is drawn this
 /// frame at least half opaque, as a card writes depth, and with `casters` only those
-/// that cast shadows (ADR-0151 decision 3).
+/// that cast shadows (ADR-0151 decision 3). The flag is whether its item carries the
+/// model's depth layer ([`Item::depth`]), drawn with it through `camera`.
 fn depth_models<'a>(
     (cache, chains): (&ResourceCache<GpuKey>, &'a Chains),
     (shot, pass): (&'a Shot, &Pass),
@@ -7843,6 +7849,7 @@ fn depth_models<'a>(
     &'a jstream_render::GpuModel,
     &'a jstream_sources::ShownModel,
     ItemGeometry,
+    bool,
 )> {
     let size = [canvas.width() as f32, canvas.height() as f32];
     let mut models = Vec::new();
@@ -7891,7 +7898,7 @@ fn depth_models<'a>(
         if casters && !shown.casts_shadows {
             continue;
         }
-        models.push((model, shown, geometry));
+        models.push((model, shown, geometry, item.depth.is_some()));
     }
     models
 }

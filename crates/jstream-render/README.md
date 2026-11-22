@@ -91,7 +91,10 @@ and calls this crate.
   (`composite.wgsl`), which discards where the sampled alpha times opacity times the
   sharp edge coverage is under one half; the pipeline blends with `Max`, so the
   nearest card wins in any order and depth of field doesn't blur it. A
-  `Placement::Layer` writes nothing; `draw_model_depth(draw, target)` adds a model's
+  `Placement::Layer` that carries its model's depth layer (`Item::depth`) writes that
+  layer's `1 / w` where the model covers (`fs_copy_depth`, over the layer's own
+  triangles and with `Max` too), so a model already drawn with its depth isn't drawn
+  again; one without writes nothing. `draw_model_depth(draw, target)` adds a model's
   own per-fragment `1 / w` the same way (`model.wgsl`'s `fs_depth`: both faces, masked
   and blended materials under half alpha discarded), and nothing without a camera. A
   scene with no camera leaves the target all 0. Depth-aware filters read it
@@ -1517,7 +1520,9 @@ opaque at half the white, and fog at alpha 0 changes nothing. End to end over `r
 the framing camera: the nearest of three cards wins whatever their order, with a card
 a focal length back seen half as far from the middle; a card at 0.4 opacity or hidden
 writes no depth and one at 0.6 does; a scene with no camera writes nothing; and a
-cube's own front face, through `draw_model_depth`, is nearer than the card behind it.
+cube's own front face, through `draw_model_depth`, is nearer than the card behind it,
+and the same when its layer carries that depth and the cube isn't drawn there
+(`golden_view_depth_takes_the_depth_a_models_layer_carries`).
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1

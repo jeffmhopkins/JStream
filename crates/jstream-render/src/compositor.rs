@@ -121,6 +121,8 @@ pub struct Compositor {
     sampler: wgpu::Sampler,
     image_layout: wgpu::BindGroupLayout,
     blends: BlendPipelines,
+    /// Adds a model's view depth layer to a scene's view depth ([`Item::depth`]).
+    depth_copier: wgpu::RenderPipeline,
     /// The same, drawing into an sRGB-encoded target (ADR-0126 §3).
     encoded_blends: BlendPipelines,
     /// The composite shader, which [`DepthPipelines`] are built from when first needed.
@@ -605,7 +607,10 @@ impl Compositor {
     /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
     /// its alpha, with its opacity and its sharp edge, is at least one half; the larger
     /// value wins, so draw order doesn't matter. A [`Placement::Layer`] (a model's
-    /// layer) writes nothing here: [`Self::draw_model_depth`] adds a model's own depth.
+    /// layer) that carries the model's depth ([`Item::depth`]) writes that depth where
+    /// the model covers, as a scene's pass tests against it, so the model isn't drawn
+    /// again; one without writes nothing here, and [`Self::draw_model_depth`] adds its
+    /// model's depth.
     /// A scene with no camera has no depth, and leaves `target` all 0.
     ///
     /// It prepares the scene again (placement, vertices, mips) rather than reusing the
@@ -651,15 +656,26 @@ impl Compositor {
                 multiview_mask: None,
             });
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.set_pipeline(self.blends.depth());
             for draw in &self.draws {
                 let item = &scene.items[draw.index];
-                if item.camera.is_none() || matches!(item.placement, Placement::Layer(_)) {
+                if item.camera.is_none() {
                     continue;
                 }
-                let bind_group = match &draw.mips {
-                    Some(mips) => &mips.bind_group,
-                    None => item.image.bind_group(),
+                let bind_group = match (item.placement, item.depth) {
+                    // A model's layer with its depth: the depth it was drawn with, over
+                    // the layer's own triangles, as a scene's pass writes it.
+                    (Placement::Layer(_), Some(depth)) if depth.owner().is(&self.owner) => {
+                        pass.set_pipeline(&self.depth_copier);
+                        depth.bind_group()
+                    }
+                    (Placement::Layer(_), _) => continue,
+                    _ => {
+                        pass.set_pipeline(self.blends.depth());
+                        match &draw.mips {
+                            Some(mips) => &mips.bind_group,
+                            None => item.image.bind_group(),
+                        }
+                    }
                 };
                 pass.set_bind_group(0, bind_group, &[]);
                 pass.draw(
@@ -1361,6 +1377,15 @@ impl Compositor {
         };
         let blends = blends_for(false);
         let encoded_blends = blends_for(true);
+        let depth_copier = blend::depth_copier(
+            &gpu.device,
+            &Layouts {
+                image: &image_layout,
+                backdrop: &resolve_layout,
+                shader: &composite_shader,
+                encoded: false,
+            },
+        );
         let composite_shader_kept = composite_shader.clone();
         let resolve_shader = shader(
             &gpu.device,
@@ -1402,6 +1427,7 @@ impl Compositor {
             sampler,
             image_layout,
             blends,
+            depth_copier,
             encoded_blends,
             composite_shader: composite_shader_kept,
             depth_pipelines: None,
