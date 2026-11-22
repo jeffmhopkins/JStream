@@ -6931,6 +6931,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "A source's size changed (ADR-0022 §4, 0.40), including when it became known (its\nfirst frame) or unknown (it stopped, failed, or was deleted). Runtime state, so it\ncarries no `rev`. The size is the one `source.sizes` reports.",
           "properties": {
+            "depth": {
+              "description": "Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it\n(0.157): a change of depth alone is a size change too.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "size": {
               "anyOf": [
                 {
@@ -15250,6 +15259,15 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SourceSize": {
       "description": "One source's current size, in a `source.sizes` result.",
       "properties": {
+        "depth": {
+          "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "size": {
           "anyOf": [
             {

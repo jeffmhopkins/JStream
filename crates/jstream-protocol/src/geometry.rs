@@ -22,7 +22,7 @@ pub use camera::{
 };
 pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
 pub use group::GroupPose;
-pub use solid::{Solid, SolidBounds};
+pub use solid::{Solid, SolidBounds, outline_contains};
 
 /// How the cropped source fills the item's box.
 ///

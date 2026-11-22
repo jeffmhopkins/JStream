@@ -3173,6 +3173,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
                 width: 1920,
                 height: 1080,
             }),
+            depth: None,
         }]
     );
 

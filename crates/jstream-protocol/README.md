@@ -342,7 +342,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   scales the model's `SolidBounds` into the box by its fit mode, flips, turns and moves
   it, and returns a `Solid`: the map from the model's space to the viewing frame, in
   `f64`, relative to the camera. Its `place` and `corners` are what an editor outlines and
-  hits, and `clip_matrix`, `view_matrix` and `normal_matrix` what the compositor draws
+  hits: `ItemGeometry::solid_outline(bounds, view)` is the convex hull of the eight
+  projected corners (`None` when one is behind the viewer), and `outline_contains` hits
+  it. An editor knows a model's bounds from `source.sizes` (`SolidBounds::of_size` of its
+  width, height and depth, which place it as its own bounds do, since a fit reads only
+  their proportions; ADR-0107 decision 8). `clip_matrix`, `view_matrix` and `normal_matrix` what the compositor draws
   with, cast to `f32` only once composed.
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
@@ -361,6 +365,9 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.158 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
+0.157 because a source with depth reports it: `SourceSize`'s and
+`source.size_changed`'s optional `depth`, a 3D model's front-to-back bounds
+([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8);
 0.156 because a kind's parameter can be a table of looks:
 `ParamType::Looks`, with `MAX_LOOKS`, `MAX_LOOK_NAME`, `MAX_BLINK_HZ`, `LOOK_ABSENT` and
 `LOOK_CELL_COLOR`, which the `grid` source kind's `looks` uses
@@ -1922,7 +1929,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). With
   `source.size_changed` it is what a client needs to draw a legacy placement's box, crop
   handles and a size in % of the source's own (ADR-0022 §4). Runtime state, so no
-  `rev`. Added in 0.40.
+  `rev`. Added in 0.40. Since 0.157 a source with depth also reports `depth`, in the
+  pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
+  height are reported at (the larger 512), so an editor can outline and hit it by its 3D
+  bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
+  other source.
 - `activity.list {after_seq?, limit?}`: the engine's recent activity, newest first
   ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)): one
   `ActivityEntry` for each batch, undo, redo and action the audit log records (not
@@ -2272,12 +2283,13 @@ After `welcome`, the server pushes every event to every client.
 - `privacy.changed {on, client_id, request_id?}`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so the engine never sends it. Added in 0.33.
-- `source.size_changed {source_id, size?}` says a source's size changed: it became
+- `source.size_changed {source_id, size?, depth?}` says a source's size changed: it became
   known (the first frame), changed, or became unknown (`size` omitted: the source
   stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
-  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40.
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
+  `depth`, as `source.sizes` reports it, since 0.157.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

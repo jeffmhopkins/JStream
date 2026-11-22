@@ -4791,8 +4791,9 @@ struct State {
     forget: Option<ForgetSources>,
     /// Each source's size as `source.sizes` reports it and `source.size_changed` last
     /// announced it (ADR-0022 §4): runtime state, not part of `rev`. A source with no
-    /// size has no entry.
-    sizes: BTreeMap<SourceId, FrameSize>,
+    /// size has no entry. Beside it, the depth of a source with depth (a 3D model,
+    /// ADR-0107 decision 8).
+    sizes: BTreeMap<SourceId, (FrameSize, Option<u32>)>,
     /// The size of each capture the program stage runs, as its render thread reports
     /// it: what a `display`, `window` or `webcam` source's size comes from.
     capture_sizes: BTreeMap<CaptureKey, FrameSize>,
@@ -6138,9 +6139,13 @@ impl State {
                         .graph
                         .state()
                         .sources()
-                        .map(|source| SourceSize {
-                            source_id: source.id().clone(),
-                            size: self.sizes.get(source.id()).copied().map(pixel_size),
+                        .map(|source| {
+                            let known = self.sizes.get(source.id()).copied();
+                            SourceSize {
+                                source_id: source.id().clone(),
+                                size: known.map(|(size, _)| pixel_size(size)),
+                                depth: known.and_then(|(_, depth)| depth),
+                            }
                         })
                         .collect(),
                 },
@@ -6454,11 +6459,12 @@ impl State {
             ..
         } = self;
         let state = graph.state();
-        let mut emit = |source_id: &SourceId, size: Option<FrameSize>| {
+        let mut emit = |source_id: &SourceId, known: Option<(FrameSize, Option<u32>)>| {
             subscribers.emit(
                 &Event::SourceSizeChanged {
                     source_id: source_id.clone(),
-                    size: size.map(pixel_size),
+                    size: known.map(|(size, _)| pixel_size(size)),
+                    depth: known.and_then(|(_, depth)| depth),
                 },
                 wake,
             );
@@ -6473,10 +6479,14 @@ impl State {
         for source in state.sources() {
             let source_id = source.id();
             let now = match frames.get(source_id) {
-                Some(frame) => frame.extent(),
-                None => live
-                    .size(source_id)
-                    .or_else(|| capture_sizes.get(&live.capture_key(source_id)?).copied()),
+                Some(frame) => frame.extent().map(|size| (size, frame.depth())),
+                None => match live.size(source_id) {
+                    Some(size) => Some((size, live.depth(source_id))),
+                    None => live
+                        .capture_key(source_id)
+                        .and_then(|key| capture_sizes.get(&key))
+                        .map(|size| (*size, None)),
+                },
             };
             if sizes.get(source_id) == now.as_ref() {
                 continue;
