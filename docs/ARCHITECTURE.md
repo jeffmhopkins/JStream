@@ -709,7 +709,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.151 a `midi`
   modifier follows a MIDI control change, pitch bend or channel pressure, smoothed, the
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)),
-  and since 0.155 a `data` modifier follows one field of a sender's live data, a number
+  and since 0.160 a `data` modifier follows one field of a sender's live data, a number
   through a range or a text through a table of states
   ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
   `output.create`, `output.set_target` and `output.delete` configure the collection's

@@ -32,7 +32,7 @@
 //! poses an item live, as ADR-0122 decision 1's value bindings describe.
 //!
 //! A `data` modifier ([ADR-0171](../../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
-//! decision 3, since 0.155) follows one field of a JTunnel sender's live data the same
+//! decision 3, since 0.160) follows one field of a JTunnel sender's live data the same
 //! way: a number through its `range`, `true` and `false` as 1 and 0, and a text through
 //! its `states` table, so a DAW's transport, clips and meters pose an item.
 
@@ -344,7 +344,7 @@ pub enum MotionKind {
         to: Finite32,
     },
     /// Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since
-    /// 0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,
+    /// 0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,
     /// followed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number
     /// reads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and
     /// an absent field 0, so the item rests at `from` until the sender says otherwise.

@@ -2219,7 +2219,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -5952,7 +5952,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -9458,7 +9458,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -13191,7 +13191,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -18607,7 +18607,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -22340,7 +22340,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -24613,7 +24613,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -28193,7 +28193,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -31922,7 +31922,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -34986,7 +34986,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -39060,7 +39060,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
@@ -42793,7 +42793,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",

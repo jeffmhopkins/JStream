@@ -216,6 +216,7 @@ impl Default for Engine {
         let audio_scopes = Arc::new(AudioScopes::new());
         let data = jstream_sources::LiveData::new();
         let gpu = Arc::new(SharedGpu::default());
+        let data = jstream_sources::LiveData::new();
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| {
                 let mut state = State::default();

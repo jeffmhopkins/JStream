@@ -218,7 +218,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MAX_MOTION_MATERIAL_LEN` (128)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
   Since 0.151 `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
-  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)). Since 0.155
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)). Since 0.160
   `MotionKind::Data` follows one field of a JTunnel sender's live data, within
   `MAX_DATA_KEY_LEN` (63), `MAX_DATA_FIELD_LEN` (255), `MAX_DATA_STATES` (32) and
   `MAX_DATA_STATE_LEN` (100)
@@ -362,10 +362,14 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.155 because a motion modifier can follow a DAW's live data:
+`PROTOCOL_VERSION` is 0.160 because a motion modifier can follow a DAW's live data:
 `MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
 `states` table, smoothed as a `midi` one is
 ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3);
+0.156 because a kind's parameter can be a table of looks:
+`ParamType::Looks`, with `MAX_LOOKS`, `MAX_LOOK_NAME`, `MAX_BLINK_HZ`, `LOOK_ABSENT` and
+`LOOK_CELL_COLOR`, which the `grid` source kind's `looks` uses
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 9);
 0.151 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
@@ -1045,7 +1049,12 @@ never a type per kind.
   letters, digits and `_`, at most `MAX_CAMERA_CONTROL_NAME` bytes) set to a 32-bit
   integer or `CAMERA_CONTROL_AUTO` (`"auto"`), a UI offering the controls
   `capture.targets` lists for that device; a control the object doesn't name keeps what
-  the device has), a
+  the device has; `looks`, since 0.156: an object of at most `MAX_LOOKS` entries, each a
+  state's text (1 to `MAX_LOOK_NAME` bytes, no control characters) set to a look,
+  `{"color", "brightness", "blink_hz"}`, each optional: `color` a `#rrggbb` or
+  `LOOK_CELL_COLOR` (`"cell"`, the cell's own colour), `brightness` 0 to 1 and `blink_hz`
+  0 to `MAX_BLINK_HZ`, any other field refused; `LOOK_ABSENT` (`"absent"`) names the look
+  of a cell the data doesn't have, for the `grid` kind's cells), a
   `default`, a `label`, an
   optional `description`, an optional `warning` (since 0.93: one line a client shows
   beside the control, not only in a tooltip, saying what the setting gives away), the UI
@@ -2797,7 +2806,7 @@ after 1.0:
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86), a `midi` one (0.151) and a `data` one (0.155) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86), a `midi` one (0.151) and a `data` one (0.160) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2873,7 +2882,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
   preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
   camera's motion refuses it.
-- **`data`** (since 0.155,
+- **`data`** (since 0.160,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3)
   follows one field of a JTunnel sender's live data the same way: `field` (a dotted path
   of names and list indexes, `slots.2.state`; empty for the whole message) of the latest

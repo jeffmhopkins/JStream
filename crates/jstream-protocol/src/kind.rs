@@ -274,11 +274,82 @@ pub enum ParamType {
         /// [`ParamType::CaptureTarget`] of kind `device`.
         target: String,
     },
+    /// How a `grid` source draws a cell in each state it reads (ADR-0171 decision 9), so a
+    /// UI can offer a table of them. Since 0.156. Its value is an object from a state's
+    /// text (1 to [`MAX_LOOK_NAME`] bytes, no control characters) to a look:
+    /// `{"color": "#rrggbb" | "cell", "brightness": 0..1, "blink_hz": 0..16}`, where
+    /// `"cell"` is the cell's own colour from the data, `brightness` defaults to 1 and
+    /// `blink_hz` to 0 (steady). At most [`MAX_LOOKS`] entries; [`LOOK_ABSENT`] names the
+    /// look of a cell the data doesn't have. Its default names only that one.
+    Looks,
     /// A type this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a descriptor from a newer server.
     #[serde(other)]
     #[schemars(skip)]
     Unknown,
+}
+
+/// The most entries a [`ParamType::Looks`] value holds.
+pub const MAX_LOOKS: usize = 32;
+
+/// The longest state text a [`ParamType::Looks`] entry is named by, in bytes.
+pub const MAX_LOOK_NAME: usize = 63;
+
+/// The fastest a [`ParamType::Looks`] entry blinks, in blinks a second.
+pub const MAX_BLINK_HZ: f64 = 16.0;
+
+/// The [`ParamType::Looks`] entry for a cell the data doesn't have: no message for its
+/// column, no list entry for its row, or no state text.
+pub const LOOK_ABSENT: &str = "absent";
+
+/// The `color` of a [`ParamType::Looks`] entry that takes the cell's own colour.
+pub const LOOK_CELL_COLOR: &str = "cell";
+
+/// Checks a [`ParamType::Looks`] value.
+fn check_looks(value: &Value) -> Result<(), String> {
+    let Some(object) = value.as_object() else {
+        return Err("must be an object of state texts to looks".into());
+    };
+    if object.len() > MAX_LOOKS {
+        return Err(format!("names more than {MAX_LOOKS} looks"));
+    }
+    for (name, look) in object {
+        if name.is_empty() || name.len() > MAX_LOOK_NAME || name.chars().any(char::is_control) {
+            return Err(format!(
+                "has a state that isn't 1 to {MAX_LOOK_NAME} bytes without control characters"
+            ));
+        }
+        let Some(look) = look.as_object() else {
+            return Err(format!("look `{name}` must be an object"));
+        };
+        for (field, v) in look {
+            let ok = match field.as_str() {
+                "color" => v
+                    .as_str()
+                    .is_some_and(|c| c == LOOK_CELL_COLOR || is_hex_color(c)),
+                "brightness" => v.as_f64().is_some_and(|b| (0.0..=1.0).contains(&b)),
+                "blink_hz" => v
+                    .as_f64()
+                    .is_some_and(|b| (0.0..=MAX_BLINK_HZ).contains(&b)),
+                _ => {
+                    return Err(format!(
+                        "look `{name}` has `{field}`; a look takes `color`, `brightness` and `blink_hz`"
+                    ));
+                }
+            };
+            if !ok {
+                return Err(format!(
+                    "look `{name}`: `color` must be `#rrggbb` or \"cell\", `brightness` 0 to 1, `blink_hz` 0 to {MAX_BLINK_HZ}"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether `c` is `#rrggbb`.
+fn is_hex_color(c: &str) -> bool {
+    c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 /// Which part of a video capture device's format a [`ParamType::CaptureFormat`]
@@ -512,6 +583,7 @@ impl ParamDescriptor {
             },
             ParamType::CaptureFormat { part, .. } => check_capture_format(*part, value),
             ParamType::CameraControls { .. } => check_camera_controls(value),
+            ParamType::Looks => check_looks(value),
             ParamType::Unknown => Err("has a type this engine can't check".into()),
         }
     }
@@ -593,6 +665,28 @@ impl ParamDescriptor {
                     {"type": "integer", "minimum": i32::MIN, "maximum": i32::MAX},
                     {"const": CAMERA_CONTROL_AUTO},
                 ]},
+            }),
+            ParamType::Looks => json!({
+                "type": "object",
+                "maxProperties": MAX_LOOKS,
+                "propertyNames": {
+                    "minLength": 1,
+                    "maxLength": MAX_LOOK_NAME,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                    "description": "A state's text: 1 to 63 bytes of UTF-8 (the server counts bytes), no control characters.",
+                },
+                "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                        "color": {"anyOf": [
+                            {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                            {"const": LOOK_CELL_COLOR},
+                        ]},
+                        "brightness": {"type": "number", "minimum": 0, "maximum": 1},
+                        "blink_hz": {"type": "number", "minimum": 0, "maximum": MAX_BLINK_HZ},
+                    },
+                    "additionalProperties": false,
+                },
             }),
             ParamType::Unknown => json!({}),
         };

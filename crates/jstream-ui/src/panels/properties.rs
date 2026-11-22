@@ -461,6 +461,7 @@ fn input_for(
         ParamType::CameraControls { target } => {
             camera_controls_input(value, send, target.clone(), settings)
         }
+        ParamType::Looks => super::looks::looks_input(value, send),
         ParamType::Scene => reference_select(value, send, move || {
             studio.collection.with(|c| {
                 c.iter()
