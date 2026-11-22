@@ -103,6 +103,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "midi_piano_roll",
             "model",
             "network_audio",
+            "reflection_probe",
             "shape",
             "spectrum",
             "text",
