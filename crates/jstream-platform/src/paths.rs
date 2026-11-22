@@ -4,7 +4,12 @@
 //! can live on a USB stick. Every host (the desktop app, the daemon) finds it here, so
 //! they agree on one folder.
 //!
-//! The folder is found from the environment, not a crate: three cases don't pay for
+//! It also finds the person's own folders the desktop app saves into, which Explorer and
+//! Finder show (ADR-0163): Documents, for the default project, and Downloads, for
+//! screenshots. On macOS and Linux they come from here; on Windows a known-folder call
+//! in `jstream-platform-windows` finds them, since OneDrive can move Documents.
+//!
+//! The folders are found from the environment, not a crate: these cases don't pay for
 //! `dirs`, which adds `dirs-sys` and, on Windows, `windows-sys`.
 
 use std::ffi::OsString;
@@ -34,6 +39,97 @@ pub const WARM_SCENES_FILE: &str = "warm-scenes.json";
 /// The file in the data folder that keeps the projects opened most recently (ADR-0121
 /// §6). Only the desktop app keeps one; the daemon opens the file it is given.
 pub const RECENT_COLLECTIONS_FILE: &str = "recent-collections.json";
+
+/// The folder the desktop app keeps its default project in, inside the person's
+/// Documents folder (ADR-0163 §1): `Documents\JStream` on Windows, `~/Documents/JStream`
+/// on macOS and Linux.
+pub const PROJECTS_DIR: &str = "JStream";
+
+/// The desktop app's default project file in [`PROJECTS_DIR`] (ADR-0163 §1).
+pub const DEFAULT_PROJECT: &str = "My project.json";
+
+/// One of the person's own folders, which the desktop app saves into (ADR-0163).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UserFolder {
+    /// Documents: the default project's folder is in it.
+    Documents,
+    /// Downloads: screenshots are saved there, where a browser's download goes.
+    Downloads,
+}
+
+/// Whether the exe in `exe_dir` is portable: a [`PORTABLE_MARKER`] file sits beside it.
+/// A portable JStream keeps its default project in its data folder too, so the whole
+/// app stays on its USB stick (ADR-0163 §1).
+pub fn is_portable(exe_dir: Option<&Path>) -> bool {
+    exe_dir.is_some_and(|dir| dir.join(PORTABLE_MARKER).is_file())
+}
+
+/// `folder` on macOS and Linux, from the environment through `var` and, on Linux, the
+/// `user-dirs.dirs` file `read` returns the text of (`None` when there is none).
+/// `None` on Windows, whose known-folder call finds it instead, and when `HOME` isn't
+/// absolute.
+///
+/// macOS: `~/Documents` or `~/Downloads`. Linux: `XDG_DOCUMENTS_DIR` or
+/// `XDG_DOWNLOAD_DIR` in `$XDG_CONFIG_HOME/user-dirs.dirs` (else
+/// `~/.config/user-dirs.dirs`), as `xdg-user-dirs` writes them, else `~/Documents` or
+/// `~/Downloads`. A line that names the home folder itself, which the spec uses for a
+/// folder turned off, or a path that isn't absolute, is ignored.
+pub fn user_folder_for(
+    folder: UserFolder,
+    var: impl Fn(&str) -> Option<OsString>,
+    read: impl Fn(&Path) -> Option<String>,
+) -> Option<PathBuf> {
+    if cfg!(windows) {
+        return None;
+    }
+    let home = var("HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())?;
+    let (name, key) = match folder {
+        UserFolder::Documents => ("Documents", "XDG_DOCUMENTS_DIR"),
+        UserFolder::Downloads => ("Downloads", "XDG_DOWNLOAD_DIR"),
+    };
+    if cfg!(target_os = "macos") {
+        return Some(home.join(name));
+    }
+    let config = var("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| home.join(".config"));
+    let listed = read(&config.join("user-dirs.dirs"))
+        .and_then(|text| xdg_user_dir(&text, key, &home))
+        .filter(|dir| *dir != home);
+    Some(listed.unwrap_or_else(|| home.join(name)))
+}
+
+/// [`user_folder_for`] with the process environment and the file system.
+pub fn user_folder(folder: UserFolder) -> Option<PathBuf> {
+    user_folder_for(
+        folder,
+        |name| std::env::var_os(name),
+        |path| std::fs::read_to_string(path).ok(),
+    )
+}
+
+/// The folder `key` names in a `user-dirs.dirs` file's `text`: a line
+/// `KEY="$HOME/path"` or `KEY="/absolute/path"`, the only two forms the file holds.
+/// The last line for `key` wins, as the shell that sources the file would have it.
+fn xdg_user_dir(text: &str, key: &str, home: &Path) -> Option<PathBuf> {
+    text.lines().rev().find_map(|line| {
+        let value = line
+            .trim()
+            .strip_prefix(key)?
+            .trim_start()
+            .strip_prefix('=')?;
+        let value = value.trim().strip_prefix('"')?.strip_suffix('"')?;
+        let path = match value.strip_prefix("$HOME") {
+            Some("") => home.to_path_buf(),
+            Some(rest) => home.join(rest.strip_prefix('/')?),
+            None => PathBuf::from(value),
+        };
+        path.is_absolute().then_some(path)
+    })
+}
 
 /// The data folder of this process: [`data_dir_for`] with the running exe's folder and
 /// the process environment. `None` when it can't be found (no usable `APPDATA` on
@@ -81,7 +177,7 @@ pub fn data_dir_for(
 
 #[cfg(test)]
 mod tests {
-    use super::{PORTABLE_DATA_DIR, PORTABLE_MARKER, data_dir_for};
+    use super::{PORTABLE_DATA_DIR, PORTABLE_MARKER, data_dir_for, is_portable};
     use std::ffi::OsString;
     use std::fs;
 
@@ -117,6 +213,8 @@ mod tests {
         fs::remove_dir(exe.join(PORTABLE_MARKER)).unwrap_or_else(|e| panic!("{e}"));
         fs::write(exe.join(PORTABLE_MARKER), "").unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(data_dir_for(Some(&exe), &everywhere), portable);
+        assert!(is_portable(Some(&exe)));
+        assert!(!is_portable(None));
         // The marker wins even when the environment names no folder.
         assert_eq!(data_dir_for(Some(&exe), env(&[])), portable);
         let _ = fs::remove_dir_all(&exe);
@@ -168,6 +266,76 @@ mod tests {
             data_dir_for(None, env(&[("XDG_DATA_HOME", "x"), ("HOME", "/h")])),
             Some(PathBuf::from("/h/.local/share/jstream")),
             "a relative XDG_DATA_HOME is ignored"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_saves_in_the_home_folders() {
+        use super::{UserFolder, user_folder_for};
+        let none = |_: &std::path::Path| None;
+        assert_eq!(
+            user_folder_for(UserFolder::Documents, env(&[("HOME", "/Users/me")]), none),
+            Some(std::path::PathBuf::from("/Users/me/Documents"))
+        );
+        assert_eq!(
+            user_folder_for(UserFolder::Downloads, env(&[("HOME", "/Users/me")]), none),
+            Some(std::path::PathBuf::from("/Users/me/Downloads"))
+        );
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn linux_reads_the_xdg_user_folders() {
+        use super::{UserFolder, user_folder_for};
+        use std::path::{Path, PathBuf};
+        let home = env(&[("HOME", "/h")]);
+        let file = |text: &'static str| {
+            move |path: &Path| {
+                (path == Path::new("/h/.config/user-dirs.dirs")).then(|| text.to_owned())
+            }
+        };
+        let dirs = "# written by xdg-user-dirs-update\n\
+                    XDG_DOCUMENTS_DIR=\"$HOME/Dokumente\"\n\
+                    XDG_DOWNLOAD_DIR=\"/mnt/dl\"\n";
+        assert_eq!(
+            user_folder_for(UserFolder::Documents, &home, file(dirs)),
+            Some(PathBuf::from("/h/Dokumente"))
+        );
+        assert_eq!(
+            user_folder_for(UserFolder::Downloads, &home, file(dirs)),
+            Some(PathBuf::from("/mnt/dl"))
+        );
+        // No file, a folder turned off (the home folder itself) or a relative path: the
+        // usual name under home.
+        for text in [
+            "",
+            "XDG_DOCUMENTS_DIR=\"$HOME/\"",
+            "XDG_DOCUMENTS_DIR=\"$HOME\"",
+            "XDG_DOCUMENTS_DIR=\"docs\"",
+        ] {
+            assert_eq!(
+                user_folder_for(UserFolder::Documents, &home, file(text)),
+                Some(PathBuf::from("/h/Documents")),
+                "{text}"
+            );
+        }
+        // XDG_CONFIG_HOME moves the file.
+        let moved = env(&[("HOME", "/h"), ("XDG_CONFIG_HOME", "/c")]);
+        let at_c = |path: &Path| {
+            (path == Path::new("/c/user-dirs.dirs")).then(|| "XDG_DOCUMENTS_DIR=\"/d\"".to_owned())
+        };
+        assert_eq!(
+            user_folder_for(UserFolder::Documents, &moved, at_c),
+            Some(PathBuf::from("/d"))
+        );
+        assert_eq!(
+            user_folder_for(UserFolder::Documents, env(&[]), file(dirs)),
+            None
+        );
+        assert_eq!(
+            user_folder_for(UserFolder::Documents, env(&[("HOME", "rel")]), file(dirs)),
+            None
         );
     }
 }
