@@ -2161,7 +2161,7 @@ fn the_engine_answers_like_the_mock() {
                 gesture_id: GestureId::new("g9"),
             },
         },
-        // No plugin is installed (ADR-0069): both answer `not_found`. `plugin.install`
+        // No plugin is installed (ADR-0069): each answers `not_found`. `plugin.install`
         // isn't sent: the engine loads the package, which the mock can't
         // (`tests/automation.rs`).
         Call::Action {
@@ -2173,6 +2173,11 @@ fn the_engine_answers_like_the_mock() {
             action: Action::PluginGrant {
                 plugin_id: jstream_protocol::PluginId::new("plg_1"),
                 grant: jstream_protocol::PluginGrant::default(),
+            },
+        },
+        Call::Action {
+            action: Action::PluginUninstall {
+                plugin_id: jstream_protocol::PluginId::new("plg_1"),
             },
         },
     ];

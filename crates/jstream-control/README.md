@@ -286,7 +286,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   collection file answers them: the mock keeps no file
   ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md));
 - `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
-  `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
+  `plugin.grant`, `plugin.enable` and `plugin.uninstall` with `not_found` (entity
+  `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock, so
   `plugin.list` lists none;
 - `plugin.clap_scan` answered as an engine that hosts no CLAP plugins (`available`

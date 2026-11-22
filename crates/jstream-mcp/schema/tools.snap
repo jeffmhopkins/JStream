@@ -640,7 +640,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "max_probe_resolution": {
-                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.161). `studio.set_rendering` refuses any other size.",
+                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -649,7 +649,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "reflection_probes": {
-                    "description": "Whether reflection probes capture, or left out to keep it (since 0.161).",
+                    "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
                       "boolean",
                       "null"
@@ -1456,6 +1456,24 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an installed plugin (0.163): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.uninstall",
                     "type": "string"
                   }
                 },
@@ -4056,7 +4074,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.161 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
                 "properties": {
                   "background": {
                     "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -4074,7 +4092,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.161): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -7899,7 +7917,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "max_probe_resolution": {
-                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.161). `studio.set_rendering` refuses any other size.",
+                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -7908,7 +7926,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "reflection_probes": {
-                    "description": "Whether reflection probes capture, or left out to keep it (since 0.161).",
+                    "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
                       "boolean",
                       "null"
@@ -8715,6 +8733,24 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an installed plugin (0.163): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.uninstall",
                     "type": "string"
                   }
                 },
@@ -11315,7 +11351,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.161 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
                 "properties": {
                   "background": {
                     "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -11333,7 +11369,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.161): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -17068,7 +17104,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "max_probe_resolution": {
-                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.161). `studio.set_rendering` refuses any other size.",
+                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -17077,7 +17113,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "reflection_probes": {
-                    "description": "Whether reflection probes capture, or left out to keep it (since 0.161).",
+                    "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
                       "boolean",
                       "null"
@@ -17884,6 +17920,24 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an installed plugin (0.163): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.uninstall",
                     "type": "string"
                   }
                 },
@@ -20484,7 +20538,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.161 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
                 "properties": {
                   "background": {
                     "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -20502,7 +20556,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.161): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -26674,7 +26728,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "max_probe_resolution": {
-                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.161). `studio.set_rendering` refuses any other size.",
+                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -26683,7 +26737,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "reflection_probes": {
-                    "description": "Whether reflection probes capture, or left out to keep it (since 0.161).",
+                    "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
                       "boolean",
                       "null"
@@ -27490,6 +27544,24 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an installed plugin (0.163): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.uninstall",
                     "type": "string"
                   }
                 },
@@ -30090,7 +30162,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.161 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
                 "properties": {
                   "background": {
                     "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -30108,7 +30180,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.161): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -35807,7 +35879,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.161 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
                 "properties": {
                   "background": {
                     "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -35825,7 +35897,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.161): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -36972,7 +37044,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "max_probe_resolution": {
-                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.161). `studio.set_rendering` refuses any other size.",
+                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -36981,7 +37053,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "reflection_probes": {
-                    "description": "Whether reflection probes capture, or left out to keep it (since 0.161).",
+                    "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
                       "boolean",
                       "null"
@@ -37581,7 +37653,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "max_probe_resolution": {
-                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.161). `studio.set_rendering` refuses any other size.",
+                    "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -37590,7 +37662,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "reflection_probes": {
-                    "description": "Whether reflection probes capture, or left out to keep it (since 0.161).",
+                    "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
                       "boolean",
                       "null"
@@ -38397,6 +38469,24 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an installed plugin (0.163): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.uninstall",
                     "type": "string"
                   }
                 },
@@ -40997,7 +41087,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.161 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
                 "properties": {
                   "background": {
                     "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -41015,7 +41105,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.161): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {

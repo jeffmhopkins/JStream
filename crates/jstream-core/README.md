@@ -183,8 +183,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)):
   `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
   `plugin.grant` replaces what it may do, never past what its manifest asks for, and
-  `plugin.enable` loads it again after the engine disabled it, and `plugin.list` lists
-  them. With a plugin folder
+  `plugin.enable` loads it again after the engine disabled it, `plugin.uninstall`
+  removes one, and `plugin.list` lists them. With a plugin folder
   (`open_plugin_dir`), the installed plugins and their grants are saved in its
   `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 
@@ -1016,11 +1016,12 @@ WebSocket API does, minus serialization:
   server in front keeps the UI's settings
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)), so behind a
   server they never reach the engine either.
-- `plugin.install`, `plugin.grant` and `plugin.enable` run with no engine lock held
-  (see *WASM plugins*). Built without the `wasm-plugins` feature, the engine answers
-  `plugin.install` with `unsupported` and the other two with `not_found`, since nothing
-  is ever installed. That is also how the mock answers, so the differential script
-  sends `plugin.enable` and `plugin.grant` for a plugin that isn't installed.
+- `plugin.install`, `plugin.grant`, `plugin.enable` and `plugin.uninstall` run with no
+  engine lock held (see *WASM plugins*). Built without the `wasm-plugins` feature, the
+  engine answers `plugin.install` with `unsupported` and the other three with
+  `not_found`, since nothing is ever installed. That is also how the mock answers, so
+  the differential script sends `plugin.enable`, `plugin.grant` and `plugin.uninstall`
+  for a plugin that isn't installed.
 
 <a id="dependencies"></a>
 ## Dependencies
@@ -3844,6 +3845,17 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   install does, answering `action_failed` if that fails, which leaves it disabled; for a
   running plugin it succeeds and changes nothing. `plugin.grant` and `plugin.enable` fail
   with `not_found` for a plugin that isn't installed.
+- **Removing.** `plugin.uninstall` takes the plugin's entry out of the registry, cuts its
+  grant to `read` at once (its session shares the grant, so a call it is still making
+  can't edit), closes a running one's subscription and drops its handles, saves
+  `plugins.json` without it,
+  and then sends `plugin.uninstalled`, saving first as a disable does. Its thread ends
+  once the invocation it is in returns, and its session with it; a fault after that
+  finds no entry to disable, and a run under the same ID installed again has another
+  run number. A plugin still `Starting` is refused with `action_failed`, since the
+  install or enable loading it would find its entry gone, or a new one under the same
+  ID. Its package is left on disk. It fails with `not_found` for a plugin that isn't
+  installed, as an engine without the `wasm-plugins` feature answers.
 - **Updates.** Each load of a package (`plugin.enable`, and the start of a saved plugin)
   compares what its manifest asks for with what it asked for when a person last granted
   the plugin, at install or with `plugin.grant`. One that asks for more stays disabled

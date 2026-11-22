@@ -833,7 +833,7 @@ pub enum Edit {
     },
     /// Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the
     /// Mixer when it is nested, its background colour, and since 0.116 whether the
-    /// studio keeps it warm (ADR-0117 §7), and since 0.161 whether its surfaces reflect
+    /// studio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect
     /// each other (ADR-0170 decision 2). Every field left out takes its default. A
     /// keyframe scene has options of its own, except a background, which it shows from
     /// its parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`
@@ -2151,6 +2151,19 @@ pub enum Action {
         /// The plugin.
         plugin_id: PluginId,
     },
+    /// Removes an installed plugin (0.163): a running one stops once the invocation it is
+    /// in returns, holding only `read` from the moment it is removed, and the engine
+    /// forgets it and its grant, so it is no longer listed or started again with the
+    /// saved plugins. Its package is left on
+    /// disk: it is the person's folder. `plugin.uninstalled` reports it. For a person
+    /// only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin
+    /// that isn't installed, and `action_failed` for one that an install or a
+    /// `plugin.enable` is still loading, which can be removed once that answers.
+    #[serde(rename = "plugin.uninstall")]
+    PluginUninstall {
+        /// The plugin.
+        plugin_id: PluginId,
+    },
     /// Re-enables an effect-pack kind the engine quarantined after a GPU device loss was
     /// blamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU
     /// (0.102, `gpu.effect_slow`), and the whole pack when the pack
@@ -2355,6 +2368,7 @@ impl Action {
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
+            Action::PluginUninstall { .. } => "plugin.uninstall",
             Action::PluginClapRescan => "plugin.clap_rescan",
             Action::EffectEnable { .. } => "effect.enable",
             Action::CodecDownload { .. } => "codec.download",
@@ -2466,6 +2480,7 @@ impl Action {
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
+            | Action::PluginUninstall { .. }
             | Action::PluginClapRescan
             | Action::EffectEnable { .. }
             | Action::CodecDownload { .. }
@@ -2538,10 +2553,11 @@ impl Action {
             )),
             Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. } => Some((
+            | Action::PluginEnable { .. }
+            | Action::PluginUninstall { .. } => Some((
                 "type",
-                "a plugin action can't be bound: a person installs, grants and re-enables \
-                 plugins through the UI (ADR-0069)",
+                "a plugin action can't be bound: a person installs, grants, re-enables and \
+                 removes plugins through the UI (ADR-0069)",
             )),
             Action::PtzDrive { .. } => Some((
                 "type",
@@ -2691,6 +2707,7 @@ impl Action {
             | Action::AgentForget { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
+            | Action::PluginUninstall { .. }
             | Action::EffectEnable { .. }
             | Action::CodecDownload { .. }
             | Action::CodecDelete { .. }

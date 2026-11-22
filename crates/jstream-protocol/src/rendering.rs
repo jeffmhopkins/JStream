@@ -29,13 +29,13 @@ pub struct RenderFeatures {
     /// second time. Off, it passes its input through and the scene isn't redrawn.
     #[serde(default = "on")]
     pub floor_reflections: bool,
-    /// Reflection probes (ADR-0170 decision 3, since 0.161), which draw their scene six
+    /// Reflection probes (ADR-0170 decision 3, since 0.165), which draw their scene six
     /// times a capture. Off, no probe captures and every surface reflects its
     /// environment as without one.
     #[serde(default = "on")]
     pub reflection_probes: bool,
     /// The largest face a probe captures at, in pixels a side: one of
-    /// [`PROBE_RESOLUTIONS`] (since 0.161). A probe set larger captures at this.
+    /// [`PROBE_RESOLUTIONS`] (since 0.165). A probe set larger captures at this.
     #[serde(default = "max_probe")]
     pub max_probe_resolution: u32,
 }
@@ -124,11 +124,11 @@ pub struct RenderFeaturesChange {
     /// Whether the `floor_reflection` filter draws, or left out to keep it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub floor_reflections: Option<bool>,
-    /// Whether reflection probes capture, or left out to keep it (since 0.161).
+    /// Whether reflection probes capture, or left out to keep it (since 0.165).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reflection_probes: Option<bool>,
     /// The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out
-    /// to keep it (since 0.161). `studio.set_rendering` refuses any other size.
+    /// to keep it (since 0.165). `studio.set_rendering` refuses any other size.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_probe_resolution: Option<u32>,
 }

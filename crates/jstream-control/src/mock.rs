@@ -1294,7 +1294,7 @@ impl State {
             // As the engine: the server in front answers the pairing calls (ADR-0044) and
             // keeps the UI settings (ADR-0084).
             // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
-            // module, and none is ever installed to grant or enable. It hosts no CLAP
+            // module, and none is ever installed to grant, enable or remove. It hosts no CLAP
             // plugins either, so it has nothing to rescan.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
@@ -1307,7 +1307,9 @@ impl State {
                     call: other.name().into(),
                 });
             }
-            Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
+            Action::PluginGrant { plugin_id, .. }
+            | Action::PluginEnable { plugin_id }
+            | Action::PluginUninstall { plugin_id } => {
                 return Err(not_found(EntityKind::Plugin, plugin_id.as_str()));
             }
             // The mock loads no effect packs, so nothing is quarantined to re-enable.
