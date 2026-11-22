@@ -10,8 +10,8 @@ review_every = "90d"
 
 One look for the web UI's menus, dialogs and secondary panels, so that each new screen
 follows these rules instead of making its own. The main window's layout, the header bar,
-the canvas and the Scenes and Sources panels keep their own prototype styling
-([spec-workspace](../design/ui-prototype/spec-workspace.md),
+the canvas and the Scenes and Sources panels keep their own prototype styling, but for
+the shared menu style of their right-click menus ([spec-workspace](../design/ui-prototype/spec-workspace.md),
 [spec-panels](../design/ui-prototype/spec-panels.md)). This page governs everything
 those panels open, and every other panel. Where OBS has an answer that fits, follow it.
 Where JStream works differently, or has a better answer, these rules win.
@@ -29,6 +29,7 @@ one job, and a screen uses only these tokens from `style.css`.
 |---|---|---|
 | Accent | `--accent` | Primary buttons, focus rings, checked controls, the selected tab's underline |
 | Selected | `--selected` | A selected row, list item or segment |
+| Button | `--button`, `--button-hover` | A secondary button's flat fill and its hover |
 | Hover | `--menu-hover` | A hovered menu line or row: neutral, so it never looks selected |
 | Danger | `--danger-text`, `--danger-solid` | Red text on a secondary button or menu line that deletes, and the solid button that confirms a delete |
 | On air | `--danger` | Go Live, the program tag, live badges and live outputs only |
@@ -71,7 +72,8 @@ The header's menus and the right-click menus are one family:
   a `›`.
 - Section heads are the [eyebrow](#type) style.
 - An item that deletes is marked with `Entry::danger`, reads red, and sits in the last
-  group. The Scenes and Sources panels' menus are left as they are.
+  group. The Scenes and Sources panels' right-click menus share this menu style, but
+  their delete items aren't marked.
 - Menus hold commands. Information belongs in dialogs and status UI.
 
 <a id="type"></a>
@@ -104,3 +106,58 @@ covers = ["crates/jstream-ui/style.css"]
 - A hovered row is neutral (`--menu-hover`), and a selected row is `--selected`. The two
   never look the same.
 - A row's summary or meta text gives way before its name: the name truncates last.
+
+<a id="dialogs"></a>
+## Dialogs
+<!-- @section
+covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
+-->
+
+- Three widths: small (`--dialog-s`, 440 px) for a question or a short form, medium
+  (`--dialog-m`, 600 px) for a one-column form, and large (`--dialog-l`, 860 px) for two
+  panes. A two-pane dialog has a fixed height, so its panes don't jump.
+- **Header**, 56 px: an optional icon, the title, and a subtitle that names the object
+  or target ("Into scene “Main”", "output-1 · Stream · Stopped"). The title names the
+  dialog in sentence case ("Output settings"), never with a raw ID first. A tagline is
+  not a subtitle. The × is a 28 px target.
+- **Body**: what scrolls fades out above the footer, so content never ends cut off
+  under it.
+- **Footer**, 56 px with 32 px buttons, one per dialog: Defaults, Delete… and similar on
+  the left (`.footer-left`), Cancel and the primary on the right.
+
+<a id="forms"></a>
+## Forms
+<!-- @section
+covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/panels/properties.rs"]
+-->
+
+The property grid, as OBS's Properties lay a source's settings out:
+
+- In a dialog, labels sit in a 120 px column on the left, top-aligned with the first line
+  of their control, in 12 px `--muted`.
+- Controls are at most 360 px wide. A number field is 88 px with its unit beside it; a
+  slider fills the row with a 64 px number after it.
+- A setting's reset (↺) sits in a 20 px column of its own and shows only once the value
+  differs from its default, so the right edges line up.
+- The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
+  themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
+- Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for
+  one that waits for OK. Both sit in the control column. A toggle's label is a `<label for>`, so a click on it
+  flips the toggle.
+- Related rows are grouped under [eyebrow](#type) headings.
+
+<a id="copy"></a>
+## Copy
+<!-- @section
+covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
+-->
+
+- A setting has at most one helper line: 12 px `--dim`, under its control, saying what
+  the person needs to decide. The rest goes behind an (i) beside the label or control
+  (the `Info` component), which shows on hover or focus, opens on the side with room
+  inside the body that would clip it, and is the mark's accessible name.
+- Say what it does for the person, not how the engine does it.
+- A warning or a consequence that needs reading is a one-line callout (`.callout`, with
+  the info icon; `.warn` when it stops something), not a paragraph.
+- An empty list says so in a few words ("No motion yet.") next to the action that fills
+  it.

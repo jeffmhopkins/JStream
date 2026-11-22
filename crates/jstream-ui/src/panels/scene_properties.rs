@@ -880,7 +880,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                                 draft.update(|d| d.keep_warm = on);
                             }
                         />
-                        <span class="field-note">"Its videos, pages and cameras keep running while it's off program, so showing it starts nothing. It counts toward Settings › General › Warm scenes."</span>
+                        <span class="field-note">"Its videos, pages and cameras keep running while it's off program, so showing it starts nothing. It counts toward Settings › General › Keep ready."</span>
                     </label>
                 </Show>
                 <Show when=move || is_group>
