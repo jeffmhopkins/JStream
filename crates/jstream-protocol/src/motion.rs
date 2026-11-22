@@ -20,7 +20,7 @@
 //! a number, kept within the range the effect's kind gives it, or to a colour's red,
 //! green and blue as a fraction of full.
 //!
-//! Since 0.141 a modifier can drive a live number or colour setting of the item's
+//! Since 0.145 a modifier can drive a live number or colour setting of the item's
 //! source instead ([ADR-0171](../../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
 //! decision 4): `property` `source` with a `source` target, [`MotionSetting`]: a light's
 //! colour and intensity, or, on a model, one material's colours and glow by name.
@@ -76,7 +76,7 @@ pub enum MotionProperty {
     /// [`MotionProperty::ALL`], which lists the placement properties.
     Effect,
     /// A live number or colour setting of the item's own source, which the modifier's
-    /// `source` names, since 0.141 (ADR-0171 decision 4): changed as an `effect`
+    /// `source` names, since 0.145 (ADR-0171 decision 4): changed as an `effect`
     /// setting is, for how this item draws its source only. Not in
     /// [`MotionProperty::ALL`].
     Source,
@@ -354,7 +354,7 @@ pub struct MotionModifier {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect: Option<MotionEffect>,
     /// The source setting it changes, with `property` `source` and only then (since
-    /// 0.141, ADR-0171). Omitted otherwise.
+    /// 0.145, ADR-0171). Omitted otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<MotionSetting>,
     /// What it does.
@@ -388,7 +388,7 @@ pub struct MotionEffect {
 /// The longest material name a [`MotionSetting`] takes, in bytes.
 pub const MAX_MOTION_MATERIAL_LEN: usize = 128;
 
-/// The source setting a `source` modifier drives (since 0.141, ADR-0171 decision 4): a
+/// The source setting a `source` modifier drives (since 0.145, ADR-0171 decision 4): a
 /// live number or colour setting of the item's own source kind, as this item draws its
 /// source; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,
 /// `cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`
