@@ -217,6 +217,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionProperty::Source` and `MotionSetting`, the source setting one drives, and
   `MAX_MOTION_MATERIAL_LEN` (128)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
+  Since 0.151 `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -356,11 +358,15 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.150 because a scene's surfaces can reflect each other through
+`PROTOCOL_VERSION` is 0.154 because a scene's surfaces can reflect each other through
 reflection probes: `SceneOptions`' `reflections`, and `RenderFeatures`'
 `reflection_probes` and `max_probe_resolution` (with `PROBE_RESOLUTIONS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decisions 2 and 3);
+0.151 because a motion modifier can follow MIDI: `MotionKind`'s
+`midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
+onto an item's property, smoothed over `smoothing_ms`
+([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
 0.147 because the costly 3D effects have app-wide switches:
 the action `studio.set_rendering` and `studio.get`'s `rendering` (`RenderFeatures`,
 `RenderFeaturesChange` in `rendering.rs`,
@@ -1477,7 +1483,7 @@ program, ranked after the Preview scene within the warm budget
 `share_space` (default `false`), which on a group placed in a 3D scene draws its children
 in that scene's space through the group item's pose instead of as one card
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), kept and ignored
-on any other scene, and since 0.150 `reflections` (default `false`), which lets the
+on any other scene, and since 0.154 `reflections` (default `false`), which lets the
 scene's `scene`-lit models and lit cards reflect each other through its
 `reflection_probe` items, each by its own roughness and metalness
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -1636,7 +1642,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
   floor_reflections?, reflection_probes?, max_probe_resolution?}` (0.147, the last two
-  since 0.150,
+  since 0.154,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -2793,12 +2799,12 @@ after 1.0:
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
-  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
-  `MotionCurve`, 0.86): a later kind or property won't break a 0.81 client's
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, `MotionMeasure` and
+  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.151): a later kind or property won't break a 0.81 client's
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86) and a `midi` one (0.151) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2860,6 +2866,20 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   and so is everything the engine doesn't hear: while no output runs the program mix
   is silent, and a preview reads every audio modifier as silence. Its `clock` is
   ignored.
+- **`midi`** (since 0.151,
+  [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)) follows a MIDI
+  controller instead of a clock, the value binding of ADR-0122: `control` is `cc` (the
+  default, with its `controller` 0 to 127, which only `cc` takes), `pitch_bend` or
+  `pressure` (channel pressure), read on `channel` 1 to 16 (omitted for the latest on any
+  channel) from `input`, a MIDI port or JTunnel sender by name as a trigger names one
+  (omitted for any). A control change and pressure map 0 to 127 onto 0 to 1, a pitch bend
+  -8192 to 8191 with its rest at one half. That is followed over `smoothing_ms` (default
+  50, `0..=10000`, a one-pole time constant for rising and falling alike; 0 jumps, and
+  the first frame an item is drawn lands on the value), bent by `curve` as an audio
+  modifier's is, and mapped onto `from` (default 0) to `to` (default 1), each within
+  ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
+  preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
+  camera's motion refuses it.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.

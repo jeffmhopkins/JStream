@@ -14,11 +14,11 @@ use crate::{
     ClientMessage, Command, CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad,
     EntityKind, ErrorResponse, Event, EventMessage, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, MasterInfo, MotionCurve, MotionMeasure, OutputHealth, OutputId,
-    OutputInfo, OutputKind, OutputState, OutputStatsInfo, PROTOCOL_VERSION, PlacementForm,
-    ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings,
-    Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    ItemInfo, ItemTransform, MasterInfo, MotionCurve, MotionMeasure, MotionMidiControl,
+    OutputHealth, OutputId, OutputInfo, OutputKind, OutputState, OutputStatsInfo, PROTOCOL_VERSION,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString,
+    ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -995,7 +995,8 @@ fn sway() -> Vec<MotionModifier> {
     ]
 }
 
-/// Lights and a speaker that follow the mix (ADR-0100): every measure and every curve.
+/// Lights and a speaker that follow the mix (ADR-0100), every measure and every curve,
+/// and a lever, a wheel and a pad that follow MIDI (ADR-0168).
 fn reactive() -> Vec<MotionModifier> {
     let f = |v: f32| Finite32::new(v).expect("finite");
     let audio = |audio, audio_source, measure, band: Option<(f32, f32)>, curve| MotionKind::Audio {
@@ -1053,6 +1054,50 @@ fn reactive() -> Vec<MotionModifier> {
                 Some((40.0, 120.0)),
                 MotionCurve::EaseInOut,
             ),
+        ),
+        // A fader tilts it like a lever, a wheel rolls it and pressure swells it
+        // (ADR-0168): every control.
+        modifier(
+            "lever",
+            MotionProperty::Tilt,
+            MotionKind::Midi {
+                control: MotionMidiControl::Cc,
+                controller: Some(1),
+                channel: Some(1),
+                input: Some("Launch Control".into()),
+                smoothing_ms: 80,
+                curve: MotionCurve::EaseInOut,
+                from: f(-25.0),
+                to: f(25.0),
+            },
+        ),
+        modifier(
+            "wheel",
+            MotionProperty::Rotation,
+            MotionKind::Midi {
+                control: MotionMidiControl::PitchBend,
+                controller: None,
+                channel: None,
+                input: None,
+                smoothing_ms: 0,
+                curve: MotionCurve::Linear,
+                from: f(-10.0),
+                to: f(10.0),
+            },
+        ),
+        modifier(
+            "press",
+            MotionProperty::Scale,
+            MotionKind::Midi {
+                control: MotionMidiControl::Pressure,
+                controller: None,
+                channel: Some(10),
+                input: None,
+                smoothing_ms: 50,
+                curve: MotionCurve::EaseOut,
+                from: Finite32::ZERO,
+                to: f(0.5),
+            },
         ),
     ]
 }

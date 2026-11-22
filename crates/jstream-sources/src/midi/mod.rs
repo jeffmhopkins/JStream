@@ -99,6 +99,13 @@ pub struct MidiState {
     bend: [AtomicI16; CHANNELS],
     /// Channel pressure by channel.
     pressure: [AtomicU8; CHANNELS],
+    /// Each controller's latest value on any channel, which a `midi` motion modifier
+    /// with no channel follows (ADR-0168).
+    any_controllers: Box<[AtomicU8]>,
+    /// The latest pitch bend on any channel.
+    any_bend: AtomicI16,
+    /// The latest channel pressure on any channel.
+    any_pressure: AtomicU8,
     log: Box<[Slot]>,
     /// Note events pushed: event `n` is in slot `n % LOG`.
     pushed: AtomicU64,
@@ -134,6 +141,9 @@ impl MidiState {
             controllers: atomics(CHANNELS * KEYS),
             bend: std::array::from_fn(|_| AtomicI16::new(0)),
             pressure: std::array::from_fn(|_| AtomicU8::new(0)),
+            any_controllers: atomics(KEYS),
+            any_bend: AtomicI16::new(0),
+            any_pressure: AtomicU8::new(0),
             log: (0..LOG)
                 .map(|_| Slot {
                     seq: AtomicU64::new(0),
@@ -166,6 +176,8 @@ impl MidiState {
             } => {
                 let channel = channel.wire();
                 self.controllers[index(channel, controller)].store(value, Ordering::Relaxed);
+                self.any_controllers[usize::from(controller & 0x7F)]
+                    .store(value, Ordering::Relaxed);
                 // All notes off (123), and all sound off (120), release every key.
                 if matches!(controller, 120 | 123) {
                     for key in 0..KEYS as u8 {
@@ -177,9 +189,11 @@ impl MidiState {
             }
             Message::PitchBend { channel, value } => {
                 self.bend[usize::from(channel.wire())].store(value, Ordering::Relaxed);
+                self.any_bend.store(value, Ordering::Relaxed);
             }
             Message::ChannelPressure { channel, pressure } => {
                 self.pressure[usize::from(channel.wire())].store(pressure, Ordering::Relaxed);
+                self.any_pressure.store(pressure, Ordering::Relaxed);
             }
             _ => {}
         }
@@ -230,6 +244,22 @@ impl MidiState {
     /// The channel pressure on `channel`.
     pub fn pressure(&self, channel: u8) -> u8 {
         self.pressure[usize::from(channel & 0x0F)].load(Ordering::Relaxed)
+    }
+
+    /// The latest value of `controller` on any channel: the one the last control change
+    /// of it set, whichever channel it came on.
+    pub fn controller_any(&self, controller: u8) -> u8 {
+        self.any_controllers[usize::from(controller & 0x7F)].load(Ordering::Relaxed)
+    }
+
+    /// The latest pitch bend on any channel, -8192 to 8191.
+    pub fn bend_any(&self) -> i16 {
+        self.any_bend.load(Ordering::Relaxed)
+    }
+
+    /// The latest channel pressure on any channel.
+    pub fn pressure_any(&self) -> u8 {
+        self.any_pressure.load(Ordering::Relaxed)
     }
 
     /// When the last message arrived, in milliseconds, or `None` before any.

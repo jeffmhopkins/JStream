@@ -2,7 +2,7 @@
 //! switch per costly 3D effect, capping what every scene may draw. It reads the switches
 //! from `studio.get` each time the page opens and sets each one with
 //! `studio.set_rendering`; the engine keeps them on its machine, whatever collection is
-//! open. Since 0.150 it also has the reflection probes' switch and the face size they
+//! open. Since 0.154 it also has the reflection probes' switch and the face size they
 //! capture at, at most (ADR-0170 decision 3), shown only by an engine that has them. An
 //! engine older than 0.147 reports none, and the page says it has none.
 //!

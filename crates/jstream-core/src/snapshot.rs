@@ -3085,8 +3085,12 @@ impl<'a> Planner<'a, '_> {
                 groups: None,
             },
         );
-        out.audio
-            .record(item.id(), item.motion(), self.assets.motion_heard());
+        out.audio.record(
+            item.id(),
+            item.motion(),
+            self.assets.motion_heard(),
+            self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+        );
         if let Some(chain) = chain {
             self.add_chain(owner, chain, out);
         }
@@ -3290,8 +3294,12 @@ impl<'a> Planner<'a, '_> {
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
             });
-            out.audio
-                .record(item.id(), item.motion(), self.assets.motion_heard());
+            out.audio.record(
+                item.id(),
+                item.motion(),
+                self.assets.motion_heard(),
+                self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+            );
         }
         path.remove(id);
     }
@@ -3363,8 +3371,12 @@ impl<'a> Planner<'a, '_> {
                 let nested = self.nested(keyframe, &group);
                 let mut inner = links.to_vec();
                 inner.push(link);
-                out.audio
-                    .record(item.id(), item.motion(), self.assets.motion_heard());
+                out.audio.record(
+                    item.id(),
+                    item.motion(),
+                    self.assets.motion_heard(),
+                    self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+                );
                 path.insert(group.clone());
                 self.place_items((scene, &nested), &inner, (out, path), placed, shared);
                 path.remove(&group);
@@ -3407,8 +3419,12 @@ impl<'a> Planner<'a, '_> {
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
                 groups: groups.clone(),
             });
-            out.audio
-                .record(item.id(), item.motion(), self.assets.motion_heard());
+            out.audio.record(
+                item.id(),
+                item.motion(),
+                self.assets.motion_heard(),
+                self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+            );
         }
     }
 

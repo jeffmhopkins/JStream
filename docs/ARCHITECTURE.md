@@ -706,7 +706,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   Since 0.86 a modifier can follow a bus or a source's audio
   ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)), and since 0.109 drive a
   number or colour setting of one of its item's effects, `property` `effect`
-  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)).
+  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.151 a `midi`
+  modifier follows a MIDI control change, pitch bend or channel pressure, smoothed, the
+  value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -784,7 +786,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   keyframes move them all. `scene.set_camera_anchor` names such a group item for the
   family's camera to ride with: its position and target are then in the group's space.
 - **Reflections** ([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md),
-  protocol 0.150): a scene with `reflections` in its `scene.set_options` has its lit
+  protocol 0.154): a scene with `reflections` in its `scene.set_options` has its lit
   models and cards reflect the scene around them, through the `reflection_probe` source
   kind's boxes; `studio.set_rendering` turns probes off app-wide and caps their face size.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
@@ -1235,7 +1237,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
   countdown and grouping recipes, fitting boxes to text, a custom shader or shader
   source the UI's shader editor opens, animating with keyframe
-  scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
+  scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
+  `midi` one to follow a controller)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live

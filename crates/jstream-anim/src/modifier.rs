@@ -5,6 +5,7 @@
 //! envelope level the evaluator hands in.
 
 use crate::audio::Audio;
+use crate::midi::Midi;
 
 /// The most modifiers one item holds (ADR-0099 decision 5).
 pub const MAX_MODIFIERS: usize = 8;
@@ -168,6 +169,11 @@ pub enum Kind {
     /// through an [`Envelope`](crate::Envelope) the evaluator keeps per item and
     /// modifier. What it hears is named beside the modifier, outside this crate.
     Audio(Audio),
+    /// Follows a MIDI controller ([ADR-0168](../../../docs/adr/0168-midi-controllers-drive-motion.md)),
+    /// through a [`Smoothing`](crate::Smoothing) the evaluator keeps per item and
+    /// modifier. Which controller it follows is named beside the modifier, outside this
+    /// crate.
+    Midi(Midi),
 }
 
 /// Where a modifier's time starts (ADR-0099 decision 3).
@@ -268,6 +274,7 @@ impl Modifier {
                 }
             }
             Kind::Audio(audio) => audio.problem(MAX_MAGNITUDE),
+            Kind::Midi(midi) => midi.problem(MAX_MAGNITUDE),
             Kind::Drift { rate_per_s, wrap } => {
                 if !(rate_per_s.is_finite() && rate_per_s.abs() <= MAX_MAGNITUDE) {
                     Some("rate_per_s")
@@ -364,6 +371,7 @@ impl Modifier {
                 if v.is_finite() { v } else { 0.0 }
             }
             Kind::Audio(audio) => audio.value(envelope),
+            Kind::Midi(midi) => midi.value(envelope),
         };
         if v.is_finite() { v } else { 0.0 }
     }
@@ -534,7 +542,7 @@ pub fn evaluate_with(
             },
         };
         let envelope = match m.kind {
-            Kind::Audio(_) => heard(&m.id).unwrap_or(0.0),
+            Kind::Audio(_) | Kind::Midi(_) => heard(&m.id).unwrap_or(0.0),
             _ => 0.0,
         };
         out.add(m.property, m.value_heard(t, envelope));

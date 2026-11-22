@@ -540,7 +540,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               ]
             },
             "max_probe_resolution": {
-              "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.150). `studio.set_rendering` refuses any other size.",
+              "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.154). `studio.set_rendering` refuses any other size.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -549,7 +549,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               ]
             },
             "reflection_probes": {
-              "description": "Whether reflection probes capture, or left out to keep it (since 0.150).",
+              "description": "Whether reflection probes capture, or left out to keep it (since 0.154).",
               "type": [
                 "boolean",
                 "null"
@@ -2993,6 +2993,73 @@ source: crates/jstream-protocol/src/fixtures.rs
               "$ref": "#/$defs/Finite32",
               "default": 1.0,
               "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "control": {
+              "$ref": "#/$defs/MotionMidiControl",
+              "default": "cc",
+              "description": "What it follows. Default `cc`."
+            },
+            "controller": {
+              "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+            },
+            "input": {
+              "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
             }
           },
           "required": [
@@ -5567,7 +5634,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.150 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.154 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
           "properties": {
             "background": {
               "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -5585,7 +5652,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "boolean"
             },
             "reflections": {
-              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.150): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.154): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
               "type": "boolean"
             },
             "scene_id": {
@@ -9226,6 +9293,26 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "MotionMidiControl": {
+      "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+      "oneOf": [
+        {
+          "const": "cc",
+          "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+          "type": "string"
+        },
+        {
+          "const": "pitch_bend",
+          "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+          "type": "string"
+        },
+        {
+          "const": "pressure",
+          "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+          "type": "string"
+        }
+      ]
+    },
     "MotionModifier": {
       "description": "One motion modifier on an item (ADR-0099 decision 3).",
       "oneOf": [
@@ -9425,6 +9512,73 @@ source: crates/jstream-protocol/src/fixtures.rs
               "$ref": "#/$defs/Finite32",
               "default": 1.0,
               "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "control": {
+              "$ref": "#/$defs/MotionMidiControl",
+              "default": "cc",
+              "description": "What it follows. Default `cc`."
+            },
+            "controller": {
+              "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+            },
+            "input": {
+              "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
             }
           },
           "required": [
@@ -14278,14 +14432,14 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "max_probe_resolution": {
           "default": 512,
-          "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.150). A probe set larger captures at this.",
+          "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.154). A probe set larger captures at this.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
         "reflection_probes": {
           "default": true,
-          "description": "Reflection probes (ADR-0170 decision 3, since 0.150), which draw their scene six\ntimes a capture. Off, no probe captures and every surface reflects its\nenvironment as without one.",
+          "description": "Reflection probes (ADR-0170 decision 3, since 0.154), which draw their scene six\ntimes a capture. Off, no probe captures and every surface reflects its\nenvironment as without one.",
           "type": "boolean"
         },
         "shadows": {
@@ -14563,7 +14717,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "array"
         },
         "reflections": {
-          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.150): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.154): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
           "type": "boolean"
         },
         "role": {
@@ -16522,5 +16676,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.150"
+  "title": "JStream protocol 0.154"
 }
