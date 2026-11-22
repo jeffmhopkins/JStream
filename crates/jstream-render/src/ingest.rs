@@ -388,7 +388,7 @@ impl Ingest {
         // The submit lock keeps another thread's staged platform fences off this submit,
         // as every submit on a platform context's queue does.
         let _submitting = gpu.submit.lock();
-        gpu.queue.submit([encoder.finish()]);
+        gpu.submit_work(encoder.finish());
         Ok(())
     }
 

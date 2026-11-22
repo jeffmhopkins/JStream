@@ -84,7 +84,19 @@ pub(crate) struct UnitTotals {
     pub(crate) nanos: u64,
     /// The longest it took in one frame of the last published second.
     pub(crate) recent_max: u64,
+    /// The timed frames it ran in on the GPU ([`GPU_EVERY`]), and what the GPU spent
+    /// running it in them.
+    pub(crate) gpu_frames: u64,
+    pub(crate) gpu_nanos: u64,
 }
+
+/// One frame in this many is timed on the GPU (`profile.get`'s `gpu_ms`), where the
+/// device can: each submit of a timed frame carries two timestamp writes.
+pub(crate) const GPU_EVERY: u64 = 4;
+
+/// The most units given GPU ids before the ids start again: units come and go with the
+/// scenes drawn.
+const GPU_IDS: usize = 4096;
 
 /// A drawer's running totals since it started, as published once a second.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -193,6 +205,9 @@ struct Acc {
     second_max: u64,
     /// Published seconds since it last ran.
     idle: u32,
+    /// Its id in the GPU timing, once a timed frame ran it, with the generation of ids
+    /// it was given in.
+    gpu: Option<(u32, u32)>,
 }
 
 impl Acc {
@@ -219,6 +234,41 @@ impl Acc {
             self.idle = self.idle.saturating_add(1);
         }
         self.idle <= FORGET_AFTER
+    }
+}
+
+/// The GPU id of the unit `key` of `map` ([`GpuIds::id_of`]).
+fn gpu_id<K: Ord + Clone>(
+    map: &mut BTreeMap<K, Acc>,
+    ids: &mut GpuIds,
+    key: &K,
+    unit: impl FnOnce(K) -> UnitKey,
+) -> Option<u32> {
+    let acc = match map.get_mut(key) {
+        Some(acc) => acc,
+        None => map.entry(key.clone()).or_default(),
+    };
+    ids.id_of(acc, || unit(key.clone()))
+}
+
+impl GpuIds {
+    /// The GPU id of `acc`'s unit, given it (and `unit()` its place) on its first timed
+    /// frame of this generation. Once [`GPU_IDS`] have been given, a new generation
+    /// starts: an id of an earlier one is given again, and its late times are dropped.
+    fn id_of(&mut self, acc: &mut Acc, unit: impl FnOnce() -> UnitKey) -> Option<u32> {
+        if let Some((generation, id)) = acc.gpu
+            && generation == self.generation
+        {
+            return Some(id);
+        }
+        if self.units.len() >= GPU_IDS {
+            self.units.clear();
+            self.generation = self.generation.wrapping_add(1);
+        }
+        self.units.push(unit());
+        let id = u32::try_from(self.units.len() - 1).ok()?;
+        acc.gpu = Some((self.generation, id));
+        Some(id)
     }
 }
 
@@ -257,6 +307,17 @@ pub(crate) struct DrawMeter {
     published: Option<Instant>,
     /// The program stage's GPU-time guard (#349), once [`Self::guard_passes`] set it.
     guard: Option<crate::runtime::PassGuard>,
+    /// Whether the frame being drawn is timed on the GPU.
+    gpu_timed: bool,
+    /// Each GPU id's unit, by id, and the generation they were given in.
+    gpu_units: GpuIds,
+}
+
+/// The GPU ids given to units, a generation at a time.
+#[derive(Default)]
+struct GpuIds {
+    units: Vec<UnitKey>,
+    generation: u32,
 }
 
 impl Default for DrawMeter {
@@ -282,6 +343,8 @@ impl Default for DrawMeter {
             frame_phases: [0; PHASES],
             published: None,
             guard: None,
+            gpu_timed: false,
+            gpu_units: GpuIds::default(),
         }
     }
 }
@@ -298,6 +361,126 @@ impl DrawMeter {
     /// times its compositor collected once per tick.
     pub(crate) fn pass_guard(&mut self) -> Option<&mut crate::runtime::PassGuard> {
         self.guard.as_mut()
+    }
+
+    /// Starts a frame's GPU timing on `compositor`: takes the units' GPU times that
+    /// came back since the last frame, a frame or two late, and times this frame when
+    /// it is one of every [`GPU_EVERY`]. Call once per frame before drawing.
+    pub(crate) fn begin_gpu(&mut self, compositor: &mut jstream_render::Compositor) {
+        compositor.gpu_units(|_, id, took| self.gpu_measured(id, took));
+        self.gpu_timed =
+            self.frames.is_multiple_of(GPU_EVERY) && compositor.begin_gpu_frame(self.frames);
+    }
+
+    /// Ends the frame's GPU timing on `compositor`, sending its timestamps to be read.
+    pub(crate) fn end_gpu(&mut self, compositor: &mut jstream_render::Compositor) {
+        if std::mem::take(&mut self.gpu_timed) {
+            compositor.end_gpu_frame();
+        }
+    }
+
+    /// Times the compositor's work from now on as the upload of `source`'s.
+    pub(crate) fn gpu_unit_upload(
+        &mut self,
+        compositor: &mut jstream_render::Compositor,
+        source: &SourceId,
+    ) {
+        if self.gpu_timed {
+            let id = gpu_id(
+                &mut self.uploads,
+                &mut self.gpu_units,
+                source,
+                UnitKey::Upload,
+            );
+            compositor.gpu_unit(id);
+        }
+    }
+
+    /// Times the compositor's work from now on as the capture `capture`'s.
+    pub(crate) fn gpu_unit_capture(
+        &mut self,
+        compositor: &mut jstream_render::Compositor,
+        capture: &CaptureKey,
+    ) {
+        if self.gpu_timed {
+            let id = gpu_id(
+                &mut self.captures,
+                &mut self.gpu_units,
+                capture,
+                UnitKey::Capture,
+            );
+            compositor.gpu_unit(id);
+        }
+    }
+
+    /// Times the compositor's work from now on as `owner`'s video chain's.
+    pub(crate) fn gpu_unit_chain(
+        &mut self,
+        compositor: &mut jstream_render::Compositor,
+        owner: &ChainOwner,
+    ) {
+        if self.gpu_timed {
+            let id = gpu_id(&mut self.chains, &mut self.gpu_units, owner, UnitKey::Chain);
+            compositor.gpu_unit(id);
+        }
+    }
+
+    /// Times the compositor's work from now on as `scene`'s pass's.
+    pub(crate) fn gpu_unit_pass(
+        &mut self,
+        compositor: &mut jstream_render::Compositor,
+        scene: &SceneId,
+    ) {
+        if self.gpu_timed {
+            let id = gpu_id(&mut self.passes, &mut self.gpu_units, scene, UnitKey::Pass);
+            compositor.gpu_unit(id);
+        }
+    }
+
+    /// Times the compositor's work from now on as the program scene's composite's.
+    pub(crate) fn gpu_unit_composite(&mut self, compositor: &mut jstream_render::Compositor) {
+        if self.gpu_timed {
+            let id = self
+                .gpu_units
+                .id_of(&mut self.composite, || UnitKey::Composite);
+            compositor.gpu_unit(id);
+        }
+    }
+
+    /// Times the compositor's work from now on as no unit's.
+    pub(crate) fn gpu_unit_none(&mut self, compositor: &mut jstream_render::Compositor) {
+        if self.gpu_timed {
+            compositor.gpu_unit(None);
+        }
+    }
+
+    /// Adds `took` as `owner`'s chain's GPU time in a timed frame, as a timed frame's
+    /// timestamps would, for tests.
+    #[cfg(test)]
+    pub(crate) fn gpu_chain_by_hand(&mut self, owner: &ChainOwner, took: Duration) {
+        if let Some(id) = gpu_id(&mut self.chains, &mut self.gpu_units, owner, UnitKey::Chain) {
+            self.gpu_measured(id, took);
+        }
+    }
+
+    /// Adds `took`, GPU time of a timed frame, to the unit of GPU id `id`.
+    fn gpu_measured(&mut self, id: u32, took: Duration) {
+        let Some(key) = self.gpu_units.units.get(id as usize) else {
+            return;
+        };
+        let acc = match key {
+            UnitKey::Upload(source) => self.uploads.get_mut(source),
+            UnitKey::Capture(capture) => self.captures.get_mut(capture),
+            UnitKey::Chain(owner) => self.chains.get_mut(owner),
+            UnitKey::Pass(scene) => self.passes.get_mut(scene),
+            UnitKey::Composite => Some(&mut self.composite),
+        };
+        // A unit forgotten since, or one whose id was given again, is let go.
+        let generation = self.gpu_units.generation;
+        if let Some(acc) = acc.filter(|acc| acc.gpu == Some((generation, id))) {
+            acc.totals.gpu_frames = acc.totals.gpu_frames.saturating_add(1);
+            acc.totals.gpu_nanos = acc.totals.gpu_nanos.saturating_add(nanos(took));
+        }
     }
 
     /// Adds `took` to `phase` in the frame being drawn.
