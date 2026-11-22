@@ -154,6 +154,89 @@ pub(crate) fn slerp_angles(from: [f32; 3], to: [f32; 3], k: f32, hint: [f32; 3])
     to_angles(q, hint)
 }
 
+/// The angles `[rotation, turn, tilt]` `k` of the way along a path through `stops`
+/// (ADR-0166 decision 2): the spherical Catmull-Rom curve through each stop's
+/// orientation, at equal shares of the path, which is [`slerp_angles`] with two stops.
+/// `hint` is the per-axis answer, which picks the triple returned. `k = 0` gives the
+/// first stop and `k = 1` the last, exactly. `stops` has at least two entries.
+pub(crate) fn path_angles(stops: &[[f32; 3]], k: f32, hint: [f32; 3]) -> [f32; 3] {
+    let (Some(first), Some(last)) = (stops.first(), stops.last()) else {
+        return hint;
+    };
+    if k == 0.0 {
+        return *first;
+    }
+    if k == 1.0 {
+        return *last;
+    }
+    let mut q = [[1.0, 0.0, 0.0, 0.0]; crate::transition::MAX_STOPS];
+    let n = stops.len().min(q.len());
+    for i in 0..n {
+        let mut next = from_angles(stops[i]);
+        // Each on the same side as the one before, so every leg takes the short way.
+        if i > 0 && dot(q[i - 1], next) < 0.0 {
+            next = next.map(|v| -v);
+        }
+        q[i] = next;
+    }
+    let turned = crate::transition::catmull(&q[..n], k, |a, b, t| slerp_same(a, b, f64::from(t)));
+    to_angles(turned, hint)
+}
+
+/// [`slerp`] without choosing the short way: `a` and `b` already lie on one side, and a
+/// curve's phantom ends and its extrapolated legs must keep the side they are given.
+fn slerp_same(a: Quat, b: Quat, k: f64) -> Quat {
+    let cos = dot(a, b).clamp(-1.0, 1.0);
+    let angle = cos.acos();
+    if angle < NEARLY_SAME {
+        return normalize([0, 1, 2, 3].map(|i| a[i] + (b[i] - a[i]) * k));
+    }
+    let sin = angle.sin();
+    let wa = ((1.0 - k) * angle).sin() / sin;
+    let wb = (k * angle).sin() / sin;
+    normalize([0, 1, 2, 3].map(|i| a[i] * wa + b[i] * wb))
+}
+
+/// A unit vector `k` of the way along the great circle from `a` to `b` (ADR-0166
+/// decision 3: an orbiting camera's direction from its target). `k` may be outside
+/// `[0, 1]`. Opposite directions turn about `up`, or about another axis when `up` lies
+/// along them.
+pub(crate) fn slerp_direction(a: [f64; 3], b: [f64; 3], k: f64, up: [f64; 3]) -> [f64; 3] {
+    let d = |u: [f64; 3], v: [f64; 3]| u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+    let unit = |u: [f64; 3]| {
+        let len = d(u, u).sqrt();
+        if len > 0.0 {
+            u.map(|x| x / len)
+        } else {
+            [0.0, 0.0, 1.0]
+        }
+    };
+    let cos = d(a, b).clamp(-1.0, 1.0);
+    let angle = cos.acos();
+    if angle < NEARLY_SAME {
+        return unit([0, 1, 2].map(|i| a[i] + (b[i] - a[i]) * k));
+    }
+    // The direction a quarter turn from `a` toward `b` in their plane, or, when they are
+    // opposite and have no plane, a quarter turn about the picture's up: `up × a`. From
+    // `b = −a` that is `−(up × a)`, the same sense of turn, so a curve that samples the
+    // pair both ways round (as Catmull-Rom's phantom ends do) turns one way throughout.
+    let mut toward = [0, 1, 2].map(|i| b[i] - a[i] * cos);
+    if d(toward, toward) < 1e-12 {
+        let mut axis = up;
+        if d(unit(axis), a).abs() > 0.999 {
+            axis = [1.0, 0.0, 0.0];
+        }
+        toward = [
+            axis[1] * a[2] - axis[2] * a[1],
+            axis[2] * a[0] - axis[0] * a[2],
+            axis[0] * a[1] - axis[1] * a[0],
+        ];
+    }
+    let toward = unit(toward);
+    let (sin_k, cos_k) = (k * angle).sin_cos();
+    unit([0, 1, 2].map(|i| a[i] * cos_k + toward[i] * sin_k))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{from_angles, slerp, slerp_angles, to_angles};

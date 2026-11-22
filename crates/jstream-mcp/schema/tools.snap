@@ -484,7 +484,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -504,6 +504,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -551,6 +558,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -7370,7 +7384,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -7390,6 +7404,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -7437,6 +7458,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -16108,7 +16136,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -16128,6 +16156,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -16175,6 +16210,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -25182,7 +25224,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -25202,6 +25244,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -25249,6 +25298,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -34155,7 +34211,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -34175,6 +34231,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -34222,6 +34285,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -35482,7 +35552,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -35502,6 +35572,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -35549,6 +35626,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
