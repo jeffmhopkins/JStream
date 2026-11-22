@@ -1953,6 +1953,7 @@ fn golden_model_a_reflection_replaces_the_studio_environment() {
                     texture: None,
                     materials: &[],
                     reflection,
+                    probe: None,
                 },
                 &layer,
             )
