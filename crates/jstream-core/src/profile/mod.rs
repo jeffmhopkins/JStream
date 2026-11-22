@@ -414,11 +414,12 @@ fn window(
         }
     }
     units.sort_by_key(|unit| std::cmp::Reverse(unit.1));
+    let gpu_timing = units.iter().any(|(unit, _)| unit.gpu_ms.is_some());
     let units = units.into_iter().take(top).map(|(unit, _)| unit).collect();
     ProfileInfo {
         seconds: finite(seconds),
         frame_budget_ms: finite(budget.as_secs_f32() * 1000.0),
-        gpu_timing: false,
+        gpu_timing,
         thread_cpu: now.threads.is_some(),
         drawers,
         units,
@@ -534,6 +535,15 @@ fn unit_profiles(
                 return None;
             }
             let spent = totals.nanos.saturating_sub(before.map_or(0, |b| b.nanos));
+            // Over the timed frames it ran in (one in `GPU_EVERY`), where the device
+            // times them.
+            let gpu_frames = totals
+                .gpu_frames
+                .saturating_sub(before.map_or(0, |b| b.gpu_frames));
+            let gpu_spent = totals
+                .gpu_nanos
+                .saturating_sub(before.map_or(0, |b| b.gpu_nanos));
+            let gpu_ms = (gpu_frames > 0).then(|| ms(gpu_spent / gpu_frames));
             let share = if drawn == 0 {
                 0.0
             } else {
@@ -547,7 +557,7 @@ fn unit_profiles(
                     ms: ms(spent / frames),
                     recent_max_ms: ms(totals.recent_max),
                     share: finite(share),
-                    gpu_ms: None,
+                    gpu_ms,
                 },
                 spent,
             ))

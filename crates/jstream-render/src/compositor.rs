@@ -450,7 +450,7 @@ impl Compositor {
             );
         }
         self.record_release(&mut encoder);
-        self.gpu.queue.submit([encoder.finish()]);
+        self.gpu.submit_work(encoder.finish());
         drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
@@ -572,7 +572,7 @@ impl Compositor {
             .flatten();
         self.record_composite(&mut encoder, (view, target.texture()), scene, prior);
         self.record_release(&mut encoder);
-        self.gpu.queue.submit([encoder.finish()]);
+        self.gpu.submit_work(encoder.finish());
         target.mark_changed();
         // Outside what the items reached the layer holds its clear colour, which is
         // nothing when that is transparent: a scene placing it draws only over the rest.
@@ -669,7 +669,7 @@ impl Compositor {
             }
         }
         self.record_release(&mut encoder);
-        self.gpu.queue.submit([encoder.finish()]);
+        self.gpu.submit_work(encoder.finish());
         target.mark_changed();
         drop(submitting);
         self.staged.clear();
@@ -790,7 +790,7 @@ impl Compositor {
                                 label: Some("jstream-render-model-texture"),
                             });
                     chain.record(&mut encoder, &self.mip_pipelines, image);
-                    self.gpu.queue.submit([encoder.finish()]);
+                    self.gpu.submit_work(encoder.finish());
                     drop(submitting);
                 }
                 chain
@@ -1110,7 +1110,7 @@ impl Compositor {
             }
         }
         self.record_release(&mut encoder);
-        self.gpu.queue.submit([encoder.finish()]);
+        self.gpu.submit_work(encoder.finish());
         // What each image drawn into can hold now (#1070, #1449): a filter can draw
         // anywhere in its output, unless what it reads is bounded and its kind says how
         // far past that it draws, and every draw is then cut to that.
@@ -1157,6 +1157,38 @@ impl Compositor {
         if let Some(timer) = &mut self.timer {
             timer.collect(&self.gpu.device, measured);
         }
+    }
+
+    /// Opens a frame whose units' GPU time is measured, tagged `tag` for
+    /// [`Self::gpu_units`] (ADR-0103, `spans.rs`): whether it is timed. It isn't on a
+    /// device without `TIMESTAMP_QUERY`, or while every frame set is still on its way.
+    pub fn begin_gpu_frame(&mut self, tag: u64) -> bool {
+        self.gpu.spans.begin(tag)
+    }
+
+    /// Names the unit the compositor's work belongs to from now on, while a frame is
+    /// timed; `None` times what follows as no unit's.
+    pub fn gpu_unit(&mut self, unit: Option<u32>) {
+        self.gpu.spans.unit(unit);
+    }
+
+    /// Closes the frame [`Self::begin_gpu_frame`] opened, sending its timestamps to be
+    /// read without waiting.
+    pub fn end_gpu_frame(&mut self) {
+        let _submitting = self.gpu.submit.lock();
+        self.gpu.spans.end(&self.gpu.device, &self.gpu.queue);
+    }
+
+    /// Hands each unit's GPU time in every timed frame read since the last call to
+    /// `measured`, with the frame's tag: `(tag, unit, time)`. Polls the device without
+    /// waiting, and allocates nothing.
+    pub fn gpu_units(&mut self, measured: impl FnMut(u64, u32, std::time::Duration)) {
+        self.gpu.spans.collect(&self.gpu.device, measured);
+    }
+
+    /// Whether the device can measure GPU time ([`Self::begin_gpu_frame`]).
+    pub fn times_gpu(&self) -> bool {
+        self.gpu.spans.supported()
     }
 
     /// The device images and targets are created on.
@@ -1259,6 +1291,7 @@ impl Compositor {
             context: self.gpu.context.clone(),
             faults: Arc::clone(&self.gpu.faults),
             submit: self.gpu.submit.clone(),
+            spans: Arc::clone(&self.gpu.spans),
         });
         sibling.blending = self.blending;
         sibling
