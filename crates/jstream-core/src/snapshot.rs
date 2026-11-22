@@ -3070,6 +3070,7 @@ impl<'a> Planner<'a, '_> {
             item.motion(),
             self.assets.motion_heard(),
             self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+            self.assets.data(),
         );
         if let Some(chain) = chain {
             self.add_chain(owner, chain, out);
@@ -3279,6 +3280,7 @@ impl<'a> Planner<'a, '_> {
                 item.motion(),
                 self.assets.motion_heard(),
                 self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+                self.assets.data(),
             );
         }
         path.remove(id);
@@ -3353,6 +3355,7 @@ impl<'a> Planner<'a, '_> {
                     item.motion(),
                     self.assets.motion_heard(),
                     self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+                    self.assets.data(),
                 );
                 path.insert(group.clone());
                 self.place_items((scene, &nested), &inner, (out, path), placed, shared);
@@ -3401,6 +3404,7 @@ impl<'a> Planner<'a, '_> {
                 item.motion(),
                 self.assets.motion_heard(),
                 self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+                self.assets.data(),
             );
         }
     }

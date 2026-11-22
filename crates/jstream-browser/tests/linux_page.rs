@@ -451,7 +451,8 @@ function paint() {
       color = "#ff00ff";
     } else if (j.source.shown && j.source.shownAt === 2.5 && j.scenes.program
         && j.scenes.program.name === "Main" && j.values.get("status.ok") === true
-        && j.clock.now() > 99) {
+        && j.clock.now() > 99 && typeof j.data === "function"
+        && j.data().transport && j.data().transport.playing === true) {
       color = "#00ff00";
     }
   }
@@ -529,6 +530,7 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
         values: true,
         levels: false,
         midi: false,
+        data: true,
     }));
     wait_for(&*page, [0, 0, 255]);
     page.send_data(PageData {
@@ -540,6 +542,7 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
         levels: None,
         midi: None,
         values: vec![("status.ok".into(), Some("true".into()))],
+        data: vec![("transport".into(), Some(r#"{"playing":true}"#.into()))],
     });
     wait_for(&*page, [0, 255, 0]);
     // A reload starts a new document, which gets the page's state again.

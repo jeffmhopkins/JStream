@@ -13,6 +13,7 @@ use jstream_protocol::{BusId, Reference, Settings, check_value_name};
 use serde_json::{Value, json};
 
 use crate::SourceError;
+use crate::data::LiveData;
 use crate::midi::{CHANNELS, KEYS, MidiState, NoteEvent};
 use crate::scope::{AudioMeter, AudioScope, METER_BANDS};
 
@@ -25,6 +26,9 @@ const MAX_MIDI_RECENT: usize = 32;
 const MIDI_RECENT_MS: u64 = 2000;
 /// How often a page granted MIDI is looked at while its input rests, in seconds.
 const MIDI_IDLE: f64 = 0.25;
+
+/// The longest `page_api_data_input`, in bytes: a JTunnel tunnel's name.
+pub(crate) const MAX_DATA_INPUT: usize = 63;
 
 /// The prefix of the engine's tempo values (ADR-0147), which only `page_api_tempo`
 /// grants.
@@ -89,6 +93,10 @@ pub(crate) struct Grant {
     /// Whether it may read the tempo (`page_api_tempo`, ADR-0124 §7): the engine's
     /// `tempo.*` values, and a MIDI reading's `tempo`. No values grant covers them.
     pub(crate) tempo: bool,
+    /// The JTunnel sender whose live data it may read (`page_api_data_input`; empty for
+    /// whichever sender has each key), while `page_api_data` is on (ADR-0171 decision
+    /// 10).
+    pub(crate) data: Option<String>,
 }
 
 /// One entry of `page_api_values`.
@@ -166,12 +174,30 @@ impl Grant {
         } else {
             None
         };
+        let data = if on("page_api_data") {
+            let input = settings
+                .get("page_api_data_input")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if input.len() > MAX_DATA_INPUT || input.chars().any(char::is_control) {
+                return Err(SourceError::Setting {
+                    param: "page_api_data_input".into(),
+                    reason: format!(
+                        "must be at most {MAX_DATA_INPUT} bytes, with no control characters"
+                    ),
+                });
+            }
+            Some(input.to_owned())
+        } else {
+            None
+        };
         Ok(Some(Self {
             scenes,
             values,
             bus,
             midi,
             tempo: on("page_api_tempo"),
+            data,
         }))
     }
 
@@ -182,6 +208,7 @@ impl Grant {
             values: !self.values.is_empty() || self.tempo,
             levels: self.bus.is_some(),
             midi: self.midi.is_some(),
+            data: self.data.is_some(),
         }
     }
 
@@ -281,6 +308,13 @@ pub(crate) struct Feed {
     looked: Option<f64>,
     /// The log, read at each look that needs it.
     events: Vec<NoteEvent>,
+    /// The engine's live data, for a grant of it (ADR-0171 decision 10).
+    data: Option<LiveData>,
+    /// Its change count at the last look.
+    data_seen: Option<u64>,
+    /// Each key's message as last sent: a key is sent again only when its message is
+    /// another.
+    data_sent: BTreeMap<String, Arc<Value>>,
 }
 
 impl Feed {
@@ -316,7 +350,19 @@ impl Feed {
             midi_moving: false,
             looked: None,
             events: Vec::new(),
+            data: None,
+            data_seen: None,
+            data_sent: BTreeMap::new(),
         }
+    }
+
+    /// The feed with `data` as the live data its grant reads. Without a call, a grant of
+    /// data reads a sender that never sends.
+    pub(crate) fn with_data(mut self, data: LiveData) -> Self {
+        if self.grant.data.is_some() {
+            self.data = Some(data);
+        }
+        self
     }
 
     /// The feed with `state` as its granted MIDI input's (ADR-0147). Without a call, a
@@ -346,6 +392,12 @@ impl Feed {
         }
         if data.midi.is_some() {
             pending.midi = data.midi;
+        }
+        for (key, value) in data.data {
+            match pending.data.iter_mut().find(|(k, _)| *k == key) {
+                Some(entry) => entry.1 = value,
+                None => pending.data.push((key, value)),
+            }
         }
         for (name, value) in data.values {
             match pending.values.iter_mut().find(|(n, _)| *n == name) {
@@ -380,13 +432,16 @@ impl Feed {
     }
 
     /// When what is still to be sent may go, on the media clock, or `None` with nothing
-    /// pending. While the granted bus has a reading, or the granted MIDI input moves, the
+    /// pending. While the granted bus has a reading, the granted MIDI input moves, or live
+    /// data is granted, the
     /// next page frame is always due, for the reading then; while that input rests, a
     /// look every [`MIDI_IDLE`] sees it move again.
     pub(crate) fn due(&self) -> Option<MediaTime> {
-        // With no MIDI state to read, there's nothing to look at.
+        // With no MIDI state to read, there's nothing to look at. Live data lands at any
+        // time, so a page granted it is looked at every page frame: one atomic load says
+        // whether anything changed.
         let resting = self.midi.is_some() && !self.midi_moving;
-        if self.pending.is_empty() && !self.metering && !self.midi_moving {
+        if self.pending.is_empty() && !self.metering && !self.midi_moving && self.data.is_none() {
             if !resting {
                 return None;
             }
@@ -475,6 +530,28 @@ impl Feed {
                 self.midi_seen = Some(changes);
                 let reading = midi_json(input, state, tempo, now_ms, &mut self.events);
                 data.midi = changed(&mut self.midi_sent, reading);
+            }
+        }
+        if let (Some(input), Some(live)) = (&self.grant.data, &self.data) {
+            let changes = live.changes();
+            if self.data_seen != Some(changes) {
+                self.data_seen = Some(changes);
+                let input = (!input.is_empty()).then_some(input.as_str());
+                let now = live.entries(input);
+                let sent = &mut self.data_sent;
+                sent.retain(|key, _| {
+                    let kept = now.iter().any(|(k, _)| k == key);
+                    if !kept {
+                        data.data.push((key.clone(), None));
+                    }
+                    kept
+                });
+                for (key, value) in now {
+                    if sent.get(&key).is_none_or(|was| !Arc::ptr_eq(was, &value)) {
+                        data.data.push((key.clone(), Some(value.to_string())));
+                        sent.insert(key, value);
+                    }
+                }
             }
         }
         if !self.grant.values.is_empty() || self.grant.tempo {
@@ -695,6 +772,7 @@ mod tests {
                 values: true,
                 levels: false,
                 midi: false,
+                data: false,
             }
         );
         let values_on = ("page_api_shared_values", json!(true));
@@ -733,6 +811,7 @@ mod tests {
             bus: None,
             midi: None,
             tempo: false,
+            data: None,
         };
         let mut feed = Feed::new(grant, 50, None);
         let mut values = BTreeMap::new();
@@ -778,6 +857,60 @@ mod tests {
     }
 
     #[test]
+    fn a_feed_sends_each_live_data_key_that_changed_from_its_sender() {
+        let grant = Grant {
+            scenes: false,
+            values: Vec::new(),
+            bus: None,
+            midi: None,
+            tempo: false,
+            data: Some("Bitwig".into()),
+        };
+        let live = LiveData::new();
+        live.put("Bitwig", "transport", br#"{"playing":true}"#, 0)
+            .expect("taken");
+        live.put("Other", "meters", br#"{"master":[1,1]}"#, 0)
+            .expect("taken");
+        let mut feed = Feed::new(grant, 50, None).with_data(live.clone());
+        assert!(feed.grant.api().data);
+        let values = BTreeMap::new();
+        let view = |ms: i64| PageView {
+            now: at(ms),
+            program: false,
+            preview: false,
+            program_scene: None,
+            preview_scene: None,
+            values: &values,
+            buses: &NO_BUSES,
+        };
+        let first = feed.view(&view(1000));
+        assert_eq!(
+            first.data,
+            [(
+                "transport".to_owned(),
+                Some(r#"{"playing":true}"#.to_owned())
+            )],
+            "only its own sender's"
+        );
+        assert!(feed.due().is_some(), "it keeps looking");
+        assert!(feed.view(&view(1100)).data.is_empty(), "nothing new");
+        live.put("Bitwig", "clock", br#"{"bar":2}"#, 0)
+            .expect("taken");
+        let next = feed.view(&view(1200));
+        assert_eq!(
+            next.data,
+            [("clock".to_owned(), Some(r#"{"bar":2}"#.to_owned()))]
+        );
+        live.restart("Bitwig");
+        let mut gone = feed.view(&view(1300)).data;
+        gone.sort();
+        assert_eq!(
+            gone,
+            [("clock".to_owned(), None), ("transport".to_owned(), None)]
+        );
+    }
+
+    #[test]
     fn a_feed_sends_at_most_one_update_per_page_frame() {
         let grant = Grant {
             scenes: false,
@@ -785,6 +918,7 @@ mod tests {
             bus: None,
             midi: None,
             tempo: false,
+            data: None,
         };
         // 50 a second: one page frame is 20 ms.
         let mut feed = Feed::new(grant, 50, None);
@@ -934,6 +1068,7 @@ mod tests {
                 bus: None,
                 midi: None,
                 tempo: false,
+                data: None,
             },
             30,
             None,
@@ -963,6 +1098,7 @@ mod tests {
                 bus: None,
                 midi: None,
                 tempo: false,
+                data: None,
             },
             25,
             None,

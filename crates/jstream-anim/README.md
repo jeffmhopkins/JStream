@@ -91,7 +91,9 @@ Contents:
   falling (0 jumps, and the first step lands on the value), and `Midi::value` bends and
   maps it. Which input, channel and controller it reads stay outside this crate: the
   evaluator hands each smoothed value to `evaluate_with` by modifier ID, as an audio
-  level. `evaluate` and `value_at` read it at `from`.
+  level. `evaluate` and `value_at` read it at `from`. A `data` modifier (ADR-0171
+  decision 3) is a `Kind::Midi` too: it follows a field of live data, which its
+  evaluator reads as `0..=1` and hands in the same way.
 - `Timeline`: cues sorted by time, a duration and a `Looping` (`Once`, `Loop`, or `Range`:
   an intro, then a loop). `check` refuses unsorted, unreachable or too many cues and bad
   bounds. `due` gives the cues that fire in a window of the animation clock, each with

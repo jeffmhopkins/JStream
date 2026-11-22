@@ -263,8 +263,9 @@ pub fn CameraMoves(
                         >
                             {KINDS
                                 .into_iter()
-                                // A camera hears nothing: an audio move is an item's.
-                                .filter(|k| *k != "Audio")
+                                // A camera hears nothing and follows no live data: an audio
+                                // or data move is an item's.
+                                .filter(|k| !matches!(*k, "Audio" | "DAW data"))
                                 .map(|k| view! { <option value=k>{k}</option> })
                                 .collect_view()}
                         </select>

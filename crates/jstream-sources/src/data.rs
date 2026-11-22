@@ -436,6 +436,34 @@ impl LiveData {
             .collect()
     }
 
+    /// Every key's message from the sender `input`, or with `None` from whichever sender
+    /// has each key (the first by name), in key order.
+    #[must_use]
+    pub fn entries(&self, input: Option<&str>) -> Vec<(String, Arc<Value>)> {
+        let store = self.lock();
+        match input {
+            Some(name) => store
+                .inputs
+                .get(name)
+                .map(|i| {
+                    i.keys
+                        .iter()
+                        .map(|(k, e)| (k.clone(), Arc::clone(&e.value)))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            None => {
+                let mut all: BTreeMap<String, Arc<Value>> = BTreeMap::new();
+                for i in store.inputs.values() {
+                    for (k, e) in &i.keys {
+                        all.entry(k.clone()).or_insert_with(|| Arc::clone(&e.value));
+                    }
+                }
+                all.into_iter().collect()
+            }
+        }
+    }
+
     /// The sender `input`'s message for `key`, if it has one.
     #[must_use]
     pub fn get(&self, input: &str, key: &str) -> Option<Arc<Value>> {

@@ -85,6 +85,9 @@ pub(crate) struct FilterAssets {
     motion_heard: crate::reactive::HeardScopes,
     /// The engine's MIDI inputs, whose clock moves a border's speed in beats (ADR-0148).
     tempo: Option<crate::tempo::Tempo>,
+    /// The engine's live data, which a `data` motion modifier watches (ADR-0171
+    /// decision 3).
+    data: Option<jstream_sources::LiveData>,
     /// The 3D rendering switches (`studio.set_rendering`, ADR-0170 decision 1): a plan
     /// leaves out the effects a switch that is off names.
     features: jstream_protocol::RenderFeatures,
@@ -173,6 +176,20 @@ impl FilterAssets {
         self.tempo.as_ref()
     }
 
+    /// These assets with `data` as the live data `data` motion modifiers watch.
+    #[must_use]
+    pub(crate) fn with_data(self, data: jstream_sources::LiveData) -> Self {
+        Self {
+            data: Some(data),
+            ..self
+        }
+    }
+
+    /// The live data `data` motion modifiers watch (ADR-0171 decision 3).
+    pub(crate) fn data(&self) -> Option<&jstream_sources::LiveData> {
+        self.data.as_ref()
+    }
+
     /// These assets with `features` as the 3D rendering switches (ADR-0170 decision 1).
     #[must_use]
     pub(crate) fn with_features(self, features: jstream_protocol::RenderFeatures) -> Self {
@@ -194,6 +211,7 @@ impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
             heard: Arc::default(),
             motion_heard: Arc::default(),
             tempo: None,
+            data: None,
             features: jstream_protocol::RenderFeatures::ALL,
         }
     }

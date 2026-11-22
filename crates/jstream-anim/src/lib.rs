@@ -29,7 +29,9 @@
 //! - MIDI-driven modifiers
 //!   ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): [`Kind::Midi`]
 //!   follows a controller through a [`Smoothing`] the evaluator keeps, and
-//!   [`evaluate_with`] takes its value as it takes an audio modifier's level.
+//!   [`evaluate_with`] takes its value as it takes an audio modifier's level. A
+//!   `data` modifier (ADR-0171 decision 3) is one too: its evaluator reads a field of
+//!   live data as `0..=1` instead of a controller.
 //!
 //! The geometry, crop and effects types are type parameters, so this crate doesn't
 //! depend on `jstream-protocol`: the graph instantiates it with the protocol's

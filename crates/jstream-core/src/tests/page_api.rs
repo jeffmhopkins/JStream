@@ -59,6 +59,7 @@ struct Seen {
     levels: Option<Value>,
     midi: Option<Value>,
     values: BTreeMap<String, Option<Value>>,
+    data: BTreeMap<String, Option<Value>>,
     clock: bool,
 }
 
@@ -71,6 +72,7 @@ impl Seen {
             levels,
             midi,
             values,
+            data,
         } in page.take_data()
         {
             self.clock |= clock.is_some();
@@ -89,6 +91,9 @@ impl Seen {
             }
             for (name, value) in values {
                 self.values.insert(name, value.map(parse));
+            }
+            for (key, value) in data {
+                self.data.insert(key, value.map(parse));
             }
         }
     }
@@ -241,6 +246,57 @@ fn a_page_without_the_grant_is_sent_nothing() {
     let page = browser.pages().remove(0);
     assert!(page.spec().page_api.is_none());
     assert!(page.take_data().is_empty());
+}
+
+/// A page granted live data reads its sender's keys as they land, and a key that goes as
+/// `null` (ADR-0171 decision 10).
+#[test]
+fn a_page_granted_live_data_reads_its_senders_keys() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let browser = FakeBrowser::new();
+    let engine = engine(&audio, &clock).with_browser(browser.clone());
+    let control = connected(&engine);
+    let settings: BTreeMap<String, Value> = [
+        ("url", json!("https://example.com/")),
+        ("page_api", json!(true)),
+        ("page_api_data", json!(true)),
+        ("page_api_data_input", json!("Bitwig")),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_owned(), v))
+    .collect();
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            Edit::SourceCreate {
+                source_id: SourceId::new("page"),
+                name: "page".into(),
+                kind: SourceKind::Builtin {
+                    kind: "browser".into(),
+                },
+                settings: Settings(settings),
+                duplicated_from: None,
+            },
+            add("a", "page-in-a", "page"),
+        ]),
+    )
+    .expect("collection");
+    block_on(control.call(switch_call("a"))).expect("scene.switch");
+    assert!(eventually(|| browser.pages().len() == 1));
+    let page = browser.pages().remove(0);
+    assert!(page.spec().page_api.is_some_and(|api| api.data));
+    let live = engine.live_data();
+    live.put("Bitwig", "transport", br#"{"playing":true}"#, 0)
+        .expect("taken");
+    live.put("Other", "transport", br#"{"playing":false}"#, 0)
+        .expect("taken");
+    let mut seen = Seen::default();
+    assert!(seen.until(&clock, &page, |s| s.data.contains_key("transport")));
+    assert_eq!(seen.data["transport"], Some(json!({"playing": true})));
+    live.restart("Bitwig");
+    assert!(seen.until(&clock, &page, |s| s.data.get("transport") == Some(&None)));
 }
 
 /// A page given a bus reads its levels and bands each page frame while the mixer runs,

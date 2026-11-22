@@ -52,6 +52,7 @@ const KEY_SCENES: &str = "jstream.page_api.scenes";
 const KEY_VALUES: &str = "jstream.page_api.values";
 const KEY_LEVELS: &str = "jstream.page_api.levels";
 const KEY_MIDI: &str = "jstream.page_api.midi";
+const KEY_DATA: &str = "jstream.page_api.data";
 const KEY_HOME_KIND: &str = "jstream.page_api.home_kind";
 const KEY_HOME: &str = "jstream.page_api.home";
 
@@ -64,6 +65,7 @@ pub(crate) fn extra_info(api: PageApi, home: &ApiHome) -> Option<DictionaryValue
     info.set_bool(Some(&KEY_VALUES.into()), c_int::from(api.values));
     info.set_bool(Some(&KEY_LEVELS.into()), c_int::from(api.levels));
     info.set_bool(Some(&KEY_MIDI.into()), c_int::from(api.midi));
+    info.set_bool(Some(&KEY_DATA.into()), c_int::from(api.data));
     info.set_string(Some(&KEY_HOME_KIND.into()), Some(&kind.into()));
     info.set_string(Some(&KEY_HOME.into()), Some(&value.into()));
     Some(info)
@@ -71,7 +73,8 @@ pub(crate) fn extra_info(api: PageApi, home: &ApiHome) -> Option<DictionaryValue
 
 /// `data` as the process message its page's main frame is sent: the clock (a flag and
 /// two numbers), the visibility, scenes, levels and MIDI (empty for none: JSON text is
-/// never empty), then each value's name and JSON text (empty for one removed). The
+/// never empty), how many values follow, then each value's name and JSON text (empty
+/// for one removed), then each live data key and its JSON text (empty for one gone). The
 /// layout is private to this crate: the engine and the helper it starts are always the
 /// same build, so a reordering here needs no version, only [`read_message`] to match.
 pub(crate) fn message(data: &PageData) -> Option<ProcessMessage> {
@@ -85,10 +88,13 @@ pub(crate) fn message(data: &PageData) -> Option<ProcessMessage> {
     list.set_string(4, Some(&data.scenes.as_deref().unwrap_or_default().into()));
     list.set_string(5, Some(&data.levels.as_deref().unwrap_or_default().into()));
     list.set_string(6, Some(&data.midi.as_deref().unwrap_or_default().into()));
-    for (n, (name, value)) in data.values.iter().enumerate() {
-        list.set_string(7 + 2 * n, Some(&name.as_str().into()));
+    let count = i32::try_from(data.values.len()).unwrap_or(i32::MAX);
+    list.set_int(7, count);
+    let pairs = data.values.iter().chain(data.data.iter());
+    for (n, (name, value)) in pairs.enumerate() {
+        list.set_string(8 + 2 * n, Some(&name.as_str().into()));
         list.set_string(
-            8 + 2 * n,
+            9 + 2 * n,
             Some(&value.as_deref().unwrap_or_default().into()),
         );
     }
@@ -112,11 +118,18 @@ fn read_message(message: &ProcessMessage) -> Option<PageData> {
         levels: text(5),
         midi: text(6),
         values: Vec::new(),
+        data: Vec::new(),
     };
-    let mut index = 7;
+    let values = usize::try_from(list.int(7)).unwrap_or(0);
+    let mut index = 8;
     while index + 1 < list.size() {
         if let Some(name) = text(index) {
-            data.values.push((name, text(index + 1)));
+            let pair = (name, text(index + 1));
+            if (index - 8) / 2 < values {
+                data.values.push(pair);
+            } else {
+                data.data.push(pair);
+            }
         }
         index += 2;
     }
@@ -190,6 +203,7 @@ wrap_render_process_handler! {
                 values: info.bool(Some(&KEY_VALUES.into())) == 1,
                 levels: info.bool(Some(&KEY_LEVELS.into())) == 1,
                 midi: info.bool(Some(&KEY_MIDI.into())) == 1,
+                data: info.bool(Some(&KEY_DATA.into())) == 1,
             };
             let id = browser.identifier();
             self.granted.with(|granted| {
