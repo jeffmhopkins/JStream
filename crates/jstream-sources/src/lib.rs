@@ -36,7 +36,7 @@ mod browser;
 mod capture;
 mod chat;
 mod color;
-mod data;
+pub mod data;
 mod describe;
 mod error;
 mod fonts;

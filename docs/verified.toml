@@ -6159,7 +6159,7 @@ stamp = { hash = "b3:696cce426f635f68", by = "agent:frame-probe", note = "Re-rea
 stamp = { hash = "b3:83423ce2603cbd75", by = "agent:claude", note = "Added the Still seam (Source::still, Still::frame/frame_if_held/held/size, a reload that fails on a new size) and the still image keeping only its shown frame; Source::frame's no-I/O promise now names the still exception, matching image/mod.rs, still.rs and the new sources test" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:bbee5feb5ec8c251", by = "agent:claude", note = "Re-read and edited: new LiveData bullet (data.rs, ADR-0171 decision 2): put/touch/restart/expire and their bounds, list/get for data.list/data.get, watch and DataCell (one NaN-boxed u64, text_hash, colour), shared and forgotten watches. The rest of the section is unchanged by this diff." }
+stamp = { hash = "b3:901aec2df0dbab16", by = "agent:claude", note = "Re-read after making the data module public (pub mod data) so its bounds constants document: the LiveData bullet (bounds of 4 MiB of JSON, touch returning whether the key is there, watches) still holds; the crate root still re-exports LiveData and its types." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/light.rs"]
 stamp = { hash = "b3:26fb3f105faa8457", by = "agent:sky-backdrop", note = "Re-read the light entry: warp described as Doppler shifted with the nebulae fading; the descriptor's added blue-glow wording doesn't change ranges or defaults." }
