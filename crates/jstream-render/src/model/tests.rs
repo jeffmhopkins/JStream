@@ -1543,6 +1543,59 @@ fn two_boxes(boxes: [([f32; 3], [f32; 3], [u8; 3]); 2]) -> Model {
     Model::new(primitives, cube.materials().to_vec(), vec![]).expect("the model builds")
 }
 
+/// The opaque primitives draw their depth first and are shaded where it is equal, so
+/// the nearest shows whatever order they are in, and of two in one plane the first.
+#[test]
+fn golden_model_opaque_primitives_show_the_nearest_in_any_order_and_the_first_in_a_plane() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let geometry = boxed(80.0, 50.0, 60.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let near = ([0.0, 0.0, 0.3], [0.5, 0.5, 0.01], [0, 0, 255]);
+    let far = ([0.0, 0.0, -0.3], [1.0, 1.0, 0.01], [255, 0, 0]);
+    let a = draw(
+        compositor,
+        &two_boxes([near, far]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    let b = draw(
+        compositor,
+        &two_boxes([far, near]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_eq!(a.rgba(), b.rgba(), "the order of the primitives shows");
+    assert_near(rgb(&a, 80, 50), [0, 0, 255], (80, 50));
+    assert!(
+        count(&a, [255, 0, 0]) > 500,
+        "the far box shows around the near one"
+    );
+    // In one plane: the first primitive's colour, whole, not a mix of the two.
+    let red = ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]);
+    let blue = ([0.0, 0.0, 0.0], [0.5, 0.5, 0.01], [0, 0, 255]);
+    let first_red = draw(
+        compositor,
+        &two_boxes([red, blue]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_near(rgb(&first_red, 80, 50), [255, 0, 0], (80, 50));
+    let first_blue = draw(
+        compositor,
+        &two_boxes([blue, red]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_near(rgb(&first_blue, 80, 50), [0, 0, 255], (80, 50));
+}
+
 /// ADR-0165 decision 2: a model whose surfaces sit at the focus draws as it does with no
 /// depth of field.
 #[test]

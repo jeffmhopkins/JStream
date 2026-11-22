@@ -123,7 +123,9 @@ fn skin_matrix(joints: vec4<u32>, weights: vec4<f32>) -> mat4x4<f32> {
 }
 
 struct VsOut {
-    @builtin(position) clip: vec4<f32>,
+    // Invariant, so the depth prepass and the shading pass place a fragment at the same
+    // depth, and the shading pass's equal test keeps exactly the nearest.
+    @builtin(position) @invariant clip: vec4<f32>,
     @location(0) seen: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) tangent: vec4<f32>,
@@ -467,6 +469,28 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         color = lit * occlusion + emitted;
     }
     return vec4<f32>(color * base.a, base.a);
+}
+
+// The opaque primitives' depth prepass: what `fs` keeps, without its shading, so the
+// shading pass after it shades each pixel once, at the nearest surface, however many
+// surfaces cover it.
+@fragment
+fn fs_prepass(in: VsOut, @builtin(front_facing) front_facing: bool) {
+    if below_floor(in.seen) {
+        discard;
+    }
+    let facing = front_facing != (frame.params.y > 0.5);
+    if !facing && material.flags.z <= 0.5 {
+        discard;
+    }
+    let mode = material.flags.x;
+    if mode > 0.5 && mode < 1.5 {
+        // As `fs` masks: a picture's unpremultiplying leaves its alpha as it was.
+        let alpha = material.base.a * textureSample(base_tex, tex_sampler, in.uv).a * in.color.a;
+        if alpha < material.flags.y {
+            discard;
+        }
+    }
 }
 
 // The model's view depth (ADR-0143 decision 4): red holds 1 / w, the viewer's distance

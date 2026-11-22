@@ -424,6 +424,9 @@ pub(crate) struct ModelRuntime {
     /// draw that had any, and their textures, so a steady frame makes no bind group
     /// (ADR-0151 decisions 3 and 9).
     shadow_bind: Option<([Option<wgpu::Texture>; FRAME_TEXTURES], wgpu::BindGroup)>,
+    /// The opaque primitives' depth, drawn before their shading.
+    prepass: wgpu::RenderPipeline,
+    /// Their shading, where the prepass left their depth.
     opaque: wgpu::RenderPipeline,
     blended: wgpu::RenderPipeline,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
@@ -544,12 +547,20 @@ impl ModelRuntime {
             ],
             immediate_size: 0,
         });
-        let pipeline = |blended: bool| {
+        // The opaque primitives draw twice: their depth first (`fs_prepass`), then their
+        // shading where it is equal, which writes no depth; blended ones test it.
+        #[derive(Clone, Copy, PartialEq)]
+        enum Kind {
+            Prepass,
+            Opaque,
+            Blended,
+        }
+        let pipeline = |kind: Kind| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(if blended {
-                    "jstream-render-model-blended"
-                } else {
-                    "jstream-render-model-opaque"
+                label: Some(match kind {
+                    Kind::Prepass => "jstream-render-model-prepass",
+                    Kind::Opaque => "jstream-render-model-opaque",
+                    Kind::Blended => "jstream-render-model-blended",
                 }),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
@@ -581,28 +592,44 @@ impl ModelRuntime {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(!blended),
-                    depth_compare: Some(wgpu::CompareFunction::Greater),
+                    depth_write_enabled: Some(kind == Kind::Prepass),
+                    depth_compare: Some(if kind == Kind::Opaque {
+                        wgpu::CompareFunction::Equal
+                    } else {
+                        wgpu::CompareFunction::Greater
+                    }),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some("fs"),
+                    entry_point: Some(if kind == Kind::Prepass {
+                        "fs_prepass"
+                    } else {
+                        "fs"
+                    }),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    // The prepass draws in the colour pass, so it has its target, and
+                    // writes none of it.
                     targets: &[Some(wgpu::ColorTargetState {
                         format: LAYER_FORMAT,
-                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
+                        blend: (kind != Kind::Prepass)
+                            .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: if kind == Kind::Prepass {
+                            wgpu::ColorWrites::empty()
+                        } else {
+                            wgpu::ColorWrites::ALL
+                        },
                     })],
                 }),
                 multiview_mask: None,
                 cache: None,
             })
         };
-        let opaque = pipeline(false);
-        let blended = pipeline(true);
+        let prepass = pipeline(Kind::Prepass);
+        let opaque = pipeline(Kind::Opaque);
+        let blended = pipeline(Kind::Blended);
         let largest = wgpu::BlendComponent {
             src_factor: wgpu::BlendFactor::One,
             dst_factor: wgpu::BlendFactor::One,
@@ -711,6 +738,7 @@ impl ModelRuntime {
             pose_layout,
             rest_pose,
             shadow_bind: None,
+            prepass,
             opaque,
             blended,
             depth_only,
@@ -1458,11 +1486,20 @@ impl ModelRuntime {
                 pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..p.index_count, 0, 0..1);
             };
+            // Depth first, then shading only where it is the nearest: a pixel several
+            // surfaces cover is shaded once, not once a surface.
+            let opaque =
+                |p: &&GpuPrimitive| !model.materials.get(p.material).is_some_and(|m| m.blended);
+            pass.set_pipeline(&self.prepass);
+            for p in model.primitives.iter().filter(opaque) {
+                draw_one(&mut pass, p);
+            }
+            // Last to first: where two primitives lie in one plane both pass the equal
+            // test and the later draw replaces the earlier, so this order shows the
+            // first of them, as one pass that kept the first nearest fragment did.
             pass.set_pipeline(&self.opaque);
-            for p in &model.primitives {
-                if !model.materials.get(p.material).is_some_and(|m| m.blended) {
-                    draw_one(&mut pass, p);
-                }
+            for p in model.primitives.iter().rev().filter(opaque) {
+                draw_one(&mut pass, p);
             }
             if !self.order.is_empty() {
                 pass.set_pipeline(&self.blended);

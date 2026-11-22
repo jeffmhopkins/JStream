@@ -594,7 +594,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
-| Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
+| Model pipelines (depth prepass, opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per sky drawn (none for a call whose layer already holds the sky) |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
@@ -762,8 +762,19 @@ and for the model-to-clip matrix built from it: only that product is `f32`, so a
 camera doesn't jitter. Depth is reversed `Depth32Float`, cleared to 0 with `Greater`:
 with perspective, clip `z` is `NEAR_W`, so `z / w = NEAR_W / w` and the GPU's own
 `z ≤ w` clip is ADR-0050's near plane; without (a 2D scene with no `perspective_px`) it
-is linear in the model's depth. Opaque and masked primitives draw first with depth
-writes, then blended ones far to near by their centres, testing without writing. There
+is linear in the model's depth. Opaque and masked primitives draw twice in the one pass.
+First a depth prepass (`fs_prepass`, which discards what `fs` discards: below the floor
+cut, a back face of a single-sided material, a masked texel under its cutoff) writes
+depth and no colour. Then their shading draws with an `Equal` test and no depth writes,
+so a pixel that several surfaces cover is shaded once, at the nearest, and not once a
+surface: the shading is by far the dearer part (up to five textures, eight lights, the
+shadow taps and the sky), and a model seen from inside, such as a room or a cockpit, has
+several surfaces behind most pixels. The clip position is `@invariant`, so both draws
+place a fragment at the same depth. The shading draws the primitives last to first:
+where two lie in one plane both pass the equal test and the later draw replaces the
+earlier, so that order shows the first of them, as before
+(`golden_model_opaque_primitives_show_the_nearest_in_any_order_and_the_first_in_a_plane`).
+Blended primitives follow, far to near by their centres, testing without writing. There
 is no cull: a mirrored map (`Solid::mirrored`) swaps which face is the front, so the
 shader discards back faces itself unless the material is double-sided. A back face of a
 double-sided material turns its normal and tangent over together, so a normal map tilts
