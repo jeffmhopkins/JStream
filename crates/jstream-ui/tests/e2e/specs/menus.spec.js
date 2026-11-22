@@ -71,6 +71,11 @@ test('the canvas has a menu on the frame and another on the margin', async ({ pa
   ]);
   await page.keyboard.press('Escape');
   await expect(menu(page)).toBeHidden();
+
+  // The frame's New group groups the selection (the seed's item) in the shown scene.
+  await page.mouse.click(inside.x, inside.y, { button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'New group' }).click();
+  await expect(page.locator('.sources-panel li.row .tree-label').first()).toHaveText('Group 1');
 });
 
 test('the arrow keys move through a menu, and a press outside closes it', async ({ page, daemon }) => {
@@ -229,7 +234,7 @@ test('the canvas item menu duplicates, and selects several', async ({ page, daem
   await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(2);
   await rows(page).first().click({ button: 'right' });
   await expect(menu(page).locator('.ctx-head')).toHaveText('2 items selected');
-  await expect(await sub(page, 'Duplicate', 'Duplicate as reference')).toBeDisabled();
+  await expect(menu(page).getByRole('menuitem', { name: /^Duplicate/ })).toBeDisabled();
   await menu(page).getByRole('menuitem', { name: 'Remove from scene' }).click();
   await expect(rows(page)).toHaveCount(0);
 });
@@ -442,18 +447,16 @@ test('the Help menu links to the project and opens the About dialog', async ({ p
   await expect(about).toHaveCount(0);
 });
 
-test('Check for updates reports from this page, and Settings keeps the launch check', async ({ page, daemon }) => {
+test('Check for updates is off in a browser, and Settings keeps the launch check', async ({ page, daemon }) => {
   await connect(page, daemon);
   const header = page.locator('header.app-header');
   await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
-  await page.getByRole('menu', { name: 'Help' }).getByRole('menuitem', { name: 'Check for updates' }).click();
-  const check = page.getByRole('dialog', { name: 'Check for updates' });
-  await expect(check).toBeVisible();
-  // The page under test is a browser, so the desktop app's request isn't there.
-  await expect(check).toContainText('Check for updates runs in the desktop app.');
-  // The header's × is also named Close, so the footer's button is the one pressed.
-  await check.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
-  await expect(check).toHaveCount(0);
+  // The page under test is a browser, so the desktop app's request isn't there: the
+  // item is off and says where it works, and no dialog opens.
+  const check = page.getByRole('menu', { name: 'Help' }).getByRole('menuitem', { name: 'Check for updates' });
+  await expect(check).toBeDisabled();
+  await expect(check).toHaveAttribute('title', 'Available in the desktop app');
+  await page.keyboard.press('Escape');
 
   await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
   await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();

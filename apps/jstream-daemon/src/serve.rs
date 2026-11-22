@@ -160,7 +160,7 @@ pub fn engine(
     #[cfg(windows)]
     scan_clap_plugins(&engine);
     #[cfg(not(windows))]
-    engine.set_clap_unavailable("CLAP plugins are hosted on Windows only so far");
+    engine.set_clap_unavailable("CLAP audio plugins are available on Windows.");
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
     #[cfg(windows)]
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));

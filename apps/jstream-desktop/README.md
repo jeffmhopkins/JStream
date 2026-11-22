@@ -388,7 +388,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   On Windows it also scans the CLAP audio plugins on a worker thread, as the daemon
   does ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)), each file in a
   `jstream-plugin-host.exe` started from beside the app, so they show in Settings ›
-  Audio plugins and Add filter; elsewhere the engine says CLAP is hosted on Windows only.
+  Audio plugins and Add filter; elsewhere the engine says "CLAP audio plugins are available on Windows."
   When the app exits, the server closes its connections and the engine stops, each
   step against a deadline (`Host::stop`): the server gets 3 s, its runtime's last tasks
   1 s, and the engine 5 s, let go of on a thread of its own so the wait can end. A step

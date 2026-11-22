@@ -1,21 +1,22 @@
-//! File › Video settings…: the collection's base resolution (the canvas every scene is
-//! laid out on) and its base frame rate, as OBS's Video settings set them, and the space
-//! its blend modes mix in (docs/UI-FEATURES.md#header).
+//! Settings › Video (File › Video settings… opens it): the collection's base resolution
+//! (the canvas every scene is laid out on) and its base frame rate, as OBS's Video
+//! settings set them, and the space its blend modes mix in (docs/UI-FEATURES.md#header).
 //!
-//! All three are collection state, so the dialog reads them from `state.get` and
-//! applies what changed as one batch: one undo step, `canvas.set_size`,
+//! All three are collection state, so the page reads them from `state.get` into a
+//! [`VideoDraft`] that the Settings window keeps, and its Save sends what changed as one
+//! batch: one undo step, `canvas.set_size`,
 //! `canvas.set_frame_rate` (ADR-0119) and `canvas.set_blending` (ADR-0126). A new size
 //! also rescales every scene by default ([`rescale`]): the engine moves nothing when the
 //! canvas changes (ADR-0022 decision 1), so the same batch carries the placement and
 //! camera edits that keep each scene looking as it did. Encoders scale after this picture: an output's
 //! video mix has its own resolution and divides the base rate. A program stage that is
-//! running keeps the rate it opened with, so the dialog says the new rate applies once
+//! running keeps the rate it opened with, so the page says the new rate applies once
 //! every output has stopped.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::app::SessionContext;
-use crate::dialog::{Info, Modal};
+use crate::dialog::Info;
 use crate::store::Studio;
 use jstream_control::ControlError;
 use jstream_control::protocol::ProtocolError;
@@ -43,7 +44,7 @@ pub const PRESETS: [(u32, u32); 6] = [
 /// The rates the engine runs at (ADR-0119).
 pub const RATES: [u32; 2] = [DEFAULT_BASE_FPS, FAST_BASE_FPS];
 
-/// A side typed into the dialog, or why it can't be used.
+/// A side typed into the page, or why it can't be used.
 pub fn side(text: &str) -> Result<u32, String> {
     match text.trim().parse::<u32>() {
         Ok(value) if (1..=MAX_SIDE).contains(&value) => Ok(value),
@@ -51,7 +52,7 @@ pub fn side(text: &str) -> Result<u32, String> {
     }
 }
 
-/// What the dialog sets: the base resolution, the base rate and the blending space.
+/// What the page sets: the base resolution, the base rate and the blending space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Video {
     /// The canvas.
@@ -327,11 +328,11 @@ pub fn rescale(
     edits
 }
 
-/// What the dialog says when Apply is refused. A revision conflict means the project
-/// changed after the scenes were read for the rescale, so Apply again reads them anew.
+/// What the Video page says when Save is refused. A revision conflict means the project
+/// changed after the scenes were read for the rescale, so Save again reads them anew.
 pub fn refusal(err: &ControlError) -> String {
     if matches!(err.protocol(), Some(ProtocolError::RevConflict { .. })) {
-        "The project changed while this was open, so nothing was applied. Apply again to scale the scenes as they are now.".into()
+        "The project changed while this was open, so nothing was saved. Save again to scale the scenes as they are now.".into()
     } else {
         err.to_string()
     }
@@ -347,61 +348,90 @@ pub fn label(width: u32, height: u32) -> String {
     format!("{width} × {height} ({}:{})", width / gcd, height / gcd)
 }
 
-/// The dialog. It reads the collection as it opens and applies on Apply.
-#[component]
-pub fn VideoSettingsDialog(
-    /// Closes the dialog.
-    close: impl Fn() + Copy + Send + Sync + 'static,
-) -> impl IntoView {
-    let session = expect_context::<SessionContext>();
-    let studio = expect_context::<Studio>();
-    let read = move || {
-        studio.collection.with_untracked(|c| {
-            c.as_ref().map_or_else(Video::default, |c| Video {
-                canvas: c.canvas,
-                fps: c.base_fps,
-                blending: c.blending,
-            })
+/// The Video page's draft: what the page shows, kept by the Settings window so it
+/// survives a move to another page, and saved only by Save.
+#[derive(Clone, Copy)]
+pub struct VideoDraft {
+    width: RwSignal<String>,
+    height: RwSignal<String>,
+    rate: RwSignal<u32>,
+    blending: RwSignal<Blending>,
+    scale_scenes: RwSignal<bool>,
+    /// Why Save was refused, if it was.
+    pub error: RwSignal<Option<String>>,
+    /// Whether a save is on its way to the engine.
+    pub busy: RwSignal<bool>,
+}
+
+/// The collection's video settings as they are now.
+fn current(studio: Studio) -> Video {
+    studio.collection.with_untracked(|c| {
+        c.as_ref().map_or_else(Video::default, |c| Video {
+            canvas: c.canvas,
+            fps: c.base_fps,
+            blending: c.blending,
         })
-    };
-    let now = read();
-    let width = RwSignal::new(now.canvas.width.to_string());
-    let height = RwSignal::new(now.canvas.height.to_string());
-    let rate = RwSignal::new(now.fps);
-    let blending = RwSignal::new(now.blending);
-    let scale_scenes = RwSignal::new(true);
-    let error = RwSignal::new(None::<String>);
-    let busy = RwSignal::new(false);
-    let preset = move || {
-        let (w, h) = (side(&width.get()), side(&height.get()));
-        PRESETS
-            .iter()
-            .position(|p| Ok(p.0) == w && Ok(p.1) == h)
-            .map_or_else(|| "custom".to_owned(), |i| i.to_string())
-    };
-    let apply = move || {
-        let (w, h) = match (side(&width.get_untracked()), side(&height.get_untracked())) {
-            (Ok(w), Ok(h)) => (w, h),
-            (Err(why), _) | (_, Err(why)) => {
-                error.set(Some(why));
-                return;
-            }
-        };
-        let wanted = Video {
+    })
+}
+
+impl VideoDraft {
+    /// A draft of the collection's settings as they are now.
+    pub fn new(studio: Studio) -> Self {
+        let now = current(studio);
+        Self {
+            width: RwSignal::new(now.canvas.width.to_string()),
+            height: RwSignal::new(now.canvas.height.to_string()),
+            rate: RwSignal::new(now.fps),
+            blending: RwSignal::new(now.blending),
+            scale_scenes: RwSignal::new(true),
+            error: RwSignal::new(None),
+            busy: RwSignal::new(false),
+        }
+    }
+
+    /// Whether the draft differs from the collection: a side that can't be used counts
+    /// as a change, so Save stays offered to say why. Reactive.
+    pub fn dirty(self, studio: Studio) -> bool {
+        studio.collection.track();
+        let now = current(studio);
+        let (w, h) = (side(&self.width.get()), side(&self.height.get()));
+        w != Ok(now.canvas.width)
+            || h != Ok(now.canvas.height)
+            || self.rate.get() != now.fps
+            || self.blending.get() != now.blending
+    }
+
+    /// What the draft asks for, or why a side can't be used.
+    fn wanted(self) -> Result<Video, String> {
+        let w = side(&self.width.get_untracked())?;
+        let h = side(&self.height.get_untracked())?;
+        Ok(Video {
             canvas: Canvas {
                 width: w,
                 height: h,
             },
-            fps: rate.get_untracked(),
-            blending: blending.get_untracked(),
+            fps: self.rate.get_untracked(),
+            blending: self.blending.get_untracked(),
+        })
+    }
+
+    /// Sends what changed as one batch, then calls `done`; nothing changed calls `done`
+    /// at once. A refusal stays in [`VideoDraft::error`] and `done` isn't called.
+    pub fn save(self, session: SessionContext, studio: Studio, done: impl Fn() + 'static) {
+        let wanted = match self.wanted() {
+            Ok(wanted) => wanted,
+            Err(why) => {
+                self.error.set(Some(why));
+                return;
+            }
         };
-        let now = read();
+        let now = current(studio);
         let mut edits = edits(now, wanted);
         // The rescale writes every placement from this snapshot, so it applies only to
         // the revision it was read at: a change from elsewhere since is a conflict, not
         // something it overwrites.
         let mut expected_rev = None;
-        if scale_scenes.get_untracked() {
+        if self.scale_scenes.get_untracked() {
             studio.collection.with_untracked(|c| {
                 if let Some(c) = c {
                     let scaled = rescale(&c.scenes, &c.sources, now.canvas, wanted.canvas);
@@ -413,14 +443,14 @@ pub fn VideoSettingsDialog(
             });
         }
         if edits.is_empty() {
-            close();
+            done();
             return;
         }
         let Some(session) = session.get() else {
-            error.set(Some("Not connected to an engine.".into()));
+            self.error.set(Some("Not connected to an engine.".into()));
             return;
         };
-        busy.set(true);
+        self.busy.set(true);
         spawn_local(async move {
             let call = Call::Batch(Batch {
                 edits,
@@ -429,26 +459,62 @@ pub fn VideoSettingsDialog(
                 ends_gesture: None,
             });
             let sent = session.control.call(call).await;
-            busy.set(false);
+            self.busy.try_set(false);
             match sent {
-                Ok(_) => close(),
-                Err(err) => error.set(Some(refusal(&err))),
+                Ok(_) => done(),
+                Err(err) => {
+                    self.error.try_set(Some(refusal(&err)));
+                }
             }
         });
+    }
+}
+
+/// The Settings window's Video page: the canvas, the frame rate and the blending space,
+/// under Canvas and Colour heads, from `draft`.
+#[component]
+pub fn VideoPage(
+    /// The draft the page shows and edits.
+    draft: VideoDraft,
+) -> impl IntoView {
+    let VideoDraft {
+        width,
+        height,
+        rate,
+        blending,
+        scale_scenes,
+        error,
+        ..
+    } = draft;
+    let preset = move || {
+        let (w, h) = (side(&width.get()), side(&height.get()));
+        PRESETS
+            .iter()
+            .position(|p| Ok(p.0) == w && Ok(p.1) == h)
+            .map_or_else(|| "custom".to_owned(), |i| i.to_string())
+    };
+    let rate_radio = move |fps: u32| {
+        let checked = move || rate.get() == fps;
+        view! {
+            <label class="segment" class:on=checked>
+                <input
+                    type="radio"
+                    name="video-rate"
+                    prop:checked=checked
+                    on:change=move |_| rate.set(fps)
+                />
+                {format!("{fps} fps")}
+            </label>
+        }
     };
     view! {
-        <Modal label="Video settings" class="settings-dialog video-settings" cancel=close>
-            <div class="modal-header">
-                <div class="modal-titles">
-                    <h2 class="modal-title">"Video settings"</h2>
-                </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
-            </div>
-            <div class="settings-body">
+        <div class="video-settings">
+            <section class="prop-section">
+                <h4 class="eyebrow">"Canvas"</h4>
                 <div class="prop-grid">
                     <div class="prop-row">
-                        <span class="prop-label">"Canvas size"</span>
-                        <div class="prop-control">
+                        <span class="prop-label">"Size"</span>
+                        <div class="prop-control wide">
                             <select
                                 aria-label="Base resolution"
                                 prop:value=preset
@@ -470,29 +536,34 @@ pub fn VideoSettingsDialog(
                                 <option value="custom">"Custom"</option>
                             </select>
                             <span class="settings-size">
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max=MAX_SIDE.to_string()
-                                    aria-label="Width"
-                                    prop:value=move || width.get()
-                                    on:input=move |event| {
-                                        width.set(event_target_value(&event));
-                                        error.set(None);
-                                    }
-                                />
-                                <span aria-hidden="true">"×"</span>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max=MAX_SIDE.to_string()
-                                    aria-label="Height"
-                                    prop:value=move || height.get()
-                                    on:input=move |event| {
-                                        height.set(event_target_value(&event));
-                                        error.set(None);
-                                    }
-                                />
+                                <label class="size-side">
+                                    <span aria-hidden="true">"W"</span>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max=MAX_SIDE.to_string()
+                                        aria-label="Width"
+                                        prop:value=move || width.get()
+                                        on:input=move |event| {
+                                            width.set(event_target_value(&event));
+                                            error.set(None);
+                                        }
+                                    />
+                                </label>
+                                <label class="size-side">
+                                    <span aria-hidden="true">"H"</span>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max=MAX_SIDE.to_string()
+                                        aria-label="Height"
+                                        prop:value=move || height.get()
+                                        on:input=move |event| {
+                                            height.set(event_target_value(&event));
+                                            error.set(None);
+                                        }
+                                    />
+                                </label>
                             </span>
                             <p class="help">"Every scene is laid out on it; outputs scale from it."</p>
                         </div>
@@ -514,23 +585,18 @@ pub fn VideoSettingsDialog(
                     <div class="prop-row">
                         <span class="prop-label">"Frame rate"</span>
                         <div class="prop-control">
-                            <select
-                                aria-label="Frame rate"
-                                prop:value=move || rate.get().to_string()
-                                on:change=move |event| {
-                                    if let Ok(fps) = event_target_value(&event).parse::<u32>() {
-                                        rate.set(fps);
-                                    }
-                                }
-                            >
-                                {RATES.iter().map(|fps| view! {
-                                    <option value=fps.to_string()>{format!("{fps} fps")}</option>
-                                }).collect_view()}
-                            </select>
+                            <div class="segmented" role="radiogroup" aria-label="Frame rate">
+                                {RATES.into_iter().map(rate_radio).collect_view()}
+                            </div>
                             <Info text="Outputs run at this rate, or at a share of it set by their video mix. 60 fps doubles every mix's rate and the work per second." />
                             <p class="help">"A live output takes a new rate once every output has stopped."</p>
                         </div>
                     </div>
+                </div>
+            </section>
+            <section class="prop-section">
+                <h4 class="eyebrow">"Colour"</h4>
+                <div class="prop-grid">
                     <div class="prop-row">
                         <span class="prop-label">"Blending"</span>
                         <div class="prop-control">
@@ -552,21 +618,9 @@ pub fn VideoSettingsDialog(
                         </div>
                     </div>
                 </div>
-                {move || error.get().map(|why| view! { <p class="settings-error" role="alert">{why}</p> })}
-            </div>
-            <div class="modal-footer">
-                <button type="button" on:click=move |_| close()>"Cancel"</button>
-                <button
-                    type="button"
-                    class="primary"
-                    data-primary
-                    prop:disabled=move || busy.get()
-                    on:click=move |_| apply()
-                >
-                    "Apply"
-                </button>
-            </div>
-        </Modal>
+            </section>
+            {move || error.get().map(|why| view! { <p class="settings-error" role="alert">{why}</p> })}
+        </div>
     }
 }
 
@@ -1042,7 +1096,7 @@ mod tests {
     }
 
     #[test]
-    fn a_conflict_says_to_apply_again() {
+    fn a_conflict_says_to_save_again() {
         let conflict = ControlError::from(ProtocolError::RevConflict {
             expected: jstream_control::protocol::Rev(4),
             current: jstream_control::protocol::Rev(5),
