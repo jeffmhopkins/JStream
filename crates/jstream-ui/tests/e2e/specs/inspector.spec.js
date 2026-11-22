@@ -1,4 +1,4 @@
-// The Inspector: the selected item's box, W/H link, fit, crop, opacity and favourite, each
+// The Inspector: the selected item's box, width and height link, fit, crop, opacity and favourite, each
 // sent as an edit the canvas and Ctrl+Z follow, and the selected scene's sections. The
 // seed's Backdrop is 640 × 360 with its top-left corner at 640, 360. The mock engine
 // doesn't implement `scene.set_transitions`, so choosing a scene's transition is covered
@@ -48,7 +48,7 @@ test('the box fields edit the item, with the W/H link keeping its shape', async 
   await expect(readout(page)).toHaveText('320 × 180');
 
   // Unlinked, the other side stays.
-  const link = inspector(page).getByRole('button', { name: 'W/H' });
+  const link = inspector(page).getByRole('button', { name: 'Link width and height' });
   await expect(link).toHaveAttribute('aria-pressed', 'true');
   await link.click();
   await expect(link).toHaveAttribute('aria-pressed', 'false');
@@ -56,9 +56,12 @@ test('the box fields edit the item, with the W/H link keeping its shape', async 
   await expect(field(page, 'W')).toHaveValue('320');
   await expect(readout(page)).toHaveText('320 × 200');
 
-  // A stepper sends one edit, and Ctrl+Z on the canvas undoes it.
+  // The fields have no steppers: an arrow key sends one edit, and Ctrl+Z on the canvas
+  // undoes it.
+  await expect(inspector(page).getByRole('button', { name: 'Increase X' })).toHaveCount(0);
   const before = await rev(page);
-  await inspector(page).getByRole('button', { name: 'Increase X' }).click();
+  await field(page, 'X').focus();
+  await page.keyboard.press('ArrowUp');
   await expect(field(page, 'X')).toHaveValue('641');
   await page.locator('.preview.stage').focus();
   await page.keyboard.press('Control+z');
@@ -191,7 +194,7 @@ test('an item\'s sections are in tabs, and its settings in the Properties dialog
 // Compact number rows (#1219): X and Y, W and H, and the scale's W and H each share a row
 // under its label, the crop's four sides share one, and nothing makes the Inspector
 // scroll sideways.
-test('the box and crop fields sit in rows, with no sideways scroll', async ({ page, daemon }) => {
+test('the box and crop fields sit in rows, crop two by two, with no sideways scroll', async ({ page, daemon }) => {
   await selectBackdrop(page, daemon);
   const top = async (label) => (await field(page, label).boundingBox()).y;
   for (const [row, a, b] of [['Position', 'X', 'Y'], ['Size', 'W', 'H'], ['Scale', 'W %', 'H %']]) {
@@ -199,10 +202,10 @@ test('the box and crop fields sit in rows, with no sideways scroll', async ({ pa
     expect(Math.abs((await top(a)) - (await top(b)))).toBeLessThan(2);
   }
   expect(await top('Y')).toBeLessThan(await top('W'));
-  const left = await top('Left');
-  for (const side of ['Right', 'Top', 'Bottom']) {
-    expect(Math.abs((await top(side)) - left)).toBeLessThan(2);
-  }
+  // Crop is two rows: Left and Right, then Top and Bottom under them.
+  expect(Math.abs((await top('Right')) - (await top('Left')))).toBeLessThan(2);
+  expect(Math.abs((await top('Bottom')) - (await top('Top')))).toBeLessThan(2);
+  expect(await top('Left')).toBeLessThan(await top('Top'));
   // Each crop field still shows its value, its caption and its unit.
   await expect(field(page, 'Left')).toHaveValue('0');
   const body = inspector(page).locator('.tab-panel').first();

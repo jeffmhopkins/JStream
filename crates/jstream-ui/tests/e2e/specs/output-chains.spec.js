@@ -57,8 +57,8 @@ test('the Outputs panel lists the program output, then each output once, and an 
   await expect(fx).toHaveAttribute('title', 'Filters for output-1 only');
   await expect(fx).not.toHaveClass(/\bon\b/);
 
-  // The program's FX shows the master chain, even with the Transform panel in front.
-  await showPanel(page, 'Transform');
+  // The program's FX shows the master chain, even with the Arrange panel in front.
+  await showPanel(page, 'Arrange');
   await rows.first().getByRole('button', { name: 'Program output filters' }).click();
   await expect(page.getByRole('tabpanel', { name: 'Filters' })).toBeVisible();
   await expect(filters(page).locator('.filters-title')).toHaveText('Program output');

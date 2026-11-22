@@ -1339,6 +1339,7 @@ where
         />
         <NumberField
             named=named
+            steppers=true
             unit="dB"
             value=value
             step=0.5
