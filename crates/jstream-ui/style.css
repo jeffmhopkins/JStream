@@ -1664,6 +1664,14 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
    on the right; Defaults sits apart from Cancel and OK. */
 .modal.props-dialog { width: var(--dialog-l); height: min(640px, 100%); }
 .scene-props-dialog .props-settings { display: grid; align-content: start; gap: 12px; }
+/* Scene properties (C13): the property grid in General, Transitions, Output and Camera
+   sections. */
+.scene-props-dialog .prop-section { margin: 0; }
+.scene-props-dialog .prop-section + .prop-section { margin-top: 8px; }
+.scene-props-dialog .prop-control > select.grow { flex: 0 1 240px; }
+.scene-props-dialog .hotkey-field { width: 140px; }
+.scene-props-dialog input[type="color"].swatch { flex: none; width: 28px; height: 28px; padding: 2px; }
+.scene-props-dialog .color-text { width: 120px; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; }
 .field-note { color: var(--dim); font-size: 11px; }
 /* The 3D camera block: one column, a fixed label column, controls in the rest.
    Not a `.field`: that two-column grid put the controls in the auto column. */
@@ -1683,10 +1691,10 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .camera-head {
   margin: 8px 0 0;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--dim);
 }
 .camera-fields > .camera-head:first-child { margin-top: 2px; }
 .camera-check {
@@ -2355,8 +2363,9 @@ input[type="checkbox"].toggle:checked::after { left: 14px; background: #fff; }
 /* More about a setting, behind an (i) (UI-DESIGN › Copy): hover or focus shows it. */
 .info { position: relative; display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 4px; padding: 0; border: 1px solid var(--dim); border-radius: 50%; background: none; color: var(--dim); font-size: 9px; font-weight: 600; line-height: 1; vertical-align: -2px; cursor: help; }
 .info:hover, .info:focus-visible { border-color: var(--text); color: var(--text); }
-.info-tip { position: absolute; z-index: 5; left: -4px; top: calc(100% + 6px); width: 260px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--menu); color: var(--text-soft); font-size: 12px; font-weight: 400; line-height: 16px; text-align: left; white-space: normal; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); pointer-events: none; visibility: hidden; }
-.info:hover .info-tip, .info:focus-visible .info-tip { visibility: visible; }
+.info-tip { position: absolute; z-index: 5; left: -4px; top: calc(100% + 6px); width: 260px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--menu); color: var(--text-soft); font-size: 12px; font-weight: 400; line-height: 16px; text-align: left; white-space: normal; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); pointer-events: none; display: none; }
+/* Out of the layout until shown, so a hidden tip never widens a scrolling column. */
+.info:hover .info-tip, .info:focus-visible .info-tip { display: block; }
 .info-tip.up { top: auto; bottom: calc(100% + 6px); }
 .info-tip.end { left: auto; right: -4px; }
 
