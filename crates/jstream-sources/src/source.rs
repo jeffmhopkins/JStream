@@ -219,6 +219,16 @@ pub struct ShownModel {
     /// [`Model::rig`](jstream_media::model::Model::rig): its rest pose until a clip
     /// plays. `None` for a model without a rig.
     pub pose: Option<Arc<[jstream_media::model::rig::Mat4]>>,
+    /// The source whose picture replaces the base-colour texture (ADR-0107 decision
+    /// 5), after its own filters, sampled live every frame. `None` keeps the model's own.
+    pub texture: Option<jstream_protocol::SourceId>,
+    /// The material, by name, whose base-colour texture `texture` replaces; `None` for
+    /// every material.
+    pub texture_material: Option<String>,
+    /// The source the model reflects (ADR-0107 decision 5): its picture, read as an
+    /// equirectangular panorama, replaces the studio environment (or its scene's sky)
+    /// for the model's reflections and ambient light.
+    pub reflection: Option<jstream_protocol::SourceId>,
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.

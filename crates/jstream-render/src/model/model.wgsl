@@ -16,7 +16,9 @@
 // environment is scaled by the scene's ambient light. A scene's environment light
 // (ADR-0151 decision 9) replaces the studio gradient with its sky, in the scene's space:
 // a gradient from its ground through its horizon to its sky straight up, or its
-// picture as an equirectangular panorama, spun about the vertical by its turn. A rough
+// picture as an equirectangular panorama, spun about the vertical by its turn. A model's
+// own `reflection` (ADR-0107 decision 5) is such a panorama too, with or without scene
+// lights, in place of either. A rough
 // reflection, and the diffuse light, read the panorama over a ring of taps around the
 // direction, wider the rougher. With no ambient light the sky lights a model on its own.
 
@@ -92,7 +94,9 @@ struct Material {
     // alpha mode (0 opaque, 1 mask, 2 blend), cutoff, double-sided, unlit.
     flags: vec4<f32>,
     // x: 1 for a lit card (ADR-0151 decision 10), whose base and emissive textures are
-    // its picture in premultiplied linear light, so it emits its own colour.
+    // its picture in premultiplied linear light, so it emits its own colour. y: 1 when
+    // the base texture is another source's picture (ADR-0107 decision 5), a mip chain in
+    // premultiplied linear light.
     card: vec4<f32>,
 }
 
@@ -370,12 +374,13 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
     if !facing && !double_sided {
         discard;
     }
-    var base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
+    var texel = textureSample(base_tex, tex_sampler, in.uv);
     let card = material.card.x > 0.5;
-    if card {
-        // A card's picture is premultiplied: its colour is what it holds over its alpha.
-        base = vec4<f32>(select(vec3<f32>(0.0), base.rgb / base.a, base.a > 1e-6), base.a);
+    if card || material.card.y > 0.5 {
+        // A picture is premultiplied: its colour is what it holds over its alpha.
+        texel = vec4<f32>(select(vec3<f32>(0.0), texel.rgb / texel.a, texel.a > 1e-6), texel.a);
     }
+    var base = material.base * texel * in.color;
     let mode = material.flags.x;
     if mode > 0.5 && mode < 1.5 {
         if base.a < material.flags.y {
@@ -447,8 +452,9 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         let r = reflect(-v, n);
         // The gradient is smooth, so a rough reflection samples it nearer the normal.
         let blurred = normalize(mix(r, n, roughness * roughness));
-        if frame.params.w > 0.5 && frame.environment.sky.w > 0.5 {
-            // The scene's sky, scaled by its ambient light when it has one.
+        if frame.environment.sky.w > 0.5 {
+            // The scene's sky, or the picture the model reflects (ADR-0107 decision 5),
+            // scaled by the scene's ambient light when it has one.
             if frame.environment.right.w < 0.5 {
                 ambient = vec3<f32>(1.0);
             }

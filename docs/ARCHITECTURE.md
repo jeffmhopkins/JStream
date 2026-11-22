@@ -1227,7 +1227,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
-  and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, a camera
+  and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live
+  texture or a reflection, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
@@ -1306,9 +1307,14 @@ spot, directional and ambient, up to 8 shading lights, placed in the camera's fr
 2048² map of the scene's view depth drawn from the light once a frame and sampled with a
 soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
-studio gradient); the layer is then placed flat
-(`Placement::Layer`) and sorts with the scene's cards at the model's centre. That
-environment can also be the scene's backdrop
+studio gradient). A model's `texture` names another source whose picture, after its
+own filters, replaces its base colour, sampled through a mip chain of the whole picture
+kept on that image and rebuilt only when it changes; its `reflection` names a source read
+as a panorama in place of the studio gradient or the scene's sky. Each is planned like a
+placed source though no item shows it, and the model's layer is drawn after the chains
+and scenes they read. The layer is then placed flat
+(`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
+environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
 each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
 with procedural nebulae, a galaxy band and stars laid out about the direction of travel,
