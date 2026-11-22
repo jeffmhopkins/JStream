@@ -647,6 +647,7 @@ mod tests {
             modifier_id: "sway".into(),
             property: jstream_protocol::MotionProperty::X,
             effect: None,
+            source: None,
             kind: jstream_protocol::MotionKind::Wiggle {
                 amplitude: Finite32::new(3.0).expect("finite"),
                 frequency_hz: Finite32::ONE,
