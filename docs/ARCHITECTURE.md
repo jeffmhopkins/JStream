@@ -706,7 +706,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   Since 0.86 a modifier can follow a bus or a source's audio
   ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)), and since 0.109 drive a
   number or colour setting of one of its item's effects, `property` `effect`
-  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.146 a `midi`
+  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.151 a `midi`
   modifier follows a MIDI control change, pitch bend or channel pressure, smoothed, the
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
@@ -1694,6 +1694,12 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   desktop app and the daemon name it (`Engine::with_warm_file`); `jstream-core` reads it
   at startup and replaces it atomically after every change. A file it can't read, or
   one past the most, is logged and read as the default.
+- **3D rendering switches:** `rendering.json` (version 1) in the data directory, which
+  costly 3D effects the engine draws (`studio.set_rendering`,
+  [ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md) decision 1), one
+  boolean each. The desktop app and the daemon name it (`Engine::with_rendering_file`);
+  `jstream-core` reads it at startup and replaces it atomically after every change. A
+  file it can't read is logged and read as all on, and a switch it leaves out is on.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

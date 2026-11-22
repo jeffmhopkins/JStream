@@ -523,6 +523,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets the 3D rendering switches (0.147, ADR-0170 decision 1): which of the costly\n3D effects the engine draws, for every scene at once. Each switch `change` names\ntakes its value and the rest keep theirs. A switch that is off draws its effect\nnowhere, whatever a scene, light or filter asks for; turning it back on restores\nwhat each scene asks for. An application setting, not collection state, as\n`studio.set_warm` is: it changes no `rev`, is never undone, emits no event, holds\nwhatever collection is open, and is kept across restarts when the engine's host\nnames a file for it. `studio.get` reports it.",
+          "properties": {
+            "ambient_occlusion": {
+              "description": "Whether the `ambient_occlusion` filter draws, or left out to keep it.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "floor_reflections": {
+              "description": "Whether the `floor_reflection` filter draws, or left out to keep it.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "shadows": {
+              "description": "Whether lights set to cast shadows draw them, or left out to keep it.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "studio.set_rendering",
+              "type": "string"
+            },
+            "volumetric_fog": {
+              "description": "Whether the `volumetric_fog` filter draws, or left out to keep it.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
           "properties": {
             "item_id": {
@@ -2944,7 +2985,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Follows a MIDI controller (ADR-0168, since 0.146): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
           "properties": {
             "channel": {
               "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -9233,7 +9274,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "MotionMidiControl": {
-      "description": "What a `midi` modifier follows (since 0.146, ADR-0168).",
+      "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
       "oneOf": [
         {
           "const": "cc",
@@ -9459,7 +9500,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Follows a MIDI controller (ADR-0168, since 0.146): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
           "properties": {
             "channel": {
               "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -13286,6 +13327,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               ],
               "description": "The scene on program. Omitted only while the collection has no scene."
             },
+            "rendering": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RenderFeatures"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170\ndecision 1, since 0.147). Omitted by an older server, which draws every effect."
+            },
             "timelines": {
               "description": "The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where\nit is now. Omitted when none is.",
               "items": {
@@ -14344,6 +14396,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "RenderFeatures": {
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch is on until `studio.set_rendering` turns it off.",
+      "properties": {
+        "ambient_occlusion": {
+          "default": true,
+          "description": "The `ambient_occlusion` filter (ADR-0151 decision 5). Off, it passes its input\nthrough.",
+          "type": "boolean"
+        },
+        "floor_reflections": {
+          "default": true,
+          "description": "The `floor_reflection` filter (ADR-0151 decision 4), which draws its scene a\nsecond time. Off, it passes its input through and the scene isn't redrawn.",
+          "type": "boolean"
+        },
+        "shadows": {
+          "default": true,
+          "description": "Shadow maps (ADR-0151 decision 3). Off, no light casts a shadow, whatever its\n`shadows` setting.",
+          "type": "boolean"
+        },
+        "volumetric_fog": {
+          "default": true,
+          "description": "The `volumetric_fog` filter (ADR-0151 decision 6). Off, it passes its input\nthrough.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "Request": {
       "description": "One request: a call plus the client-chosen ID its answer will carry.",
@@ -16562,5 +16640,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.146"
+  "title": "JStream protocol 0.151"
 }

@@ -66,9 +66,12 @@ pub fn engine(
     secrets: &Secrets,
 ) -> anyhow::Result<Arc<Engine>> {
     let mut engine = Engine::new().with_audit(audit);
-    // The warm budget is kept in the data folder, where the desktop app keeps it too.
+    // The warm budget and the 3D rendering switches are kept in the data folder, where
+    // the desktop app keeps them too.
     if let Some(dir) = jstream_platform::paths::data_dir() {
-        engine = engine.with_warm_file(dir.join(jstream_platform::paths::WARM_SCENES_FILE));
+        engine = engine
+            .with_warm_file(dir.join(jstream_platform::paths::WARM_SCENES_FILE))
+            .with_rendering_file(dir.join(jstream_platform::paths::RENDERING_FILE));
     }
     if let Some(path) = &options.collection {
         // The error names the file and what is wrong with it.

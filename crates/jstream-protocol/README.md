@@ -74,7 +74,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
-  `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`),
+  `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
+  `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -216,7 +217,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionProperty::Source` and `MotionSetting`, the source setting one drives, and
   `MAX_MOTION_MATERIAL_LEN` (128)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
-  Since 0.146 `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
+  Since 0.151 `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
   ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
@@ -357,10 +358,14 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.146 because a motion modifier can follow MIDI: `MotionKind`'s
+`PROTOCOL_VERSION` is 0.151 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
 ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
+0.147 because the costly 3D effects have app-wide switches:
+the action `studio.set_rendering` and `studio.get`'s `rendering` (`RenderFeatures`,
+`RenderFeaturesChange` in `rendering.rs`,
+[ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md) decision 1);
 0.145 because a motion modifier can drive a live setting of its
 item's source: `MotionProperty::Source` with its `MotionSetting`, a light's colour and
 intensity or a model material's colour and glow by name
@@ -1625,6 +1630,18 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   once, and nothing for a source a mix draws anyway. The scenes are walked in the warm
   order and the first that would pass the limit is left cold with every one after it;
   the Preview scene never is.
+- `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
+  floor_reflections?}` (0.147,
+  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
+  its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
+  draws its effect in no scene, whatever a light (`shadows`) or a scene filter
+  (`ambient_occlusion`, `volumetric_fog`, `floor_reflection`) asks for; on again, each
+  scene gets what it asks for. All are on until set. An application setting, like
+  `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
+  kept across restarts when the engine's host names a file for it. It can't be bound to
+  a hotkey, and no plugin is granted it. A switch an older file or server leaves out
+  reads as on.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1738,7 +1755,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
-  none).
+  none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
+  sets.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
@@ -2443,7 +2461,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
   client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
-  previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
+  previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` and `studio.set_rendering` (application settings), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
   `privacy.set`, `youtube.*`, pairing and devices, `plugin.*` itself, and the
   `timeline.*` edits and actions, whose cues run actions the `edit` class can't
@@ -2767,11 +2785,11 @@ after 1.0:
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, `MotionMeasure` and
-  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.146): a later kind or property won't break a 0.81 client's
+  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.151): a later kind or property won't break a 0.81 client's
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) and a `midi` one (0.146) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86) and a `midi` one (0.151) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2833,7 +2851,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   and so is everything the engine doesn't hear: while no output runs the program mix
   is silent, and a preview reads every audio modifier as silence. Its `clock` is
   ignored.
-- **`midi`** (since 0.146,
+- **`midi`** (since 0.151,
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)) follows a MIDI
   controller instead of a clock, the value binding of ADR-0122: `control` is `cc` (the
   default, with its `controller` 0 to 127, which only `cc` takes), `pitch_bend` or

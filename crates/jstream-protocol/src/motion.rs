@@ -26,7 +26,7 @@
 //! colour and intensity, or, on a model, one material's colours and glow by name.
 //!
 //! A `midi` modifier ([ADR-0168](../../../docs/adr/0168-midi-controllers-drive-motion.md),
-//! since 0.146) follows a MIDI control change, pitch bend or channel pressure instead of
+//! since 0.151) follows a MIDI control change, pitch bend or channel pressure instead of
 //! the clock: the controller's value is mapped onto 0 to 1, smoothed over
 //! `smoothing_ms`, bent by `curve` and mapped onto `from..to`, so a fader or a knob
 //! poses an item live, as ADR-0122 decision 1's value bindings describe.
@@ -190,7 +190,7 @@ pub enum MotionCurve {
     Unknown,
 }
 
-/// What a `midi` modifier follows (since 0.146, ADR-0168).
+/// What a `midi` modifier follows (since 0.151, ADR-0168).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -301,7 +301,7 @@ pub enum MotionKind {
         #[serde(default = "default_to")]
         to: Finite32,
     },
-    /// Follows a MIDI controller (ADR-0168, since 0.146): `control`'s latest value on
+    /// Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on
     /// `channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`
     /// and mapped onto `from..to`. Before the controller has sent anything it reads 0
     /// (a pitch bend one half), so the item rests at `from`.

@@ -227,7 +227,9 @@ Contents:
   `paths::RECENT_COLLECTIONS_FILE` names the file that keeps the projects opened most
   recently ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)), and
   `paths::WARM_SCENES_FILE` the one that keeps the warm budget, which both hosts name
-  (ADR-0117 §7).
+  (ADR-0117 §7), and `paths::RENDERING_FILE` the one that keeps the 3D rendering
+  switches, which both hosts name too
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)).
 - **The person's folders** (`paths.rs`,
   [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   `paths::user_folder` finds Documents and Downloads (`UserFolder`), where the desktop app

@@ -1726,6 +1726,20 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         gpu_mib: Option<u32>,
     },
+    /// Sets the 3D rendering switches (0.147, ADR-0170 decision 1): which of the costly
+    /// 3D effects the engine draws, for every scene at once. Each switch `change` names
+    /// takes its value and the rest keep theirs. A switch that is off draws its effect
+    /// nowhere, whatever a scene, light or filter asks for; turning it back on restores
+    /// what each scene asks for. An application setting, not collection state, as
+    /// `studio.set_warm` is: it changes no `rev`, is never undone, emits no event, holds
+    /// whatever collection is open, and is kept across restarts when the engine's host
+    /// names a file for it. `studio.get` reports it.
+    #[serde(rename = "studio.set_rendering")]
+    StudioSetRendering {
+        /// The switches to change.
+        #[serde(flatten)]
+        change: crate::RenderFeaturesChange,
+    },
     /// Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows
     /// one: the placement's `visible` becomes `true` as `item.set_visible` would make it,
     /// with the same `scene_id` rules and the same errors (`not_found` for an item or
@@ -2313,6 +2327,7 @@ impl Action {
             Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
             Action::StudioSetWarm { .. } => "studio.set_warm",
+            Action::StudioSetRendering { .. } => "studio.set_rendering",
             Action::ItemShow { .. } => "item.show",
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
@@ -2444,6 +2459,7 @@ impl Action {
             | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }
             | Action::StudioSetWarm { .. }
+            | Action::StudioSetRendering { .. }
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
@@ -2507,6 +2523,11 @@ impl Action {
                 "type",
                 "`studio.set_warm` can't be bound: it's an application setting, changed in \
                  Settings",
+            )),
+            Action::StudioSetRendering { .. } => Some((
+                "type",
+                "`studio.set_rendering` can't be bound: it's an application setting, changed \
+                 in Settings",
             )),
             Action::UiSettingsSet { .. } => Some((
                 "type",
@@ -2661,6 +2682,7 @@ impl Action {
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
             | Action::StudioSetWarm { .. }
+            | Action::StudioSetRendering { .. }
             | Action::PluginInstall { .. }
             | Action::PluginClapRescan
             | Action::AgentApprove { .. }
