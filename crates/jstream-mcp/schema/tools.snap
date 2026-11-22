@@ -5744,7 +5744,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "null"
                   }
                 ],
-                "description": "The source setting it changes, with `property` `source` and only then (since\n0.135, ADR-0171). Omitted otherwise."
+                "description": "The source setting it changes, with `property` `source` and only then (since\n0.139, ADR-0171). Omitted otherwise."
               }
             },
             "required": [
@@ -5823,13 +5823,13 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "source",
-                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.135 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.139 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
                 "type": "string"
               }
             ]
           },
           "MotionSetting": {
-            "description": "The source setting a `source` modifier drives (since 0.135, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+            "description": "The source setting a `source` modifier drives (since 0.139, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
             "properties": {
               "material": {
                 "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
@@ -12630,7 +12630,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "null"
                   }
                 ],
-                "description": "The source setting it changes, with `property` `source` and only then (since\n0.135, ADR-0171). Omitted otherwise."
+                "description": "The source setting it changes, with `property` `source` and only then (since\n0.139, ADR-0171). Omitted otherwise."
               }
             },
             "required": [
@@ -12709,13 +12709,13 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "source",
-                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.135 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.139 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
                 "type": "string"
               }
             ]
           },
           "MotionSetting": {
-            "description": "The source setting a `source` modifier drives (since 0.135, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+            "description": "The source setting a `source` modifier drives (since 0.139, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
             "properties": {
               "material": {
                 "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
@@ -21368,7 +21368,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "null"
                   }
                 ],
-                "description": "The source setting it changes, with `property` `source` and only then (since\n0.135, ADR-0171). Omitted otherwise."
+                "description": "The source setting it changes, with `property` `source` and only then (since\n0.139, ADR-0171). Omitted otherwise."
               }
             },
             "required": [
@@ -21447,13 +21447,13 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "source",
-                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.135 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.139 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
                 "type": "string"
               }
             ]
           },
           "MotionSetting": {
-            "description": "The source setting a `source` modifier drives (since 0.135, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+            "description": "The source setting a `source` modifier drives (since 0.139, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
             "properties": {
               "material": {
                 "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
@@ -23482,7 +23482,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "null"
                   }
                 ],
-                "description": "The source setting it changes, with `property` `source` and only then (since\n0.135, ADR-0171). Omitted otherwise."
+                "description": "The source setting it changes, with `property` `source` and only then (since\n0.139, ADR-0171). Omitted otherwise."
               }
             },
             "required": [
@@ -23561,13 +23561,13 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "source",
-                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.135 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.139 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
                 "type": "string"
               }
             ]
           },
           "MotionSetting": {
-            "description": "The source setting a `source` modifier drives (since 0.135, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+            "description": "The source setting a `source` modifier drives (since 0.139, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
             "properties": {
               "material": {
                 "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
@@ -30438,7 +30438,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "null"
                   }
                 ],
-                "description": "The source setting it changes, with `property` `source` and only then (since\n0.135, ADR-0171). Omitted otherwise."
+                "description": "The source setting it changes, with `property` `source` and only then (since\n0.139, ADR-0171). Omitted otherwise."
               }
             },
             "required": [
@@ -30517,13 +30517,13 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "source",
-                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.135 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.139 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
                 "type": "string"
               }
             ]
           },
           "MotionSetting": {
-            "description": "The source setting a `source` modifier drives (since 0.135, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+            "description": "The source setting a `source` modifier drives (since 0.139, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
             "properties": {
               "material": {
                 "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
@@ -40742,7 +40742,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "null"
                   }
                 ],
-                "description": "The source setting it changes, with `property` `source` and only then (since\n0.135, ADR-0171). Omitted otherwise."
+                "description": "The source setting it changes, with `property` `source` and only then (since\n0.139, ADR-0171). Omitted otherwise."
               }
             },
             "required": [
@@ -40821,13 +40821,13 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "source",
-                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.135 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+                "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.139 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
                 "type": "string"
               }
             ]
           },
           "MotionSetting": {
-            "description": "The source setting a `source` modifier drives (since 0.135, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+            "description": "The source setting a `source` modifier drives (since 0.139, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
             "properties": {
               "material": {
                 "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
