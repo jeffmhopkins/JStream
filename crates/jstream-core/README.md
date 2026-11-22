@@ -626,7 +626,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
-  `src/tests/groups3d.rs`, `tests/mcp.rs`,
+  `src/tests/groups3d.rs`, `src/tests/clock.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -1037,6 +1037,9 @@ depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crat
 Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
 happened. Placeholder output actions do too: they only step the state machine.
+`clock.hold`, `clock.step` and `clock.release` (ADR-0172) do too: they hold or step the
+media clock and wake the sources' thread, and an `output.start` while it is held, or a
+hold while an output runs, is `action_failed`.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
 media clock's time under that lock and hands them to the snapshot thread after
 releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
@@ -3796,7 +3799,10 @@ video and the audio subscription's; the stop latches the output's drop source, t
 the drop ledger, under it. A stopping program stage detaches its mixer from the
 audio routing under the collection lock, which is why it is never dropped while that
 lock is held, as its final `stats.tick` already requires. The master's meters are
-atomics the mixer thread writes and the sampler reads, with no lock. The `jstream-sources`
+atomics the mixer thread writes and the sampler reads, with no lock. The media clock's
+hold (`HeldClock`, ADR-0172) is a leaf mutex: every reader of the clock takes it alone
+for the moment it reads, and `clock.hold`, `clock.step` and `clock.release` take it
+under the collection lock, with nothing taken under it. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
 each live source for a frame it already has, apart from one catch-up paint of a painter
