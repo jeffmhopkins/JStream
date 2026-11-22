@@ -749,6 +749,18 @@ pub(crate) struct Shot {
     /// When each item's `triggered` modifiers were last fired (#1107), as the engine set
     /// it ([`Shot::set_fired`]). A modifier never fired here is still.
     fired: motion::Fired,
+    /// What each model source it draws shows on its surfaces and reflects (ADR-0107
+    /// decision 5), by the model's source. A model with neither isn't here.
+    maps: BTreeMap<SourceId, ModelMaps>,
+}
+
+/// The pictures a model's `texture` and `reflection` settings name, as the shot shows
+/// them: after their own filters, a scene source's scene drawn as it is placed. `None`
+/// for a setting that names nothing, or a source that shows nothing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct ModelMaps {
+    texture: Option<SourceRef>,
+    reflection: Option<SourceRef>,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -1018,6 +1030,7 @@ impl Default for Shot {
             tempo: None,
             audio: crate::reactive::Bindings::default(),
             fired: motion::Fired::default(),
+            maps: BTreeMap::new(),
         }
     }
 }
@@ -1588,6 +1601,7 @@ impl PartialEq for Shot {
             // An edit to an effect modifier alone changes only this (ADR-0138).
             && self.driven == other.driven
             && self.tempo == other.tempo
+            && self.maps == other.maps
     }
 }
 
@@ -1940,6 +1954,17 @@ fn plan_inner(
             GpuKey::Capture(spec) => Some(spec.clone()),
             _ => None,
         }));
+    // A model's texture or reflection reads a capture though no layer shows it
+    // (ADR-0107 decision 5).
+    shot.captures.extend(
+        shot.maps
+            .values()
+            .flat_map(|maps| [&maps.texture, &maps.reflection])
+            .filter_map(|map| match map {
+                Some(SourceRef::Capture(spec)) => Some(spec.clone()),
+                _ => None,
+            }),
+    );
     shot.chain_steps = schedule_chains(&shot);
     let read = placed_captures(shot.chain_steps.iter().filter_map(|step| match step {
         ChainStep::Pass(pass) => Some(&**pass),
@@ -3066,6 +3091,7 @@ impl<'a> Planner<'a, '_> {
             let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
             note_light(out, scene, item, through.as_ref(), &image, &groups);
             self.look_sky(&image, out);
+            self.look_maps(&image, out, path);
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
                 continue;
             };
@@ -3236,6 +3262,7 @@ impl<'a> Planner<'a, '_> {
             }
             note_light(out, scene, item, through.as_ref(), &source, &groups);
             self.look_sky(&source, out);
+            self.look_maps(&source, out, path);
             placed.push(Placed {
                 item: item.id().clone(),
                 through,
@@ -3277,6 +3304,59 @@ impl<'a> Planner<'a, '_> {
         };
         if &image != id {
             self.look(&image, out);
+        }
+    }
+
+    /// What a model `image` shows on its surfaces and reflects, when it names other
+    /// sources (ADR-0107 decision 5): each as an item would show it, its frame, chain or
+    /// scene going in `out` too though no item shows it, once per shot. A model naming
+    /// itself, or a scene being planned above it, shows nothing there: the graph
+    /// refuses such a cycle, so only a collection loaded around that check has one.
+    fn look_maps(&mut self, image: &SourceRef, out: &mut Shot, path: &mut BTreeSet<SceneId>) {
+        let (SourceRef::Frame(id) | SourceRef::Filtered(id)) = image else {
+            return;
+        };
+        if out.maps.contains_key(id) {
+            return;
+        }
+        let Some((texture, reflection)) = out
+            .frames
+            .get(id)
+            .and_then(|frame| frame.model.as_ref())
+            .filter(|shown| shown.texture.is_some() || shown.reflection.is_some())
+            .map(|shown| (shown.texture.clone(), shown.reflection.clone()))
+        else {
+            return;
+        };
+        // Marked first, so a map that reaches this model again stops here.
+        out.maps.insert(id.clone(), ModelMaps::default());
+        let maps = ModelMaps {
+            texture: texture.and_then(|named| self.map_of(id, &named, out, path)),
+            reflection: reflection.and_then(|named| self.map_of(id, &named, out, path)),
+        };
+        out.maps.insert(id.clone(), maps);
+    }
+
+    /// What `named`, a source model `model` names for a map, shows.
+    fn map_of(
+        &mut self,
+        model: &SourceId,
+        named: &SourceId,
+        out: &mut Shot,
+        path: &mut BTreeSet<SceneId>,
+    ) -> Option<SourceRef> {
+        if named == model {
+            return None;
+        }
+        let source = self.state.source(named)?;
+        match source.kind() {
+            SourceKind::Scene { scene_id } => {
+                if path.contains(scene_id) {
+                    return None;
+                }
+                Some(self.scened(source, scene_id.clone(), out, path))
+            }
+            _ => self.shown(source, out),
         }
     }
 
@@ -3869,14 +3949,20 @@ impl Passes for Vec<Pass> {
 /// read its owner's output from the frame before.
 fn schedule_chains(shot: &Shot) -> Vec<ChainStep> {
     let mut order = ChainOrder::default();
+    let mut done = BTreeSet::new();
     // A model's layer without effects reads nothing a chain draws, so it is drawn
-    // first, before any pass that shows it (ADR-0107).
-    for owner in shot.boxes.keys() {
-        if !shot.chains.contains_key(owner) {
+    // first, before any pass that shows it (ADR-0107). One with a live texture or
+    // reflection (decision 5) is drawn after the chains and scenes those read, and
+    // after the plain models, which a scene it reads may show.
+    for mapped in [false, true] {
+        for owner in shot.boxes.keys() {
+            if shot.chains.contains_key(owner) || order.maps_of(shot, owner).is_some() != mapped {
+                continue;
+            }
+            order.maps(shot, owner, &mut done);
             order.steps.push(ChainStep::Box(owner.clone()));
         }
     }
-    let mut done = BTreeSet::new();
     for owner in shot.chains.keys() {
         order.chain(shot, owner, &mut done);
     }
@@ -3893,6 +3979,52 @@ struct ChainOrder {
 }
 
 impl ChainOrder {
+    /// The maps of the model item `owner` draws, when it has any.
+    fn maps_of<'s>(&self, shot: &'s Shot, owner: &ChainOwner) -> Option<&'s ModelMaps> {
+        match &shot.boxes.get(owner)?.source {
+            SourceRef::Frame(source) => shot.maps.get(source),
+            _ => None,
+        }
+    }
+
+    /// Schedules what the model item `owner`'s texture and reflection read (ADR-0107
+    /// decision 5), before its layer is drawn.
+    fn maps(&mut self, shot: &Shot, owner: &ChainOwner, done: &mut BTreeSet<GpuKey>) {
+        let Some(maps) = self.maps_of(shot, owner) else {
+            return;
+        };
+        for map in [&maps.texture, &maps.reflection].into_iter().flatten() {
+            match map {
+                SourceRef::Filtered(source) => {
+                    self.chain(shot, &ChainOwner::Source(source.clone()), done);
+                }
+                SourceRef::Placed(source, scene) => {
+                    self.chain(
+                        shot,
+                        &ChainOwner::Placed(source.clone(), scene.clone()),
+                        done,
+                    );
+                }
+                SourceRef::Scene(inner) => {
+                    let read = ChainOwner::Scene(inner.clone());
+                    if shot.chains.contains_key(&read) {
+                        self.chain(shot, &read, done);
+                    } else {
+                        visit(
+                            shot,
+                            inner,
+                            REFERENCE_DEPTH,
+                            &mut BTreeSet::new(),
+                            done,
+                            self,
+                        );
+                    }
+                }
+                SourceRef::Frame(_) | SourceRef::Capture(_) | SourceRef::Boxed(..) => {}
+            }
+        }
+    }
+
     fn chain(&mut self, shot: &Shot, owner: &ChainOwner, done: &mut BTreeSet<GpuKey>) {
         if self.ran.contains(owner) || !self.open.insert(owner.clone()) {
             return;
@@ -3960,6 +4092,7 @@ impl ChainOrder {
                 );
             }
             if shot.boxes.contains_key(owner) {
+                self.maps(shot, owner, done);
                 self.steps.push(ChainStep::Box(owner.clone()));
             }
         }
@@ -6253,6 +6386,7 @@ fn draw_model(
     } else {
         None
     };
+    let (texture, reflection) = model_maps(shot, &*cache, source, shown);
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => Some(compositor.draw_model(
             &jstream_render::ModelDraw {
@@ -6264,6 +6398,8 @@ fn draw_model(
                 shadows: &maps,
                 environment,
                 floor: None,
+                texture,
+                reflection,
             },
             layer,
         )),
@@ -6279,6 +6415,29 @@ fn draw_model(
             Ok(())
         }
     }
+}
+
+/// What model `source`, as `shown`, shows on its surfaces and reflects this frame
+/// (ADR-0107 decision 5): the pictures its `texture` and `reflection` name, as the
+/// chain phase drew them. A texture whose picture isn't there reads transparent; a
+/// reflection whose picture isn't there leaves the environment it replaces.
+fn model_maps<'c>(
+    shot: &Shot,
+    cache: &'c ResourceCache<GpuKey>,
+    source: &SourceId,
+    shown: &'c jstream_sources::ShownModel,
+) -> (
+    Option<jstream_render::LiveTexture<'c>>,
+    Option<&'c jstream_render::Image>,
+) {
+    let maps = shot.maps.get(source);
+    let picture = |map: Option<&SourceRef>| map.and_then(|map| cache.get(&key(map, shot)));
+    let texture = shown.texture.as_ref().map(|_| jstream_render::LiveTexture {
+        image: picture(maps.and_then(|maps| maps.texture.as_ref())),
+        material: shown.texture_material.as_deref(),
+    });
+    let reflection = picture(maps.and_then(|maps| maps.reflection.as_ref()));
+    (texture, reflection)
 }
 
 /// The lights of scene `scene_id` as `view` sees them, for a `scene`-lit model or a lit
@@ -6582,8 +6741,22 @@ fn draw_reflection(
             continue;
         };
         pose(compositor, model, shown);
+        let source = shot
+            .boxes
+            .iter()
+            .find_map(|(owner, boxed)| match (owner, &boxed.source) {
+                (ChainOwner::Item(scene, item), SourceRef::Frame(source))
+                    if scene == scene_id && item == item_id =>
+                {
+                    Some(source)
+                }
+                _ => None,
+            });
         let reflected = GpuKey::ReflectedModel(scene_id.clone(), item_id.clone());
         cache.layer(compositor, &reflected, width, height)?;
+        let (texture, reflection) = source.map_or((None, None), |source| {
+            model_maps(shot, &*cache, source, shown)
+        });
         let Some(target) = cache.get(&reflected) else {
             continue;
         };
@@ -6598,6 +6771,8 @@ fn draw_reflection(
                 environment: scene_environment((shot, &*cache), &pass.scene, at, live).0,
                 // Only what stands above the floor is reflected in it.
                 floor: Some(floor),
+                texture,
+                reflection,
             },
             target,
         )?;
@@ -7344,6 +7519,8 @@ fn draw_view_depth(
                 shadows: &[],
                 environment: None,
                 floor: from.and_then(|(_, _, floor)| floor),
+                texture: None,
+                reflection: None,
             },
             target,
         )?;

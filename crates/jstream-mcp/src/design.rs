@@ -11,7 +11,8 @@
 //! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
 //! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
 //! set with a scene camera (ADR-0094), its depth of field (ADR-0108), a sky backdrop
-//! (ADR-0167), and 3D groups and a camera that rides with one (ADR-0164), which
+//! (ADR-0167), and 3D groups and a camera that rides with one (ADR-0164), how to use 3D
+//! models with live textures and reflections (ADR-0107 decision 9), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
@@ -234,6 +235,19 @@ To reframe a 3D scene live without an edit, `scene.aim_camera` pans and tilts it
 camera in degrees from the stored view and zooms it (1-8), gliding there; the aim \
 `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera, and `scene.camera_aim` \
 reads it. \
+3D models: a `model` source is a solid object placed by an item like any source, its \
+box giving its size and its turn, tilt and depth its pose, in a 2D scene or a 3D set. \
+Use a built-in `shape` (`cube`, `sphere`, `cylinder`, `cone`, `plane`) with `color`, \
+`metallic` and `roughness` for simple set pieces, and `shape` `file` with a glTF file \
+(`.glb`) for an asset made in a 3D tool. `lighting` `studio` lights it well from any \
+angle with no setup; `unlit` shows its colours as authored, for flat-shaded or baked \
+assets; `scene` lights it with the scene's light sources. To put a live picture on it \
+(a camera on a screen, a page on a panel, a shader on a sphere), set `texture` to that \
+source; `texture_material` names the one material of a file it goes on, such as its \
+screen. `reflection` gives it surroundings to reflect: a sky or studio still, a shader, \
+or a `scene` source of its own set so a glossy model mirrors the room (a source can't \
+show a scene that shows the model itself). Pair a low `roughness` with `metallic` 1 for \
+chrome, and keep `roughness` 0.4-0.7 for most props, which read better than mirrors. \
 A sky all around a 3D set (open sky, a city, space) is a `light` source of `type` \
 `environment` placed in the scene with `backdrop` on: it fills everything behind the \
 items, infinitely far away, so it turns as the camera looks around and never shifts \
