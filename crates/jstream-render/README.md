@@ -509,7 +509,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    copies the output into one of up to `READBACK_DEPTH` (three) map-read buffers in a
    submit of its own and starts its map, tagged by the caller; `collect` polls the
    device without blocking and hands back, oldest first, every frame whose map has
-   finished, as tightly packed RGBA8, in the order they were recorded. With every
+   finished, as tightly packed RGBA8, in the order they were recorded, each in the
+   caller's buffer, which the caller may swap out to keep the frame, so a call that
+   hands two keeps both. With every
    buffer still on its way (`is_full`) `record` returns `false` for the caller to
    count, and a new size waits until none is out. A ring made `with_copier` leaves the
    copy out of each mapped buffer to a `Copier`'s `jstream-readback` thread: `collect`

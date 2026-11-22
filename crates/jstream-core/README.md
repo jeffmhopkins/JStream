@@ -4281,11 +4281,12 @@ frame read back goes out a few ticks after it was drawn, with the time it was dr
 for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
 nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)
 repeats the last frame at the tick, and no push goes back in time
-(`MixFrame::push_time`). When all three buffers are still on their way the GPU is
+(`MixFrame::push_time`). A readback's latency varies, so two can land on one tick: an
+encoder session gets both, the older first (`MixFrame::earlier`), and a picture stream
+or virtual camera only the newest. When all three buffers are still on their way the GPU is
 behind: a mix that only feeds readbacks skips that tick's composite (its layers kept,
 as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
-ticks, frames collected in the same tick as a newer one, and frames that land behind
-a repeat are all counted in `render_ticks`, and so is a monitored scene a preview stream
+ticks and frames that land behind a repeat are counted in `render_ticks`, and so is a monitored scene a preview stream
 shows (*Preview*), drawn after every mix, when the tick's period ran out before it
 began. The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
