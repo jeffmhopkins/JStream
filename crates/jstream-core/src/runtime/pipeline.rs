@@ -1831,6 +1831,9 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                 compositor.gpu_times(|kind, took| guard.measured(kind, took));
                 guard.end_tick();
             }
+            // The units' GPU times that came back, and this tick's timing when it is
+            // one of the timed ones (`profile.get`'s `gpu_ms`).
+            meter.begin_gpu(&mut compositor);
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
             // this tick claims its layers without drawing, so they aren't retired and
@@ -1963,6 +1966,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     drawn.map_err(|err| draw_error(&compositor, &err))?;
                 }
             }
+            meter.end_gpu(&mut compositor);
             // A failed frame skips this: what it retired waits for the next frame's
             // fence, which also covers it, so nothing is freed on this thread.
             Ok(cache.end_frame(&compositor))

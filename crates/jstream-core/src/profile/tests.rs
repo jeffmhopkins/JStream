@@ -92,6 +92,39 @@ fn a_window_ranks_the_units_of_a_drawer() {
     assert!(!info.gpu_timing);
 }
 
+/// A unit timed on the GPU carries its average GPU time over the timed frames it ran
+/// in, and the profile says it measures GPU time; a unit never timed carries none.
+#[test]
+fn a_unit_timed_on_the_gpu_carries_its_gpu_time() {
+    let profiler = Profiler::new(ms(33), Arc::new(SourceMeters::default()));
+    let mut meter = profiler.program_meter();
+    let timed = ChainOwner::Item(SceneId::new("main"), ItemId::new("model"));
+    let untimed = ChainOwner::Scene(SceneId::new("main"));
+    let start = Instant::now();
+    for frame in 0..8u64 {
+        let begun = Instant::now();
+        meter.chain(&timed, begun.checked_sub(ms(2)).expect("earlier"));
+        meter.chain(&untimed, begun.checked_sub(ms(1)).expect("earlier"));
+        // One frame in four is timed, its times back a frame or so later.
+        if frame % 4 == 1 {
+            meter.gpu_chain_by_hand(&timed, ms(12));
+        }
+        meter.end_frame(ms(3), start + ms(1000 * frame), drop);
+    }
+    let info = profiler.profile(Some(60), None, None, InputTotals::default());
+    assert!(info.gpu_timing, "{info:?}");
+    let gpu_of = |scene_chain: bool| {
+        info.units
+            .iter()
+            .find(|u| matches!(u.unit, ProfileUnit::SceneChain { .. }) == scene_chain)
+            .expect("the unit")
+            .gpu_ms
+    };
+    let timed_ms = gpu_of(false).expect("timed").get();
+    assert!((timed_ms - 12.0).abs() < 0.01, "{info:?}");
+    assert_eq!(gpu_of(true), None);
+}
+
 /// A unit in a later window counts only what it did since the earlier one, and a new
 /// run of the drawer counts from zero.
 #[test]

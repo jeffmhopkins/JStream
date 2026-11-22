@@ -611,6 +611,13 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   finish phase. A meter keeps its units in maps from frame to frame, so a steady frame
   allocates nothing, and publishes running totals once a second through `arc-swap`
   (`DrawerSlot`); the render thread's collector frees the totals it replaces. The
+  render thread also times one frame in four (`GPU_EVERY`) on the GPU, where the device
+  has timestamp queries: `DrawMeter::begin_gpu` opens it on the compositor
+  (`Compositor::begin_gpu_frame`), `compose_metered` names each unit as its work starts
+  (`Compositor::gpu_unit`, by an id the meter gives the unit on its first timed frame),
+  and the times that come back a frame or two later go into the unit's `gpu_frames` and
+  `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
+  `gpu_timing` is on once any unit carries one. The preview hub's thread times none. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
   source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
   reads all of them, the threads from the host's `ThreadCpu`
@@ -4385,6 +4392,9 @@ no time back for it leaves it) goes to `jstream-device-losses` as `GpuEvent::Slo
 beside the losses (`GpuEvent::Lost`). The engine quarantines it there, as above, and
 sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. A GPU
 without timestamp queries times nothing, and only a device loss guards it.
+Each tick then takes the units' GPU times that came back and, one tick in four, times
+its own (`DrawMeter::begin_gpu`, closed with `end_gpu` once the tick has drawn), for
+`profile.get`'s `gpu_ms` (the Profile paragraph in [Contents](#contents-media)).
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
