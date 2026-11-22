@@ -2049,6 +2049,18 @@ names in the shot when it places the light (`look_sky`), so it is uploaded thoug
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
 drawn for a sky alone. A reflection's models take the same sky
 (`an_environment_light_lights_a_scene_lit_model_with_its_sky`).
+A model's `texture` and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
+decision 5) name other sources. Planning resolves each where it places the model
+(`look_maps`) as an item would show it, its frame, its video chain or, for a `scene`
+source, its scene, into `Shot::maps` by the model's source, though no item shows it; a
+capture it names joins the shot's captures. `schedule_chains` draws a model's layer
+(`ChainStep::Box`) after the chains and scene passes those read, and after the models
+without maps, which such a scene may show. `draw_model` and a floor reflection's models
+take them through `model_maps`: a texture whose picture isn't there reads transparent,
+and a reflection whose picture isn't there leaves the environment. The graph refuses a
+map that reaches a scene showing the model as it refuses any reference cycle
+(`golden_a_model_shows_another_sources_picture_as_its_texture`,
+`a_models_texture_reaching_its_own_scene_is_a_cycle`).
 A lit card ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
 10): a box in a 3D scene whose `ItemGeometry::surface` is `lit` and which shows its
 source's own frame, with its effects in its box, is boxed (`Boxed::lit`) even without a

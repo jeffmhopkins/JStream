@@ -16,7 +16,8 @@ use jstream_media::model::shapes::Shape;
 use jstream_media::model::{Lighting, Material, Model};
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_protocol::{
-    AssetRoot, EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings,
+    AssetRoot, EnumOption, KindDescriptor, Media, ParamDescriptor, ParamType, Reference, Settings,
+    SourceId, not_a_reference,
 };
 use serde_json::{Value, json};
 
@@ -103,6 +104,46 @@ impl ModelKind {
                         json!("studio"),
                     ),
                     "Studio lights it from above and to the left of the camera; unlit shows its colours as they are; scene lights it with the light sources placed in its 3D scene (studio in a 2D scene).",
+                )),
+                live(described(
+                    param(
+                        "texture",
+                        "Texture",
+                        ParamType::Source {
+                            media: Some(Media::Video),
+                        },
+                        Value::Null,
+                    ),
+                    "A source whose picture, live and after its own filters, replaces the \
+                     base-colour texture: a webcam, a browser page, a shader, a scene. \
+                     Missing or not yet drawing, it reads transparent.",
+                )),
+                live(described(
+                    param(
+                        "texture_material",
+                        "Textured material",
+                        ParamType::String {
+                            multiline: false,
+                            max_len: 256,
+                        },
+                        json!(""),
+                    ),
+                    "Which of a file's materials, by name, the texture replaces; empty \
+                     replaces every material's.",
+                )),
+                live(described(
+                    param(
+                        "reflection",
+                        "Reflection",
+                        ParamType::Source {
+                            media: Some(Media::Video),
+                        },
+                        Value::Null,
+                    ),
+                    "A source the model reflects, read as an equirectangular panorama: \
+                     it replaces the studio environment (or its scene's sky) for its \
+                     reflections and ambient light. A scene source makes it reflect \
+                     that scene.",
                 )),
                 live(described(
                     param(
@@ -203,7 +244,7 @@ impl SourceKind for ModelKind {
 }
 
 /// The live settings that change a model's look, not its mesh.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct Look {
     color: [f32; 4],
     metallic: f32,
@@ -212,6 +253,27 @@ struct Look {
     double_sided: bool,
     casts_shadows: bool,
     receives_shadows: bool,
+    /// The source whose picture is the base-colour texture (ADR-0107 decision 5).
+    texture: Option<SourceId>,
+    /// The file's material it replaces, or every material's for `None`.
+    texture_material: Option<String>,
+    /// The source the model reflects.
+    reflection: Option<SourceId>,
+}
+
+/// The source a `texture` or `reflection` setting names: a source reference or `null`.
+/// Settings saved before the setting existed have neither: none.
+fn named_source(settings: &Settings, id: &str) -> Result<Option<SourceId>, SourceError> {
+    match settings.get(id) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => match Reference::from_value(value) {
+            Some(Reference::Source { source_id }) => Ok(Some(source_id)),
+            _ => Err(SourceError::Setting {
+                param: id.into(),
+                reason: not_a_reference("source"),
+            }),
+        },
+    }
 }
 
 impl Look {
@@ -246,6 +308,15 @@ impl Look {
                 .ok_or_else(|| bad(id, "must be true or false")),
         };
         let (casts_shadows, receives_shadows) = (flag("casts_shadows")?, flag("receives_shadows")?);
+        let texture_material = match settings.get("texture_material") {
+            None => None,
+            Some(value) => {
+                let name = value
+                    .as_str()
+                    .ok_or_else(|| bad("texture_material", "must be a material's name"))?;
+                (!name.is_empty()).then(|| name.to_owned())
+            }
+        };
         // The colour setting is sRGB; a material's base colour is linear.
         let decode = |c: u8| {
             let c = f32::from(c) / 255.0;
@@ -268,6 +339,9 @@ impl Look {
             double_sided,
             casts_shadows,
             receives_shadows,
+            texture: named_source(settings, "texture")?,
+            texture_material,
+            reflection: named_source(settings, "reflection")?,
         })
     }
 
@@ -295,6 +369,9 @@ impl Look {
             casts_shadows: self.casts_shadows,
             receives_shadows: self.receives_shadows,
             pose,
+            texture: self.texture.clone(),
+            texture_material: self.texture_material.clone(),
+            reflection: self.reflection.clone(),
         }
     }
 }
