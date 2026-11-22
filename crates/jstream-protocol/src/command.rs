@@ -2121,7 +2121,7 @@ pub enum Action {
         /// The plugin.
         plugin_id: PluginId,
     },
-    /// Removes an installed plugin (0.135): a running one stops once the invocation it is
+    /// Removes an installed plugin (0.136): a running one stops once the invocation it is
     /// in returns, holding only `read` from the moment it is removed, and the engine
     /// forgets it and its grant, so it is no longer listed or started again with the
     /// saved plugins. Its package is left on
