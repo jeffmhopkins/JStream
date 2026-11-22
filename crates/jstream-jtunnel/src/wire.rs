@@ -11,7 +11,13 @@
 //!            with 255 for a channel or key of -1
 //! subscribe  name length (1), name (no terminator)
 //! bye        nothing
+//! state      stream id (4), message id (4), piece (1), piece count (1), key length (1),
+//!            key, data length (2), data
 //! ```
+//!
+//! A state packet (type 4, JTunnel 0.13 and later) is one piece of a JSON message under a
+//! key, the sender's side channel of what its DAW is doing (ADR-0171 decision 1);
+//! [`StateAssembler`](crate::StateAssembler) puts the pieces back together.
 //!
 //! Parsing checks everything the sender's own parser checks, so a packet JTunnel would
 //! refuse is refused here too, and a parsed packet's events can be walked without
@@ -52,6 +58,15 @@ pub const SYSEX_PIECE_BYTES: usize = MAX_EVENT_BYTES - 4;
 /// The longest SysEx message carried (256 pieces). Longer ones are never sent.
 pub const MAX_SYSEX_BYTES: usize = 256 * SYSEX_PIECE_BYTES;
 
+/// The longest state key, in bytes.
+pub const MAX_STATE_KEY: usize = 63;
+/// The most bytes of a state message one piece carries.
+pub const STATE_PIECE_BYTES: usize = 1200;
+/// The most pieces a state message goes in.
+pub const MAX_STATE_PIECES: u8 = 64;
+/// The longest state message: every piece full.
+pub const MAX_STATE_BYTES: usize = STATE_PIECE_BYTES * MAX_STATE_PIECES as usize;
+
 const HEADER_BYTES: usize = 6;
 const TAG_SYSEX: u8 = 1;
 const TAG_EXPRESSION: u8 = 2;
@@ -68,6 +83,8 @@ pub enum PacketType {
     Subscribe = 2,
     /// A receiver leaving at once.
     Bye = 3,
+    /// One piece of a state message, from a sender (ADR-0171 decision 1).
+    State = 4,
 }
 
 /// How a stream's audio is coded.
@@ -328,6 +345,37 @@ pub enum Packet<'a> {
     },
     /// A receiver leaving.
     Bye,
+    /// One piece of a sender's state message.
+    State(StatePiece<'a>),
+}
+
+/// One piece of a state message (ADR-0171 decision 1): JSON under a key such as
+/// `transport` or `track/3`, cut into up to [`MAX_STATE_PIECES`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StatePiece<'a> {
+    /// The sender's state stream: a new one means it started again.
+    pub stream_id: u32,
+    /// The same for every piece of one message; a resend repeats it.
+    pub message_id: u32,
+    /// This piece's place, from 0, below `pieces`.
+    pub piece: u8,
+    /// How many pieces the message has: 1 to [`MAX_STATE_PIECES`].
+    pub pieces: u8,
+    /// The key: 1 to [`MAX_STATE_KEY`] of ASCII letters, digits, `/`, `_`, `.` and `-`
+    /// ([`is_state_key`]), so it is always UTF-8.
+    pub key: &'a str,
+    /// This piece's bytes of the message: at most [`STATE_PIECE_BYTES`].
+    pub data: &'a [u8],
+}
+
+/// Whether `key` is a state key JTunnel sends: 1 to [`MAX_STATE_KEY`] of ASCII letters,
+/// digits, `/`, `_`, `.` and `-`.
+#[must_use]
+pub fn is_state_key(key: &[u8]) -> bool {
+    (1..=MAX_STATE_KEY).contains(&key.len())
+        && key
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'.' | b'-'))
 }
 
 struct Reader<'a> {
@@ -383,10 +431,48 @@ pub fn parse(datagram: &[u8]) -> Result<Packet<'_>, WireError> {
             }
         }
         3 => Packet::Bye,
+        4 => return parse_state(&mut r),
         t => return Err(WireError::Type(t)),
     };
     // Bytes after the packet's end are ignored, as the sender's own parser ignores them.
     Ok(packet)
+}
+
+/// A state packet ends with its data, as JTunnel's own parser insists: bytes after it
+/// are refused, unlike the other types'.
+fn parse_state<'a>(r: &mut Reader<'a>) -> Result<Packet<'a>, WireError> {
+    let stream_id = r.u32("stream id")?;
+    let message_id = r.u32("message id")?;
+    let piece = r.u8("piece")?;
+    let pieces = r.u8("piece count")?;
+    let key_len = usize::from(r.u8("key length")?);
+    if pieces == 0 || pieces > MAX_STATE_PIECES {
+        return Err(WireError::Malformed("piece count"));
+    }
+    if piece >= pieces {
+        return Err(WireError::Malformed("piece"));
+    }
+    let key = r.take(key_len, "key")?;
+    if !is_state_key(key) {
+        return Err(WireError::Malformed("key"));
+    }
+    let data_len = usize::from(r.u16("data length")?);
+    if data_len > STATE_PIECE_BYTES {
+        return Err(WireError::Malformed("data length"));
+    }
+    if r.data.len() != data_len {
+        return Err(WireError::Malformed("state data"));
+    }
+    let data = r.take(data_len, "state data")?;
+    Ok(Packet::State(StatePiece {
+        stream_id,
+        message_id,
+        piece,
+        pieces,
+        // `is_state_key` admits ASCII only.
+        key: std::str::from_utf8(key).map_err(|_| WireError::Malformed("key"))?,
+        data,
+    }))
 }
 
 fn parse_audio<'a>(r: &mut Reader<'a>) -> Result<Packet<'a>, WireError> {
@@ -498,6 +584,35 @@ pub fn write_subscribe(out: &mut [u8], name: &[u8]) -> Option<usize> {
 #[must_use]
 pub fn write_bye(out: &mut [u8]) -> Option<usize> {
     write_header(out, PacketType::Bye)
+}
+
+/// Writes one state piece into `out`, as a sender does, and gives its length, or `None`
+/// if `out` is too small or the piece is one [`parse`] would refuse (a bad key, too much
+/// data, a piece past the count). JStream doesn't send state; this is for tests and
+/// fuzzing.
+#[must_use]
+pub fn write_state(out: &mut [u8], piece: &StatePiece<'_>) -> Option<usize> {
+    if !is_state_key(piece.key.as_bytes())
+        || piece.data.len() > STATE_PIECE_BYTES
+        || piece.pieces == 0
+        || piece.pieces > MAX_STATE_PIECES
+        || piece.piece >= piece.pieces
+    {
+        return None;
+    }
+    let mut at = write_header(out, PacketType::State)?;
+    let mut put = |bytes: &[u8]| -> Option<()> {
+        out.get_mut(at..at + bytes.len())?.copy_from_slice(bytes);
+        at += bytes.len();
+        Some(())
+    };
+    put(&piece.stream_id.to_le_bytes())?;
+    put(&piece.message_id.to_le_bytes())?;
+    put(&[piece.piece, piece.pieces, piece.key.len() as u8])?;
+    put(piece.key.as_bytes())?;
+    put(&(piece.data.len() as u16).to_le_bytes())?;
+    put(piece.data)?;
+    Some(at)
 }
 
 /// One frame to write with [`write_audio`].
@@ -670,6 +785,108 @@ mod tests {
         assert_eq!(parse(b"XTUN\x02\x01"), Err(WireError::NotJTunnel));
         assert_eq!(parse(b"JTUN\x01\x01"), Err(WireError::Version(1)));
         assert_eq!(parse(b"JTUN\x02\x09"), Err(WireError::Type(9)));
+    }
+
+    /// Bytes written by JTunnel 0.13's own `writeState` (Jclap's
+    /// `plugins/jtunnel/src/protocol.cpp`, compiled and run once): this parser reads what
+    /// JTunnel writes, and the writer writes the same bytes.
+    #[test]
+    fn reads_and_writes_the_state_pieces_jtunnel_writes() {
+        let bytes =
+            unhex("4a54554e0204d4c3b2a107000000010207747261636b2f330d007b226d757465223a747275657d");
+        let piece = StatePiece {
+            stream_id: 0xA1B2_C3D4,
+            message_id: 7,
+            piece: 1,
+            pieces: 2,
+            key: "track/3",
+            data: br#"{"mute":true}"#,
+        };
+        assert_eq!(parse(&bytes), Ok(Packet::State(piece)));
+        let mut buf = [0; MAX_PACKET_BYTES];
+        let n = write_state(&mut buf, &piece).unwrap_or(0);
+        assert_eq!(&buf[..n], &bytes[..]);
+    }
+
+    #[test]
+    fn malformed_state_is_refused() {
+        let mut buf = [0; MAX_PACKET_BYTES];
+        let full = [b'x'; STATE_PIECE_BYTES];
+        let piece = StatePiece {
+            stream_id: 1,
+            message_id: 2,
+            piece: 0,
+            pieces: 1,
+            key: "transport",
+            data: &full,
+        };
+        let n = write_state(&mut buf, &piece).unwrap_or(0);
+        assert!(
+            n <= MAX_PACKET_BYTES && n > 0,
+            "a full piece fits one packet"
+        );
+        assert!(parse(&buf[..n]).is_ok());
+        for cut in HEADER_BYTES..n {
+            assert!(parse(&buf[..cut]).is_err(), "cut at {cut}");
+        }
+        let mut long = buf[..n].to_vec();
+        long.push(0);
+        assert_eq!(parse(&long), Err(WireError::Malformed("state data")));
+        let with = |at: usize, value: u8| {
+            let mut b = buf[..n].to_vec();
+            b[at] = value;
+            parse(&b).map(|_| ())
+        };
+        // The piece count, the piece, the key length and the key's characters.
+        assert_eq!(with(15, 0), Err(WireError::Malformed("piece count")));
+        assert_eq!(with(15, 65), Err(WireError::Malformed("piece count")));
+        assert_eq!(with(14, 1), Err(WireError::Malformed("piece")));
+        assert_eq!(with(16, 0), Err(WireError::Malformed("key")));
+        assert_eq!(with(17, b' '), Err(WireError::Malformed("key")));
+        assert_eq!(with(17, 0xC3), Err(WireError::Malformed("key")));
+        // A data length over a piece's, even with that many bytes there.
+        let mut over = buf[..n].to_vec();
+        let at = 17 + "transport".len();
+        over[at..at + 2].copy_from_slice(&1201_u16.to_le_bytes());
+        over.push(b'x');
+        assert_eq!(parse(&over), Err(WireError::Malformed("data length")));
+        // The writer refuses what the parser would.
+        let bad = |p: StatePiece<'_>| write_state(&mut [0; MAX_PACKET_BYTES], &p);
+        assert_eq!(bad(StatePiece { key: "", ..piece }), None);
+        assert_eq!(
+            bad(StatePiece {
+                key: "a b",
+                ..piece
+            }),
+            None
+        );
+        assert_eq!(
+            bad(StatePiece {
+                key: &"k".repeat(64),
+                ..piece
+            }),
+            None
+        );
+        assert_eq!(bad(StatePiece { piece: 1, ..piece }), None);
+        assert_eq!(
+            bad(StatePiece {
+                pieces: 65,
+                ..piece
+            }),
+            None
+        );
+        assert!(
+            bad(StatePiece {
+                key: &"k".repeat(63),
+                pieces: 64,
+                piece: 63,
+                data: b"",
+                ..piece
+            })
+            .is_some()
+        );
+        assert!(is_state_key(b"track/12") && is_state_key(b"a.b_c-d"));
+        assert!(!is_state_key(b"track 1") && !is_state_key("é".as_bytes()));
     }
 
     #[test]

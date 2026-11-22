@@ -60,7 +60,7 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `move_collection_file` (a host's default project moving, ADR-0163); `set_process_cpu`
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel` and
   `jtunnel_stats` (the JTunnel receiver, off until a host starts it; see *Contents:
-  live sources*); `set_thread_cpu`
+  live sources*); `live_data` (the JTunnel senders' state, ADR-0171); `set_thread_cpu`
   (`profile.get`'s threads, below); `set_thread_priority` (the OS scheduling class the
   program stage's render and mixer threads take as they start, on Windows their MMCSS
   tasks, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8); `open_plugin_dir`
@@ -257,8 +257,22 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `Receiver::heard`) lists them with whether each is accepted. It drops and
   counts every datagram from outside loopback, 10/8, 172.16/12, 192.168/16 and
   169.254/16 (`is_lan`), from an address it didn't subscribe to (an IPv4 address mapped
-  into IPv6 counts as itself), longer than a packet may be, or that isn't an audio
-  packet `jstream-jtunnel` accepts.
+  into IPv6 counts as itself), longer than a packet may be, or that isn't an audio or
+  state packet `jstream-jtunnel` accepts.
+  A state packet ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+  decisions 1 and 2) is counted as `state_off` and dropped unless the sender's
+  `AcceptedSender::with_state` is on ("Use this sender's state", on by default for an
+  accepted sender). On,
+  each sender's `StateAssembler` joins its pieces per key and the whole message goes to
+  the engine's `LiveData` (`jstream-sources`, one per engine, `Engine::live_data`) under
+  the sender's name, counted as `state`, or as `state_dropped` when it isn't one JSON
+  value or is over a bound, as is a message forgotten part-way; a resend of a finished
+  message keeps its key current, and is taken again whole when its key expired or its
+  message was refused for room (`StateAssembler::forget`), a new stream ID forgets the sender's keys, every
+  second keys not kept current for 3 s go, and a receiver that stops forgets its
+  senders' state. `data.list` and `data.get` (protocol 0.140) answer from `LiveData` on
+  its own lock, outside the collection lock; `profile.get`'s `network` carries the three
+  counters.
   Each sender's frames go through a `Playout` (jitter buffer, sequence tracking, clock
   estimate) held for the source's `latency_ms`, and each one due is handed to the
   source's mixer input as a device packet: the stream position as the device position,
@@ -283,7 +297,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `engine` with no request ID, and the pages fed with it. It starts once per engine,
   however often the receiver starts again, holds the engine weakly and stops when the
   engine goes.
-  `Engine::jtunnel_stats` reads its counters (`JtunnelStats`, `midi` among them), and
+  `Engine::jtunnel_stats` reads its counters (`JtunnelStats`, `midi` and `state`,
+  `state_off` and `state_dropped` among them), and
   `profile.get`'s `network` (protocol 0.113, `Receiver::profile`) adds each sender's
   playout as the thread last published it (`Seen`: whether it records, the held and
   lead time, the drift, and the playout's counts), read without a lock. Tests run a
@@ -301,7 +316,13 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   with whether they are accepted, a goodbye, an unreadable answer counted, a long
   answer read whole, the per-host bound and (on Linux, from several loopback addresses)
   the list's bound, and through the engine `jtunnel.senders` off by default, then the sender
-  listed and `jtunnel.senders_changed` sent.
+  listed and `jtunnel.senders_changed` sent. State tests send pieces on loopback: a
+  sender's state counted and dropped while its switch is off; with it on, as it is by
+  default, whole
+  messages, one in two pieces sent out of order, reaching the live data and a watch,
+  one that isn't JSON counted, a new stream ID forgetting the old keys and a stopped
+  receiver forgetting them all; and through the engine `data.list` empty before the
+  receiver starts, then the sender's key listed and `data.get` reading it.
 - **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
@@ -764,7 +785,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   loopback JTunnel sender once its first frame arrives, one naming a sender not accepted
   and one with the receiver off unavailable with their reasons, `jtunnel.senders` off
   by default and then listing a sender that answered a fake mDNS responder, with
-  `jtunnel.senders_changed`, a CLAP filter on the master chain run on its
+  `jtunnel.senders_changed`, a sender's state read with `data.list` and `data.get`
+  (ADR-0171), a CLAP filter on the master chain run on its
   own fake host by the program stage's thread, put on the host's block, and its host
   stopped when the filter is removed (`a_master_clap_filter_runs_on_a_host`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
@@ -1056,6 +1078,8 @@ outside it: a rescan runs plugin host processes for seconds and takes the collec
 lock only to add the kinds it found (see *CLAP plugins* under Purpose).
 `jtunnel.senders` (0.114) and `profile.get`'s `network` read the JTunnel receiver
 outside it, taking only the audio sources' wanted-set mutex to clone the receiver.
+`data.list` and `data.get` (0.140, ADR-0171) read the live data outside it, taking only
+the live data's own lock.
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -3804,7 +3828,10 @@ and reports a change to the list over a one-slot channel that it never waits on;
 `jstream-jtunnel-events` thread takes the collection lock to emit
 `jtunnel.senders_changed`); its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
-lock held. The `jstream-tempo` thread reads the MIDI state without a lock and takes
+lock held. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
+receiver's thread takes it alone to put a state message and set the watches on its key,
+`data.list` and `data.get` take it alone, outside the collection lock, and the render
+thread never takes it (a watch's cell is one atomic). The `jstream-tempo` thread reads the MIDI state without a lock and takes
 the collection lock only to publish a tempo value that changed. The camera controls'
 changes go to the `jstream-camera-controls` thread over a channel, sent under the
 collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks
