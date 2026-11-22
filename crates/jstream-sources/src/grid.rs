@@ -20,6 +20,10 @@
 //! one way to fill it. The painter reads the messages from [`LiveData`] on the engine's
 //! paint thread at 30 fps, and draws only when the data changed or a look blinks, on the
 //! CPU as the MIDI kinds do. The render thread only takes the painted frame.
+//!
+//! It paints on the media clock's ticks, so while that clock is held (ADR-0172) new data
+//! is drawn at the next step or release, and a render reads the data as of each step.
+//! Data modifiers read theirs on the render thread, so during a hold they still move.
 
 use crate::color::parse_color;
 use crate::data::{LiveData, field};
@@ -107,8 +111,8 @@ impl GridKind {
         let params = vec![
             live(described(
                 param("input", "Sender", text(63), json!("")),
-                "The JTunnel sender whose data it draws, by name. Empty draws whichever \
-                 sender has the keys.",
+                "The JTunnel sender whose data it draws, by name. Empty draws, for each \
+                 key, the first sender by name that has it.",
             )),
             live(described(
                 param(

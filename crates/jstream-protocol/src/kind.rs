@@ -669,7 +669,12 @@ impl ParamDescriptor {
             ParamType::Looks => json!({
                 "type": "object",
                 "maxProperties": MAX_LOOKS,
-                "propertyNames": {"minLength": 1, "maxLength": MAX_LOOK_NAME},
+                "propertyNames": {
+                    "minLength": 1,
+                    "maxLength": MAX_LOOK_NAME,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                    "description": "A state's text: 1 to 63 bytes of UTF-8 (the server counts bytes), no control characters.",
+                },
                 "additionalProperties": {
                     "type": "object",
                     "properties": {

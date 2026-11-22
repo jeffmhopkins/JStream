@@ -87,10 +87,16 @@ fn problem(rows: &[LookRow]) -> Option<String> {
     if rows.len() > MAX_LOOKS {
         return Some(format!("At most {MAX_LOOKS} states."));
     }
-    rows.iter().find_map(|r| {
-        (r.state.is_empty() || r.state.len() > MAX_LOOK_NAME)
-            .then(|| format!("A state is 1 to {MAX_LOOK_NAME} characters."))
-    })
+    if rows
+        .iter()
+        .any(|r| r.state.is_empty() || r.state.len() > MAX_LOOK_NAME)
+    {
+        return Some(format!("A state is 1 to {MAX_LOOK_NAME} bytes."));
+    }
+    rows.iter()
+        .enumerate()
+        .any(|(i, r)| rows[..i].iter().any(|o| o.state == r.state))
+        .then(|| "Each state once.".to_owned())
 }
 
 /// A change to the table's rows.
@@ -150,7 +156,7 @@ pub fn looks_input(
             {table}
             <div class="looks-actions">
                 <button type="button" class="sm" on:click=add>"Add a state"</button>
-                <button type="button" class="sm" title="Fills the states a JTunnel clip slot sends"
+                <button type="button" class="sm" title="Replaces the table with the states a JTunnel clip slot sends"
                     on:click=preset>"Clip launcher looks"</button>
             </div>
         </div>
@@ -250,5 +256,6 @@ mod tests {
         assert!(problem(&[row("ok")]).is_none());
         let many: Vec<_> = (0..=MAX_LOOKS).map(|i| row(&format!("s{i}"))).collect();
         assert!(problem(&many).is_some());
+        assert!(problem(&[row("a"), row("a")]).is_some(), "each state once");
     }
 }

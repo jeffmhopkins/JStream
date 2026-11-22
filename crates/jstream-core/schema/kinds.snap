@@ -2054,7 +2054,7 @@ source: crates/jstream-core/src/kinds.rs
         "max_len": 63,
         "default": "",
         "label": "Sender",
-        "description": "The JTunnel sender whose data it draws, by name. Empty draws whichever sender has the keys.",
+        "description": "The JTunnel sender whose data it draws, by name. Empty draws, for each key, the first sender by name that has it.",
         "live": true
       },
       {
