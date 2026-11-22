@@ -1256,8 +1256,8 @@ pub fn Filters() -> impl IntoView {
     });
     let chains =
         Memo::new(move |_| shown.with(|s| s.as_ref().map(|(chains, _, o)| (o.clone(), *chains))));
-    // The selected item's effects (ADR-0065), under its source's chains, while the
-    // panel shows that source's and the item has a picture: in a keyframe scene, as the
+    // The selected item's own filters (ADR-0065), beside its source's, while the panel
+    // shows that source's and the item has a picture: in a keyframe scene, as the
     // keyframe shows them, with whether it overrides them (ADR-0088).
     let effects = Memo::new(move |_| {
         let source = shown.with(|s| matches!(s, Some((_, _, FilterOwner::Source { .. }))));
@@ -1269,6 +1269,49 @@ pub fn Filters() -> impl IntoView {
         });
         effects.filter(|_| source)
     });
+    // Which list a "Source | This item" segmented control shows (C14): it stays on the
+    // item's filters from one item to the next, and an item without them shows its
+    // source's.
+    let item_scope = RwSignal::new(false);
+    let on_item = Memo::new(move |_| item_scope.get() && effects.with(Option::is_some));
+    // The owner the list shows, which the header describes and the window opens on.
+    let active = Memo::new(move |_| {
+        if on_item.get() {
+            effects.with(|e| e.as_ref().map(|(owner, _)| owner.clone()))
+        } else {
+            shown.with(|s| s.as_ref().map(|(_, _, owner)| owner.clone()))
+        }
+    });
+    let count = move |owner: Option<FilterOwner>| {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .zip(owner)
+                .and_then(|(c, owner)| c.chains(&owner).map(|ch| ch.video.len() + ch.audio.len()))
+                .unwrap_or(0)
+        })
+    };
+    let scope = move |item: bool, label: &'static str| {
+        let on = move || on_item.get() == item;
+        let n = move || {
+            count(if item {
+                effects.with(|e| e.as_ref().map(|(owner, _)| owner.clone()))
+            } else {
+                shown.with(|s| s.as_ref().map(|(_, _, owner)| owner.clone()))
+            })
+        };
+        view! {
+            <button
+                type="button"
+                role="tab"
+                aria-selected=move || on().to_string()
+                class:on=on
+                on:click=move |_| item_scope.set(item)
+            >
+                {label}
+                <span class="count">{n}</span>
+            </button>
+        }
+    };
     view! {
         <section
             class="panel filters-panel"
@@ -1286,10 +1329,19 @@ pub fn Filters() -> impl IntoView {
                     <p class="placeholder">"Select a source or a scene."</p>
                 }
                 .into_any(),
-                Some((icon, name, note)) => {
+                Some((icon, name, _)) => {
+                    // Where the list shown applies.
+                    let note = move || {
+                        studio.collection.with(|c| {
+                            c.as_ref()
+                                .zip(active.get())
+                                .map(|(c, owner)| owner_note(c, &owner))
+                                .unwrap_or_default()
+                        })
+                    };
                     // The quick view links to the Filters window, which has the room.
                     let open = move |_| {
-                        if let Some((_, _, owner)) = shown.get_untracked() {
+                        if let Some(owner) = active.get_untracked() {
                             dialogs.open(owner);
                         }
                     };
@@ -1314,8 +1366,14 @@ pub fn Filters() -> impl IntoView {
                     .into_any()
                 }
             }}
+            <Show when=move || effects.with(Option::is_some)>
+                <div class="segmented full filters-panel-scopes" role="tablist" aria-label="Filters of">
+                    {scope(false, "Source")}
+                    {scope(true, "This item")}
+                </div>
+            </Show>
             {move || {
-                chains.get().map(|(owner, (video, audio))| {
+                (!on_item.get()).then(|| chains.get()).flatten().map(|(owner, (video, audio))| {
                     let add = {
                         let owner = owner.clone();
                         move |_| dialogs.add(owner.clone())
@@ -1329,17 +1387,12 @@ pub fn Filters() -> impl IntoView {
                 })
             }}
             {move || {
-                effects.get().map(|(owner, overridden)| {
+                on_item.get().then(|| effects.get()).flatten().map(|(owner, overridden)| {
                     let add = {
                         let owner = owner.clone();
                         move |_| dialogs.add(owner.clone())
                     };
-                    let subtitle = if overridden.is_some() {
-                        "This item’s effects in this keyframe"
-                    } else {
-                        "This item’s effects"
-                    };
-                    // In a keyframe: whether it follows the item's own effects, and a
+                    // In a keyframe: whether it follows the item's own filters, and a
                     // button that follows them again.
                     let follow = overridden.map(|overridden| {
                         let owner = owner.clone();
@@ -1361,7 +1414,7 @@ pub fn Filters() -> impl IntoView {
                         if overridden {
                             view! {
                                 <p class="filters-keyframe">
-                                    "This keyframe has its own effects for this item. "
+                                    "This keyframe has its own filters for this item. "
                                     <button type="button" class="filters-follow" on:click=follow>
                                         "Follow the item"
                                     </button>
@@ -1371,7 +1424,7 @@ pub fn Filters() -> impl IntoView {
                         } else {
                             view! {
                                 <p class="filters-keyframe">
-                                    "Follows the item’s own effects. A change here gives this keyframe its own."
+                                    "Follows the item’s own filters. A change here gives this keyframe its own."
                                 </p>
                             }
                             .into_any()
@@ -1379,17 +1432,9 @@ pub fn Filters() -> impl IntoView {
                     });
                     view! {
                         <div class="filters-effects">
-                            <div class="filters-titles">
-                                <span class="filters-subtitle">{subtitle}</span>
-                                <span class="filters-effects-note">
-                                    {studio.collection.with_untracked(|c| {
-                                        c.as_ref().map(|c| owner_note(c, &owner)).unwrap_or_default()
-                                    })}
-                                </span>
-                            </div>
                             {follow}
                             <Chains owner=owner.clone() video=true audio=false in_place=true />
-                            <button type="button" class="filters-add" on:click=add>"+ Add effect…"</button>
+                            <button type="button" class="filters-add" on:click=add>"+ Add filter…"</button>
                         </div>
                     }
                 })
@@ -1486,7 +1531,7 @@ pub fn Chains(
     let chain = move |which: FilterChain| {
         let (title, icon, empty) = chain_head(effects, which);
         let list = Memo::new(move |_| chains.with(|c| c.chain(which).to_vec()));
-        let count = move || count_text(effects, list.with(Vec::len));
+        let count = move || count_text(list.with(Vec::len));
         let owner = owner.clone();
         let drop = drop.clone();
         view! {
@@ -1502,7 +1547,7 @@ pub fn Chains(
                 >
                     <ul
                         class="filter-rows"
-                        aria-label=if effects { "Item effects".to_owned() } else { format!("{title} filters") }
+                        aria-label=if effects { "Item filters".to_owned() } else { format!("{title} filters") }
                         class:reordering=move || reorder.dragged.with(Option::is_some)
                         on:pointermove=move |event| reorder.moved(&event)
                         on:pointerup={
@@ -1550,9 +1595,10 @@ pub fn Chains(
     }
 }
 
-/// An item's "Over the canvas" check under its effects (ADR-0106): on, the effects
-/// run after the item is placed, so a mask lines up with the canvas however the item
-/// is moved or flipped; off, they run over its box and move with it.
+/// An item's "Over the canvas" toggle row under its own filters (ADR-0106, C14): on,
+/// they run after the item is placed, so a mask lines up with the canvas however the
+/// item is moved or flipped; off, they run over its box and move with it. It applies
+/// at once, so it is a switch (UI-DESIGN › Controls).
 #[component]
 fn EffectsSpaceCheck(item_id: ItemId) -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -1568,11 +1614,11 @@ fn EffectsSpaceCheck(item_id: ItemId) -> impl IntoView {
             })
         })
     };
-    let toggle = move |event: leptos::ev::Event| {
-        let space = if event_target_checked(&event) {
-            EffectsSpace::Canvas
-        } else {
+    let toggle = move |_| {
+        let space = if canvas.get_untracked() {
             EffectsSpace::Box
+        } else {
+            EffectsSpace::Canvas
         };
         if let Some(s) = session.get() {
             let edits = vec![Edit::ItemSetEffectsSpace {
@@ -1584,36 +1630,39 @@ fn EffectsSpaceCheck(item_id: ItemId) -> impl IntoView {
         }
     };
     view! {
-        <label class="check effects-space" title="Run the effects after the item is placed, over the canvas, so a mask lines up with the canvas however the item is moved or flipped">
-            <input
-                type="checkbox"
-                class="inline-check"
-                prop:checked=move || canvas.get()
-                on:change=toggle
-            />
-            "Over the canvas"
-        </label>
+        <div class="toggle-row effects-space" title="Run the item’s filters after it is placed, over the canvas, so a mask lines up with the canvas however the item is moved or flipped">
+            <span class="toggle-row-label">"Over the canvas"</span>
+            <button
+                type="button"
+                role="switch"
+                class="switch"
+                class:on=move || canvas.get()
+                aria-label="Over the canvas"
+                aria-checked=move || canvas.get().to_string()
+                on:click=toggle
+            >
+                <span class="switch-knob"></span>
+            </button>
+        </div>
     }
 }
 
-/// A chain's heading, icon and empty text: an item's effects (ADR-0065) are "Effects",
-/// any other owner's chains "Video" and "Audio".
+/// A chain's heading, icon and empty text: an item's own chain (ADR-0065) is "Video",
+/// with "No item filters." when empty, and any other owner's chains "Video" and "Audio".
 fn chain_head(effects: bool, which: FilterChain) -> (&'static str, &'static str, &'static str) {
     match (effects, which) {
-        (true, _) => ("Effects", "monitor", "No effects."),
+        (true, _) => ("Video", "monitor", "No item filters."),
         (false, FilterChain::Video) => ("Video", "monitor", "No video filters."),
         (false, FilterChain::Audio) => ("Audio", "speaker", "No audio filters."),
     }
 }
 
-/// A chain's count: "1 filter" or "N filters", or for an item's effects "1 effect" or
-/// "N effects".
-fn count_text(effects: bool, n: usize) -> String {
-    let word = if effects { "effect" } else { "filter" };
+/// A chain's count: "1 filter" or "N filters".
+fn count_text(n: usize) -> String {
     if n == 1 {
-        format!("1 {word}")
+        "1 filter".to_owned()
     } else {
-        format!("{n} {word}s")
+        format!("{n} filters")
     }
 }
 
@@ -3008,7 +3057,7 @@ fn FilterPane(target: Target) -> impl IntoView {
                 FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
             ) =>
         {
-            format!("Effect on “{owner_name}”")
+            format!("Item filter on “{owner_name}”")
         }
         FilterChain::Video => format!("Video filter on “{owner_name}”"),
         FilterChain::Audio => format!("Audio filter on “{owner_name}”"),
@@ -3509,7 +3558,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         FilterOwner::Source { .. } => "The engine lists no filters for this source.",
         FilterOwner::Scene { .. } => "The engine lists no filters for this scene.",
         FilterOwner::Item { .. } | FilterOwner::Keyframe { .. } => {
-            "The engine lists no effects for this item."
+            "The engine lists no filters for this item."
         }
         _ => "The engine lists no filters for this output.",
     };
@@ -4508,15 +4557,15 @@ mod tests {
         assert!(collection.chains(&owner("gone")).is_none());
         assert_eq!(owner_chains(&collection, &owner("gone")), (false, false));
         assert!(owner_scene_choices(&collection, &owner("gone"), None).is_empty());
-        // Its chain reads as effects.
+        // Its chain reads as item filters (C14).
         assert_eq!(
             chain_head(true, FilterChain::Video),
-            ("Effects", "monitor", "No effects.")
+            ("Video", "monitor", "No item filters.")
         );
         assert_eq!(chain_head(false, FilterChain::Video).0, "Video");
-        assert_eq!(count_text(true, 1), "1 effect");
-        assert_eq!(count_text(true, 3), "3 effects");
-        assert_eq!(count_text(false, 0), "0 filters");
+        assert_eq!(count_text(1), "1 filter");
+        assert_eq!(count_text(3), "3 filters");
+        assert_eq!(count_text(0), "0 filters");
 
         // The Filters window's scopes: the item's source, its effects and the scene, so
         // each is one click away, whichever of them it opened on.

@@ -205,8 +205,9 @@ test('a Follow pointer pane offers the default wheel zoom, and its Set key takes
   ]);
   await showPanel(page, 'Filters');
   await page.locator('.sources-panel li.row').filter({ hasText: 'Screen' }).locator('.row-main').click();
+  await page.locator('.filters-panel').getByRole('tablist', { name: 'Filters of' }).getByRole('tab', { name: 'This item' }).click();
   const effects = page.locator('.filters-panel .filters-effects');
-  await effects.getByRole('button', { name: '+ Add effect…' }).click();
+  await effects.getByRole('button', { name: '+ Add filter…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });
   await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option').filter({ hasText: 'Follow pointer' }).click();
   await add.getByRole('button', { name: 'Add filter' }).click();
