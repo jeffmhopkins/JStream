@@ -337,7 +337,9 @@ applies_to = ["Cargo.toml", "deny.toml"]
 Dependencies may only use the licenses on the `deny.toml` allow list: permissive
 licenses plus MPL-2.0 (file-level copyleft). No GPL, LGPL or AGPL. The one exception is the
 prebuilt CEF runtime for browser sources, which contains LGPL-2.1 FFmpeg and ships with
-its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)). A system library
+its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)). Microsoft's DirectX
+Shader Compiler DLLs ship in the Windows zip under Microsoft's redistribution terms, with
+their licence files ([ADR-0175](adr/0175-ship-the-directx-shader-compiler.md)). A system library
 loaded at run time and never shipped, such as R-DEP-002's FFmpeg exception, is not a
 dependency here.
 

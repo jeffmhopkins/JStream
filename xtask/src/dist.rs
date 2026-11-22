@@ -3,9 +3,11 @@
 //! statically and browser sources on, builds the sandboxed browser helper with CEF, refuses
 //! any binary that still imports a Visual C++ runtime DLL (or a host that loads CEF), and
 //! zips one folder that runs from wherever it is unzipped, with the helper and CEF's
-//! runtime in its `browser` folder.
+//! runtime in its `browser` folder. Microsoft's DirectX Shader Compiler ships beside the
+//! exes, each DLL checked against its pinned hash, with its licences in its `dxc` folder.
 //!
-//! Docs: docs/ARCHITECTURE.md#packaging, docs/adr/0048-sandboxed-browser-helper.md
+//! Docs: docs/ARCHITECTURE.md#packaging, docs/adr/0048-sandboxed-browser-helper.md,
+//! docs/adr/0175-ship-the-directx-shader-compiler.md
 
 use std::fs;
 use std::io::Write;
@@ -79,7 +81,70 @@ const CRT_STATIC: &str = "-Ctarget-feature=+crt-static";
 const CRT_DLLS: &[&str] = &["vcruntime", "msvcp", "concrt", "vccorlib"];
 
 const USAGE: &str = "usage: cargo xtask dist [--ui-dir <built UI folder>] [--out <folder>] \
-     [--revision <name>] [--no-browser]";
+     [--revision <name>] [--no-browser] (--dxc-dir <unzipped DXC release> | --no-dxc)";
+
+/// The DirectX Shader Compiler release the zip ships (ADR-0175), and where it comes from.
+/// wgpu's DX12 backend loads `dxcompiler.dll` from beside the exe when it is there (its
+/// `Dx12Compiler::Auto`) and compiles shaders with FXC when it isn't. It needs this
+/// release or a later one.
+const DXC_RELEASE: &str = "v1.8.2502";
+const DXC_URL: &str = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/\
+                       v1.8.2502/dxc_2025_02_20.zip";
+
+/// The DLLs that ship beside the exes: (architecture in Windows' words, file in the
+/// release's `bin/<architecture>` folder, its BLAKE3 hash). CI checks the release zip's
+/// SHA-256 when it downloads it; these check what `dist` copies, wherever it came from.
+const DXC_DLLS: &[(&str, &str, &str)] = &[
+    (
+        "x64",
+        "dxcompiler.dll",
+        "917bdd911930dc2ebe5291785db5041bd7c410e4502b737c1f8be704465c0971",
+    ),
+    (
+        "x64",
+        "dxil.dll",
+        "4b5f5e7cc3613c9ee2ed4bc2211079685106c677ffe8a274c06566679fe432ab",
+    ),
+    (
+        "arm64",
+        "dxcompiler.dll",
+        "29617ba66c4fe11ec19d18db3d357630f949e488eea26db8459e3f2eed10b515",
+    ),
+    (
+        "arm64",
+        "dxil.dll",
+        "2fc6af46fd2aadc8b2a6c033f6de3f7b5726fa48882e06a344c8477232f178d1",
+    ),
+];
+
+/// The licence files at the top of the release, which ship in [`DXC_DIR`] as they are,
+/// with their BLAKE3 hashes: the terms ADR-0175 accepted.
+const DXC_LICENSES: &[(&str, &str)] = &[
+    (
+        "LICENSE-LLVM.txt",
+        "9b6bd8972c684f535a61806eeaec440b89bb74be1941106ba432ec9017412c73",
+    ),
+    (
+        "LICENSE-MIT.txt",
+        "fa597af0e0042fdcd180bdb3833c03f7ad6a0e241e6affc5fb7f110af0794861",
+    ),
+    (
+        "LICENSE-MS.txt",
+        "d4e61773dd053748ddec12db25a61438ecf95fc7778e9ff8dfddcbf9f49a9878",
+    ),
+];
+
+/// The folder in the zip that holds DXC's licences and `DXC-VERSION.txt`. The DLLs
+/// themselves sit beside the exes, where Windows' DLL search finds them.
+const DXC_DIR: &str = "dxc";
+
+/// The README paragraph for a zip that ships DXC.
+const DXC_README: &str = "
+dxcompiler.dll and dxil.dll are Microsoft's DirectX Shader Compiler, which compiles the
+GPU shaders faster than the one built into Windows when output starts. Its licences are in
+the dxc folder, its release in dxc\\DXC-VERSION.txt. Without the two DLLs JStream still
+runs, with Windows' own compiler (FXC).
+";
 
 /// The text file at the top of the zip.
 const README: &str = "\
@@ -111,6 +176,8 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let mut out = None;
     let mut revision = None;
     let mut browser = true;
+    let mut dxc_dir = None;
+    let mut no_dxc = false;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || {
@@ -123,12 +190,24 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             "--out" => out = Some(value()?),
             "--revision" => revision = Some(value()?.to_string_lossy().into_owned()),
             "--no-browser" => browser = false,
+            "--dxc-dir" => dxc_dir = Some(value()?),
+            "--no-dxc" => no_dxc = true,
             _ => bail!("unknown argument `{arg}`\n{USAGE}"),
         }
     }
     if !cfg!(all(windows, target_env = "msvc")) {
         bail!("the portable zip is built on Windows with the MSVC toolchain");
     }
+    // Checked before the build, so a wrong or missing release fails in seconds.
+    let dxc = match (dxc_dir, no_dxc) {
+        (Some(dir), false) => Some(dxc_files(&dir, arch())?),
+        (None, true) => None,
+        (Some(_), true) => bail!("--dxc-dir and --no-dxc together\n{USAGE}"),
+        (None, false) => bail!(
+            "pass --dxc-dir <folder> with DXC {DXC_RELEASE} unzipped in it ({DXC_URL}), \
+             or --no-dxc for a zip that compiles shaders with FXC\n{USAGE}"
+        ),
+    };
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("target"));
@@ -173,8 +252,15 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     for license in LICENSES {
         copy(&root.join(license), &stage.join(license))?;
     }
-    fs::write(stage.join("README.txt"), README.replace('\n', "\r\n"))
+    let readme = match dxc {
+        Some(_) => format!("{README}{DXC_README}"),
+        None => README.to_owned(),
+    };
+    fs::write(stage.join("README.txt"), readme.replace('\n', "\r\n"))
         .context("writing README.txt")?;
+    if let Some(dxc) = &dxc {
+        stage_dxc(dxc, &stage)?;
+    }
     copy_dir(&ui, &stage.join(UI_DIR))?;
     if let Some(cef) = &cef {
         stage_browser(cef, &release.join(HELPER_BUILT), &stage.join(BROWSER_DIR))?;
@@ -321,6 +407,93 @@ fn stage_browser(cef: &Path, dll: &Path, to: &Path) -> Result<()> {
     let text = cef_version_text(&archive)?;
     fs::write(to.join("CEF-VERSION.txt"), text.replace('\n', "\r\n"))
         .context("writing CEF-VERSION.txt")
+}
+
+/// What `dist` copies from an unzipped DXC release.
+struct DxcFiles {
+    /// (file in the release, name beside the exes).
+    dlls: Vec<(PathBuf, &'static str)>,
+    /// (file in the release, name in [`DXC_DIR`]).
+    licenses: Vec<(PathBuf, &'static str)>,
+}
+
+/// The files to ship from the DXC release unzipped in `dir`, for `arch`, each checked
+/// against its pinned hash.
+fn dxc_files(dir: &Path, arch: &str) -> Result<DxcFiles> {
+    let dlls: Vec<_> = DXC_DLLS
+        .iter()
+        .filter(|(dll_arch, _, _)| *dll_arch == arch)
+        .map(|(_, name, hash)| (dir.join("bin").join(arch).join(name), *name, *hash))
+        .collect();
+    if dlls.is_empty() {
+        bail!("DXC {DXC_RELEASE} has no pinned DLLs for {arch}");
+    }
+    let licenses: Vec<_> = DXC_LICENSES
+        .iter()
+        .map(|(name, hash)| (dir.join(name), *name, *hash))
+        .collect();
+    for (path, _, hash) in dlls.iter().chain(&licenses) {
+        check_blake3(path, hash)?;
+    }
+    let keep = |files: Vec<(PathBuf, &'static str, &str)>| {
+        files
+            .into_iter()
+            .map(|(path, name, _)| (path, name))
+            .collect()
+    };
+    Ok(DxcFiles {
+        dlls: keep(dlls),
+        licenses: keep(licenses),
+    })
+}
+
+/// Fails unless the file at `path` hashes to `expected` (BLAKE3, hex).
+fn check_blake3(path: &Path, expected: &str) -> Result<()> {
+    let bytes = fs::read(path).with_context(|| {
+        format!(
+            "reading {} (is DXC {DXC_RELEASE} unzipped there?)",
+            path.display()
+        )
+    })?;
+    let actual = blake3::hash(&bytes).to_hex();
+    if actual.as_str() != expected {
+        bail!(
+            "{} has BLAKE3 {actual}, not the pinned {expected}: it is not DXC {DXC_RELEASE}'s",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+/// What `DXC-VERSION.txt` says.
+fn dxc_version_text() -> String {
+    format!(
+        "DirectX Shader Compiler {DXC_RELEASE}, Microsoft's release:\n{DXC_URL}\n\n\
+         Its sources: https://github.com/microsoft/DirectXShaderCompiler.\n\
+         The release's notes apply LICENSE-MIT.txt to d3d12shader.h and LICENSE-LLVM.txt \
+         to its other files. It also ships LICENSE-MS.txt, Microsoft's terms for the \
+         compiler, which JStream follows for both DLLs.\n"
+    )
+}
+
+/// Copies DXC's DLLs beside the exes in `stage` and its licences, with `DXC-VERSION.txt`,
+/// into its [`DXC_DIR`] folder, refusing a DLL that imports the Visual C++ runtime.
+fn stage_dxc(dxc: &DxcFiles, stage: &Path) -> Result<()> {
+    for (from, name) in &dxc.dlls {
+        let to = stage.join(name);
+        copy(from, &to)?;
+        check_no_crt_imports(&to)?;
+    }
+    let dir = stage.join(DXC_DIR);
+    fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    for (from, name) in &dxc.licenses {
+        copy(from, &dir.join(name))?;
+    }
+    fs::write(
+        dir.join("DXC-VERSION.txt"),
+        dxc_version_text().replace('\n', "\r\n"),
+    )
+    .context("writing DXC-VERSION.txt")
 }
 
 /// The `RUSTFLAGS` to build with: `None` keeps `.cargo/config.toml`'s flags (no variable
@@ -626,7 +799,8 @@ fn zip_bytes(entries: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CRT_STATIC, Pe, cef_dir, cef_version_text, imported_dlls, is_crt, ships_from_cef,
+        CRT_STATIC, DXC_DLLS, DXC_LICENSES, DXC_RELEASE, DXC_URL, Pe, cef_dir, cef_version_text,
+        check_blake3, dxc_files, dxc_version_text, imported_dlls, is_crt, ships_from_cef,
         with_crt_static, zip_bytes,
     };
     use std::io::Read;
@@ -891,5 +1065,63 @@ mod tests {
         );
         assert!(cef_version_text("{}").is_err());
         assert!(cef_version_text("not json").is_err());
+    }
+
+    #[test]
+    fn dxc_pins_both_dlls_for_each_architecture() {
+        for arch in ["x64", "arm64"] {
+            let names: Vec<&str> = DXC_DLLS
+                .iter()
+                .filter(|(a, _, _)| *a == arch)
+                .map(|(_, name, _)| *name)
+                .collect();
+            assert_eq!(names, ["dxcompiler.dll", "dxil.dll"], "{arch}");
+        }
+        for hash in DXC_DLLS
+            .iter()
+            .map(|(_, _, hash)| *hash)
+            .chain(DXC_LICENSES.iter().map(|(_, hash)| *hash))
+        {
+            assert_eq!(hash.len(), 64, "{hash}");
+            assert!(hash.bytes().all(|b| b.is_ascii_hexdigit()), "{hash}");
+        }
+        assert!(DXC_URL.contains(DXC_RELEASE), "{DXC_URL}");
+        assert!(!DXC_URL.contains(' '), "{DXC_URL}");
+    }
+
+    #[test]
+    fn dxc_files_must_match_their_pinned_hashes() {
+        let dir = std::env::temp_dir().join(format!("xtask-dist-dxc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let missing = dxc_files(&dir, "x64").err().map(|e| format!("{e:#}"));
+        assert!(
+            missing
+                .as_deref()
+                .is_some_and(|e| e.contains("dxcompiler.dll")),
+            "{missing:?}"
+        );
+        assert!(dxc_files(&dir, "x86").is_err(), "no pinned DLLs for x86");
+
+        std::fs::create_dir_all(dir.join("bin/x64")).unwrap_or_else(|e| panic!("{e}"));
+        let dll = dir.join("bin/x64/dxcompiler.dll");
+        std::fs::write(&dll, b"not DXC").unwrap_or_else(|e| panic!("{e}"));
+        let wrong = dxc_files(&dir, "x64").err().map(|e| format!("{e:#}"));
+        assert!(
+            wrong
+                .as_deref()
+                .is_some_and(|e| e.contains("not the pinned")),
+            "{wrong:?}"
+        );
+        let hash = blake3::hash(b"not DXC").to_hex();
+        assert!(check_blake3(&dll, hash.as_str()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_dxc_version_names_the_release() {
+        let text = dxc_version_text();
+        assert!(text.contains(DXC_RELEASE), "{text}");
+        assert!(text.contains(DXC_URL), "{text}");
+        assert!(text.contains("LICENSE-MS.txt"), "{text}");
     }
 }

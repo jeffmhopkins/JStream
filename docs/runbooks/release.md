@@ -59,9 +59,12 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
      `main`, and stops if the version's tag already exists or the check can't tell;
    - `zip` runs `cargo xtask dist --revision v<version>` on `windows-latest` from a clean
      build, so the zip is `jstream-v<version>-windows-x64.zip`, browser helper and CEF
-     runtime included, and writes its SHA-256 and Windows's part of the release notes:
-     the getting-started link, the unsigned warning, the CEF build from
-     `browser\CEF-VERSION.txt` and the checksum;
+     runtime included, with the DirectX Shader Compiler DLLs it downloads and checks
+     against their pinned hashes (FXC compiles shaders when they are missing,
+     [ADR-0175](../adr/0175-ship-the-directx-shader-compiler.md)), and writes its SHA-256
+     and Windows's part of the release notes: the getting-started link, the unsigned
+     warning, the CEF build from `browser\CEF-VERSION.txt`, the DXC release from
+     `dxc\DXC-VERSION.txt` and the checksum;
    - `linux` runs `cargo xtask dist-linux` on `ubuntu-latest` from a clean build, with the
      same pinned linuxdeploy, GTK plugin and AppImage runtime as `after-review`'s
      `dist-linux`, checks that `chrome-sandbox` is setuid root and that the AAC notice

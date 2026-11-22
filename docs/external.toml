@@ -819,3 +819,19 @@ relied_on = "From macOS 14.1 legacy DAL camera plug-ins don't load; `system-over
 review_every = "365d"
 status = "unverified"
 checked_note = "Seen through search excerpts only: the 14.1 change and the system-override command; the page itself was not re-read"
+
+[[external]]
+id = "dxc"
+url = "https://github.com/microsoft/DirectXShaderCompiler"
+relied_on = "Microsoft's DirectX Shader Compiler: dxcompiler.dll and dxil.dll from its official releases, which the Windows zip ships beside the exes so wgpu's Dx12Compiler::Auto compiles HLSL with DXC instead of FXC (ADR-0175)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: the project's releases publish dxc_<date>.zip with bin/x64 and bin/arm64 dxcompiler.dll and dxil.dll"
+
+[[external]]
+id = "dxc-v1-8-2502"
+url = "https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.8.2502"
+relied_on = "DXC v1.8.2502's release zip dxc_2025_02_20.zip (SHA-256 70b1913a…6f85), wgpu's minimum DXC; it holds LICENSE-LLVM.txt, LICENSE-MIT.txt and LICENSE-MS.txt, whose Microsoft terms permit redistributing the compiler's object code in an application on the conditions ADR-0175 lists"
+review_every = "365d"
+status = "ok"
+checked_note = "Downloaded the zip, checked its SHA-256 and the DLLs' hashes, and read the three licence files and ReleaseNotes.md"
