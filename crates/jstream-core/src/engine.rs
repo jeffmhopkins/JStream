@@ -1140,6 +1140,64 @@ impl Engine {
         Ok(())
     }
 
+    /// Moves the open collection file to `to`, for a host whose default project moves to
+    /// another folder (ADR-0163 §2). It is a `collection.save_as` to `to`, made by the
+    /// engine itself: nothing at `to` is replaced, `collection` asset references keep
+    /// naming the same files, and each output's stream key is copied to the new path's
+    /// scope. Then the old path's keys are removed and the old file is renamed to
+    /// [`MOVED_SUFFIX`](crate::MOVED_SUFFIX) appended to its name, so no later start
+    /// finds it again. A failure to remove an old key or to rename the old file is logged:
+    /// the move has happened by then. Returns the renamed file, or `None` when it
+    /// couldn't be renamed.
+    ///
+    /// # Errors
+    /// What a `collection.save_as` to `to` answers: `unsupported` without a collection
+    /// file, `already_exists` when anything is at `to`, `invalid_argument` for a path
+    /// the rules refuse or that isn't UTF-8, and `action_failed` when the file can't be
+    /// written or the keys can't be copied. The open file is then left as it was.
+    pub fn move_collection_file(&self, to: &Path) -> Result<Option<PathBuf>, ProtocolError> {
+        let Some(target) = to.to_str() else {
+            return Err(ProtocolError::invalid_argument(
+                "path",
+                "the path must be UTF-8",
+            ));
+        };
+        let from = lock(&self.shared.collection_file)
+            .as_ref()
+            .map(|file| file.path().to_path_buf());
+        let old_scope = lock(&self.shared.key_scope).clone();
+        let outputs: Vec<OutputId> = lock(&self.shared.state)
+            .graph
+            .state()
+            .outputs()
+            .map(|o| o.id().clone())
+            .collect();
+        let client_id = ClientId::new(crate::history::ENGINE_CLIENT);
+        self.collection_save_as(&client_id, &RequestId::new("move"), target)?;
+        let old_keys: Vec<String> = old_scope
+            .map(|scope| {
+                outputs
+                    .iter()
+                    .map(|id| crate::projects::key_name(Some(&scope), id))
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.clear_keys(&old_keys);
+        let Some(from) = from else {
+            return Ok(None);
+        };
+        let mut moved = from.clone().into_os_string();
+        moved.push(crate::MOVED_SUFFIX);
+        let moved = PathBuf::from(moved);
+        match std::fs::rename(&from, &moved) {
+            Ok(()) => Ok(Some(moved)),
+            Err(err) => {
+                tracing::warn!(path = %from.display(), error = %err, "the moved collection file was not renamed");
+                Ok(None)
+            }
+        }
+    }
+
     /// Copies each output's stream key from the open collection's scope to `scope`, for
     /// a save as (ADR-0121 §5), and returns the names it wrote. Without a key store
     /// there is nothing to copy. A failure removes the copies made so far.

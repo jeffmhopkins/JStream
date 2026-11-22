@@ -49,9 +49,11 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "apps/jstream-desktop/README.md#
 about an unknown publisher the first time. Choose **More info**, then **Run anyway**. Do
 this only for a zip you downloaded from the releases page.
 
-JStream keeps its settings, scenes and logs in `%APPDATA%\JStream`. To keep them in the
-JStream folder instead (to run it from a USB stick), create an empty file named
-`portable`, with no extension, next to `jstream.exe`: they then go in its `data` folder.
+JStream saves your project in `Documents\JStream` (`My project.json` to start with), and
+keeps its settings and logs in `%APPDATA%\JStream`. Screenshots go to your Downloads
+folder, and a message says where. To keep everything in the JStream folder instead (to
+run it from a USB stick), create an empty file named `portable`, with no extension, next
+to `jstream.exe`: it all then goes in its `data` folder.
 
 **On macOS** (Apple Silicon, macOS 14 or later): download
 `jstream-v<version>-macos-arm64.dmg` from the same page, open it and drag JStream to
