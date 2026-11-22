@@ -280,6 +280,7 @@ mod tests {
         let switch = Action::SceneSwitch {
             scene_id: SceneId::new("intro"),
             preset_id: None,
+            via: Vec::new(),
         };
         let binding = Binding::new(note(60, None, None), &switch);
         assert_eq!(

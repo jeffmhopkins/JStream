@@ -371,6 +371,7 @@ mod tests {
         let switch = Action::SceneSwitch {
             scene_id: SceneId::new("intro"),
             preset_id: None,
+            via: Vec::new(),
         };
         let binding = HotkeyBinding::new(Chord::new("F1"), &switch);
         assert_eq!(

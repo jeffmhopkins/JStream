@@ -184,6 +184,7 @@ fn when_shown_audio_follows_the_program() {
             action: Action::SceneSwitch {
                 scene_id: SceneId::new(scene),
                 preset_id: None,
+                via: Vec::new(),
             },
         }))
         .expect("switched");

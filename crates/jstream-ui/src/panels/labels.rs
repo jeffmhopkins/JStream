@@ -1159,6 +1159,7 @@ mod tests {
         let switch = |to: &str| Action::SceneSwitch {
             scene_id: SceneId::new(to),
             preset_id: None,
+            via: Vec::new(),
         };
         collection.hotkeys = vec![
             HotkeyBinding::new(Chord::new("F1"), &switch("k1")).with_labels(vec!["l1".into()]),

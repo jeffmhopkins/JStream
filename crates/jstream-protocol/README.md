@@ -71,7 +71,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
+  `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
+  `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
@@ -254,7 +255,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `plugin.uninstalled` (0.136),
+  `plugin.uninstalled` (0.142),
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
@@ -352,8 +353,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.136 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.142 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
+0.138 because a Move may pass through keyframes and orbit its
+camera: `scene.switch`'s and `scene.switch_and_watch`'s `via` and the `move` kind's
+`camera_path` setting
+([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md));
 0.134 because a client can hold and step the engine's media clock
 to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
 ([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
@@ -1304,8 +1309,8 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
-  (`Action::named_objects`; today scenes, outputs, the preset a `scene.switch`
-  names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
+  (`Action::named_objects`; today scenes, outputs, the preset and `via` scenes a
+  `scene.switch` names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
   item an `item.*` action names), and any edit that takes an item away
   (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
   the item (ADR-0101). A binding goes with its labels. Their inverses restore the
@@ -1541,6 +1546,11 @@ kind `kind.list` reports (category `transition`: `cut`, `fade`, `move` and `stin
 far) and `settings` are checked against its descriptor as a source's are (`unmatched`,
 the effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
 stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
+A `move` also takes `camera_path` (0.138, `line` by default, or `orbit`,
+`CAMERA_ORBIT`): an orbit circles a 3D scene's camera around its target, keeping its
+distance on a curve, where a line moves it straight
+([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+decision 3).
 A `stinger` takes the `scene` it plays over the switch (a scene reference, or `null` to
 cut), `cut_ms`, when the picture under it cuts (default 500, at most the duration), and
 `stagger_ms`, which staggers the stinger scene's items by stacking order.
@@ -1576,7 +1586,13 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
-  transition runs starts the new one from what is on screen.
+  transition runs starts the new one from what is on screen. Its `via` (0.138, up to
+  `MAX_VIA`, 8) names keyframes of the destination's family that a Move within the
+  family passes through on its way, in order: each value follows one smooth curve
+  through every stop, at equal shares of the preset's timing (ADR-0166 decision 2). A
+  stop outside the family, the destination itself, a repeat of the stop before it or a
+  ninth is `invalid_argument` on `via` or `via.<index>`; a missing one is `not_found`.
+  A Fade, a cut, a stinger or a switch from outside the family ignores it.
 - `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
   Like a switch it changes no `rev` and is never undone; a switch leaves preview where
   it is.
@@ -1930,7 +1946,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   takes at least `delay_ms + (count - 1) × interval_ms`, at most 10 s; each is what that
   mix or scene shows then, as `video.snapshot` draws it (a capture draws nothing). A
   scene off program shows what its preview stream would.
-  `scene.switch_and_watch {scene_id, preset_id?, count, interval_ms, delay_ms?}` is
+  `scene.switch_and_watch {scene_id, preset_id?, via?, count, interval_ms, delay_ms?}` is
   `scene.switch` followed by a sheet of the program mix counted from the switch, in one
   call, so an agent sees a transition play: a stinger's cover at its `cut_ms`, or a
   600 ms move. It is an action (it switches), answering with an `ActionResult`
@@ -2295,7 +2311,7 @@ After `welcome`, the server pushes every event to every client.
   broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
   [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) and
-  `plugin.uninstalled {plugin_id}` (0.136) are described under [Plugins](#plugins).
+  `plugin.uninstalled {plugin_id}` (0.142) are described under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
   `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
@@ -2447,7 +2463,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
-- **`plugin.uninstall {plugin_id}`** (0.136) removes an installed plugin, for a person
+- **`plugin.uninstall {plugin_id}`** (0.142) removes an installed plugin, for a person
   like the other plugin actions. A running plugin stops once the invocation it is in
   returns, holding only `read` from the moment it is removed, and the engine forgets it
   and its grant: `plugin.list` no longer
@@ -2473,7 +2489,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
-- **`plugin.uninstalled {plugin_id}`** (0.136) reports a plugin a person removed with
+- **`plugin.uninstalled {plugin_id}`** (0.142) reports a plugin a person removed with
   `plugin.uninstall`. Like `plugin.state_changed`, it is a person's: the MCP feed drops it.
 
 CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are

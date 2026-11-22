@@ -704,13 +704,12 @@ fn InstallDialog(section: Section) -> impl IntoView {
             <div class="modal-header">
                 <div class="modal-titles">
                     <h2 class="modal-title">"Install plugin"</h2>
-                    <span class="modal-sub">"A WASM automation plugin, from a folder on the engine's machine"</span>
                 </div>
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| cancel()>"×"</button>
             </div>
             <div class="plugin-dialog-body">
                 <label class="field">
-                    <span>"Folder"</span>
+                    <span>"Folder on the engine's machine"</span>
                     <span class="path-row">
                         <input
                             type="text"

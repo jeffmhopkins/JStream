@@ -1,15 +1,16 @@
-//! "Warm scenes" on the Settings dialog's General page (`settings.rs`, ADR-0117 §7):
+//! "Keep ready" (how many warm scenes) on the Settings dialog's General page (`settings.rs`, ADR-0117 §7):
 //! how many scenes besides the program the engine keeps warm, so showing one starts
 //! nothing. The Preview scene is always one of them. It reads the number from
 //! `studio.get` each time the page opens and sets it with `studio.set_warm`; the engine
 //! keeps it on its machine, whatever collection is open. An engine older than 0.115
-//! reports none, and the control hides. Beside it, "Warm scenes' GPU memory" sets the
+//! reports none, and the control hides. Beside it, "Memory limit" sets the
 //! limit on what the warm scenes are estimated to hold on the GPU (`gpu_mib`,
 //! ADR-0150), hidden from an engine older than 0.117.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::app::SessionContext;
+use crate::dialog::Info;
 use jstream_control::Control;
 use jstream_protocol::{Action, Call, CallResult, MAX_WARM_SCENES, Query, QueryResult};
 
@@ -89,7 +90,7 @@ pub fn choice_label(scenes: u32) -> String {
     }
 }
 
-/// The "Warm scenes" choice, shown once the engine has reported its budget.
+/// The "Keep ready" choice (the warm scenes), shown once the engine has reported its budget.
 #[component]
 pub fn WarmScenesSetting() -> impl IntoView {
     let session = use_context::<SessionContext>().and_then(|context| context.get());
@@ -154,49 +155,59 @@ pub fn WarmScenesSetting() -> impl IntoView {
     };
     view! {
         <Show when=move || scenes.get().is_some()>
-            <label class="settings-field warm-scenes">
-                <span class="settings-check-label">"Warm scenes"</span>
-                <select
-                    aria-label="Warm scenes"
-                    prop:value=move || scenes.get().unwrap_or_default().to_string()
-                    on:change=move |event| {
-                        if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
-                            choose(chosen);
-                        }
-                    }
-                >
-                    {(0..=MAX_WARM_SCENES).map(|n| view! {
-                        <option value=n.to_string()>{choice_label(n)}</option>
-                    }).collect_view()}
-                </select>
-                <span class="settings-check-note">
-                    "How many scenes besides the one on program stay ready: their videos, pages and cameras keep running, so showing one starts nothing. The Preview scene is always one of them, then the scenes set to Keep warm, then those a hotkey switches to, then the scenes shown most recently. More scenes use more memory and CPU. 3 until you change it."
-                </span>
-            </label>
-        </Show>
-        <Show when=move || scenes.get().is_some() && gpu.get().is_some()>
-            <label class="settings-field warm-gpu">
-                <span class="settings-check-label">"Warm scenes' GPU memory"</span>
-                <select
-                    aria-label="Warm scenes' GPU memory"
-                    prop:value=move || gpu.get().unwrap_or_default().to_string()
-                    on:change=move |event| {
-                        if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
-                            choose_gpu(chosen);
-                        }
-                    }
-                >
-                    {move || gpu_choices().into_iter().map(|mib| view! {
-                        <option value=mib.to_string()>{gpu_label(mib)}</option>
-                    }).collect_view()}
-                </select>
-                <span class="settings-check-note">
-                    "The most video memory the warm scenes may use, as JStream estimates it from the size of each video, page and camera they show. Scenes are kept in the order above until the next one would go past it; the Preview scene always stays ready. The estimate is a lower bound. No limit until you change it."
-                </span>
-            </label>
+            <section class="prop-section">
+                <h4 class="eyebrow">"Performance"</h4>
+                <div class="prop-grid">
+                    <div class="prop-row warm-scenes">
+                        <span class="prop-label">
+                            "Keep ready"
+                            <Info text="Scenes besides the one on program whose videos, pages and cameras keep running, so showing one starts nothing. The Preview scene comes first, then scenes set to Keep warm, then those a hotkey switches to, then the scenes shown most recently. 3 until you change it." />
+                        </span>
+                        <div class="prop-control">
+                            <select
+                                aria-label="Keep ready"
+                                prop:value=move || scenes.get().unwrap_or_default().to_string()
+                                on:change=move |event| {
+                                    if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
+                                        choose(chosen);
+                                    }
+                                }
+                            >
+                                {(0..=MAX_WARM_SCENES).map(|n| view! {
+                                    <option value=n.to_string()>{choice_label(n)}</option>
+                                }).collect_view()}
+                            </select>
+                            <p class="help">"Ready scenes switch instantly but use memory."</p>
+                        </div>
+                    </div>
+                    <Show when=move || gpu.get().is_some()>
+                        <div class="prop-row warm-gpu">
+                            <span class="prop-label">
+                                "Memory limit"
+                                <Info text="The most video memory the ready scenes may use, estimated from each video, page and camera they show (a lower bound). Scenes are kept in the order above until the next would pass it; the Preview scene always stays ready." />
+                            </span>
+                            <div class="prop-control">
+                                <select
+                                    aria-label="Memory limit"
+                                    prop:value=move || gpu.get().unwrap_or_default().to_string()
+                                    on:change=move |event| {
+                                        if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
+                                            choose_gpu(chosen);
+                                        }
+                                    }
+                                >
+                                    {move || gpu_choices().into_iter().map(|mib| view! {
+                                        <option value=mib.to_string()>{gpu_label(mib)}</option>
+                                    }).collect_view()}
+                                </select>
+                            </div>
+                        </div>
+                    </Show>
+                </div>
+            </section>
         </Show>
         {move || error.get().map(|message| view! {
-            <p class="settings-error" role="alert">{format!("Warm scenes: {message}")}</p>
+            <p class="settings-error" role="alert">{format!("Keep ready: {message}")}</p>
         })}
     }
 }
