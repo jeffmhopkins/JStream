@@ -509,7 +509,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets the 3D rendering switches (0.136, ADR-0170 decision 1): which of the costly\n3D effects the engine draws, for every scene at once. Each switch `change` names\ntakes its value and the rest keep theirs. A switch that is off draws its effect\nnowhere, whatever a scene, light or filter asks for; turning it back on restores\nwhat each scene asks for. An application setting, not collection state, as\n`studio.set_warm` is: it changes no `rev`, is never undone, emits no event, holds\nwhatever collection is open, and is kept across restarts when the engine's host\nnames a file for it. `studio.get` reports it.",
+          "description": "Sets the 3D rendering switches (0.141, ADR-0170 decision 1): which of the costly\n3D effects the engine draws, for every scene at once. Each switch `change` names\ntakes its value and the rest keep theirs. A switch that is off draws its effect\nnowhere, whatever a scene, light or filter asks for; turning it back on restores\nwhat each scene asks for. An application setting, not collection state, as\n`studio.set_warm` is: it changes no `rev`, is never undone, emits no event, holds\nwhatever collection is open, and is kept across restarts when the engine's host\nnames a file for it. `studio.get` reports it.",
           "properties": {
             "ambient_occlusion": {
               "description": "Whether the `ambient_occlusion` filter draws, or left out to keep it.",
@@ -13054,7 +13054,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170\ndecision 1, since 0.136). Omitted by an older server, which draws every effect."
+              "description": "The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170\ndecision 1, since 0.141). Omitted by an older server, which draws every effect."
             },
             "timelines": {
               "description": "The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where\nit is now. Omitted when none is.",
@@ -14079,7 +14079,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "RenderFeatures": {
-      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.136).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch is on until `studio.set_rendering` turns it off.",
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.141).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch is on until `studio.set_rendering` turns it off.",
       "properties": {
         "ambient_occlusion": {
           "default": true,
@@ -16321,5 +16321,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.136"
+  "title": "JStream protocol 0.141"
 }

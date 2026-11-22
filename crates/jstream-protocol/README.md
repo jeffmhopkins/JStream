@@ -73,7 +73,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
-  `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.136, with
+  `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.141, with
   `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
@@ -352,7 +352,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.136 because the costly 3D effects have app-wide switches:
+`PROTOCOL_VERSION` is 0.141 because the costly 3D effects have app-wide switches:
 the action `studio.set_rendering` and `studio.get`'s `rendering` (`RenderFeatures`,
 `RenderFeaturesChange` in `rendering.rs`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md) decision 1);
@@ -1598,7 +1598,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   order and the first that would pass the limit is left cold with every one after it;
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
-  floor_reflections?}` (0.136,
+  floor_reflections?}` (0.141,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -1722,7 +1722,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
-  none). Since 0.136 `rendering` holds the 3D rendering switches `studio.set_rendering`
+  none). Since 0.141 `rendering` holds the 3D rendering switches `studio.set_rendering`
   sets.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
