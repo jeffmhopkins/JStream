@@ -1682,5 +1682,7 @@ fn upload_texture(gpu: &Gpu, texture: &ModelTexture) -> Result<wgpu::TextureView
     Ok(uploaded.create_view(&wgpu::TextureViewDescriptor::default()))
 }
 
+pub(crate) mod focus;
+
 #[cfg(test)]
 mod tests;
