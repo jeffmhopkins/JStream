@@ -3,12 +3,13 @@
 //! senders.
 //!
 //! Neither may panic. An audio packet that parses writes back from its frames' raw
-//! events and audio, and that parses to the same packet.
+//! events and audio, and that parses to the same packet. A state piece that parses writes
+//! back to the same bytes, and its assembler takes it (ADR-0171).
 
 #![no_main]
 
 use jstream_jtunnel::wire::{self, Event, FrameOut, Packet};
-use jstream_jtunnel::{SeqTracker, SysexAssembler, dnssd};
+use jstream_jtunnel::{SeqTracker, StateAssembler, SysexAssembler, dnssd};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -17,6 +18,13 @@ fuzz_target!(|data: &[u8]| {
     let Ok(packet) = wire::parse(data) else {
         return;
     };
+    if let Packet::State(piece) = packet {
+        let mut buf = [0; wire::MAX_PACKET_BYTES];
+        let n = wire::write_state(&mut buf, &piece).expect("a parsed piece writes");
+        assert_eq!(&buf[..n], data, "a state packet has nothing after its data");
+        let _ = StateAssembler::new().push(&piece);
+        return;
+    }
     let Packet::Audio { header, frames } = packet else {
         return;
     };

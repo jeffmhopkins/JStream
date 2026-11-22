@@ -228,8 +228,14 @@ fn senders_that_answer_the_query_are_listed_and_trusted_with_nothing() {
     let mut setup = setup("Bitwig", &sender);
     setup.discover = Some(responder.addr());
     let (changed, heard) = sync_channel(1);
-    let receiver = Receiver::start(&setup, Arc::new(Clock(Instant::now())), None, Some(changed))
-        .expect("a receiver");
+    let receiver = Receiver::start(
+        &setup,
+        Arc::new(Clock(Instant::now())),
+        None,
+        LiveData::new(),
+        Some(changed),
+    )
+    .expect("a receiver");
     // The first query goes out at once, from the receive socket.
     let (query, from) = responder.next();
     assert_eq!(from, receiver.local_addr());
@@ -311,7 +317,14 @@ fn senders_that_answer_the_query_are_listed_and_trusted_with_nothing() {
 }
 
 fn start(setup: &JtunnelSetup) -> Receiver {
-    Receiver::start(setup, Arc::new(Clock(Instant::now())), None, None).expect("a receiver")
+    Receiver::start(
+        setup,
+        Arc::new(Clock(Instant::now())),
+        None,
+        LiveData::new(),
+        None,
+    )
+    .expect("a receiver")
 }
 
 /// Waits up to 5 s for `check`.
@@ -538,6 +551,7 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         &setup("Keys", &sender),
         Arc::new(Clock(started)),
         Some(Arc::clone(&midi)),
+        LiveData::new(),
         None,
     )
     .expect("a receiver");
@@ -620,4 +634,153 @@ fn the_profile_reads_each_senders_playout() {
     let input = &receiver.profile().inputs[0];
     assert_eq!(input.sample_rate, 48_000);
     assert_eq!(input.lead_ms.get(), 20.0);
+}
+
+impl FakeSender {
+    /// Sends one state piece to `to`.
+    fn state(&self, to: SocketAddr, piece: &wire::StatePiece<'_>) {
+        let mut out = [0; wire::MAX_PACKET_BYTES];
+        let n = wire::write_state(&mut out, piece).expect("a packet");
+        self.socket.send_to(&out[..n], to).expect("sent");
+    }
+}
+
+fn piece<'a>(
+    stream: u32,
+    id: u32,
+    i: u8,
+    n: u8,
+    key: &'a str,
+    data: &'a [u8],
+) -> wire::StatePiece<'a> {
+    wire::StatePiece {
+        stream_id: stream,
+        message_id: id,
+        piece: i,
+        pieces: n,
+        key,
+        data,
+    }
+}
+
+/// ADR-0171 decision 1: an accepted sender's state is used by default, and counted and
+/// dropped while "Use this sender's state" is off for it.
+#[test]
+fn a_senders_state_is_dropped_while_its_switch_is_off() {
+    let sender = FakeSender::new();
+    let data = LiveData::new();
+    let mut setup = setup("Bitwig", &sender);
+    assert!(setup.accepted[0].uses_state(), "on once accepted");
+    setup.accepted[0] = setup.accepted[0].clone().with_state(false);
+    let receiver = Receiver::start(
+        &setup,
+        Arc::new(Clock(Instant::now())),
+        None,
+        data.clone(),
+        None,
+    )
+    .expect("a receiver");
+    sender.state(
+        receiver.local_addr(),
+        &piece(1, 1, 0, 1, "transport", b"{\"playing\":true}"),
+    );
+    assert!(eventually(|| receiver.stats().state_off == 1));
+    assert!(data.list().is_empty());
+    assert_eq!(receiver.stats().malformed, 0);
+}
+
+/// ADR-0171 decisions 1 and 2: with the switch on, as it is once a sender is accepted,
+/// whole messages reach the live data
+/// under the sender's name, a piece at a time or at once; a message that isn't JSON is
+/// counted; a new stream forgets the old one; a stopped receiver forgets them all.
+#[test]
+fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
+    let sender = FakeSender::new();
+    let data = LiveData::new();
+    let setup = setup("Bitwig", &sender);
+    let receiver = Receiver::start(
+        &setup,
+        Arc::new(Clock(Instant::now())),
+        None,
+        data.clone(),
+        None,
+    )
+    .expect("a receiver");
+    let to = receiver.local_addr();
+    let volume = data.watch(&jstream_sources::DataWatch {
+        input: Some("Bitwig".into()),
+        key: "track/0".into(),
+        field: "volume".into(),
+        color: false,
+    });
+    sender.state(to, &piece(1, 1, 0, 1, "transport", b"{\"playing\":true}"));
+    // In two pieces, the second first.
+    sender.state(to, &piece(1, 2, 1, 2, "track/0", b"0.5}"));
+    sender.state(to, &piece(1, 2, 0, 2, "track/0", b"{\"volume\":"));
+    assert!(eventually(|| receiver.stats().state == 2));
+    assert_eq!(volume.read(), jstream_sources::DataReading::Number(0.5));
+    assert_eq!(
+        data.get("Bitwig", "transport").as_deref(),
+        Some(&serde_json::json!({"playing": true}))
+    );
+    sender.state(to, &piece(1, 3, 0, 1, "mixer", b"{not json"));
+    assert!(eventually(|| receiver.stats().state_dropped == 1));
+    assert_eq!(
+        data.list()[0].1,
+        vec!["track/0".to_owned(), "transport".to_owned()]
+    );
+    // The sender starts again: what it sent before is gone.
+    sender.state(to, &piece(2, 1, 0, 1, "clock", b"{\"tempo\":120}"));
+    assert!(eventually(|| receiver.stats().state == 3));
+    assert_eq!(
+        data.list(),
+        vec![("Bitwig".to_owned(), vec!["clock".to_owned()])]
+    );
+    assert_eq!(volume.read(), jstream_sources::DataReading::Absent);
+    drop(receiver);
+    assert!(data.list().is_empty());
+}
+
+/// The media clock, moved on by hand on top of real time.
+struct Shifted(Instant, Arc<AtomicU64>);
+
+impl MediaClock for Shifted {
+    fn timebase(&self) -> Timebase {
+        Timebase::NANOS
+    }
+
+    fn now(&self) -> MediaTime {
+        let ns = u64::try_from(self.0.elapsed().as_nanos()).unwrap_or(u64::MAX / 2)
+            + self.1.load(Ordering::Relaxed);
+        MediaTime::new(i64::try_from(ns).unwrap_or(i64::MAX), Timebase::NANOS)
+    }
+}
+
+/// #1597 review B1: a key that expired after a gap comes back with the sender's next
+/// resend of the same message, rather than staying absent until the message changes.
+#[test]
+fn an_expired_key_comes_back_with_its_next_resend() {
+    let sender = FakeSender::new();
+    let data = LiveData::new();
+    let setup = setup("Bitwig", &sender);
+    let shift = Arc::new(AtomicU64::new(0));
+    let receiver = Receiver::start(
+        &setup,
+        Arc::new(Shifted(Instant::now(), Arc::clone(&shift))),
+        None,
+        data.clone(),
+        None,
+    )
+    .expect("a receiver");
+    let to = receiver.local_addr();
+    let track = piece(1, 1, 0, 1, "track/0", b"{\"name\":\"Drums\"}");
+    sender.state(to, &track);
+    assert!(eventually(|| data.get("Bitwig", "track/0").is_some()));
+    // Four seconds pass with nothing resent: the key goes.
+    shift.store(4_000_000_000, Ordering::Relaxed);
+    assert!(eventually(|| data.get("Bitwig", "track/0").is_none()));
+    // The resend of the same message brings it back.
+    sender.state(to, &track);
+    assert!(eventually(|| data.get("Bitwig", "track/0").is_some()));
+    assert_eq!(receiver.stats().state, 2);
 }
