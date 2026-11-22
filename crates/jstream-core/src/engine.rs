@@ -2213,6 +2213,7 @@ impl Engine {
                 Action::SceneSwitchAndWatch {
                     scene_id,
                     preset_id,
+                    via,
                     strip,
                 },
         } = call
@@ -2226,6 +2227,7 @@ impl Engine {
                 action: Action::SceneSwitch {
                     scene_id,
                     preset_id,
+                    via,
                 },
             };
             return match self.execute(client_id, request_id, switch, previews) {
@@ -5705,6 +5707,7 @@ impl State {
                     run,
                     by_item: true,
                     from_camera,
+                    via: Vec::new(),
                 }),
             );
         }
@@ -5765,8 +5768,16 @@ impl State {
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
+                via,
             } => {
-                self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
+                self.switch(
+                    client_id,
+                    request_id,
+                    scene_id,
+                    preset_id.as_ref(),
+                    via,
+                    wake,
+                )?;
                 return Ok(CallResult::action());
             }
             Action::SceneZoomCamera { scene_id, steps } => {
@@ -6090,10 +6101,12 @@ impl State {
         request_id: &RequestId,
         scene_id: SceneId,
         named: Option<&TransitionPresetId>,
+        via: Vec<SceneId>,
         wake: &mut Vec<Waker>,
     ) -> Result<(), ProtocolError> {
         self.switched_at = None;
         studio::exists(self.graph.state(), &scene_id)?;
+        transition::check_via(self.graph.state(), &scene_id, &via)?;
         let from_scene = self.studio.program().cloned();
         let (preset_id, run) =
             transition::resolve(&self.graph, from_scene.as_ref(), &scene_id, named)?;
@@ -6149,6 +6162,8 @@ impl State {
                     run,
                     by_item,
                     from_camera,
+                    // Only a Move within the family follows a path (ADR-0166 decision 2).
+                    via: if by_item { via } else { Vec::new() },
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
@@ -6274,6 +6289,7 @@ impl State {
                     run,
                     by_item: true,
                     from_camera,
+                    via: Vec::new(),
                 }),
             );
         }
@@ -6305,6 +6321,7 @@ impl State {
             },
             by_item: true,
             from_camera: transition::camera_of(&self.graph, program),
+            via: Vec::new(),
         };
         let Self {
             graph,
@@ -7607,6 +7624,7 @@ fn preset_run(
         unmatched,
         stagger_ms: 0,
         stinger: None,
+        orbit: false,
     })
 }
 

@@ -97,6 +97,7 @@ fn three_tracks() -> (Engine, crate::InProcessControl) {
         action: Action::SceneSwitch {
             scene_id: SceneId::new("p"),
             preset_id: None,
+            via: Vec::new(),
         },
     }))
     .expect("switch");
@@ -189,6 +190,7 @@ fn three_placed_scenes_switch_independently() {
         action: Action::SceneSwitch {
             scene_id: SceneId::new("j"),
             preset_id: None,
+            via: Vec::new(),
         },
     }))
     .expect("switch");
@@ -246,6 +248,7 @@ fn the_placing_scenes_keyframe_wins_where_it_overrides() {
         action: Action::SceneSwitch {
             scene_id: SceneId::new("pk"),
             preset_id: None,
+            via: Vec::new(),
         },
     }))
     .expect("switch");
@@ -455,6 +458,7 @@ fn a_switch_on_the_program_family_starts_no_move() {
         action: Action::SceneSwitch {
             scene_id: SceneId::new("gk"),
             preset_id: None,
+            via: Vec::new(),
         },
     }))
     .expect("switch");

@@ -270,13 +270,13 @@ pub fn scene_edits(
                 hotkeys::label(chord)
             ));
         }
-        // A rebind keeps the preset the old binding switched with, and its labels
-        // (ADR-0133).
+        // A rebind keeps the preset the old binding switched with, the keyframes it
+        // passes through (ADR-0166 decision 2) and its labels (ADR-0133).
         let old = collection.scene_hotkey(scene_id);
-        let preset_id = old.and_then(|b| match b.action() {
-            Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
-            _ => None,
-        });
+        let (preset_id, via) = match old.and_then(|b| b.action()) {
+            Some(Action::SceneSwitch { preset_id, via, .. }) => (preset_id, via),
+            _ => (None, Vec::new()),
+        };
         let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
             edits.push(Edit::HotkeyClear { chord });
@@ -287,6 +287,7 @@ pub fn scene_edits(
                 action: Action::SceneSwitch {
                     scene_id: scene_id.clone(),
                     preset_id,
+                    via,
                 },
             });
             if !labels.is_empty() {
@@ -1068,6 +1069,7 @@ mod tests {
         Action::SceneSwitch {
             scene_id: SceneId::new(id),
             preset_id: None,
+            via: Vec::new(),
         }
     }
 
@@ -1634,12 +1636,14 @@ mod tests {
         assert_eq!(with_swatch(None, "#ff0000"), "#ff0000");
     }
 
-    /// Rebinding a scene's hotkey keeps the preset its old binding switched with.
+    /// Rebinding a scene's hotkey keeps the preset its old binding switched with, and
+    /// the keyframes it passes through (ADR-0166 decision 2).
     #[test]
     fn a_rebind_keeps_the_binding_s_preset() {
         let fade = Action::SceneSwitch {
             scene_id: SceneId::new("a"),
             preset_id: Some(TransitionPresetId::new("fade")),
+            via: vec![SceneId::new("k")],
         };
         let c = Collection {
             hotkeys: vec![HotkeyBinding::new(Chord::new("F1"), &fade)],

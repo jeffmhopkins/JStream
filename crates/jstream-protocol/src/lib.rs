@@ -179,9 +179,9 @@ pub use timeline::{
     check_timeline_id,
 };
 pub use transition::{
-    Bezier, CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, KeyframeTiming,
-    MAX_BEZIER_OVERSHOOT, MAX_DELAY_MS, MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER,
-    TransitionEffect, TransitionPresetInfo, TransitionStarted, TransitionsInfo,
+    Bezier, CAMERA_ORBIT, CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition,
+    KeyframeTiming, MAX_BEZIER_OVERSHOOT, MAX_DELAY_MS, MAX_DURATION_MS, MAX_STAGGER_MS, MAX_VIA,
+    MOVE, STINGER, TransitionEffect, TransitionPresetInfo, TransitionStarted, TransitionsInfo,
     builtin_kinds as builtin_transition_kinds, check_preset_timing, initial_preset,
 };
 pub use values::{

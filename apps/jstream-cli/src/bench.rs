@@ -955,6 +955,7 @@ impl Plan {
                 Action::SceneSwitch {
                     scene_id: program.clone(),
                     preset_id: Some(TransitionPresetId::new("cut")),
+                    via: Vec::new(),
                 },
             );
         }
@@ -1081,6 +1082,7 @@ fn measure(
             Action::SceneSwitch {
                 scene_id: scene.clone(),
                 preset_id: Some(TransitionPresetId::new("cut")),
+                via: Vec::new(),
             },
         )?;
     }
@@ -1262,6 +1264,7 @@ fn switch(
             scene_id: scene.clone(),
             preset_id: Some(TransitionPresetId::new(options.preset.clone())),
             strip: FrameStrip::new(6, 150),
+            via: Vec::new(),
         },
     );
     let saved = watched.and_then(|result| match result {

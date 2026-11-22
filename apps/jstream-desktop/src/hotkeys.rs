@@ -350,6 +350,7 @@ mod tests {
         Action::SceneSwitch {
             scene_id: SceneId::new(scene),
             preset_id: None,
+            via: Vec::new(),
         }
     }
 

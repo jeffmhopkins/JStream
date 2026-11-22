@@ -1653,6 +1653,14 @@ pub enum Action {
     /// undone, and emits `studio.changed` naming the preset it used, which `studio.get`
     /// reads back. Switching to the scene already on program succeeds and emits nothing.
     /// Fails with `not_found` for a scene or a preset not in the collection.
+    ///
+    /// `via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members
+    /// of one family passes through on its way, in order: each value follows one smooth
+    /// curve through every stop, so it neither stops nor kinks at a middle keyframe, and
+    /// the preset's timing covers the whole path. Each entry is a member of `scene_id`'s
+    /// family other than `scene_id`, at most eight of them, none repeating the one
+    /// before it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing
+    /// scene). A Fade, a cut, a stinger or a switch from outside the family ignores it.
     #[serde(rename = "scene.switch")]
     SceneSwitch {
         /// The scene to put on program.
@@ -1660,6 +1668,9 @@ pub enum Action {
         /// The preset to use, overriding the scenes' and the default.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preset_id: Option<TransitionPresetId>,
+        /// Keyframes of the same family the Move passes through first, in order.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        via: Vec<SceneId>,
     },
     /// `scene.switch`, then a frame sheet of the program mix from the switch on (since
     /// 0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a
@@ -1675,6 +1686,9 @@ pub enum Action {
         /// The preset to use, overriding the scenes' and the default.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preset_id: Option<TransitionPresetId>,
+        /// Keyframes the Move passes through first, as `scene.switch` takes them.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        via: Vec<SceneId>,
         /// When to take the pictures, counted from the switch.
         #[serde(flatten)]
         strip: FrameStrip,
@@ -2365,16 +2379,20 @@ impl Action {
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
+                via,
             }
             | Action::SceneSwitchAndWatch {
                 scene_id,
                 preset_id,
+                via,
                 ..
             } => {
                 let mut named = vec![(EntityKind::Scene, scene_id.as_str())];
                 if let Some(preset_id) = preset_id {
                     named.push((EntityKind::Transition, preset_id.as_str()));
                 }
+                // A path's stops are named too (ADR-0166 decision 2).
+                named.extend(via.iter().map(|id| (EntityKind::Scene, id.as_str())));
                 named
             }
             Action::StudioSetPreview { scene_id }
