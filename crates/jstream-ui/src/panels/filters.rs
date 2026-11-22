@@ -23,6 +23,7 @@ use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::custom_shader::{self, ShaderEditor};
+use crate::panels::device_preview::{SavedPreview, Shows};
 use crate::panels::filter_presets::{preset_patch, presets};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
@@ -31,9 +32,9 @@ use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
     Action, Edit, EffectsSpace, FOLLOW_POINTER_KIND, FilterChain, FilterChains, FilterId,
-    FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor, KindSummary, MAX_CHAIN_FILTERS,
-    OutputKind, OutputState, OverrideField, ParamType, Query, QueryResult, Reference, Rev, SceneId,
-    Settings, SourceId, SourceInfo, SourceKind,
+    FilterInfo, FilterOwner, HistoryOp, ItemId, KindCategory, KindDescriptor, KindSummary,
+    MAX_CHAIN_FILTERS, OutputKind, OutputState, OverrideField, ParamType, Query, QueryResult,
+    Reference, Rev, SceneId, Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -1986,6 +1987,80 @@ pub fn restore_patch(now: &Settings, base: &Settings, touched: &HashSet<String>)
 /// One tab of the Filters window's scope switcher: its label and the chains it shows.
 pub type Scope = (&'static str, FilterOwner);
 
+/// The undo or redo a key press asks for: Ctrl (or Cmd) with Z undoes, with Shift as
+/// well, or with Y, redoes.
+pub fn history_key(key: &str, command: bool, shift: bool) -> Option<HistoryOp> {
+    match key {
+        "z" | "Z" if command && shift => Some(HistoryOp::Redo),
+        "z" | "Z" if command => Some(HistoryOp::Undo),
+        "y" | "Y" if command => Some(HistoryOp::Redo),
+        _ => None,
+    }
+}
+
+/// Whether a key press lands in a field that keeps its own undo: text, a number or a
+/// select, but not a range or a checkbox.
+fn typing_in(event: &leptos::ev::KeyboardEvent) -> bool {
+    use leptos::wasm_bindgen::JsCast;
+    let Some(element) = event
+        .target()
+        .and_then(|t| t.dyn_into::<leptos::web_sys::Element>().ok())
+    else {
+        return false;
+    };
+    match element.tag_name().as_str() {
+        "TEXTAREA" | "SELECT" => true,
+        "INPUT" => !matches!(
+            element.get_attribute("type").as_deref(),
+            Some("range" | "checkbox" | "radio" | "button" | "color")
+        ),
+        _ => element.has_attribute("contenteditable"),
+    }
+}
+
+/// Where `filter_id` sits in `owner`'s chains: its index and its chain's length.
+pub fn chain_place(
+    collection: &Collection,
+    owner: &FilterOwner,
+    filter_id: &FilterId,
+) -> Option<(usize, usize)> {
+    let chains = collection.chains(owner)?;
+    [&chains.video, &chains.audio]
+        .into_iter()
+        .find_map(|chain| {
+            chain
+                .iter()
+                .position(|f| f.filter_id == *filter_id)
+                .map(|at| (at, chain.len()))
+        })
+}
+
+/// The index a filter at `at` in a chain of `len` moves to `delta` places on, if it
+/// stays in the chain.
+pub fn stepped(at: usize, len: usize, delta: i64) -> Option<u32> {
+    let to = i64::try_from(at).ok()?.checked_add(delta)?;
+    let to = usize::try_from(to).ok().filter(|to| *to < len)?;
+    u32::try_from(to).ok()
+}
+
+/// What the Filters window shows above a chain of `owner`'s: the source, when it has a
+/// picture; the scene, for a scene's chain or an item's, which is drawn in its scene;
+/// nothing for the program or an output.
+pub fn shown_by(collection: &Collection, owner: &FilterOwner) -> Option<Shows> {
+    match owner {
+        FilterOwner::Source { source_id } => owner_chains(collection, owner)
+            .0
+            .then(|| Shows::Source(source_id.clone())),
+        FilterOwner::Scene { scene_id } | FilterOwner::Keyframe { scene_id, .. } => {
+            Some(Shows::Scene(scene_id.clone()))
+        }
+        FilterOwner::Item { item_id } => collection
+            .item(item_id)
+            .map(|(scene, _)| Shows::Scene(scene.scene_id.clone())),
+        _ => None,
+    }
+}
+
 /// The Filters window's scopes for `owner`, opened with `scene` shown and `item`
 /// selected: the selected item's source ("Source"), its own effects ("This item", for a
 /// picture) and the shown scene's chain ("Scene"), so each is one click from the others.
@@ -2148,39 +2223,6 @@ impl FilterUndo {
             opened: StoredValue::new(opened),
             following: StoredValue::new(following),
         }
-    }
-
-    /// Adds `target`, a filter the batch that made revision `at` just added and the
-    /// collection may not hold yet, to what the dialog opened with once it arrives, so
-    /// Cancel puts it back as added.
-    pub fn adopt_added(self, target: Target, at: Rev) {
-        let studio = expect_context::<Studio>();
-        let FilterUndo { opened, following } = self;
-        let adopted = StoredValue::new(false);
-        Effect::new(move |_| {
-            let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
-            if adopted.get_value() || rev < Some(at) {
-                return;
-            }
-            adopted.set_value(true);
-            let Some(chains) = untrack(|| {
-                studio
-                    .collection
-                    .with(|c| c.as_ref()?.chains(&target.owner).map(Cow::into_owned))
-            }) else {
-                return;
-            };
-            opened.update_value(|opened| adopt(opened, &target, &chains));
-            // An add to a keyframe that followed the item gave it its own effects
-            // before the dialog did, which Cancel keeps, as it keeps the filter.
-            untrack(|| {
-                studio.collection.with(|c| {
-                    if let Some(c) = c.as_ref() {
-                        following.update_value(|f| adopt_following(f, c, &target.owner));
-                    }
-                })
-            });
-        });
     }
 
     /// The edits that put back every filter edit the dialog sent.
@@ -2472,9 +2514,11 @@ pub fn window_restore(
 }
 
 /// The Filters window (spec-workspace.md 6.3, after OBS's): the scope switcher across the
-/// top, the chain on the left and the selected filter's settings on the right, drawn
-/// while it is open. It doesn't dim the canvas, so the picture stays in view. Changes
-/// apply at once; Cancel or Escape puts back what it did ([`window_restore`]), OK keeps it.
+/// top, the chain on the left over a bar of Add, Remove, Move up and Move down, and on
+/// the right the chain owner's picture over the selected filter's settings, drawn while
+/// it is open. It doesn't dim the canvas, so the picture stays in view. Changes apply at
+/// once and are undoable steps: Ctrl+Z and Ctrl+Shift+Z undo and redo them from the
+/// window, and Close, Escape and × only close it.
 #[component]
 pub fn FilterSettings() -> impl IntoView {
     let dialogs = expect_context::<FilterDialogs>();
@@ -2505,26 +2549,11 @@ fn WindowBody(
             })
         })
     };
-    // Each scope's chains as the window opened, and from now on every filter edit it
-    // sends, which Cancel puts back.
-    let owners: Vec<FilterOwner> = scopes.iter().map(|(_, o)| o.clone()).collect();
-    let undo = FilterUndo::begin(&owners);
     let scope = RwSignal::new(owner.clone());
     let selected = RwSignal::new(first);
     // A just-added filter may not be in the collection yet: the window waits for it
     // until a state at or after the batch's revision lacks it.
     let added_at = RwSignal::new(dialogs.added_at.get_untracked());
-    // Opened on a filter just added, which the collection may not hold yet: it joins
-    // what the window opened with once it arrives, so Cancel puts it back as added.
-    if let (Some(at), Some(filter_id)) = (added_at.get_untracked(), selected.get_untracked()) {
-        undo.adopt_added(
-            Target {
-                owner: owner.clone(),
-                filter_id,
-            },
-            at,
-        );
-    }
     // A filter the Add filter dialog over the window just added: the window shows it.
     Effect::new(move |_| {
         if let Some((filter_id, rev)) = dialogs.landed.get() {
@@ -2561,12 +2590,125 @@ fn WindowBody(
             selected.set(next);
         }
     });
-    let cancel = move || {
-        let edits = undo.restore();
-        if let (false, Some(s)) = (edits.is_empty(), session.get()) {
+    // Ctrl+Z and Ctrl+Shift+Z (or Ctrl+Y) undo and redo from the window, as on the
+    // canvas, which a dialog keeps the keyboard from; a text field keeps its own.
+    let history_keys = move |event: leptos::ev::KeyboardEvent| {
+        let Some(op) = history_key(
+            &event.key(),
+            event.ctrl_key() || event.meta_key(),
+            event.shift_key(),
+        ) else {
+            return;
+        };
+        if typing_in(&event) {
+            return;
+        }
+        event.prevent_default();
+        let Some(s) = session.get() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(error) = crate::canvas::model::history(&*s.control, op).await
+                && !crate::canvas::model::is_history_empty(&error)
+            {
+                studio.problem.try_set(Some(error.to_string()));
+            }
+        });
+    };
+    // The selected filter's chain and place in it, for the bar's Move up and Move down.
+    let place = Memo::new(move |_| {
+        let owner = scope.get();
+        let filter_id = selected.get()?;
+        studio
+            .collection
+            .with(|c| c.as_ref().and_then(|c| chain_place(c, &owner, &filter_id)))
+    });
+    let send = move |edits: Vec<Edit>| {
+        if let Some(s) = session.get() {
+            dialogs.sent(&edits);
             studio.apply(&s, edits);
         }
-        close();
+    };
+    let step = move |delta: i64| {
+        let (Some(filter_id), Some((at, len))) = (selected.get_untracked(), place.get_untracked())
+        else {
+            return;
+        };
+        if let Some(index) = stepped(at, len, delta) {
+            send(vec![Edit::FilterReorder {
+                owner: scope.get_untracked(),
+                filter_id,
+                index,
+            }]);
+        }
+    };
+    let can_add = move || {
+        let owner = scope.get();
+        studio.collection.with(|c| {
+            c.as_ref().is_some_and(|c| {
+                let (video, audio) = owner_chains(c, &owner);
+                video || audio
+            })
+        })
+    };
+    // The bar under the list, as OBS's Filters window lays it out: Add and Remove, then
+    // Move up and Move down, the tree panels' tool bar (`.tool-bar`).
+    let tool = move |label: &'static str,
+                     icon: &'static str,
+                     gap: bool,
+                     off: Signal<bool>,
+                     run: Callback<()>| {
+        view! {
+            <button
+                type="button"
+                class="tool"
+                class:gap=gap
+                title=label
+                aria-label=label
+                disabled=move || off.get()
+                on:click=move |_| run.run(())
+            >
+                <Icon name=icon size=15 />
+            </button>
+        }
+    };
+    let tools = view! {
+        <div class="tool-bar filters-tools" role="toolbar" aria-label="Filter tools">
+            {tool("Add filter…", "plus", false, Signal::derive(move || !can_add()), Callback::new(move |()| {
+                dialogs.add(scope.get_untracked());
+            }))}
+            {tool("Remove filter", "trash", false, Signal::derive(move || place.with(Option::is_none)), Callback::new(move |()| {
+                if let Some(filter_id) = selected.get_untracked() {
+                    send(vec![Edit::FilterRemove {
+                        owner: scope.get_untracked(),
+                        filter_id,
+                    }]);
+                }
+            }))}
+            {tool(
+                "Move up",
+                "up",
+                true,
+                Signal::derive(move || place.get().is_none_or(|(at, len)| stepped(at, len, -1).is_none())),
+                Callback::new(move |()| step(-1)),
+            )}
+            {tool(
+                "Move down",
+                "down",
+                false,
+                Signal::derive(move || place.get().is_none_or(|(at, len)| stepped(at, len, 1).is_none())),
+                Callback::new(move |()| step(1)),
+            )}
+        </div>
+    };
+    // The scope owner's picture: a source, or the scene a scene's or an item's chain
+    // draws in; an output's chains have none.
+    let preview = move || {
+        let owner = scope.get();
+        let shows = studio
+            .collection
+            .with_untracked(|c| c.as_ref().and_then(|c| shown_by(c, &owner)))?;
+        Some(view! { <div class="filters-preview"><SavedPreview shows=shows /></div> })
     };
     let name = studio.collection.with_untracked(|c| {
         c.as_ref()
@@ -2622,22 +2764,7 @@ fn WindowBody(
                 .map(|c| owner_chains(c, &owner))
                 .unwrap_or_default()
         });
-        let add = {
-            let owner = owner.clone();
-            move |_| dialogs.add(owner.clone())
-        };
-        let effects = matches!(
-            owner,
-            FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
-        );
-        view! {
-            <Chains owner=owner video=video audio=audio pick=selected />
-            {(video || audio).then(|| view! {
-                <button type="button" class="filters-add" on:click=add>
-                    {if effects { "+ Add effect…" } else { "+ Add filter…" }}
-                </button>
-            })}
-        }
+        view! { <Chains owner=owner video=video audio=audio pick=selected /> }
     };
     // The selected filter once the chain holds it: a just-added one may arrive later.
     let shown = Memo::new(move |_| {
@@ -2652,21 +2779,21 @@ fn WindowBody(
                 <FilterPane target=Target { owner, filter_id } />
             }
             .into_any(),
-            None => view! { <p class="placeholder">"No filter selected. Add one on the left."</p> }
+            None => view! { <p class="placeholder">"No filter selected. Add one with + below the list."</p> }
                 .into_any(),
         }
     };
     view! {
-        <Modal label="Filters" class="filter-dialog filters-window" cancel=cancel undimmed=true>
+        <Modal label="Filters" class="filter-dialog filters-window" cancel=close undimmed=true>
             <div class="modal-header">
                 <div class="props-head">
                     <Icon name="sliders" size=18 />
                     <div class="modal-titles">
                         <h2 class="modal-title">"Filters"</h2>
-                        <span class="modal-sub">{format!("For “{name}”")}</span>
+                        <span class="modal-sub">{name}</span>
                     </div>
                 </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| cancel()>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
                     "×"
                 </button>
             </div>
@@ -2675,13 +2802,16 @@ fn WindowBody(
                     <div class="segmented" role="tablist" aria-label="Filter scope">{tabs}</div>
                 </div>
             })}
-            <div class="filters-window-body">
-                <div class="filters-window-list">{chains}</div>
-                <div class="filters-window-pane">{pane}</div>
+            <div class="filters-window-body" on:keydown=history_keys>
+                <div class="filters-window-side">
+                    <div class="filters-window-list">{chains}</div>
+                    {tools}
+                </div>
+                <div class="filters-window-pane">{preview}{pane}</div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="secondary" on:click=move |_| cancel()>"Cancel"</button>
-                <button type="button" class="primary" data-primary on:click=move |_| close()>"OK"</button>
+                <span class="modal-note">"Changes apply live · Ctrl+Z undoes"</span>
+                <button type="button" class="secondary" data-primary on:click=move |_| close()>"Close"</button>
             </div>
         </Modal>
     }
@@ -3164,14 +3294,36 @@ fn FilterPane(target: Target) -> impl IntoView {
             })
         })
         .flatten();
+    // The ⋯ menu: Defaults and Remove, as OBS's filter context menu holds them. Escape
+    // closes it, not the dialog; leaving it closes it too.
+    let more = RwSignal::new(false);
+    let more_keys = move |event: leptos::ev::KeyboardEvent| {
+        if event.key() == "Escape" && more.get_untracked() {
+            event.prevent_default();
+            event.stop_propagation();
+            more.set(false);
+        }
+    };
+    let more_blur = move |event: leptos::ev::FocusEvent| {
+        use leptos::wasm_bindgen::JsCast;
+        let inside = event
+            .related_target()
+            .and_then(|t| t.dyn_into::<leptos::web_sys::Node>().ok())
+            .zip(
+                event
+                    .current_target()
+                    .and_then(|t| t.dyn_into::<leptos::web_sys::Node>().ok()),
+            )
+            .is_some_and(|(to, menu)| menu.contains(Some(&to)));
+        if !inside {
+            more.set(false);
+        }
+    };
     let label = format!("{name} settings");
     view! {
         <div class="filter-pane" role="group" aria-label=label>
             <div class="filter-pane-head">
-                <div class="modal-titles">
-                    <span class="filter-pane-title">{name}</span>
-                    <span class="modal-sub filter-pane-sub">{sub}</span>
-                </div>
+                <span class="filter-pane-title" title=sub>{name}</span>
                 <button
                     type="button"
                     role="switch"
@@ -3183,18 +3335,37 @@ fn FilterPane(target: Target) -> impl IntoView {
                 >
                     <span class="switch-knob"></span>
                 </button>
+                <div class="filter-more" on:keydown=more_keys on:focusout=more_blur>
+                    <button
+                        type="button"
+                        class="filter-more-button"
+                        aria-label="More for this filter"
+                        title="More"
+                        aria-haspopup="menu"
+                        aria-expanded=move || more.get().to_string()
+                        on:click=move |_| more.update(|m| *m = !*m)
+                    >
+                        "⋯"
+                    </button>
+                    <Show when=move || more.get()>
+                        <div class="filter-more-menu" role="menu" aria-label="Filter">
+                            <button type="button" role="menuitem" on:click=move |e| { more.set(false); defaults(e); }>
+                                "Defaults"
+                            </button>
+                            <button type="button" role="menuitem" class="danger" on:click=move |e| { more.set(false); remove(e); }>
+                                "Remove"
+                            </button>
+                        </div>
+                    </Show>
+                </div>
             </div>
             <div class="filter-dialog-body">
                 {(!hint.is_empty()).then(|| view! { <p class="filter-hint">{hint}</p> })}
+                {shader_button}
                 {preset_picker}
                 {form}
                 {zoom_keys}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
-            </div>
-            <div class="filter-pane-foot">
-                <button type="button" class="secondary danger" on:click=remove>"Remove"</button>
-                <button type="button" class="secondary" on:click=defaults>"Defaults"</button>
-                {shader_button}
             </div>
             {shader_editor}
         </div>
@@ -4397,6 +4568,20 @@ mod tests {
             ),
             [("Output", FilterOwner::Master)]
         );
+        // What the window shows above each: the webcam source itself, the scene for the
+        // scene's chain and for the item's effects, nothing for an audio-only source or
+        // the program.
+        assert_eq!(
+            shown_by(&collection, &webcam),
+            Some(Shows::Source(SourceId::new("webcam")))
+        );
+        assert_eq!(
+            shown_by(&collection, &scene_chain),
+            Some(Shows::Scene(middle.clone()))
+        );
+        assert_eq!(shown_by(&collection, &cam), Some(Shows::Scene(middle.clone())));
+        assert_eq!(shown_by(&collection, &mic_source), None);
+        assert_eq!(shown_by(&collection, &FilterOwner::Master), None);
     }
 
     /// An item's effects in a keyframe scene (FL-09, ADR-0088): the keyframe's owner, which
@@ -5149,5 +5334,20 @@ mod tests {
         );
         // Nothing sent and nothing changed: nothing to put back.
         assert!(restore_patch(&base, &base, &HashSet::new()).is_empty());
+    }
+
+    #[test]
+    fn the_window_undoes_on_ctrl_z_and_steps_a_filter_within_its_chain() {
+        assert_eq!(history_key("z", true, false), Some(HistoryOp::Undo));
+        assert_eq!(history_key("Z", true, true), Some(HistoryOp::Redo));
+        assert_eq!(history_key("y", true, false), Some(HistoryOp::Redo));
+        assert_eq!(history_key("z", false, false), None, "a plain z is typing");
+        assert_eq!(history_key("x", true, false), None);
+        // Move up and Move down stay inside the chain.
+        assert_eq!(stepped(0, 3, -1), None);
+        assert_eq!(stepped(0, 3, 1), Some(1));
+        assert_eq!(stepped(2, 3, 1), None);
+        assert_eq!(stepped(2, 3, -1), Some(1));
+        assert_eq!(stepped(0, 1, 1), None);
     }
 }

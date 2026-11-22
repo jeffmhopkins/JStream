@@ -1880,17 +1880,37 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 /* The Filters window: scope tabs, the chain on the left, the selected filter's settings on
    the right. Its backdrop is clear, so the canvas shows each change. */
 .modal-backdrop.undimmed { background: transparent; }
-.modal.filters-window { width: var(--dialog-l); height: min(620px, 100%); }
+.modal.filters-window { width: var(--dialog-l); height: min(660px, 100%); }
 .filters-scopes { padding: 10px 16px; border-bottom: 1px solid var(--line); }
-.filters-window-body { display: grid; grid-template-columns: 300px 1fr; flex: 1 1 auto; min-height: 0; }
+.filters-window-body { display: grid; grid-template-columns: 280px 1fr; flex: 1 1 auto; min-height: 0; }
 .filters-window-list { display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow: auto; border-right: 1px solid var(--line); }
+/* The window's list sits over OBS's bar of Add, Remove, Move up and Move down. */
+.filters-window-side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.filters-window-side > .filters-window-list { flex: 1 1 auto; border-right: 0; }
+.tool-bar.filters-tools { position: static; margin: 0; padding: 8px 10px; }
+.filters-tools .tool[aria-label="Remove filter"]:not(:disabled) { color: var(--danger-text); }
 .filters-window-pane { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
 .filters-window-pane > .placeholder { padding: 16px; }
+.filters-preview { flex: none; padding: 14px 16px 0; }
+.filters-preview .props-preview { height: 160px; }
 .filter-pane { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
-.filter-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px 0; }
-.filter-pane-title { font-size: 14px; font-weight: 600; }
+.filter-pane-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px 0; }
+.filter-pane-title { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 600; }
 .filter-pane .filter-dialog-body { max-height: none; flex: 1 1 auto; }
-.filter-pane-foot { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+/* In the pane a slider takes the row's width, its number after it. */
+.filter-pane .field.prop > label { grid-template-columns: 120px minmax(0, 1fr); }
+.filter-pane .field.prop .control:has(> input[type="range"]) { max-width: none; }
+.filter-pane .field.prop .control > input[type="range"] { flex: 1 1 auto; }
+/* The ⋯ menu beside the switch: Defaults and Remove. */
+.filter-more { position: relative; flex: none; }
+.filter-more-button { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); font-size: 16px; line-height: 1; }
+.filter-more-button:hover, .filter-more-button[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+.filter-more-menu { position: absolute; z-index: 6; right: 0; top: calc(100% + 4px); min-width: 160px; display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--menu); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.filter-more-menu > button { height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: none; color: var(--text); text-align: left; font: inherit; }
+.filter-more-menu > button:hover, .filter-more-menu > button:focus-visible { background: var(--hover); }
+.filter-more-menu > button.danger { color: var(--danger-text); }
+/* A footer's note on its left, such as the Filters window's "Changes apply live". */
+.modal-footer .modal-note { margin-right: auto; color: var(--dim); font-size: 12px; }
 .filter.selected > .filter-row { background: var(--selected, rgba(76, 141, 255, 0.18)); }
 .filters-open { margin-left: auto; width: 26px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 5px; background: none; color: var(--muted); }
 .filters-open:hover { color: var(--text); background: var(--hover, rgba(255, 255, 255, 0.06)); }
