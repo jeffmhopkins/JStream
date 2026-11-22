@@ -272,6 +272,37 @@ impl BrowserKind {
                         json!(""),
                     )
                 },
+                ParamDescriptor {
+                    description: Some(
+                        "Also give the page one JTunnel sender's live DAW data, every key's \
+                         newest message, with jstream.data() and a data event for each key \
+                         that changes (ADR-0171)."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "A page given DAW data sees the sender's transport, mixer, clips and \
+                         notes, and a page from the web can send that anywhere."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param("page_api_data", "DAW data", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The JTunnel sender whose data the page may read, by name. Empty \
+                         gives it whichever sender has each key."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api_data")),
+                    ..param(
+                        "page_api_data_input",
+                        "DAW data sender",
+                        text(crate::page_api::MAX_DATA_INPUT as u32, false),
+                        json!(""),
+                    )
+                },
             ],
             ..kind(BROWSER, "Browser", true, true)
         })
@@ -381,8 +412,12 @@ pub(crate) fn open(
                 .zip(ctx.midi.as_ref())
                 .map(|(input, inputs)| inputs.drawn(input));
             let feed = Feed::new(grant, fps, scope);
-            match midi {
+            let feed = match midi {
                 Some(state) => feed.with_midi(state),
+                None => feed,
+            };
+            match &ctx.data {
+                Some(data) => feed.with_data(data.clone()),
                 None => feed,
             }
         }),

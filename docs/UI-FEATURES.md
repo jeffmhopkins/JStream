@@ -266,7 +266,7 @@ direction to keep the prototype's design while staying familiar to OBS users.
 | OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ✅ | Shift-click adds a row or takes it out; every selected item's row is highlighted. |
 | OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | ✅ | Add source is the dialog (DL-06), from the panel's right-click menu or its tool bar (OB-10); Del or the item menu's Remove from scene removes; the row menu's Delete source everywhere… asks with the plan's summary. |
 | OB-10 | Tool bar | Under the rows, as in OBS's Sources dock: Add source, Remove from scene, Properties, Filters, Move up, Move down. | ✅ | The same `ToolBar`. Add source opens the Add source dialog (DL-06) on the shown scene; Remove from scene and the arrows act on the selected items (the arrows as the item menu's Bring forward and Send backward, `item.reorder`), off in a keyframe as their menu entries are, and each arrow off when it would move nothing, at the top or bottom of the stack; Properties and Filters act on one selected item, as its menu's do. An empty scene says "No sources yet. Click + below, or right-click here, to add one." |
-| OB-11 | Page API badge | Beyond the prototype: a source whose page reads the engine says so on its row. | ✅ | `sources.rs`: an "API" badge on the row of each `browser` source with `page_api` on ([ADR-0124](adr/0124-page-api-read-review.md)), whose tooltip names what its page is granted, as the engine reads the settings: "Page API: clock, visibility, scenes, shared values (status.*), audio levels (Mic), tempo, MIDI (Keys)". |
+| OB-11 | Page API badge | Beyond the prototype: a source whose page reads the engine says so on its row. | ✅ | `sources.rs`: an "API" badge on the row of each `browser` source with `page_api` on ([ADR-0124](adr/0124-page-api-read-review.md)), whose tooltip names what its page is granted, as the engine reads the settings: "Page API: clock, visibility, scenes, shared values (status.*), audio levels (Mic), tempo, MIDI (Keys), DAW data (Bitwig)", and "DAW data (every sender)" when no sender is named. |
 
 <a id="inspector"></a>
 ## Inspector
@@ -544,7 +544,7 @@ not remove them; they move into the prototype's look.
   off and what it asks for that isn't granted, installs one from its package folder
   (a folder dialog in the desktop app), and
   turns a disabled one back on, and removes one after its remove dialog is confirmed
-  (`plugin.uninstall`, protocol 0.158; its folder stays on disk). Its grant dialog offers only what the plugin's manifest
+  (`plugin.uninstall`, protocol 0.163; its folder stays on disk). Its grant dialog offers only what the plugin's manifest
   asks for: `read`, always on, the other classes with what each lets it do, the hosts,
   and folders when it asks for them. It opens after an install that asks for more than
   `read`, and grants and turns on, in one step, a plugin whose update needs a grant.
