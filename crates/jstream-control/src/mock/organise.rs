@@ -344,6 +344,13 @@ impl Collection {
                 "a keyframe scene shows its parent's background",
             ));
         }
+        if options.reflections && self.scenes[si].variant_of.is_some() {
+            return Err(invalid(
+                at,
+                "reflections",
+                "a keyframe scene is drawn as its parent, whose reflections it shows",
+            ));
+        }
         let old = std::mem::replace(&mut self.scenes[si].options, options.clone());
         Ok(vec![Edit::SceneSetOptions {
             scene_id: scene_id.clone(),

@@ -1411,7 +1411,9 @@ its start with its first frame decoded.
 The **3D rendering switches** (`studio.set_rendering`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decision 1) are an application setting too, answered before the collection lock
-(`Engine::rendering_call`): each switch the call names takes its value
+(`Engine::rendering_call`): a `max_probe_resolution` that isn't one of
+`PROBE_RESOLUTIONS` is `invalid_argument` and changes nothing; otherwise each switch the
+call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
 collection lock released, saves them in the file the host named with
