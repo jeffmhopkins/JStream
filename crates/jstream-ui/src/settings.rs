@@ -2,8 +2,8 @@
 //! settings that belong to the application rather than to a scene or a selected item,
 //! with its pages listed on the left, as OBS's Settings has them.
 //!
-//! - **General** holds "Check for updates at launch" (`updates.rs`), whether to ask
-//!   before a new agent connects (`agents.rs`) and "Warm scenes" (`warm.rs`).
+//! - **General** holds "Check for updates" (`updates.rs`), "Ask before connecting" for a
+//!   new agent (`agents.rs`) and "Keep ready" with its memory limit (`warm.rs`).
 //! - **3D rendering** holds one switch per costly 3D effect, for every scene at once
 //!   (`rendering.rs`, ADR-0170 decision 1).
 //! - **Plugins** is the WASM automation plugins' list, install and permissions
