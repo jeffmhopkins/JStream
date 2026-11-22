@@ -176,12 +176,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Plugins** (`plugins.spec.js`, the Settings dialog's Plugins page, opened by File ›
   Plugins…): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
-  `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
+  `plugin.install`, `plugin.grant`, `plugin.enable` and `plugin.uninstall` from a list
+  it keeps. An install
   sends the folder and the ID suggested from its name with no grant, and, since the
   manifest asks for more than `read`, opens the grant dialog, which offers `read` ticked
   and fixed and only the classes and host asked for, and sends just what was ticked; the
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
-  granted a class and a folder and turned on in one step. The Inspector holds neither
+  granted a class and a folder and turned on in one step. Remove… opens a dialog that
+  quotes the plugin's name and says its folder stays; Cancel sends nothing, and Remove
+  sends one `plugin.uninstall` and the row goes. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
   between General, Video, 3D rendering, Audio, Plugins and Devices, and the install dialog opens
   centred over a moved Settings dialog and closes alone on Escape.

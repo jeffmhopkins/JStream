@@ -1842,6 +1842,9 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::PluginEnable {
             plugin_id: PluginId::new("plg_1"),
         },
+        Action::PluginUninstall {
+            plugin_id: PluginId::new("plg_1"),
+        },
         Action::EffectEnable {
             kind_id: "fx/blur".into(),
         },
@@ -3790,6 +3793,9 @@ pub(crate) fn events() -> Vec<Event> {
             remote_name: None,
         });
     }
+    events.push(Event::PluginUninstalled {
+        plugin_id: PluginId::new("plg_1"),
+    });
     events.push(Event::GpuDeviceLost {
         cause: "Device lost (DXGI_ERROR_DEVICE_HUNG)".into(),
         blamed: vec!["fx/blur".into()],

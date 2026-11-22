@@ -83,7 +83,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
@@ -266,6 +266,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
+  `plugin.uninstalled` (0.163),
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
@@ -371,6 +372,8 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 from its field: `MotionKind::Data`'s `color_from` (`MotionColorFrom`: a `#rrggbb` text, or
 a pick from its `palette`)
 ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 5);
+0.163 because a person can remove a WASM plugin: `plugin.uninstall`
+and the `plugin.uninstalled` event ([Plugins](#plugins));
 0.160 because a motion modifier can follow a DAW's live data:
 `MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
 `states` table, smoothed as a `midi` one is
@@ -1339,7 +1342,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   `device.revoke` (the server answers them for the client that asks), the
   `youtube.*` actions (YouTube is driven through the UI,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
-  `plugin.*` actions (a person installs and grants plugins): each is
+  `plugin.*` actions (a person installs, grants and removes plugins): each is
   `invalid_argument` on `action.type`. A scene, output, preset or item the action names
   must exist, else `not_found`. `item.show`, `item.hide` and `item.toggle` (0.80,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) are the actions that show
@@ -2394,8 +2397,8 @@ After `welcome`, the server pushes every event to every client.
   stream_id, status, health, issues}` (0.23), and `youtube.stats {output_id,
   broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
   [YouTube](#youtube).
-- `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
-  under [Plugins](#plugins).
+- `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) and
+  `plugin.uninstalled {plugin_id}` (0.163) are described under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
   `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
@@ -2547,6 +2550,14 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
+- **`plugin.uninstall {plugin_id}`** (0.163) removes an installed plugin, for a person
+  like the other plugin actions. A running plugin stops once the invocation it is in
+  returns, holding only `read` from the moment it is removed, and the engine forgets it
+  and its grant: `plugin.list` no longer
+  lists it and it isn't saved, so it doesn't come back on a restart. Its package folder
+  stays on disk, since it is the person's. An unknown plugin is `not_found`; one an
+  install or `plugin.enable` is still loading is `action_failed`, and can be removed
+  once that call answers. After it, the same ID can be installed again.
 - **`plugin.list`** lists the installed plugins for a person, ordered by ID, each a
   `PluginInfo`: `plugin_id`, `state` and `reason` as `plugin.state_changed` gives them,
   `remote_name`, `path` (its package, as installed), `request` (what its manifest asks
@@ -2565,6 +2576,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
+- **`plugin.uninstalled {plugin_id}`** (0.163) reports a plugin a person removed with
+  `plugin.uninstall`. Like `plugin.state_changed`, it is a person's: the MCP feed drops it.
 
 CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are
 not WASM plugins: the engine scans for `.clap` files and offers each effect as a

@@ -8,10 +8,13 @@
 //! the helper's process, opened once per slot on the engine's D3D12 device
 //! (`OpenSharedHandle`), checked to be a single-mip BGRA8 texture of the size the helper
 //! said, imported into wgpu, and each paint copied from it into the next of three
-//! textures the page owns, waiting for the copy before the slot goes back to the helper.
-//! The copy is submitted under the context's `SubmitLock`, so it can't take a fence wait
-//! or signal that render staged for its own submit on the same queue. The lock is let go
-//! before the wait. Nothing is read back to the CPU. The frame is `Bgra8`, premultiplied, BT.709 full
+//! textures the page owns. The link's release thread waits for the copy before the slot
+//! goes back to the helper, and only then makes it the page's latest frame; no lock a
+//! plan takes to read the frame is held while it waits, as the copy runs behind the
+//! frames render queued before it. The copy is submitted under the context's
+//! `SubmitLock`, so it can't take a fence wait or signal that render staged for its own
+//! submit on the same queue. The lock is let go before the wait. Nothing is read back to
+//! the CPU. The frame is `Bgra8`, premultiplied, BT.709 full
 //! range, stamped on arrival. A paint that can't be copied keeps the last frame and is
 //! logged once until one succeeds. `use_device` also tells the helper the device's adapter
 //! LUID; without a device, or one without a LUID, pages deliver no frames.
@@ -30,14 +33,15 @@ use windows::Win32::Graphics::Direct3D12::{ID3D12Device, ID3D12Resource};
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::System::Threading::GetCurrentProcess;
 
-use crate::link::{Frames, PageFrames, Paint};
-
-/// Textures each page writes its paints into in turn, so a frame the compositor still
-/// holds isn't written while it is drawn.
-const RING: usize = 3;
+use crate::link::{Frames, Import, PageFrames, Paint, Skipped};
 
 /// The most shared textures the helper paints a page into (its own ring).
 const HELPER_SLOTS: usize = 3;
+
+/// Textures each page writes its paints into in turn: one per copy that can be on its
+/// way (one per helper slot) and the latest frame, so while every copy publishes, a copy
+/// never writes the frame the compositor holds.
+const RING: usize = HELPER_SLOTS + 1;
 
 /// The longest the engine waits for a copy before giving up on the frame.
 const COPY_TIMEOUT: Duration = Duration::from_secs(2);
@@ -161,7 +165,7 @@ impl Frames for HelperFrames {
         Box::new(HelperPageFrames {
             device: Arc::clone(&self.device),
             process: Arc::clone(&self.process),
-            frames: Mutex::new(PageState::default()),
+            frames: Arc::new(Mutex::new(PageState::default())),
         })
     }
 }
@@ -170,7 +174,8 @@ impl Frames for HelperFrames {
 struct HelperPageFrames {
     device: Arc<DeviceSlot>,
     process: Arc<OwnedHandle>,
-    frames: Mutex<PageState>,
+    /// Never held while a copy is waited for.
+    frames: Arc<Mutex<PageState>>,
 }
 
 #[derive(Default)]
@@ -201,25 +206,26 @@ impl FrameSync for Copied {
 }
 
 impl PageFrames for HelperPageFrames {
-    /// Copies the helper's texture into the page's next ring texture and makes it the
-    /// latest frame, waiting for the copy on the GPU, as the helper reuses the texture
-    /// once this returns. A paint that can't be copied is skipped, keeping the last
-    /// frame, and logged once until a paint succeeds again.
-    fn paint(&self, paint: &Paint, pts: MediaTime) {
+    /// Submits the copy of the helper's texture into the page's next ring texture,
+    /// without waiting for it: the [`Import`] waits on the link's release thread, as the
+    /// helper reuses the texture once it has, and then makes the copy the latest frame.
+    /// A paint that can't be copied is skipped, keeping the last frame, and logged once
+    /// until a paint succeeds again.
+    fn import(&self, paint: &Paint, pts: MediaTime) -> Box<dyn Import> {
         let Some(device) = self.device.get() else {
-            return;
+            return Box::new(Skipped);
         };
         let mut frames = self.frames.lock().unwrap_or_else(PoisonError::into_inner);
         match copy(&device, &self.process, &mut frames, paint, pts) {
-            Ok(frame) => {
-                frames.latest = Some(frame);
-                frames.warned = false;
-            }
+            Ok((submitted, frame)) => Box::new(Copying {
+                device,
+                submitted,
+                frame: Some(frame),
+                frames: Arc::clone(&self.frames),
+            }),
             Err(reason) => {
-                if !frames.warned {
-                    tracing::warn!(%reason, "a browser page's paint could not be copied");
-                    frames.warned = true;
-                }
+                warn(&mut frames, &reason);
+                Box::new(Skipped)
             }
         }
     }
@@ -234,6 +240,57 @@ impl PageFrames for HelperPageFrames {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .current(current)
+    }
+}
+
+/// A copy submitted, for the release thread to wait for and publish.
+struct Copying {
+    device: Device,
+    submitted: wgpu::SubmissionIndex,
+    frame: Option<GpuFrame>,
+    frames: Arc<Mutex<PageState>>,
+}
+
+impl Import for Copying {
+    /// Waits for the copy, holding no lock: it runs after the frames render queued
+    /// before it.
+    fn wait(&mut self) -> bool {
+        let waited = self.device.device.poll(wgpu::PollType::Wait {
+            submission_index: Some(self.submitted.clone()),
+            timeout: Some(COPY_TIMEOUT),
+        });
+        match waited {
+            Ok(_) => true,
+            Err(e) => {
+                let mut frames = self.frames.lock().unwrap_or_else(PoisonError::into_inner);
+                warn(&mut frames, &format!("waiting for the copy: {e}"));
+                self.frame = None;
+                false
+            }
+        }
+    }
+
+    /// Makes the copy the latest frame, unless the page's textures were remade on
+    /// another device or at another size since it was submitted.
+    fn publish(self: Box<Self>) {
+        let mut frames = self.frames.lock().unwrap_or_else(PoisonError::into_inner);
+        if frames.generation != self.device.generation {
+            return;
+        }
+        if let Some(frame) = self.frame
+            && frames.size == (frame.info().size.width(), frame.info().size.height())
+        {
+            frames.latest = Some(frame);
+            frames.warned = false;
+        }
+    }
+}
+
+/// Logs a paint that couldn't be taken, once until one is.
+fn warn(frames: &mut PageState, reason: &str) {
+    if !frames.warned {
+        tracing::warn!(%reason, "a browser page's paint could not be copied");
+        frames.warned = true;
     }
 }
 
@@ -252,13 +309,15 @@ impl PageState {
     }
 }
 
+/// Submits the copy of `paint` into the page's next ring texture: what to wait for, and
+/// the frame it makes.
 fn copy(
     device: &Device,
     process: &OwnedHandle,
     frames: &mut PageState,
     paint: &Paint,
     pts: MediaTime,
-) -> Result<GpuFrame, String> {
+) -> Result<(wgpu::SubmissionIndex, GpuFrame), String> {
     let slot = usize::from(paint.slot);
     if slot >= HELPER_SLOTS {
         return Err(format!("the helper named texture slot {slot}"));
@@ -324,18 +383,12 @@ fn copy(
         }),
     );
     // Under the context's submit lock, so this submit can't take a wait or signal that
-    // render staged for its own (FrameSync::stage); released before the wait below.
+    // render staged for its own (FrameSync::stage); released before the wait, which the
+    // release thread does ([`Copying::wait`]).
     let submitted = {
         let _submitting = device.submit.lock();
         device.queue.submit([encoder.finish()])
     };
-    device
-        .device
-        .poll(wgpu::PollType::Wait {
-            submission_index: Some(submitted),
-            timeout: Some(COPY_TIMEOUT),
-        })
-        .map_err(|e| format!("waiting for the copy: {e}"))?;
     let info = VideoFrameInfo {
         size: frame_size,
         format: PixelFormat::Bgra8,
@@ -346,7 +399,7 @@ fn copy(
         },
         pts,
     };
-    Ok(GpuFrame::new(target, info, Arc::new(Copied)))
+    Ok((submitted, GpuFrame::new(target, info, Arc::new(Copied))))
 }
 
 /// Opens the helper's texture `handle` (an NT handle in its process) on the engine's
