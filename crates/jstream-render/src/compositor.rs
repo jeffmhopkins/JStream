@@ -135,6 +135,9 @@ pub struct Compositor {
     wipe: Wipe,
     mip_pipelines: MipPipelines,
     models: ModelRuntime,
+    /// Depth of field on models (ADR-0165): its passes and the layers a model with depth
+    /// of field is drawn into first, made on first use.
+    model_focus: ModelFocusRun,
     /// The sky backdrop's pipeline (ADR-0167), built the first time one draws.
     sky: Option<crate::sky::SkyRuntime>,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
@@ -768,7 +771,87 @@ impl Compositor {
                 chain
             });
         let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
-        errors.close(self.models.draw(&self.gpu, &self.owner, draw, target, live))
+        let drawn = self.draw_model_focused(draw, target, live);
+        errors.close(drawn)
+    }
+
+    /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
+    /// depth of field (ADR-0165), the model and its view depth are drawn into layers of
+    /// their own first, and the model's focus passes blur them into `target`. `live` is
+    /// the live texture's mip chain, as [`Self::draw_model`] made it.
+    fn draw_model_focused(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+    ) -> Result<(), RenderError> {
+        let canvas = jstream_protocol::Canvas {
+            width: target.width(),
+            height: target.height(),
+        };
+        let view = draw
+            .camera
+            .and_then(|camera| camera.view(canvas).ok())
+            .filter(|view| view.focus().is_some());
+        let Some(view) = view else {
+            return self.models.draw(&self.gpu, &self.owner, draw, target, live);
+        };
+        let (colour, depth) = self.model_focus_layers(canvas.width, canvas.height)?;
+        self.models
+            .draw(&self.gpu, &self.owner, draw, &colour, live)?;
+        let empty = Scene {
+            canvas: jstream_media::FrameSize::new(canvas.width, canvas.height).map_err(|_| {
+                RenderError::Invalid {
+                    what: "layer",
+                    detail: "the target has no pixels".into(),
+                }
+            })?,
+            background: crate::scene::Color::rgb(0.0, 0.0, 0.0),
+            items: &[],
+        };
+        self.draw_view_depth(&empty, &depth)?;
+        self.models
+            .draw_depth(&self.gpu, &self.owner, draw, &depth)?;
+        let slot = self
+            .model_focus
+            .filter
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut focus = slot.take().unwrap_or_else(|| {
+            filter::VideoFilter::of(
+                crate::model::focus::KIND,
+                Box::new(crate::model::focus::ModelFocus::default()),
+            )
+        });
+        focus.set_depth(Some(filter::ViewDepth {
+            view: Some(view),
+            ..filter::ViewDepth::new(Arc::new(depth), view.focal_px())
+        }));
+        let drawn = self.filter_into(&mut focus, &colour, target, FilterClock::default());
+        focus.set_depth(None);
+        *self
+            .model_focus
+            .filter
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(focus);
+        drawn
+    }
+
+    /// The colour and depth layers a model with depth of field is drawn into first, of
+    /// `width` by `height`, kept while the size holds.
+    fn model_focus_layers(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<(Image, Image), RenderError> {
+        if let Some((colour, depth)) = &self.model_focus.layers
+            && (colour.width(), colour.height()) == (width, height)
+        {
+            return Ok((colour.clone(), depth.clone()));
+        }
+        let layers = (self.layer(width, height)?, self.layer(width, height)?);
+        self.model_focus.layers = Some(layers.clone());
+        Ok(layers)
     }
 
     /// Draws a 3D scene's sky backdrop into `target`, a [`Self::layer`] of the canvas
@@ -1251,6 +1334,7 @@ impl Compositor {
             wipe,
             mip_pipelines,
             models,
+            model_focus: ModelFocusRun::default(),
             sky: None,
             readback_wait: std::time::Duration::ZERO,
             timer: None,
@@ -2285,4 +2369,15 @@ fn color_attachment(
             store: wgpu::StoreOp::Store,
         },
     }
+}
+
+/// The compositor's state for depth of field on models (ADR-0165).
+#[derive(Default)]
+struct ModelFocusRun {
+    /// The passes, as a filter so they draw through the filter runtime. A filter is
+    /// `Send` but not `Sync`, and the compositor must be both; only `&mut self` reaches
+    /// it, through `Mutex::get_mut`, so it never locks.
+    filter: std::sync::Mutex<Option<filter::VideoFilter>>,
+    /// The model's colour and its view depth, drawn before the passes blur them.
+    layers: Option<(Image, Image)>,
 }

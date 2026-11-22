@@ -48,7 +48,9 @@ and calls this crate.
   scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
   and their shadow maps, ADR-0151, and maybe another source's picture as its texture
   and one it reflects, `LiveTexture` and `reflection`, ADR-0107 decision 5)
-  into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
+  into a canvas-sized layer with its own depth test, blurred by its own depth when the
+  camera has a depth of field ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
+  The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
@@ -560,6 +562,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
+| Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
@@ -691,8 +694,31 @@ largest on a plane; past the edge `w` runs on beyond the corners', so the cap ke
 soft edge inside the push and it falls off whole. A vertex that blur pushes past the
 horizon, where it can't be mapped back to the plane, is pushed by a pixel instead.
 Colour is averaged in linear light, so a blur keeps the item's mean light. A 3D model's
-layer (ADR-0107, below) is placed flat, so its `dof` is zero and depth of field doesn't
-blur it yet.
+layer (ADR-0107, below) is placed flat, so its `dof` is zero: the model is blurred as
+its layer is drawn instead.
+
+**Depth of field on models** ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
+When a `ModelDraw`'s camera has a focus, `draw_model` draws the model and its view depth
+(`1 / w`, as `draw_model_depth` draws it over a cleared layer) into two layers the
+compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
+the filter runtime, as an internal filter no chain can hold. Its five passes, sharing
+`focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl` takes the
+largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose radius
+reaches each tile, `pack.wgsl` puts each pixel's `1 / w` beside its tile's reach `R`, and
+`gather.wgsl` reads 48 taps on a golden-angle spiral over a disc of radius `R`, turned
+per pixel. A tap adds its colour times `R² / (48 r²)` where its own radius `r` reaches
+the pixel, a tap farther than the pixel reaching no farther than the pixel's own radius,
+so a soft near part spreads over a sharp far one and never the reverse. Taps narrower
+than the spacing `R / √48` add nothing, and the pixel's own colour goes under what
+spread over it; taps on a sharp nearer part scale a soft farther pixel's sum up by the
+share left. Empty pixels are infinitely far, so a silhouette softens outward. Last,
+`smooth.wgsl` replaces each pixel whose own radius is 1.5 px or more by the mean of its
+5 × 5 neighbours weighted by their own softness, which evens out the gather's grain.
+Both read colours through `finite`, NaN as 0 and infinity as the half-float maximum, so
+one non-finite pixel isn't spread into a disc of dots.
+Where `R`
+is under half a pixel the pixel is copied, so a model in focus draws exactly as without
+depth of field, and a camera without one skips all of it.
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
