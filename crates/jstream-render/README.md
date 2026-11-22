@@ -401,7 +401,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    a new frame (one whose hold or info, its presentation time included, differs from
    the last one's, since a platform may reuse a hold for every frame it writes into a
    texture), not the same frame shown again. `Image::mark_changed` marks an import the
-   caller keeps outside the cache, whose texture the platform rewrites. So a source
+   caller keeps outside the cache, whose texture the platform rewrites. `Image::seen`
+   gives a caller that count with which image it is (`Seen`), and `GpuModel::seen` which
+   upload a model is (`SeenModel`), neither keeping it alive, to tell later whether what
+   it drew from has changed (the engine keeps its shadow maps by them). So a source
    drawn in 3D by several items or calls (two mixes, a nested scene) is rebuilt once per
    change, and not at all while it is unchanged. A 3D item samples its chain, which is
    always premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp`

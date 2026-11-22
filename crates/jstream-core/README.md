@@ -2172,6 +2172,16 @@ view. More than 2 such lights are logged once (`Chains::shadows_warned`). `Chain
 the maps for that run (`shadows_of`), and every receiving model of the scene draws with
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).
+A map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,
+for each scene, what its maps were last drawn of (`KeptShadows`): every card a view depth
+draws, by its picture's `jstream_render::Seen`, placement, crop and opacity, and every
+casting model `depth_models` lists, by its upload (`SeenModel`), where its item places
+it and its pose; and for each map the light's view it was drawn through and what its
+layer held after the draw. A map whose casters, light view and layer all match is left
+as it is, so a scene whose lights and casters hold still pays for its shadow maps once,
+not once a frame; a card showing a new frame, a moved item, a clip's next pose, a moved
+light or a layer the cache made again draws it
+(`a_shadow_map_is_drawn_again_only_when_what_casts_changes`).
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 7) is posed before it is drawn: `pose` writes its source's `ShownModel::pose`

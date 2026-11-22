@@ -43,12 +43,12 @@ pub use filter::{
     reads_shadows as video_filter_reads_shadows, reflection_floor as video_filter_reflection_floor,
 };
 pub use gpu::{OpenOptions, adapter_available, context_lost};
-pub use image::Image;
+pub use image::{Image, Seen};
 pub use jstream_protocol::BlendMode;
 pub use model::{
     CardDraw, Environment, GpuModel, LightKind, Lighting, LiveTexture, MAX_EMISSIVE_STRENGTH,
     MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, SHADOW_MAP_PX, SceneLight,
-    ShadowMap,
+    SeenModel, ShadowMap,
 };
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};

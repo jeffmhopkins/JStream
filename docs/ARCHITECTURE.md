@@ -1327,8 +1327,8 @@ under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene'
 lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
 spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
 `f64`; a spot or directional light may cast shadows, up to 2 a scene, each through a
-2048² map of the scene's view depth drawn from the light once a frame and sampled with a
-soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
+2048² map of the scene's view depth drawn from the light, again only when the light or
+what casts into it has changed, and sampled with a soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
 studio gradient). A model's `texture` names another source whose picture, after its
 own filters, replaces its base colour, sampled through a mip chain of the whole picture

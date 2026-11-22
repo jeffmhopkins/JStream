@@ -3623,6 +3623,75 @@ pub(crate) struct DrawnShadow {
     pub(crate) softness: f32,
 }
 
+/// What a scene's shadow maps were last drawn of, and the maps (ADR-0151 decision 3): a
+/// map is drawn again only when what casts into it, its light's view or the map itself
+/// has changed since.
+#[derive(Debug)]
+pub(crate) struct KeptShadows {
+    /// Everything that casts, in drawing order.
+    casters: Vec<Caster>,
+    /// Each map drawn: its layer, the light's view it was drawn through, and what the
+    /// layer held after the draw.
+    maps: Vec<(GpuKey, SceneCamera, jstream_render::Seen)>,
+}
+
+/// One thing a shadow map is drawn of.
+#[derive(Debug, PartialEq)]
+enum Caster {
+    /// A card: its picture as it was, and where it is placed.
+    Card {
+        image: jstream_render::Seen,
+        placement: Placement,
+        crop: Crop,
+        opacity: f32,
+    },
+    /// A model: which upload, where its item places it, and its pose.
+    Model {
+        model: jstream_render::SeenModel,
+        geometry: ItemGeometry,
+        lighting: jstream_media::model::Lighting,
+        pose: Option<Arc<[jstream_media::model::rig::Mat4]>>,
+    },
+}
+
+/// What scene `pass`'s shadow maps are drawn of at `at`: of `items` the cards a view
+/// depth draws ([`Compositor::render_view_depth`]), then the models that cast
+/// ([`depth_models`]).
+fn casters_of(
+    items: &[Item<'_>],
+    (cache, chains): (&ResourceCache<GpuKey>, &Chains),
+    (shot, pass): (&Shot, &Pass),
+    (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
+    live: &LiveParams,
+) -> Vec<Caster> {
+    let cards = items
+        .iter()
+        .filter(|item| {
+            item.visible && item.camera.is_some() && !matches!(item.placement, Placement::Layer(_))
+        })
+        .map(|item| Caster::Card {
+            image: item.image.seen(),
+            placement: item.placement,
+            crop: item.crop,
+            opacity: item.opacity,
+        });
+    let models = depth_models(
+        (cache, chains),
+        (shot, pass),
+        (at, canvas, camera),
+        live,
+        true,
+    )
+    .into_iter()
+    .map(|(model, shown, geometry)| Caster::Model {
+        model: model.seen(),
+        geometry,
+        lighting: shown.lighting,
+        pose: shown.pose.clone(),
+    });
+    cards.chain(models).collect()
+}
+
 /// The depth a scene that a video filter reads (`scene_mask`) is drawn at: as a scene
 /// nested one level down, so what it nests counts toward [`MAX_NESTING`] the same way.
 const REFERENCE_DEPTH: usize = 1;
@@ -6809,6 +6878,20 @@ fn draw_shadows(
         return Ok(Vec::new());
     };
     let bounds = caster_bounds(&items);
+    // What the maps would be drawn of. A map kept from an earlier frame that was drawn
+    // of the same things through the same light, and not written since, is left alone.
+    let casters = casters_of(
+        &items,
+        (&*cache, &*chains),
+        (shot, pass),
+        (at, canvas, camera),
+        live,
+    );
+    let kept = chains
+        .shadow_maps
+        .remove(scene_id)
+        .filter(|kept| kept.casters == casters);
+    let mut maps = Vec::with_capacity(keys.len());
     let map_canvas = FrameSize::new(side, side).map_err(|_| RenderError::Invalid {
         what: "shadow map",
         detail: "a shadow map has no pixels".into(),
@@ -6822,21 +6905,36 @@ fn draw_shadows(
         else {
             continue;
         };
-        cast.clear();
-        cast.extend(items.iter().map(|item| Item {
-            camera: item.camera.map(|_| from),
-            depth: None,
-            ..*item
-        }));
-        let seen = scene(map_canvas, Color::TRANSPARENT, &cast);
-        draw_view_depth(
-            compositor,
-            (&*cache, &*chains),
-            (shot, pass, &seen),
-            key,
-            (at, canvas, camera),
-            (live, Some((from, true, None))),
-        )?;
+        let Some(target) = cache.get(key) else {
+            continue;
+        };
+        let holds = kept.as_ref().is_some_and(|kept| {
+            kept.maps
+                .iter()
+                .any(|(of, through, held)| of == key && *through == from && held.still(target))
+        });
+        if !holds {
+            cast.clear();
+            cast.extend(items.iter().map(|item| Item {
+                camera: item.camera.map(|_| from),
+                depth: None,
+                ..*item
+            }));
+            let seen = scene(map_canvas, Color::TRANSPARENT, &cast);
+            draw_view_depth(
+                compositor,
+                (&*cache, &*chains),
+                (shot, pass, &seen),
+                key,
+                (at, canvas, camera),
+                (live, Some((from, true, None))),
+            )?;
+            #[cfg(test)]
+            {
+                chains.shadow_draws.set(chains.shadow_draws.get() + 1);
+            }
+        }
+        maps.push((key.clone(), from, target.seen()));
         drawn.push(DrawnShadow {
             light,
             key: key.clone(),
@@ -6844,6 +6942,10 @@ fn draw_shadows(
             softness,
         });
     }
+    drop(items);
+    chains
+        .shadow_maps
+        .insert(scene_id.clone(), KeptShadows { casters, maps });
     Ok(drawn)
 }
 
@@ -7679,7 +7781,52 @@ fn draw_view_depth(
         return Ok(None);
     };
     compositor.render_view_depth(drawn, target)?;
+    let casters = from.is_some_and(|(_, casters, _)| casters);
+    for (model, shown, geometry) in depth_models(
+        (cache, chains),
+        (shot, pass),
+        (at, canvas, camera),
+        live,
+        casters,
+    ) {
+        pose(compositor, model, shown);
+        compositor.draw_model_depth(
+            &jstream_render::ModelDraw {
+                model,
+                geometry,
+                camera: Some(from.map_or(camera, |(from, _, _)| from)),
+                lighting: shown.lighting,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: from.and_then(|(_, _, floor)| floor),
+                materials: &[],
+                texture: None,
+                reflection: None,
+            },
+            target,
+        )?;
+    }
+    Ok(Some(view))
+}
+
+/// The models `pass` shows that write a view depth at `at`, each with what it shows and
+/// where its item places it through `camera`: every model whose layer is drawn this
+/// frame at least half opaque, as a card writes depth, and with `casters` only those
+/// that cast shadows (ADR-0151 decision 3).
+fn depth_models<'a>(
+    (cache, chains): (&ResourceCache<GpuKey>, &'a Chains),
+    (shot, pass): (&'a Shot, &Pass),
+    (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
+    live: &LiveParams,
+    casters: bool,
+) -> Vec<(
+    &'a jstream_render::GpuModel,
+    &'a jstream_sources::ShownModel,
+    ItemGeometry,
+)> {
     let size = [canvas.width() as f32, canvas.height() as f32];
+    let mut models = Vec::new();
     for layer in &pass.layers {
         if !layer.boxed.is_some_and(|boxed| boxed.model) {
             continue;
@@ -7722,28 +7869,12 @@ fn draw_view_depth(
             continue;
         };
         // A shadow map leaves out a model that casts none (ADR-0151 decision 3).
-        if from.is_some_and(|(_, casters, _)| casters) && !shown.casts_shadows {
+        if casters && !shown.casts_shadows {
             continue;
         }
-        pose(compositor, model, shown);
-        compositor.draw_model_depth(
-            &jstream_render::ModelDraw {
-                model,
-                geometry,
-                camera: Some(from.map_or(camera, |(from, _, _)| from)),
-                lighting: shown.lighting,
-                lights: None,
-                shadows: &[],
-                environment: None,
-                floor: from.and_then(|(_, _, floor)| floor),
-                materials: &[],
-                texture: None,
-                reflection: None,
-            },
-            target,
-        )?;
+        models.push((model, shown, geometry));
     }
-    Ok(Some(view))
+    models
 }
 
 /// `base`, a pass's camera with its live camera applied, moved by its family's camera

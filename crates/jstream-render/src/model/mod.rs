@@ -208,7 +208,24 @@ fn material_bytes(values: &[f32; MATERIAL_VALUES]) -> [u8; MATERIAL_VALUES * 4] 
     out
 }
 
+/// Which uploaded model a [`GpuModel`] was ([`GpuModel::seen`]). It doesn't keep the
+/// model's buffers alive, and it never matches another upload, even one made where a
+/// dropped one was.
+#[derive(Clone, Debug)]
+pub struct SeenModel(std::sync::Weak<Uploaded>);
+
+impl PartialEq for SeenModel {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
 impl GpuModel {
+    /// Which upload this is, to tell later whether a model is still the same one.
+    pub fn seen(&self) -> SeenModel {
+        SeenModel(Arc::downgrade(&self.inner))
+    }
+
     /// The version of the model it was uploaded from
     /// ([`jstream_media::model::Model::version`]).
     pub fn version(&self) -> u64 {
