@@ -1972,6 +1972,10 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
         // Whether the compositor was asked to time the pack passes yet: once a meter
         // guards them (#349).
         let mut timing = false;
+        // Chooses the size 3D models are drawn at, once the first tick says what a
+        // frame may take (ADR-0197).
+        let model_mode = crate::resolution::Mode::from_env();
+        let mut governor: Option<crate::resolution::Governor> = None;
         let draw: DrawFn = Box::new(
             move |program, scenes, live, captures, frames, at, meter, warm| {
                 if let Some(hook) = &hook {
@@ -2008,6 +2012,14 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 // Read once, after the poll above brought back what the GPU has finished:
                 // every mix of the tick is converted, or none is.
                 let behind = flights.behind();
+                // How many pixels this tick's 3D models are drawn with (ADR-0197): fewer
+                // while the GPU is short of time, so the outputs' frames are not what
+                // gives way.
+                chains.model_percent = governor
+                    .get_or_insert_with(|| {
+                        crate::resolution::Governor::new(model_mode, meter.budget())
+                    })
+                    .tick(meter.take_gpu_frame(), behind);
                 let mut converted = false;
                 // The GPU is still on the tick before this one: the pictures only this
                 // machine sees give way, so the outputs' never queue behind a preview's.
@@ -2137,6 +2149,9 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                         )
                         .and_then(|output| {
                             let started = Instant::now();
+                            // The frame's way out, its conversion for the encoders and
+                            // its copy for a readback, is timed with its composite.
+                            meter.gpu_unit_composite(&mut compositor);
                             if frame.readback {
                                 // Recorded now and collected once mapped, a tick or two on.
                                 if !readbacks.record(&compositor, frame, &output, at)? {
@@ -2163,6 +2178,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                                     .map(|()| converted = true),
                                 None => Ok(()),
                             };
+                            meter.gpu_unit_none(&mut compositor);
                             meter.phase_since(Phase::Finish, started);
                             submitted
                         });

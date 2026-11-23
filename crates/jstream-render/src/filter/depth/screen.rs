@@ -16,7 +16,7 @@ use super::{DepthSurface, ViewDepth};
 use crate::error::RenderError;
 use crate::filter::multipass::copy;
 use crate::filter::params::{Read, Uniforms, filter};
-use crate::filter::{Blend, Ctx, Pass, Shader};
+use crate::filter::{Blend, Ctx, Pass, Shader, program_system};
 use crate::image::Image;
 
 /// The kind's ID, which the engine names when it puts the pass in a scene's chain.
@@ -67,22 +67,6 @@ fn uniforms(steps: u32, depth: &ViewDepth) -> Option<Vec<u8>> {
             .vec4([depth.focal_px, cx, cy, steps as f32])
             .finish(),
     )
-}
-
-/// The `sys` uniform of the program prelude a shader is drawn with into `target`: the
-/// sizes, and how each of its inputs stores alpha.
-pub(super) fn system(input: &Image, target: &Image, inputs: &[Image]) -> [u8; 96] {
-    let mut bytes = [0u8; 96];
-    let size = [input.width() as f32, input.height() as f32];
-    let pass = [target.width() as f32, target.height() as f32];
-    for (at, value) in [size[0], size[1], pass[0], pass[1]].iter().enumerate() {
-        bytes[at * 4..at * 4 + 4].copy_from_slice(&value.to_le_bytes());
-    }
-    for (n, image) in inputs.iter().enumerate() {
-        let at = 48 + n * 4;
-        bytes[at..at + 4].copy_from_slice(&image.alpha().shader_mode().to_le_bytes());
-    }
-    bytes
 }
 
 pub(super) struct ScreenReflections {
@@ -142,9 +126,9 @@ impl Pass for ScreenReflections {
             traced.clone(),
         ];
         let marched = &inputs[..5];
-        let sys = system(input, &traced, marched);
+        let sys = program_system(input, &traced, marched);
         ctx.draw_program(TRACE.into(), marched, &sys, &params, &traced)?;
-        let sys = system(input, output, &inputs);
+        let sys = program_system(input, output, &inputs);
         ctx.draw_program(RESOLVE.into(), &inputs, &sys, &params, output)
     }
 }

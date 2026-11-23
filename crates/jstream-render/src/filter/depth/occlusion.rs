@@ -215,7 +215,7 @@ impl Pass for AmbientOcclusion {
             target: &share,
         })?;
         let inputs = [input.clone(), share.clone(), depth.image.as_ref().clone()];
-        let system = super::screen::system(input, output, &inputs);
+        let system = crate::filter::program_system(input, output, &inputs);
         ctx.draw_program(
             APPLY.into(),
             &inputs,

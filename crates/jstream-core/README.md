@@ -676,7 +676,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   `snapshot::compose_metered` fills: each source's upload, each capture, each video
   chain (an item's with its box), each nested scene's pass and the composite, and the
   phases they make up, with the readback's wait (`Compositor::readback_wait`) in the
-  finish phase. A meter keeps its units in maps from frame to frame, so a steady frame
+  finish phase. The GPU times of one timed frame's units, added up, are also the
+  frame's GPU time (`DrawMeter::take_gpu_frame`), which the program's draw hands to
+  `resolution::Governor` (ADR-0197, see [Runtime](#runtime)). A meter keeps its units in maps from frame to frame, so a steady frame
   allocates nothing, and publishes running totals once a second through `arc-swap`
   (`DrawerSlot`); the render thread's collector frees the totals it replaces. The
   render thread also times one frame in four (`GPU_EVERY`) on the GPU, where the device
@@ -685,7 +687,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   (`Compositor::gpu_unit`, by an id the meter gives the unit on its first timed frame),
   and the times that come back a frame or two later go into the unit's `gpu_frames` and
   `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
-  `gpu_timing` is on once any unit carries one. The preview hub's thread times none. The
+  `gpu_timing` is on once any unit carries one. The composite's `gpu_ms` includes the
+  frame's way out, which the draw names it around: the conversion to NV12 into the
+  encoders' target and the copy of a readback, each a submit of its own after the
+  composite's. Its `ms` doesn't: on the CPU those stay in the finish phase. The preview hub's thread times none. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
   source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
   reads all of them, the threads from the host's `ThreadCpu`
@@ -1890,15 +1895,20 @@ one (`a_warp_aimed_ahead_cross_fades_the_backdrop_to_straight_ahead`).
 With arrival pictures
 ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
 planning puts the frames of the visible items of the light's `sky_pictures` scene in the
-shot (`Shot::sky_pictures`, by the light's source, each with how much its item's width
-scales `sky_picture_deg`, `picture_scale`), and the state keeps the picture shown
+shot (`Shot::sky_pictures`, by the light's source), one arrival each, or one of up to four
+pictures for an item showing a nested scene
+([ADR-0198](../../docs/adr/0198-an-arrival-can-be-a-planet-with-its-sun.md); `SkyPart`s: each with how much its item's
+width scales `sky_picture_deg`, `picture_scale`, and its turn and tilt from the first,
+which `part_direction` places), and the state keeps the arrival shown
 and where it is pinned (`Arrival`): none while the deep sky is gone at warp
 (`deep_shown`), and another, at random, picked once as it starts to show again with the
 warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
-`draw_sky_of` passes it to the backdrop, the upload loop takes the shown picture's average
-colour once per version (`note_picture_mean`, kept in `Chains::picture_means` for the
-shown pictures only), and `light_scene` and a probe's capture add a directional light from
-it in that colour (`arrival_light`, `an_arrival_picture_shows_ahead_and_lights_the_scene`).
+`draw_sky_of` passes its pictures to the backdrop, the upload loop takes the average
+colour of the shown arrival's last picture once per version (`note_picture_mean`, kept in
+`Chains::picture_means` for the shown ones only), and `light_scene` and a probe's capture
+add a directional light from that picture in that colour (`arrival_light`,
+`an_arrival_picture_shows_ahead_and_lights_the_scene`,
+`an_arrival_of_a_planet_and_its_sun_lights_from_the_sun`).
 Its stars, star brightness, nebula, galaxy band and colours are drawn as those
 modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
@@ -2304,7 +2314,16 @@ where it is placed, turned, flipped and tilted as it is (a live resize redraws i
 there), and the layer covers the canvas flat. Its transition visual never glides.
 An item that shows a 3D model ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6;
 its source's frame carries the model, from `Source::model`, beside the transparent
-stand-in) always has a canvas-sized layer, effects or not. The chain phase draws the
+stand-in) always has a canvas-sized layer, effects or not. The layer is drawn with
+`Chains::model_percent` of the canvas's width and of its height in pixels, rounded up
+(`Boxed::pixels`, [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)):
+100 everywhere but on the program stage's render thread while its GPU is short of time
+(see [Runtime](#runtime)). A smaller layer, its `GpuKey::ModelDepth` and its
+`GpuKey::ModelSurface` layers are given the canvas as their extent, so the model is
+placed on the canvas and the pass places the layer over it
+(`golden_a_model_is_seen_through_the_scene_camera`); the scene's surface buffer merges
+a smaller surface whatever its size (`a_metal_floor_reflects_a_card_on_screen`). The
+chain phase draws the
 model into it with `Compositor::draw_model`: posed by the item's geometry with its live
 values and motion applied, seen through its scene's camera with the camera's live value,
 motion and follow applied as the scene's pass resolves them, and lit as the source says.
@@ -4556,7 +4575,7 @@ and then removed; a store failure leaves that key where it was and is logged.
 <a id="runtime"></a>
 ## Runtime
 <!-- @section
-covers = ["crates/jstream-core/src/runtime/**"]
+covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-core/src/resolution.rs"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
 -->
 
@@ -4602,6 +4621,23 @@ does. A GPU slower than the frame rate then encodes at the rate it can draw, a f
 or two behind, where before every tick queued behind the last and each frame reached
 the encoder later than the one before
 (`a_gpu_that_is_behind_is_handed_no_more_encode_targets`).
+
+Before a frame is given up that way, 3D models give up pixels
+([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)).
+`resolution::Governor` runs once a tick in the program's draw, after the poll: it takes
+the GPU time of the latest timed frame that came back (`DrawMeter::take_gpu_frame`, the
+units of one frame of every four added up) and whether the conversions are behind, and
+sets `Chains::model_percent` to one of 100, 85, 75, 67 and 50. It steps down at once
+when the GPU is behind and when three timed frames in a row took over 88% of the frame's
+budget; it steps up when the time the larger size is expected to take (all of the frame's
+growing with the model's pixels) has stayed under 78% for 5 seconds, a wait that doubles,
+up to 80 seconds, each time a step up is undone within 15; and it decides nothing for 10
+ticks after a change, while the frames in flight are the old size. A device that can't
+time its frames steps on the first signal alone. Each change logs one line. The
+environment variable `JSTREAM_MODEL_RESOLUTION` set to `off` keeps 100, one of the
+sizes keeps that size, and `auto` or nothing chooses; any other value is logged and read
+as `auto`. A drawer whose meter has no budget (not the program's) stays at 100
+(`resolution.rs`'s tests).
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back, as do JPEG and PNG preview streams'
 picture queues (*Preview streams*), and virtual cameras the program; a mix with a

@@ -100,6 +100,10 @@ const TEXTURE_BAND_BYTES: usize = 4 << 20;
 
 pub use jstream_media::model::Lighting;
 
+/// How many sizes of the depth buffer a model's layer is drawn with are kept
+/// (`ModelRuntime::depth_view`).
+const KEPT_DEPTHS: usize = 2;
+
 /// A model on the GPU, made by [`crate::Compositor::upload_model`]. Cheap to clone; a
 /// clone shares the buffers and textures.
 #[derive(Clone)]
@@ -630,7 +634,7 @@ pub(crate) struct ModelRuntime {
     /// A live texture whose source isn't drawing: transparent, and its texture, which
     /// [`LiveBinds`] tells apart from a mip chain's.
     clear: (wgpu::Texture, wgpu::TextureView),
-    depth: Option<(u32, u32, wgpu::TextureView)>,
+    depth: Vec<(u32, u32, wgpu::TextureView)>,
     /// Blended primitives in the order they draw, kept to reuse the allocation.
     order: Vec<(f64, usize)>,
     /// The quad a lit card is shaded on ([`Self::light_card`]), once made.
@@ -1045,7 +1049,7 @@ impl ModelRuntime {
             white,
             flat_normal,
             clear: (clear_texture, clear_view),
-            depth: None,
+            depth: Vec::with_capacity(KEPT_DEPTHS),
             order: Vec::new(),
             card: None,
         }
@@ -1371,12 +1375,9 @@ impl ModelRuntime {
         let views = surface_views(owner, targets)?;
         let (width, height) = (targets[0].width(), targets[0].height());
         let sources = surface_views(owner, layers)?;
-        if (layers[0].width(), layers[0].height()) != (width, height) {
-            return Err(RenderError::Invalid {
-                what: "layer",
-                detail: "a model's surface layers are not its scene's surface buffer's size".into(),
-            });
-        }
+        // The layers' size, which is the buffer's unless the model was drawn with fewer
+        // pixels than its canvas (ADR-0197).
+        let from = (layers[0].width(), layers[0].height());
         let depth = self.surface_depth_view(gpu, width, height);
         let (layout, pipeline) = &self.with_surface.merge;
         let read = |n: usize| wgpu::BindGroupEntry {
@@ -1429,6 +1430,7 @@ impl ModelRuntime {
                     drop(submitting);
                     return Ok(());
                 }
+                let region = spread(region, from, (width, height));
                 pass.set_scissor_rect(region.x, region.y, region.width, region.height);
             }
             pass.set_pipeline(pipeline);
@@ -1752,7 +1754,9 @@ impl ModelRuntime {
             });
         };
         let (width, height) = (target.width(), target.height());
-        let canvas = Canvas { width, height };
+        // The canvas the model is placed on is the target's extent: a layer drawn with
+        // fewer pixels than its canvas (ADR-0197) holds the same picture, less sharp.
+        let canvas = canvas_of(target);
         let camera = match draw.camera {
             Some(camera) => Some(camera.view(canvas).map_err(placement)?),
             None => None,
@@ -2085,10 +2089,7 @@ impl ModelRuntime {
         let Some(camera) = draw.camera else {
             return Ok(());
         };
-        let canvas = Canvas {
-            width: target.width(),
-            height: target.height(),
-        };
+        let canvas = canvas_of(target);
         let camera = camera.view(canvas).map_err(placement)?;
         let solid = draw
             .geometry
@@ -2340,13 +2341,19 @@ impl ModelRuntime {
     }
 
     fn depth_view(&mut self, gpu: &Gpu, width: u32, height: u32) -> wgpu::TextureView {
-        if let Some((w, h, view)) = &self.depth
-            && (*w, *h) == (width, height)
+        if let Some(at) = self
+            .depth
+            .iter()
+            .position(|(w, h, _)| (*w, *h) == (width, height))
         {
-            return view.clone();
+            // The latest used is kept first.
+            self.depth[..=at].rotate_right(1);
+            return self.depth[0].2.clone();
         }
         // A pass's attachments must all be one size, so a layer of another size makes a
         // new one (a canvas resize, or a second canvas through the same compositor).
+        // The two sizes used last are kept: a model drawn with fewer pixels than its
+        // canvas (ADR-0197) alternates, every frame, with what is drawn at the canvas's.
         let (w, h) = (width, height);
         let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("jstream-render-model-depth"),
@@ -2363,9 +2370,43 @@ impl ModelRuntime {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.depth = Some((w, h, view.clone()));
+        self.depth.truncate(KEPT_DEPTHS - 1);
+        self.depth.insert(0, (w, h, view.clone()));
         view
     }
+}
+
+/// `region` of a layer `from` pixels in size, as the texels it covers of one `to` pixels
+/// in size that shows the same picture: itself when the two are one size, else grown to
+/// whole texels and kept inside `to`.
+fn spread(region: Region, from: (u32, u32), to: (u32, u32)) -> Region {
+    if from == to || from.0 == 0 || from.1 == 0 {
+        return region;
+    }
+    let low = |at: u32, from: u32, to: u32| {
+        (u64::from(at) * u64::from(to) / u64::from(from)).min(u64::from(to)) as u32
+    };
+    let high = |at: u32, from: u32, to: u32| {
+        (u64::from(at) * u64::from(to))
+            .div_ceil(u64::from(from))
+            .min(u64::from(to)) as u32
+    };
+    let x = low(region.x, from.0, to.0);
+    let y = low(region.y, from.1, to.1);
+    Region {
+        x,
+        y,
+        width: high(region.x.saturating_add(region.width), from.0, to.0).saturating_sub(x),
+        height: high(region.y.saturating_add(region.height), from.1, to.1).saturating_sub(y),
+    }
+}
+
+/// The canvas a model drawn into `target` is placed on: the target's extent
+/// ([`Image::extent`]), which is its size in pixels unless it stands for a larger canvas
+/// (ADR-0197).
+pub(crate) fn canvas_of(target: &Image) -> Canvas {
+    let (width, height) = target.extent();
+    Canvas { width, height }
 }
 
 /// The model pipelines that draw a layer and its surface at once, and the merge of that

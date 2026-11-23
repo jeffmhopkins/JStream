@@ -991,6 +991,10 @@ pub(crate) struct Chains {
     /// The models drawn since the chains last began a frame: one no frame drew is let
     /// go when the next begins.
     models_used: BTreeSet<SourceId>,
+    /// How many pixels a 3D model's layer is drawn with, as a percentage of its
+    /// canvas's width and of its height (ADR-0197): 100 unless the program stage's
+    /// render thread lowered it to keep its frames in time.
+    pub(crate) model_percent: crate::resolution::Percent,
     /// The thread that uploads the models, for the program stage's render thread
     /// ([`Self::upload_models_aside`]). `None` uploads them where they are drawn.
     models_aside: Option<crate::model_uploads::ModelUploads>,
@@ -3167,12 +3171,24 @@ mod tests {
     /// cell: `.` black, `W` white, `B` blue, `?` anything more than a few levels from
     /// all three. `None` where the machine has no adapter.
     fn golden(shot: &Shot) -> Option<String> {
+        golden_at(shot, 100).map(|(grid, _)| grid)
+    }
+
+    /// A layer's size in pixels, then its extent.
+    type LayerSize = [(u32, u32); 2];
+
+    /// [`golden`], with 3D models drawn at `percent` of the canvas's width and of its
+    /// height (ADR-0197), and the size in pixels and the extent of `cam`'s layer.
+    fn golden_at(shot: &Shot, percent: u32) -> Option<(String, Option<LayerSize>)> {
         const PALETTE: [(char, [u8; 3]); 3] =
             [('.', [0, 0, 0]), ('W', [255, 255, 255]), ('B', [0, 0, 255])];
         let _gpu = crate::tests::one_gpu_test_at_a_time();
         let mut compositor = gpu()?;
         let mut cache = ResourceCache::new();
-        let mut chains = Chains::default();
+        let mut chains = Chains {
+            model_percent: crate::resolution::Percent::of(percent),
+            ..Chains::default()
+        };
         let (width, height) = CANVAS;
         let points: Vec<_> = (0..height / 4)
             .flat_map(|y| (0..width / 4).map(move |x| (x * 4 + 2, y * 4 + 2)))
@@ -3194,7 +3210,10 @@ mod tests {
             }
             out.push('\n');
         }
-        Some(out)
+        let layer = cache
+            .get(&GpuKey::ItemBox(SceneId::new("main"), ItemId::new("cam")))
+            .map(|layer| [(layer.width(), layer.height()), layer.extent()]);
+        Some((out, layer))
     }
 
     /// Asserts `shot`'s [`golden`] is `expected`, a grid written one row per line,
@@ -4630,6 +4649,20 @@ mod tests {
     /// and lights the scene from there in the picture's colour.
     #[test]
     fn an_arrival_picture_shows_ahead_and_lights_the_scene() {
+        arrives_at(false);
+    }
+
+    /// ADR-0198: an arrival of several pictures, a nested scene's, shows its first ahead
+    /// and the others turned from it, and lights the scene from its last: a sun turned
+    /// a quarter to the right of a planet lights it from the right in the sun's colour.
+    #[test]
+    fn an_arrival_of_a_planet_and_its_sun_lights_from_the_sun() {
+        arrives_at(true);
+    }
+
+    /// The arrival test, with a planet alone or a planet and a sun a quarter to its right
+    /// (`system`).
+    fn arrives_at(system: bool) {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
         let Some(mut compositor) = gpu() else { return };
         let mut graph = placed(&[("cam", (4.0, 4.0), (2.0, 2.0), 0.0)]);
@@ -4661,16 +4694,58 @@ mod tests {
                     settings: Default::default(),
                     duplicated_from: None,
                 },
-                Edit::ItemAdd {
-                    scene_id: arrivals.clone(),
-                    item_id: ItemId::new("planet"),
-                    source_id: SourceId::new("planet"),
-                    transform: None,
-                    geometry: None,
-                    opacity: None,
-                    blend: None,
-                },
             ],
+        );
+        let solar = SceneId::new("solar");
+        let mut sun_at = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(960.0, 540.0).expect("finite"),
+            jstream_protocol::Size::try_new(1920.0, 1080.0).expect("positive"),
+        )
+        .expect("valid");
+        sun_at.turn_deg = jstream_protocol::Finite32::new(90.0).expect("finite");
+        let add = |scene: &SceneId, item: &str, source: &str, geometry| Edit::ItemAdd {
+            scene_id: scene.clone(),
+            item_id: ItemId::new(item),
+            source_id: SourceId::new(source),
+            transform: None,
+            geometry,
+            opacity: None,
+            blend: None,
+        };
+        apply(
+            &mut graph,
+            if system {
+                vec![
+                    Edit::SceneCreate {
+                        scene_id: solar.clone(),
+                        name: "Solar".into(),
+                        role: None,
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("sun"),
+                        name: "sun".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "display".into(),
+                        },
+                        settings: Default::default(),
+                        duplicated_from: None,
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("solar"),
+                        name: "solar".into(),
+                        kind: SourceKind::Scene {
+                            scene_id: solar.clone(),
+                        },
+                        settings: Default::default(),
+                        duplicated_from: None,
+                    },
+                    add(&solar, "planet", "planet", None),
+                    add(&solar, "sun", "sun", Some(sun_at)),
+                    add(&arrivals, "solar", "solar", None),
+                ]
+            } else {
+                vec![add(&arrivals, "planet", "planet", None)]
+            },
         );
         let sky = jstream_sources::ShownLight {
             kind: jstream_sources::LightType::Environment,
@@ -4704,6 +4779,8 @@ mod tests {
         };
         let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");
         let red = Frame::new(4, 4, &[255, 0, 0, 255].repeat(16), 4).expect("invariant: 4x4 RGBA8");
+        let green =
+            Frame::new(4, 4, &[0, 255, 0, 255].repeat(16), 5).expect("invariant: 4x4 RGBA8");
         let lamp = Frame::new(1, 1, &[0; 4], 3)
             .expect("invariant: 1x1 RGBA8")
             .with_light(Some(sky));
@@ -4716,6 +4793,7 @@ mod tests {
                     match id.as_str() {
                         "cam" => white.clone(),
                         "planet" => red.clone(),
+                        "sun" => green.clone(),
                         _ => lamp.clone(),
                     },
                     None,
@@ -4728,12 +4806,21 @@ mod tests {
             .sky_pictures
             .get(&SourceId::new("logo"))
             .expect("the light's arrival pictures are planned");
-        assert_eq!(planned.len(), 1);
-        assert_eq!(planned[0].0, SourceId::new("planet"));
+        assert_eq!(planned.len(), 1, "one arrival");
+        let parts = &planned[0];
+        assert_eq!(parts[0].source, SourceId::new("planet"));
+        assert_eq!(parts[0].offset_deg, [0.0; 2]);
         assert!(
-            (planned[0].1 - 1.0).abs() < 1e-6,
+            (parts[0].scale - 1.0).abs() < 1e-6,
             "a full-canvas item: its setting"
         );
+        if system {
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[1].source, SourceId::new("sun"));
+            assert_eq!(parts[1].offset_deg, [90.0, 0.0]);
+        } else {
+            assert_eq!(parts.len(), 1);
+        }
         // A picture's item scales its width: a box half the canvas wide, half.
         let canvas = jstream_protocol::Canvas::DEFAULT;
         let half = jstream_protocol::ItemGeometry::try_new(
@@ -4776,13 +4863,23 @@ mod tests {
         .expect("it lights the scene");
         assert_eq!(light.kind, jstream_render::LightKind::Directional);
         assert!((light.intensity - 2.0).abs() < 1e-6);
-        assert!(
-            light.color.r > 0.99 && light.color.g < 0.01,
-            "{:?}",
-            light.color
-        );
-        // It shines from ahead, back toward the viewer.
-        assert!(light.aim[2] > 0.9, "{:?}", light.aim);
+        if system {
+            // From the sun, a quarter to the right, toward the left, in its colour.
+            assert!(
+                light.color.g > 0.99 && light.color.r < 0.01,
+                "{:?}",
+                light.color
+            );
+            assert!(light.aim[0] < -0.9, "{:?}", light.aim);
+        } else {
+            assert!(
+                light.color.r > 0.99 && light.color.g < 0.01,
+                "{:?}",
+                light.color
+            );
+            // It shines from ahead, back toward the viewer.
+            assert!(light.aim[2] > 0.9, "{:?}", light.aim);
+        }
     }
 
     /// ADR-0187: as a warp aimed ahead starts, the backdrop cross-fades from the sky its
@@ -5731,7 +5828,7 @@ mod tests {
             .with_model(model.model());
         let red =
             Frame::new(16, 9, &[255, 0, 0, 255].repeat(16 * 9), 3).expect("invariant: 16x9 RGBA8");
-        let under = |graph: &Graph, features: jstream_protocol::RenderFeatures| {
+        let under_at = |graph: &Graph, features: jstream_protocol::RenderFeatures, percent| {
             let assets = FilterAssets::default().with_features(features);
             let shot = snapshot::plan_with(
                 graph,
@@ -5753,7 +5850,10 @@ mod tests {
             let _gpu = crate::tests::one_gpu_test_at_a_time();
             let mut compositor = gpu()?;
             let mut cache = ResourceCache::new();
-            let mut chains = Chains::default();
+            let mut chains = Chains {
+                model_percent: crate::resolution::Percent::of(percent),
+                ..Chains::default()
+            };
             let point = draw_points(
                 &mut compositor,
                 (&mut cache, &mut chains),
@@ -5762,6 +5862,7 @@ mod tests {
             )[0];
             Some((point, !chains.surfaced.is_empty()))
         };
+        let under = |graph: &Graph, features| under_at(graph, features, 100);
         let all = jstream_protocol::RenderFeatures::ALL;
         let Some((reflected, surfaced)) = under(&graph, all) else {
             return;
@@ -5780,6 +5881,15 @@ mod tests {
             u16::from(reflected[0]) > u16::from(plain[0]) + 40
                 && u16::from(reflected[0]) > u16::from(reflected[1]) + 40,
             "the red card is reflected in the floor under it: {reflected:?} (without: {plain:?})"
+        );
+        // The floor drawn with half the pixels each way (ADR-0197): its surface is still
+        // drawn with its layer, spread over the scene's buffer, and reflects the card.
+        let (half, surfaced) = under_at(&graph, all, 50).expect("an adapter");
+        assert!(surfaced, "the smaller surface is merged, not drawn again");
+        assert!(
+            u16::from(half[0]) > u16::from(plain[0]) + 40
+                && u16::from(half[0]) > u16::from(half[1]) + 40,
+            "the red card is reflected in the floor drawn smaller: {half:?} (without: {plain:?})"
         );
         apply(&mut graph, vec![reflective(false)]);
         let (unreflective, _) = under(&graph, all).expect("an adapter");
@@ -6473,6 +6583,34 @@ mod tests {
             expected,
             "turned 60°, the plane is about half as wide, its near edge the longer",
         );
+        // Drawn with half the pixels each way (ADR-0197), its layer is half the canvas's
+        // size, stands for the whole canvas, and shows the plane in the same place: only
+        // the cells its edge crosses (`?`) differ, softened by the enlarging.
+        if let Some((half, layer)) = golden_at(&model_shot(&graph, "plane"), 50) {
+            assert_eq!(
+                layer,
+                Some([(CANVAS.0 / 2, CANVAS.1 / 2), CANVAS]),
+                "the layer's pixels and the canvas it is placed over"
+            );
+            let full: String = expected
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .flat_map(|line| line.chars().chain(['\n']))
+                .collect();
+            assert!(
+                half.len() == full.len()
+                    && half
+                        .chars()
+                        .zip(full.chars())
+                        .all(|(h, f)| h == f || h == '?'),
+                "at half the pixels the plane covers the same cells\nhalf:\n{half}"
+            );
+            assert!(
+                half.chars().filter(|c| *c == 'W').count() >= 24,
+                "and its inside is as white\nhalf:\n{half}"
+            );
+        }
         // A flat item in the same pose covers the same pixels.
         apply(
             &mut graph,

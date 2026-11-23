@@ -1358,13 +1358,18 @@ mid-stinger leaves through the camera each item had. A camera with a depth of fi
 distance from the focus plane in the same draw: a disc of taps from the item's mips, its
 edge softened to match, with no extra pass or target. A 3D model is blurred by its own
 depth as its layer is drawn ([ADR-0165](adr/0165-depth-of-field-on-models.md)): its colour
-and view depth are drawn first, then five fullscreen passes gather each pixel's
+and view depth are drawn first, then six passes gather each pixel's
 neighbours whose circle of confusion reaches it, so a soft near part spreads over a
-sharp far one and the silhouette softens outward.
+sharp far one and the silhouette softens outward. The wide blurs are gathered at half
+the layer's size and the slight ones at its own
+([ADR-0193](adr/0193-depth-of-field-on-models-gathers-at-half-size.md)).
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version, for the
 program stage by a thread of its own, which also keeps the warm scenes' models
 uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and drawn
-per placement into a canvas-sized layer, through the scene's camera or the item's own
+per placement into a canvas-sized layer (or one with fewer pixels that stands for the
+canvas, while the program's GPU is short of time,
+[ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)),
+through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
 lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
@@ -1405,8 +1410,10 @@ oriented by the light's item's turn, tilt and rotation
 ([ADR-0182](adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), or laid out anew around
 the scene's straight ahead as a warp aimed there starts, cross-fading for half a second
 from the sky before ([ADR-0187](adr/0187-a-warp-can-travel-straight-ahead.md)), and
-showing a flat picture pinned near its straight ahead that changes as each warp ends
-([ADR-0188](adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
+showing flat pictures pinned in it, the first near its straight ahead, that change as
+each warp ends
+([ADR-0188](adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
+[ADR-0198](adr/0198-an-arrival-can-be-a-planet-with-its-sun.md)),
 with nebulae and a galaxy band baked once per seed into cube maps
 ([ADR-0174](adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md))
 and procedural stars laid out about the direction of travel,

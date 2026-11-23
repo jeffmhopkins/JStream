@@ -74,7 +74,7 @@ function scanState() {
 /** Opens Add filter on the program output's chain, an audio chain. */
 async function addProgramFilter(page) {
   await showPanel(page, 'Outputs');
-  await page.getByRole('button', { name: 'Program output filters' }).click();
+  await page.locator('section.outputs').getByRole('button', { name: 'Program output filters' }).click();
   await page.locator('.filters-panel').getByRole('button', { name: '+ Add filter…' }).click();
   return page.getByRole('dialog', { name: 'Add filter' });
 }

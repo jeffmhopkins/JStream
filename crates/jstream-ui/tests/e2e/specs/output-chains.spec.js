@@ -41,20 +41,20 @@ test('the Outputs panel lists the program output, then each output once, and an 
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveClass(/\bprogram\b/);
   await expect(rows.first().locator('.output-row-name')).toHaveText('Program output');
-  await expect(rows.first().locator('.output-row-status')).toHaveText('master');
-  await expect(rows.first().getByRole('button', { name: 'Program output filters' })).toHaveText('FX 0');
+  await expect(rows.first().locator('.output-row-status')).toHaveText('Master');
+  await expect(rows.first().getByRole('button', { name: 'Program output filters' })).toHaveText('');
   // The note is the program row's tooltip, not a paragraph.
   await expect(rows.first()).toHaveAttribute('title', 'Program filters apply to every output; each output can add its own after them.');
 
   await addRecording(page);
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(1).locator('.output-row-name')).toHaveText('output-1');
-  await expect(rows.nth(1).locator('.badge')).toHaveText('Stopped');
+  await expect(rows.nth(1).locator('.output-row-state')).toHaveText('Stopped');
   // Each output is listed once: its FX button is on its own row.
   await expect(page.locator('section.outputs').getByText('output-1', { exact: true })).toHaveCount(1);
   const fx = rows.nth(1).getByRole('button', { name: 'output-1 filters' });
-  await expect(fx).toHaveText('FX 0');
-  await expect(fx).toHaveAttribute('title', 'Filters for output-1 only');
+  await expect(fx).toHaveText('');
+  await expect(fx).toHaveAttribute('title', 'Filters for output-1 only: no filters yet');
   await expect(fx).not.toHaveClass(/\bon\b/);
 
   // The program's FX shows the master chain, even with the Arrange panel in front.
@@ -85,7 +85,7 @@ test('filters added to the program output and to an output count on their FX but
   await addRecording(page);
   const program = chains(page).getByRole('button', { name: 'Program output filters' });
   const output = chains(page).getByRole('button', { name: 'output-1 filters' });
-  await expect(output).toHaveText('FX 0');
+  await expect(output).toHaveText('');
 
   await program.click();
   await filters(page).getByRole('button', { name: '+ Add filter…' }).click();
@@ -101,8 +101,8 @@ test('filters added to the program output and to an output count on their FX but
   await expect(add).toBeHidden();
   await expect(audioRows(page).locator('.filter-name')).toHaveText(['Gain']);
   expect(await rev(page)).toBe(start + 1);
-  await expect(program).toHaveText('FX 1');
-  await expect(page.locator('.master-card').getByRole('button', { name: 'FX 1' })).toBeVisible();
+  await expect(program).toHaveText('1');
+  await expect(page.locator('.master-card').getByRole('button', { name: 'Program output filters' })).toBeVisible();
 
   // One setting: it opens in place, and a change there is one edit.
   await expect(audioRows(page).first()).toHaveClass(/\bopen\b/);
@@ -126,9 +126,9 @@ test('filters added to the program output and to an output count on their FX but
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(add).toBeHidden();
   await expect(audioRows(page).locator('.filter-name')).toHaveText(['Gain']);
-  await expect(output).toHaveText('FX 1');
+  await expect(output).toHaveText('1');
   await expect(output).toHaveClass(/\bon\b/);
-  await expect(program).toHaveText('FX 1');
+  await expect(program).toHaveText('1');
 
   // Its eye and × edit the output's chain, not the master's.
   start = await rev(page);
@@ -138,8 +138,8 @@ test('filters added to the program output and to an output count on their FX but
   await audioRows(page).first().hover();
   await filters(page).getByRole('button', { name: 'Remove Gain' }).click();
   await expect(filters(page)).toContainText('No audio filters.');
-  await expect(output).toHaveText('FX 0');
-  await expect(program).toHaveText('FX 1');
+  await expect(output).toHaveText('');
+  await expect(program).toHaveText('1');
 
   // The master's filter opens in the Filters window on a double-click.
   // A double-click's first click toggles its editor in place, which can scroll the
@@ -156,5 +156,5 @@ test('filters added to the program output and to an output count on their FX but
   await expect(dialog.locator('.filters-window-pane')).toHaveText('No filter selected. Add one with + below the list.');
   await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
-  await expect(program).toHaveText('FX 0');
+  await expect(program).toHaveText('');
 });

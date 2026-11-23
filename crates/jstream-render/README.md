@@ -52,6 +52,9 @@ and calls this crate.
   placement changes its materials, `ModelDraw::materials`)
   into a canvas-sized layer with its own depth test, blurred by its own depth when the
   camera has a depth of field ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
+  The layer may have fewer pixels than the canvas it stands for, its extent
+  ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)):
+  the model is placed on the extent's canvas and the layer holds the same picture, less sharp.
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
@@ -84,9 +87,11 @@ and calls this crate.
   `dropping` (0 to 1, easing out over the last 0.15 toward its setting, [ADR-0186](../../docs/adr/0186-the-sky-eases-out-of-warp-toward-rest.md)) the deep sky returns early, squeezed ahead, and zooms back out to its
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
-  about 0.6 px wide. A `SkyPicture` is drawn over all of it, read through the tangent
-  plane at its centre (`pinned`), covering what is behind it and fading as the deep sky
+  about 0.6 px wide. Up to `MAX_SKY_PICTURES` (4) `SkyPicture`s are drawn over all of
+  it, bottom first, each read through the tangent plane at its centre (`pinned`, one
+  texture binding each, 7 to 10), covering what is behind it and fading as the deep sky
   does at warp ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
+  [ADR-0198](../../docs/adr/0198-an-arrival-can-be-a-planet-with-its-sun.md),
   `golden_sky_a_pinned_picture_covers_the_sky_where_it_is`). The engine places the layer under the scene's items with no camera.
   Its two pipelines (the frame's and the bright stars' table's) are made on the first
   draw, and the bake's on the first sky with nebulae or a band, unless `warm_3d` made
@@ -682,8 +687,8 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
-| Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
-| Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
+| Model depth targets (`Depth32Float`) | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
+| Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
@@ -824,24 +829,41 @@ its layer is drawn instead.
 When a `ModelDraw`'s camera has a focus, `draw_model` draws the model and its view depth
 (`1 / w`, as `draw_model_depth` draws it over a cleared depth layer) into a layer and a
 depth layer the compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
-the filter runtime, as an internal filter no chain can hold. Its five passes, sharing
-`focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl` takes the
-largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose radius
-reaches each tile, `pack.wgsl` puts each pixel's `1 / w` beside its tile's reach `R`, and
-`gather.wgsl` reads 48 taps on a golden-angle spiral over a disc of radius `R`, turned
-per pixel. A tap adds its colour times `R² / (48 r²)` where its own radius `r` reaches
-the pixel, a tap farther than the pixel reaching no farther than the pixel's own radius,
-so a soft near part spreads over a sharp far one and never the reverse. Taps narrower
-than the spacing `R / √48` add nothing, and the pixel's own colour goes under what
-spread over it; taps on a sharp nearer part scale a soft farther pixel's sum up by the
-share left. Empty pixels are infinitely far, so a silhouette softens outward. Last,
-`smooth.wgsl` replaces each pixel whose own radius is 1.5 px or more by the mean of its
-5 × 5 neighbours weighted by their own softness, which evens out the gather's grain.
-Both read colours through `finite`, NaN as 0 and infinity as the half-float maximum, so
+the filter runtime, as an internal filter no chain can hold. Its six passes, the first
+five sharing `focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl`
+takes the largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose
+radius reaches each tile, and `pack.wgsl` puts each pixel's `1 / w` beside its tile's
+reach `R`. The blur is then drawn as two layers
+([ADR-0193](../../docs/adr/0193-depth-of-field-on-models-gathers-at-half-size.md)): a
+pixel of radius `r` spreads in the wide one by the share `wide(r)`, 0 under 0.75 px and
+1 from 2 px, and in the narrow one by the rest. `gather.wgsl` draws the wide layer at
+half the layer's size, each texel for one pixel of its block of two by two, the corner
+alternating. It reads 48 taps on a golden-angle spiral over a disc of radius `R`, turned
+per pixel, from the full-size colour and depth. A tap adds its colour times
+`wide(r) R² / (48 r²)` where its own radius `r` reaches the pixel, a tap farther than the
+pixel reaching no farther than the pixel's own radius, so a soft near part spreads over
+a sharp far one and never the reverse. Taps narrower than the spacing `R / √48` add
+nothing; taps on a sharp nearer part scale a soft farther pixel's sum up by the share
+left. Empty pixels are infinitely far, so a silhouette softens outward. `smooth.wgsl`,
+at half size too, replaces each texel whose pixel's radius is 1.5 px or more by a mean of
+its 5 × 5 neighbours, weighted by their own softness and by a cone one and a half tap
+spacings wide (at most 0.4 of the radius), which evens out the gather's grain. Last,
+`resolve.wgsl`, at the layer's size and drawn with the shader-source prelude for its
+three textures, takes the wide layer from the 3 × 3 texels around the pixel, each
+weighted by how near its pixel is and how alike that pixel's radius is to this one's,
+and spreads the narrow layer itself: each of the 3 × 3 pixels around gives its share
+`1 - wide(r)` (all of it under the tap spacing), over itself alone at radius 0 up to all
+nine at about 1.8 px. The narrow layer goes under the wide one.
+All three read colours through `finite`, NaN as 0 and infinity as the half-float maximum, so
 one non-finite pixel isn't spread into a disc of dots.
 Where `R`
 is under half a pixel the pixel is copied, so a model in focus draws exactly as without
 depth of field, and a camera without one skips all of it.
+The blur and its 64-pixel cap count in canvas pixels. For a target with fewer pixels
+than its extent ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)),
+the kept layers are the target's size and stand for the same canvas, and both are scaled
+by the target's width over its extent's, so the blur covers as much of the picture
+(`golden_model_drawn_with_fewer_pixels_is_as_soft_out_of_focus`).
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
@@ -1021,7 +1043,9 @@ surface into three layers of the layer's size, cleared first; then
 ([ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)) where
 they are nearer than what it holds (`surface_merge.wgsl`, one full-screen triangle cut
 to the box the model drew in, its depth `1 / w` squeezed into 0..1), so a model isn't
-shaded twice for it. `Compositor::draw_model_surface(draw, targets)` draws a model
+shaded twice for it. The layers may be smaller than the buffer, for a model drawn with
+fewer pixels than its canvas (ADR-0197): each of the buffer's texels takes the layers'
+texel it falls in, unfiltered, and the box is grown to the buffer's texels it covers. `Compositor::draw_model_surface(draw, targets)` draws a model
 straight into the buffer instead (`fs_surface`, writing the same depth), for one whose
 layer drew no surface. `fs`, `fs_with_surface` and `fs_surface` share `shade`, so the
 buffer holds what the model's layer was shaded with: the shading normal in the viewing frame and `1 / w`;
@@ -1284,8 +1308,12 @@ buffer before it and one after it, each an empty compute pass writing a timestam
 submit's command buffers run in order, so the span is the GPU running that work, not the
 time it sat waiting for the drawing thread. `end_gpu_frame` resolves the frame's
 timestamps (at most 256 spans) and maps them, and `gpu_units` polls without waiting and
-hands back each unit's GPU time in each frame read since, a frame or two late. Texture
-writes, readbacks and the encoders' conversion carry no timestamps.
+hands back each unit's GPU time in each frame read since, a frame or two late. A
+frame's way out goes through `submit_work` too: a readback ring's copy, with its NV12
+conversion when it has one, and the conversion into an encode target
+(`Nv12Converter::submit`), so a drawer that names a unit around them times them
+(`a_readback_and_its_conversion_are_timed_in_the_unit_named`). Texture writes carry no
+timestamps.
 
 **GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
 bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU

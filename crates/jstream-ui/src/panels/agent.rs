@@ -15,6 +15,7 @@
 //! Docs: docs/adr/0083-activity-log-over-the-protocol.md, docs/UI-FEATURES.md#live-panels
 
 use crate::app::SessionContext;
+use crate::icons::Icon;
 use crate::session::CLIENT_NAME;
 use crate::store::query;
 use futures_util::StreamExt;
@@ -58,6 +59,20 @@ pub fn meta(entry: &ActivityEntry, now_ms: u64) -> String {
         line.push_str(error);
     }
     line
+}
+
+/// The entries in runs that happened about the same time, as [`ago`] words it (C22):
+/// each run's heading ("9 min ago") and its entries, in the order given (newest first).
+pub fn by_time(entries: Vec<ActivityEntry>, now_ms: u64) -> Vec<(String, Vec<ActivityEntry>)> {
+    let mut runs: Vec<(String, Vec<ActivityEntry>)> = Vec::new();
+    for entry in entries {
+        let when = ago(now_ms, entry.time_ms);
+        match runs.last_mut() {
+            Some((last, run)) if *last == when => run.push(entry),
+            _ => runs.push((when, vec![entry])),
+        }
+    }
+    runs
 }
 
 /// Where the panel's Clear button last left the log: the newest entry's `seq` then
@@ -226,7 +241,7 @@ pub fn AgentActivity() -> impl IntoView {
 
     view! {
         <section class="agent-activity">
-            <h2>"Agent activity"</h2>
+            <h2 class="visually-hidden">"Agent activity"</h2>
             {move || {
                 log.problem
                     .get()
@@ -236,39 +251,58 @@ pub fn AgentActivity() -> impl IntoView {
                 let rows = shown();
                 if rows.is_empty() {
                     return view! {
-                        <p class="placeholder">
-                            "Nothing yet. What agents connected over MCP change shows here, newest first."
-                        </p>
+                        <div class="empty-state">
+                            <Icon name="bolt" size=18 />
+                            <p class="empty-title">"No agent activity yet"</p>
+                            <p class="empty-note">
+                                "What agents connected over MCP change shows here, newest first."
+                            </p>
+                        </div>
                     }
                         .into_any();
                 }
                 let now = log.now_ms.get();
-                view! {
-                    <div class="activity-bar">
-                        <button
-                            type="button"
-                            class="link"
-                            title="Empty this list. The engine's activity log and undo history are kept."
-                            on:click=clear
-                        >
-                            "Clear"
-                        </button>
-                    </div>
-                    <ol class="activity-log">
-                        {rows
-                            .into_iter()
-                            .map(|entry| {
-                                let failed = entry.error.is_some();
-                                view! {
-                                    <li class:failed=failed>
-                                        <span class="activity-meta">{meta(&entry, now)}</span>
-                                        <span class="activity-summary">{entry.summary.clone()}</span>
-                                    </li>
-                                }
-                            })
-                            .collect_view()}
-                    </ol>
-                }
+                let clear_button = move || view! {
+                    <button
+                        type="button"
+                        class="link activity-clear"
+                        title="Empty this list. The engine's activity log and undo history are kept."
+                        on:click=clear
+                    >
+                        "Clear"
+                    </button>
+                };
+                by_time(rows, now)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(n, (when, run))| {
+                        view! {
+                            <div class="activity-head">
+                                <h3 class="eyebrow">{when}</h3>
+                                {(n == 0).then(clear_button)}
+                            </div>
+                            <ol class="activity-log">
+                                {run
+                                    .into_iter()
+                                    .map(|entry| {
+                                        let failed = entry.error.is_some();
+                                        let error = entry.error.clone();
+                                        view! {
+                                            <li class:failed=failed title=meta(&entry, now)>
+                                                <Icon name=if failed { "info" } else { "bolt" } size=14 />
+                                                <span class="activity-main">
+                                                    <span class="activity-summary">{entry.summary.clone()}</span>
+                                                    {error.map(|e| view! { <span class="activity-error">{format!("Failed: {e}")}</span> })}
+                                                </span>
+                                                <span class="activity-who">{entry.client_name.clone()}</span>
+                                            </li>
+                                        }
+                                    })
+                                    .collect_view()}
+                            </ol>
+                        }
+                    })
+                    .collect_view()
                     .into_any()
             }}
         </section>
@@ -278,7 +312,7 @@ pub fn AgentActivity() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{ago, is_agent, merge, meta};
+    use super::{ago, by_time, is_agent, merge, meta};
     use jstream_protocol::{ActivityEntry, ClientId, MAX_ACTIVITY_ENTRIES};
 
     fn entry(seq: u64, client_name: &str) -> ActivityEntry {
@@ -291,6 +325,22 @@ mod tests {
             summary: "Switched to “Desktop + Cam”".into(),
             error: None,
         }
+    }
+
+    #[test]
+    fn runs_at_about_the_same_time_share_a_heading() {
+        let at = |seq, time_ms| ActivityEntry {
+            time_ms,
+            ..entry(seq, "claude-desktop")
+        };
+        let now = 1_000_000;
+        let runs = by_time(
+            vec![at(3, now), at(2, now - 10_000), at(1, now - 540_000)],
+            now,
+        );
+        let heads: Vec<(&str, usize)> = runs.iter().map(|(h, r)| (h.as_str(), r.len())).collect();
+        assert_eq!(heads, [("just now", 2), ("9 min ago", 1)]);
+        assert!(by_time(Vec::new(), now).is_empty());
     }
 
     #[test]

@@ -1007,7 +1007,9 @@ impl Compositor {
     ///
     /// # Errors
     /// [`RenderError::Invalid`] when a layer or target isn't a layer this compositor made,
-    /// or the six aren't one size.
+    /// or the three of either aren't one size. The layers may be smaller than the
+    /// targets, for a model drawn with fewer pixels than its canvas (ADR-0197): each of
+    /// the buffer's texels takes the layers' texel it falls in.
     pub fn merge_model_surface(
         &mut self,
         layers: [&Image; 3],
@@ -1092,10 +1094,10 @@ impl Compositor {
         live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
         surface: Option<[&Image; 3]>,
     ) -> Result<(), RenderError> {
-        let canvas = jstream_protocol::Canvas {
-            width: target.width(),
-            height: target.height(),
-        };
+        // The canvas the model is placed on, which the target may hold with fewer
+        // pixels (ADR-0197): the layers the passes read are the target's size, and stand
+        // for the same canvas.
+        let canvas = crate::model::canvas_of(target);
         let view = draw
             .camera
             .and_then(|camera| camera.view(canvas).ok())
@@ -1105,11 +1107,16 @@ impl Compositor {
                 .models
                 .draw(&self.gpu, &self.owner, draw, target, live, surface);
         };
-        let (colour, depth) = self.model_focus_layers(canvas.width, canvas.height)?;
+        let (width, height) = (target.width(), target.height());
+        let (mut colour, mut depth) = self.model_focus_layers(width, height)?;
+        if let Ok(extent) = jstream_media::FrameSize::new(canvas.width, canvas.height) {
+            colour.set_extent(extent);
+            depth.set_extent(extent);
+        }
         self.models
             .draw(&self.gpu, &self.owner, draw, &colour, live, surface)?;
         let empty = Scene {
-            canvas: jstream_media::FrameSize::new(canvas.width, canvas.height).map_err(|_| {
+            canvas: jstream_media::FrameSize::new(width, height).map_err(|_| {
                 RenderError::Invalid {
                     what: "layer",
                     detail: "the target has no pixels".into(),
@@ -1547,6 +1554,12 @@ impl Compositor {
     /// [`Self::queue`]: the context's on a platform context, else the compositor's own.
     pub(crate) fn submit_lock(&self) -> &jstream_platform::SubmitLock {
         &self.gpu.submit
+    }
+
+    /// Submits `work` on [`Self::queue`], timed with the unit the drawer is timing, if
+    /// any (`Gpu::submit_work`). The caller holds [`Self::submit_lock`].
+    pub(crate) fn submit_work(&self, work: wgpu::CommandBuffer) -> wgpu::SubmissionIndex {
+        self.gpu.submit_work(work)
     }
 
     /// The adapter the device was opened on.

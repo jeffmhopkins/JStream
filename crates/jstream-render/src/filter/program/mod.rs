@@ -553,5 +553,21 @@ fn clamp_size((width, height): (u32, u32)) -> (u32, u32) {
     (width.clamp(1, MAX_SIDE), height.clamp(1, MAX_SIDE))
 }
 
+/// The `sys` uniform of the program prelude a shader is drawn with into `target`: the
+/// sizes, and how each of its inputs stores alpha.
+pub(crate) fn system(input: &Image, target: &Image, inputs: &[Image]) -> [u8; 96] {
+    let mut bytes = [0u8; 96];
+    let size = [input.width() as f32, input.height() as f32];
+    let pass = [target.width() as f32, target.height() as f32];
+    for (at, value) in [size[0], size[1], pass[0], pass[1]].iter().enumerate() {
+        bytes[at * 4..at * 4 + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    for (n, image) in inputs.iter().enumerate() {
+        let at = 48 + n * 4;
+        bytes[at..at + 4].copy_from_slice(&image.alpha().shader_mode().to_le_bytes());
+    }
+    bytes
+}
+
 #[cfg(test)]
 mod tests;
