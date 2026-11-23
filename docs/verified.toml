@@ -6960,7 +6960,7 @@ stamp = { hash = "b3:372b1ab4238c8b43", by = "agent:claude-daw", note = "The Sou
 stamp = { hash = "b3:cccb4552a14a540c", by = "agent:claude", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/studio.rs"]
-stamp = { hash = "b3:37488f2c42095c6b", by = "agent:claude", note = "The Transitions panel line (toolbar, ⋯ menu with Delete…) still holds after the N1 fix, which only scopes the delete question to its preset" }
+stamp = { hash = "b3:bf8a9cda09312ca2", by = "agent:claude", note = """Only a rustdoc fix in studio.rs (duplicate_edit's "<name> copy" in backticks, for invalid_html_tags); no behaviour change; holds""" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/transform.rs"]
 stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
@@ -7203,7 +7203,7 @@ stamp = { hash = "b3:372b1ab4238c8b43", by = "agent:claude-daw", note = "page_ap
 stamp = { hash = "b3:cccb4552a14a540c", by = "agent:claude", note = "C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/studio.rs"]
-stamp = { hash = "b3:37488f2c42095c6b", by = "agent:claude", note = "The N1 fix in studio.rs (the delete question keeps its preset and closes on another pick) changes no crate purpose; holds" }
+stamp = { hash = "b3:bf8a9cda09312ca2", by = "agent:claude", note = """Only a rustdoc fix in studio.rs (duplicate_edit's "<name> copy" in backticks, for invalid_html_tags); no behaviour change; holds""" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/transform.rs"]
 stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
@@ -8916,5 +8916,5 @@ stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fm
 stamp = { hash = "b3:9e3c8a2f4aab4952", by = "agent:claude", note = "TR-03 now says Delete… deletes only the preset it was chosen on and closes on a pick, add, duplicate or another shown preset (review N1)" }
 
 ["UI-FEATURES#transitions"."file:crates/jstream-ui/src/panels/studio.rs"]
-stamp = { hash = "b3:37488f2c42095c6b", by = "agent:claude", note = "TR-03 now says Delete… deletes only the preset it was chosen on and closes on a pick, add, duplicate or another shown preset (review N1)" }
+stamp = { hash = "b3:bf8a9cda09312ca2", by = "agent:claude", note = """Only a rustdoc fix in studio.rs (duplicate_edit's "<name> copy" in backticks, for invalid_html_tags); no behaviour change; holds""" }
 
