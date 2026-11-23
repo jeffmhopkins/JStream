@@ -3,7 +3,7 @@
 import fs from 'fs';
 const yml = fs.readFileSync(new URL("../workflows/review-gate.yml", import.meta.url), 'utf8');
 const block = yml.slice(yml.indexOf('// BEGIN decide'), yml.indexOf('// END decide'));
-const { decide, carryCandidate, reviewedBase, sameChange, onlyBaseMerges } = new Function(block + '\nreturn { decide, carryCandidate, reviewedBase, sameChange, onlyBaseMerges };')();
+const { decide, carryCandidate, reviewedBase, sameChange, sameModes, onlyBaseMerges } = new Function(block + '\nreturn { decide, carryCandidate, reviewedBase, sameChange, sameModes, onlyBaseMerges };')();
 const H = 'a'.repeat(40), OLD = 'b'.repeat(40);
 const mk = (verdict, round, opts = {}) => ({
   author_association: opts.assoc ?? 'OWNER',
@@ -91,4 +91,18 @@ const B = { inBase: true, parents: 1, parentInBase: false, files: null };
 eq("merges: main's own squash commits brought in are skipped (#1132 B6)", onlyBaseMerges([B, B, M, R]), true);
 eq('merges: only base commits, no merge of the PR', onlyBaseMerges([B]), false);
 eq('merges: a plain PR commit beside base commits', onlyBaseMerges([B, M, { parents: 1, parentInBase: false, files: ['src/x.rs'] }]), false);
+// ADR-0199: a carry also needs the PR's file modes changed the same way (#1584).
+const tr = (entries, truncated = false) => ({ truncated, tree: Object.entries(entries).map(([path, mode]) => ({ path, mode })) });
+const side = (base, head) => ({ base: tr(base), head: tr(head) });
+const added = [bin('t.opus', S1)];
+eq('modes: same added file mode', sameModes(added, side({}, { 't.opus': '100644' }), side({ 'x': '100644' }, { 'x': '100644', 't.opus': '100644' })), true);
+eq('modes: a merge chmods an added file (#1584)', sameModes(added, side({}, { 't.opus': '100644' }), side({}, { 't.opus': '100755' })), false);
+eq('modes: a merge chmods a modified file', sameModes([f('a.sh', P1)], side({ 'a.sh': '100644' }, { 'a.sh': '100644' }), side({ 'a.sh': '100644' }, { 'a.sh': '100755' })), false);
+eq("modes: the PR's own chmod carries", sameModes([f('a.sh', P1)], side({ 'a.sh': '100644' }, { 'a.sh': '100755' }), side({ 'a.sh': '100644' }, { 'a.sh': '100755' })), true);
+eq('modes: the base chmods a file the PR modifies', sameModes([f('a.sh', P1)], side({ 'a.sh': '100644' }, { 'a.sh': '100644' }), side({ 'a.sh': '100755' }, { 'a.sh': '100755' })), true);
+eq('modes: a renamed file is read at its old path', sameModes([{ filename: 'b.sh', previous_filename: 'a.sh', status: 'renamed', patch: P1 }], side({ 'a.sh': '100755' }, { 'b.sh': '100755' }), side({ 'a.sh': '100755' }, { 'b.sh': '100644' })), false);
+eq('modes: ledger ignored', sameModes([f('docs/verified.toml', '+x')], side({ 'docs/verified.toml': '100644' }, { 'docs/verified.toml': '100644' }), side({ 'docs/verified.toml': '100644' }, { 'docs/verified.toml': '100755' })), true);
+eq('modes: closed on a truncated tree', sameModes(added, side({}, { 't.opus': '100644' }), { base: tr({}), head: tr({ 't.opus': '100644' }, true) }), false);
+eq('modes: closed on a missing tree', sameModes(added, side({}, { 't.opus': '100644' }), { base: tr({}), head: null }), false);
+eq('modes: closed on files missing', sameModes(null, side({}, {}), side({}, {})), false);
 process.exit(fails ? 1 : 0);
