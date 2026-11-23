@@ -3379,7 +3379,7 @@ stream the profiler's `StreamRegistry`, and the stream counts each picture its b
 queue took or refused (`SentCounts`), so its `frames_out` and `dropped` are what reached
 the client's queue and what its keyframe gate dropped, beside the encoder's own drops.
 Each stream's profile names the video encoder encoding it now and whether it is a
-hardware one (`encoder`, `hardware`, protocol 0.173; `streams::encoder_of` reads
+hardware one (`encoder`, `hardware`, protocol 0.175; `streams::encoder_of` reads
 `StatsHandle::codec`, which follows a first-frame fallback), an output's too.
 JPEG and PNG streams are not metered.
 

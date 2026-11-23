@@ -885,10 +885,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:b99b107032bf812a", by = "agent:claude", note = "Protocol 0.173 adds two defaulted fields to profile.get's StreamProfile (encoder, hardware) with snapshot and fixture updates; the section's account of the protocol, its versioning and schema is unchanged." }
+stamp = { hash = "b3:d0767b34d3b4904f", by = "agent:claude", note = "Protocol 0.175 adds two defaulted fields to profile.get's StreamProfile (encoder, hardware) with snapshot and fixture updates; the section's account of the protocol, its versioning and schema is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:6f538da93cd5260d", by = "agent:claude", note = "Protocol 0.173 adds two defaulted fields to profile.get's StreamProfile (encoder, hardware) with snapshot and fixture updates; the section's account of the protocol, its versioning and schema is unchanged." }
+stamp = { hash = "b3:98d05c4c8e8aeedc", by = "agent:claude", note = "Protocol 0.175 adds two defaulted fields to profile.get's StreamProfile (encoder, hardware) with snapshot and fixture updates; the section's account of the protocol, its versioning and schema is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -1041,7 +1041,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Proto
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:b13cd77d903477a1", by = "agent:claude", note = "Protocol 0.173 adds two defaulted fields to profile.get's StreamProfile (encoder, hardware) with snapshot and fixture updates; the section's account of the protocol, its versioning and schema is unchanged." }
+stamp = { hash = "b3:2b4a873f8797565e", by = "agent:claude", note = "Protocol 0.175 adds two defaulted fields to profile.get's StreamProfile (encoder, hardware) with snapshot and fixture updates; the section's account of the protocol, its versioning and schema is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -2142,7 +2142,7 @@ stamp = { hash = "b3:f893dad728d37a4d", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:340cab5f57cb3721", by = "agent:smooth-paths", note = "keyframes.rs gains path, refusal and orbit tests under the keyframe scenes it already lists; the rest are constructor fields" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:f0f152b33d4eb3bf", by = "agent:claude", note = "tests.rs: the output stream profile test also asserts the encoder is named and software with the fakes; preview/mod.rs gains hardware_tests. The section's list of what the tests cover holds." }
+stamp = { hash = "b3:be2a6de862f0bd27", by = "agent:claude", note = "tests.rs: the output stream profile test also asserts the encoder is named and software with the fakes; preview/mod.rs gains hardware_tests. The section's list of what the tests cover holds." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/activity.rs"]
 stamp = { hash = "b3:1f503152ce8ea35d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2316,7 +2316,7 @@ stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:bfa9a4fc540d5bc2", by = "agent:issues-thread", note = "#1538 only changes when take_samples (engine.rs) reads each frame-sheet picture: never sooner than interval_ms after the previous one. Re-read the Frame sheets section; added that overdue pictures are taken an interval apart (engine::sample_due), so a late sheet runs longer; the at_ms and switch_and_watch text still holds." }
 
 ["CRATE-jstream-core#frame-sheets"."dep:crates/jstream-protocol/README.md#queries"]
-stamp = { hash = "b3:a93a974be5aa9399", by = "agent:claude", note = "preview/mod.rs changed only how a staged H.264 session is opened and metered; frame sheets (video.snapshot and its encoders) are untouched and the section holds." }
+stamp = { hash = "b3:04bc52720ea3a10c", by = "agent:claude", note = "preview/mod.rs changed only how a staged H.264 session is opened and metered, and the protocol's queries text only gained the stream's encoder; frame sheets (video.snapshot and its encoders) are untouched and the section holds." }
 
 ["CRATE-jstream-core#frame-sheets"."file:crates/jstream-core/src/frames.rs"]
 stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "Shared::sample now pins each slot's frame (Shot::pin) and draw_sheet draws through View.pinned, so a painted source's tile shows it as taken; the text says so, and at_ms is again the time each tile shows (new test a_sheet_shows_a_painted_source_as_each_picture_was_taken)." }
@@ -2394,7 +2394,7 @@ stamp = { hash = "b3:7555920d25b26a7d", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to outputs.rs, youtube.rs, runtime/pipeline.rs, runtime/publish.rs, runtime/sink.rs, runtime/vcam.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#outputs, matching what it relies on" }
 
 ["CRATE-jstream-core#preview-streams"."body"]
-stamp = { hash = "b3:0f63cd44b4c0daf2", by = "agent:claude", note = "Edited: a stream the program stage draws opens its H.264 on the hardware encoder for one stream at a time (HardwareSlot, open_staged_h264: Prefer while the slot is free, Avoid otherwise and on a failed or software Prefer), the hub's own streams stay on Avoid, and each metered stream names its encoder (protocol 0.173); checked against preview/mod.rs and its two hardware tests." }
+stamp = { hash = "b3:6cc4ff407c198343", by = "agent:claude", note = "Edited: a stream the program stage draws opens its H.264 on the hardware encoder for one stream at a time (HardwareSlot, open_staged_h264: Prefer while the slot is free, Avoid otherwise and on a failed or software Prefer), the hub's own streams stay on Avoid, and each metered stream names its encoder (protocol 0.175); checked against preview/mod.rs and its two hardware tests." }
 
 ["CRATE-jstream-core#preview-streams"."dep:crates/jstream-protocol/README.md#binary-streams"]
 stamp = { hash = "b3:e90844923a76aa3e", by = "agent:claude-perf-suite", note = "binary-streams gained the views report; the engine's preview streams themselves are unchanged | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
@@ -4617,16 +4617,16 @@ stamp = { hash = "b3:c499997af40d7f9e", by = "agent:channels", note = "Added 0.1
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:b99b107032bf812a", by = "agent:claude", note = "Both snapshots changed only by StreamProfile's two new defaulted fields and their fixture values; an older client ignores them and an older engine's reply defaults them, as this section requires of an addition." }
+stamp = { hash = "b3:d0767b34d3b4904f", by = "agent:claude", note = "Both snapshots changed only by StreamProfile's two new defaulted fields, their fixture values and the version 0.175; an older client ignores the fields and an older engine's reply defaults them, as this section requires of an addition." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:6f538da93cd5260d", by = "agent:claude", note = "Both snapshots changed only by StreamProfile's two new defaulted fields and their fixture values; an older client ignores them and an older engine's reply defaults them, as this section requires of an addition." }
+stamp = { hash = "b3:98d05c4c8e8aeedc", by = "agent:claude", note = "Both snapshots changed only by StreamProfile's two new defaulted fields, their fixture values and the version 0.175; an older client ignores the fields and an older engine's reply defaults them, as this section requires of an addition." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:b13cd77d903477a1", by = "agent:claude", note = "Both snapshots changed only by StreamProfile's two new defaulted fields and their fixture values; an older client ignores them and an older engine's reply defaults them, as this section requires of an addition." }
+stamp = { hash = "b3:2b4a873f8797565e", by = "agent:claude", note = "Both snapshots changed only by StreamProfile's two new defaulted fields, their fixture values and the version 0.175; an older client ignores the fields and an older engine's reply defaults them, as this section requires of an addition." }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
 stamp = { hash = "b3:676067bd06525692", by = "agent:channels", note = "Added channel.values to the query list and the channel actions to the actions list." }
@@ -4686,7 +4686,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:b13cd77d903477a1", by = "agent:claude", note = "version.rs changed only the minor to 173; the errors and version types this section lists are unchanged." }
+stamp = { hash = "b3:2b4a873f8797565e", by = "agent:claude", note = "version.rs changed only the minor, to 175; the errors and version types this section lists are unchanged." }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:626ba3cd643e0e61", by = "agent:claude", note = "Added solid_outline (hull of the eight projected corners, None if one is behind the viewer), outline_contains and SolidBounds::of_size to the solid.rs entry; checked against solid.rs." }
@@ -4767,7 +4767,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:02c803fcc8de8b7a", by = "agent:release-alpha9", note = "Re-read: version 0.170 and new re-exports; the design holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold | kept from the merged side: Re-read the envelope and versioning design against version.rs at 0.172 and lib.rs's new export: a minor bump with an additive field; the handshake rules hold." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:b13cd77d903477a1", by = "agent:claude", note = "version.rs changed only the minor to 173, an addition under the same rule (R-API-001) this section states." }
+stamp = { hash = "b3:2b4a873f8797565e", by = "agent:claude", note = "version.rs changed only the minor, to 175, an addition under the same rule (R-API-001) this section states." }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -5058,7 +5058,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Addit
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:b13cd77d903477a1", by = "agent:claude", note = "Re-read: StreamProfile gained two defaulted fields and the version went to 0.173; the purpose text names neither and holds." }
+stamp = { hash = "b3:2b4a873f8797565e", by = "agent:claude", note = "Re-read: StreamProfile gained two defaulted fields and the version went to 0.175; the purpose text names neither and holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -5070,7 +5070,7 @@ stamp = { hash = "b3:83762eebb87f7e1a", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to pack.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#queries"."body"]
-stamp = { hash = "b3:a93a974be5aa9399", by = "agent:claude", note = "Edited the profile.get entry: since 0.173 a stream names the video encoder encoding it now (encoder) and whether it is hardware; checked against profile.rs and core's stream_profiles." }
+stamp = { hash = "b3:04bc52720ea3a10c", by = "agent:claude", note = "Edited the profile.get entry: since 0.175 a stream names the video encoder encoding it now (encoder) and whether it is hardware; checked against profile.rs and core's stream_profiles." }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -5112,13 +5112,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:e4036ac66ffa1727", by = "agent:claude", note = "Edited: the paragraph opens on 0.173 and says why (StreamProfile's encoder and hardware); the earlier versions' reasons are untouched." }
+stamp = { hash = "b3:83d019b2f39d4a04", by = "agent:claude", note = "Edited: the paragraph opens on 0.175 and says why (StreamProfile's encoder and hardware); the earlier versions' reasons are untouched. 0.173 and 0.174 are other changes' numbers, not yet on this base." }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:b13cd77d903477a1", by = "agent:claude", note = "Edited: the paragraph opens on 0.173 and says why (StreamProfile's encoder and hardware); the earlier versions' reasons are untouched." }
+stamp = { hash = "b3:2b4a873f8797565e", by = "agent:claude", note = "Edited: the paragraph opens on 0.175 and says why (StreamProfile's encoder and hardware); the earlier versions' reasons are untouched. 0.173 and 0.174 are other changes' numbers, not yet on this base." }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
