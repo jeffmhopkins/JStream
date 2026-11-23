@@ -399,7 +399,10 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **MIDI-driven motion** (`reactive.rs`,
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): a `midi` modifier
   following a control change, pitch bend or channel pressure on its input's state, read
-  from atomics and smoothed by the same follower; a preview reads it unsmoothed.
+  from atomics and smoothed by the same follower; a preview reads it unsmoothed. A scene
+  camera's `midi` and `data` modifiers are recorded and smoothed the same way, by scene
+  family and modifier ID instead of item
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
 - **Data-driven motion** (`reactive.rs`,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3): a
   `data` modifier following one field of a sender's live data, a number through its
@@ -419,7 +422,10 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   draws it. Nothing is stored.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
-  camera motion and follow camera, planned with the shot. A follow camera holds its
+  camera motion and follow camera, planned with the shot; camera motion reads its
+  `midi` and `data` levels from the shot's bindings, and its `pan` and `tilt` turn the
+  view about the camera as the live aim does
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)). A follow camera holds its
   zoom by default and only pans at the box's edges
   ([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md)).
 - **Live aim** (`aim.rs`,
@@ -1792,7 +1798,8 @@ with a `follow_pointer` effect draws through the framing camera so it can
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)): its pass, and a
 transition's ends, carry the family's `CameraMoves`, which `compose` applies to the
 camera as it draws (a follow camera's springs in that compositor's `Chains`, stepped
-once per frame time, then the camera's motion), with the zoom steps from the live
+once per frame time, then the camera's motion, whose `midi` and `data` modifiers read
+the shot's bindings, ADR-0176), with the zoom steps from the live
 values. Such a shot changes with time, so it redraws each frame. Each compositor keeps
 its own springs. The preview thread draws with the captures, so its follow camera
 follows the pointer apart from the render thread, from rest. The snapshot thread now

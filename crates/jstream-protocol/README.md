@@ -226,9 +226,11 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
-  the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
+  the target's x, y and z, `fov`, `roll`, `focus` and `blur`, and since 0.164 `pan` and
+  `tilt`) and `check_camera_motion`,
   which checks a camera's list as `check_motion` checks an item's and refuses an
-  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
+  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); since 0.164
+  it takes `midi` and `data` ones ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
   `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms`, since 0.91 `safe_margin_pct`
   up to `MAX_FOLLOW_MARGIN_PCT` and, since 0.124, `hold_zoom`, each with its default) with `CameraFollow::check`, and
@@ -367,7 +369,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.163 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.164 because a scene camera's motion takes `midi` and `data`
+modifiers, so a controller or a DAW's live data drives its position, aim, roll and field
+of view, and `CameraProperty` gains `pan` and `tilt`, which turn the view about the
+camera ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md));
+0.163 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
 0.160 because a motion modifier can follow a DAW's live data:
 `MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
@@ -2905,8 +2911,9 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   the first frame an item is drawn lands on the value), bent by `curve` as an audio
   modifier's is, and mapped onto `from` (default 0) to `to` (default 1), each within
   ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
-  preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
-  camera's motion refuses it.
+  preview reads the control as it is, unsmoothed. Its `clock` is ignored. A scene
+  camera's motion takes it since 0.164, smoothed by scene family and ID
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
 - **`data`** (since 0.160,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3)
   follows one field of a JTunnel sender's live data the same way: `field` (a dotted path
@@ -2918,7 +2925,8 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   to 100 bytes, each to a value within 0 to 1) or 0; and a missing sender, key or field,
   or one that went stale, reads 0. That is smoothed, bent and mapped onto `from..to` as a
   `midi` modifier's is, with the same defaults. A preview reads the field as it is,
-  unsmoothed. Its `clock` is ignored, and a scene camera's motion refuses it.
+  unsmoothed. Its `clock` is ignored. A scene camera's motion takes it since 0.164
+  (ADR-0176).
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.

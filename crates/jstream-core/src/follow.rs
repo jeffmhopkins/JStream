@@ -1,8 +1,10 @@
 //! A scene camera's motion and its follow camera (ADR-0113,
 //! docs/adr/0113-camera-motion-and-follow-pointer.md).
 //!
-//! Camera motion ([`CameraMotion`]) is a pure function of time, as an item's is: each
-//! modifier's value is added to one camera property as the camera is drawn.
+//! Camera motion ([`CameraMotion`]) is a pure function of time and of the shot's MIDI and
+//! data levels, as an item's is: each modifier's value is added to one camera property as
+//! the camera is drawn, and `pan` and `tilt` then turn the view about the camera
+//! (ADR-0176).
 //!
 //! A follow camera ([`Follow`]) is not: it glides after the pointer over a capture item
 //! through springs it carries from frame to frame, so the render thread keeps one per
@@ -58,6 +60,7 @@ use jstream_protocol::{
     Placed, SceneCamera, SceneId, Vec3,
 };
 
+use crate::reactive::Bindings;
 use crate::snapshot::{CaptureKey, Captures};
 
 /// A scene family's camera motion, as `jstream-anim` evaluates it: each modifier with
@@ -77,14 +80,18 @@ impl CameraMotion {
     }
 
     /// `camera` with the motion's values at `at` added, the scene first shown on program
-    /// at `shown`. The field of view is held to 1 to 170°, focus above 0 and blur to 0 to
-    /// 64, and a camera that would reach its target keeps its unmoved position. Allocates
-    /// nothing.
+    /// at `shown`. `heard` gives a MIDI or data modifier's smoothed `0..=1` level by
+    /// modifier ID (ADR-0176), as an item's evaluation takes it; one it has none for
+    /// rests at its `from`. The field of view is held to 1 to 170°, focus above 0 and blur
+    /// to 0 to 64, and a camera that would reach its target keeps its unmoved position.
+    /// The pan and tilt then turn the view about the moved position, as a live aim does
+    /// (ADR-0152). Allocates nothing.
     pub(crate) fn apply(
         &self,
         camera: SceneCamera,
         at: MediaTime,
         shown: Option<MediaTime>,
+        heard: impl Fn(&str) -> Option<f32>,
     ) -> SceneCamera {
         if self.0.is_empty() {
             return camera;
@@ -94,8 +101,16 @@ impl CameraMotion {
         let mut out = camera;
         let mut position = [0.0_f32; 3];
         let mut target = [0.0_f32; 3];
+        let (mut pan, mut tilt) = (0.0_f64, 0.0_f64);
         for (property, modifier) in self.0.iter() {
-            let value = jstream_anim::evaluate(std::slice::from_ref(modifier), engine_s, shown_s).x;
+            let value = jstream_anim::evaluate_with(
+                std::slice::from_ref(modifier),
+                engine_s,
+                shown_s,
+                |_| None,
+                &heard,
+            )
+            .x;
             let value = value as f32;
             match property {
                 CameraProperty::PositionX => position[0] += value,
@@ -122,6 +137,8 @@ impl CameraMotion {
                         out.blur_px,
                     );
                 }
+                CameraProperty::Pan if value.is_finite() => pan += f64::from(value),
+                CameraProperty::Tilt if value.is_finite() => tilt += f64::from(value),
                 _ => {}
             }
         }
@@ -133,11 +150,12 @@ impl CameraMotion {
             target: moved(out.target, target),
             ..out
         };
-        if moved_camera.validate().is_ok() {
+        let moved = if moved_camera.validate().is_ok() {
             moved_camera
         } else {
             out
-        }
+        };
+        crate::aim::turn(moved, (pan, tilt, 1.0))
     }
 }
 
@@ -158,7 +176,13 @@ pub(crate) struct CameraMoves {
 impl CameraMoves {
     /// `base`, the camera the scene draws through, as it is at `at`: glided after the
     /// pointer by the follow camera, then moved by the motion. `shown` is when the scene
-    /// started being drawn on program, `zooms` the zoom steps asked for its family.
+    /// started being drawn on program, `zooms` the zoom steps asked for its family, and
+    /// `bindings` the shot's, whose camera levels its MIDI and data modifiers read
+    /// (ADR-0176).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "each is one input of the pass camera"
+    )]
     pub(crate) fn apply(
         &self,
         base: SceneCamera,
@@ -167,6 +191,7 @@ impl CameraMoves {
         captures: &dyn Captures,
         cameras: &mut Cameras,
         zooms: i64,
+        bindings: &Bindings,
     ) -> SceneCamera {
         let followed = match &self.follow {
             Some(plan) => {
@@ -183,7 +208,9 @@ impl CameraMoves {
             }
             None => base,
         };
-        self.motion.apply(followed, at, shown)
+        self.motion.apply(followed, at, shown, |id| {
+            bindings.camera_level(&self.family, id)
+        })
     }
 
     /// Whether it changes the camera with time.
@@ -1220,7 +1247,7 @@ mod tests {
             drift("roll", CameraProperty::Roll, -2.0),
         ]);
         assert!(!motion.is_still());
-        let camera = motion.apply(base(), ms(2000), None);
+        let camera = motion.apply(base(), ms(2000), None, |_| None);
         assert!((camera.position.x.get() - (base().position.x.get() + 20.0)).abs() < 1e-3);
         assert_eq!(camera.fov_deg.get(), MAX_FOV_DEG);
         assert!((camera.roll_deg.get() + 4.0).abs() < 1e-3);
@@ -1230,7 +1257,79 @@ mod tests {
             CameraProperty::PositionZ,
             -base().target_distance(),
         )]);
-        assert_eq!(onto.apply(base(), ms(1000), None).position, base().position);
-        assert_eq!(CameraMotion::default().apply(base(), ms(5), None), base());
+        assert_eq!(
+            onto.apply(base(), ms(1000), None, |_| None).position,
+            base().position
+        );
+        assert_eq!(
+            CameraMotion::default().apply(base(), ms(5), None, |_| None),
+            base()
+        );
+    }
+
+    /// ADR-0176: a MIDI modifier maps its smoothed level onto its range, and pan and tilt
+    /// turn the view about the camera's position.
+    #[test]
+    fn a_controller_moves_the_camera_and_turns_it() {
+        let f = |v: f32| Finite32::new(v).expect("finite");
+        let fader = |id: &str, property, from, to| jstream_protocol::CameraMotionModifier {
+            modifier_id: id.into(),
+            property,
+            kind: MotionKind::Midi {
+                control: jstream_protocol::MotionMidiControl::Cc,
+                controller: Some(20),
+                channel: Some(16),
+                input: Some("Bitwig".into()),
+                smoothing_ms: 50,
+                curve: jstream_protocol::MotionCurve::Linear,
+                from: f(from),
+                to: f(to),
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        };
+        let motion = CameraMotion::of(&[
+            fader("fov", CameraProperty::Fov, 0.0, -20.0),
+            fader("pan", CameraProperty::Pan, -45.0, 45.0),
+            fader("tilt", CameraProperty::Tilt, 0.0, 30.0),
+            fader("x", CameraProperty::PositionX, 0.0, 100.0),
+        ]);
+        assert!(!motion.is_still());
+        // Before anything is sent each rests at its `from`.
+        let rest = motion.apply(base(), ms(0), None, |_| None);
+        assert_eq!(rest.fov_deg.get(), 40.0);
+        let level = |id: &str| match id {
+            "fov" | "x" => Some(1.0),
+            "pan" => Some(0.75),
+            "tilt" => Some(0.0),
+            _ => None,
+        };
+        let moved = motion.apply(base(), ms(0), None, level);
+        assert_eq!(moved.fov_deg.get(), 20.0);
+        let p = moved.position;
+        assert!((p.x.get() - (base().position.x.get() + 100.0)).abs() < 1e-3);
+        // Panned 22.5° right of where the moved camera looks (it moved 100 px right of
+        // its target), level, at the same distance.
+        let d = [
+            moved.target.x.get() - p.x.get(),
+            moved.target.y.get() - p.y.get(),
+            moved.target.z.get() - p.z.get(),
+        ];
+        let yaw = f64::from(d[0]).atan2(f64::from(-d[2])).to_degrees();
+        let before = (-100f64)
+            .atan2(f64::from(base().target_distance()))
+            .to_degrees();
+        assert!((yaw - (before + 22.5)).abs() < 0.01, "{yaw}");
+        assert!(d[1].abs() < 0.01, "{d:?}");
+        let length = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        let expect = base().target_distance().hypot(100.0);
+        assert!((length - expect).abs() < 0.5, "{length} vs {expect}");
+        // Tilted up 30°: the target rises (scene y is down).
+        let up = motion.apply(base(), ms(0), None, |id| {
+            Some(if id == "tilt" { 1.0 } else { 0.0 })
+        });
+        let rise = up.position.y.get() - up.target.y.get();
+        let expect = base().target_distance() * 30f32.to_radians().sin();
+        assert!((rise - expect).abs() < 0.5, "{rise} vs {expect}");
     }
 }

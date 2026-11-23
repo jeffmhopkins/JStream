@@ -823,7 +823,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   camera, with Open its filter, or saying how to add one, with Add Follow pointer…, which
   opens Add filter on the scene's first display or window capture (`followable`)
   ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)); and
-  Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
+  Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and DAW data (set over the protocol), MIDI included with its Input ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md), `camera_kind`), on Pan and Tilt too, and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. The list is a draft field, which OK sends as
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.

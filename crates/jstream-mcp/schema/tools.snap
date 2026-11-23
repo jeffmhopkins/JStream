@@ -2370,7 +2370,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "CameraProperty": {
-            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after\nthe position and target have moved, the view held within 89° of level.",
             "oneOf": [
               {
                 "const": "position_x",
@@ -2420,6 +2420,16 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "blur",
                 "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              },
+              {
+                "const": "pan",
+                "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.164, ADR-0176): its target swings about its position.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "The view turned up, in degrees (since 0.164, ADR-0176): its target swings about\nits position, held within 89° of level.",
                 "type": "string"
               }
             ]
@@ -9627,7 +9637,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "CameraProperty": {
-            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after\nthe position and target have moved, the view held within 89° of level.",
             "oneOf": [
               {
                 "const": "position_x",
@@ -9677,6 +9687,16 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "blur",
                 "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              },
+              {
+                "const": "pan",
+                "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.164, ADR-0176): its target swings about its position.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "The view turned up, in degrees (since 0.164, ADR-0176): its target swings about\nits position, held within 89° of level.",
                 "type": "string"
               }
             ]
@@ -18794,7 +18814,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "CameraProperty": {
-            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after\nthe position and target have moved, the view held within 89° of level.",
             "oneOf": [
               {
                 "const": "position_x",
@@ -18844,6 +18864,16 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "blur",
                 "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              },
+              {
+                "const": "pan",
+                "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.164, ADR-0176): its target swings about its position.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "The view turned up, in degrees (since 0.164, ADR-0176): its target swings about\nits position, held within 89° of level.",
                 "type": "string"
               }
             ]
@@ -28398,7 +28428,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "CameraProperty": {
-            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after\nthe position and target have moved, the view held within 89° of level.",
             "oneOf": [
               {
                 "const": "position_x",
@@ -28448,6 +28478,16 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "blur",
                 "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              },
+              {
+                "const": "pan",
+                "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.164, ADR-0176): its target swings about its position.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "The view turned up, in degrees (since 0.164, ADR-0176): its target swings about\nits position, held within 89° of level.",
                 "type": "string"
               }
             ]
@@ -35191,7 +35231,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "CameraProperty": {
-            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after\nthe position and target have moved, the view held within 89° of level.",
             "oneOf": [
               {
                 "const": "position_x",
@@ -35241,6 +35281,16 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "blur",
                 "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              },
+              {
+                "const": "pan",
+                "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.164, ADR-0176): its target swings about its position.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "The view turned up, in degrees (since 0.164, ADR-0176): its target swings about\nits position, held within 89° of level.",
                 "type": "string"
               }
             ]
@@ -39283,7 +39333,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "CameraProperty": {
-            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after\nthe position and target have moved, the view held within 89° of level.",
             "oneOf": [
               {
                 "const": "position_x",
@@ -39333,6 +39383,16 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "blur",
                 "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              },
+              {
+                "const": "pan",
+                "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.164, ADR-0176): its target swings about its position.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "The view turned up, in degrees (since 0.164, ADR-0176): its target swings about\nits position, held within 89° of level.",
                 "type": "string"
               }
             ]

@@ -126,6 +126,72 @@ fn camera_motion_redraws_every_frame() {
     assert!(!hub.load().shot().changes_with_time(), "a disabled sway");
 }
 
+/// ADR-0176: a camera's `midi` modifier is followed by the shot's follower, by scene
+/// family, from a named JTunnel sender on one channel.
+#[test]
+fn a_controller_drives_a_scene_camera() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    batch(&control, edits(scenes())).expect("scenes");
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let zoom = CameraMotionModifier {
+        modifier_id: "zoom".into(),
+        property: CameraProperty::Fov,
+        kind: MotionKind::Midi {
+            control: jstream_protocol::MotionMidiControl::Cc,
+            controller: Some(25),
+            channel: Some(16),
+            input: Some("Bitwig".into()),
+            smoothing_ms: 0,
+            curve: jstream_protocol::MotionCurve::Linear,
+            from: f(0.0),
+            to: f(-30.0),
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
+    };
+    batch(
+        &control,
+        Batch::single(Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("a"),
+            motion: vec![zoom],
+        }),
+    )
+    .expect("a MIDI camera move is taken");
+    let snapshot = hub.load();
+    let shot = snapshot.shot();
+    assert!(shot.changes_with_time(), "a camera on a fader redraws");
+    let family = SceneId::new("a");
+    assert_eq!(
+        shot.audio().camera_level(&family, "zoom"),
+        Some(0.0),
+        "nothing sent yet"
+    );
+    let midi = engine.midi_inputs();
+    let cc = |channel: u8, value| {
+        jstream_midi::Message::parse(&[0xB0 | channel, 25, value]).expect("a CC")
+    };
+    midi.push("Other", 0, &cc(15, 127));
+    midi.push("Bitwig", 1, &cc(0, 127));
+    let mut follower = crate::reactive::Follower::default();
+    follower.follow(
+        shot.audio(),
+        jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS),
+    );
+    assert_eq!(
+        shot.audio().camera_level(&family, "zoom"),
+        Some(0.0),
+        "another sender or channel moves nothing"
+    );
+    midi.push("Bitwig", 2, &cc(15, 127));
+    follower.follow(
+        shot.audio(),
+        jstream_media::MediaTime::new(16_000, jstream_media::Timebase::MICROS),
+    );
+    assert_eq!(shot.audio().camera_level(&family, "zoom"), Some(1.0));
+}
+
 /// ADR-0120: a Follow pointer filter on a capture in a 2D scene supplies the scene's
 /// camera and moves it every frame; turned off, the scene is still and 2D again.
 #[test]

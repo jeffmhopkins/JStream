@@ -4,8 +4,10 @@
 //! A scene with a camera may also hold `camera_motion`, at most [`MAX_MOTION_MODIFIERS`]
 //! [`CameraMotionModifier`]s, which change the camera continuously as it is drawn with the
 //! same kinds and clocks as an item's ([`MotionKind`], [`MotionClock`]), less `audio`,
-//! since a camera hears nothing, and `midi` (ADR-0168) and `data` (ADR-0171), since it
-//! follows no controller and no live data. It may also hold
+//! since a camera hears nothing. Since 0.164 a camera's modifiers may be `midi`
+//! (ADR-0168) or `data` (ADR-0171), so a controller or a DAW's live data drives its
+//! position, aim, pan, tilt, roll and field of view through the same follower an item's
+//! use (ADR-0176). It may also hold
 //! `camera_follow`, a [`CameraFollow`], whose camera glides after the pointer over a
 //! display or window capture in the scene. Both belong to the scene family, beside the
 //! camera. Camera motion is set with `scene.set_camera_motion`. Since 0.91 the follow
@@ -26,7 +28,8 @@ use serde_json::Value;
 
 /// The camera property a camera motion modifier changes. Every value is added to the
 /// camera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and
-/// blur to 0 to 64.
+/// blur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after
+/// the position and target have moved, the view held within 89° of level.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -53,6 +56,12 @@ pub enum CameraProperty {
     Focus,
     /// The blur far from focus, in canvas pixels; only a camera with a focus shows it.
     Blur,
+    /// The view turned about the vertical through the camera, to the right, in degrees
+    /// (since 0.164, ADR-0176): its target swings about its position.
+    Pan,
+    /// The view turned up, in degrees (since 0.164, ADR-0176): its target swings about
+    /// its position, held within 89° of level.
+    Tilt,
     /// A property this version of the protocol doesn't know, from a newer server. Never
     /// sent; an edit carrying one is refused, and a stored one draws as still.
     #[serde(other)]
@@ -62,7 +71,7 @@ pub enum CameraProperty {
 
 impl CameraProperty {
     /// Every property, in the order above.
-    pub const ALL: [CameraProperty; 10] = [
+    pub const ALL: [CameraProperty; 12] = [
         CameraProperty::PositionX,
         CameraProperty::PositionY,
         CameraProperty::PositionZ,
@@ -73,6 +82,8 @@ impl CameraProperty {
         CameraProperty::Roll,
         CameraProperty::Focus,
         CameraProperty::Blur,
+        CameraProperty::Pan,
+        CameraProperty::Tilt,
     ];
 }
 
@@ -107,7 +118,8 @@ fn is_true(value: &bool) -> bool {
 /// Whether a camera's motion list may be stored: at most 8 modifiers, unique well-formed
 /// IDs, known properties, kinds and clocks, and each kind's parameters in range, as
 /// [`check_motion`] checks an item's. An `audio` modifier is refused: a camera hears
-/// nothing, so it would only ever sit at its `from` (ADR-0100).
+/// nothing, so it would only ever sit at its `from` (ADR-0100). A `midi` or `data` one
+/// is taken since 0.164 (ADR-0176).
 ///
 /// # Errors
 /// The first problem, naming its field (`motion` or `motion.N.<param>`).
@@ -134,24 +146,6 @@ pub fn check_camera_motion(motion: &[CameraMotionModifier]) -> Result<(), Motion
         return Err(MotionProblem {
             field: format!("motion.{n}.kind"),
             reason: "audio motion is for items: a camera hears nothing".into(),
-        });
-    }
-    if let Some(n) = motion
-        .iter()
-        .position(|m| matches!(m.kind, MotionKind::Midi { .. }))
-    {
-        return Err(MotionProblem {
-            field: format!("motion.{n}.kind"),
-            reason: "MIDI motion is for items: a camera follows no controller".into(),
-        });
-    }
-    if let Some(n) = motion
-        .iter()
-        .position(|m| matches!(m.kind, MotionKind::Data { .. }))
-    {
-        return Err(MotionProblem {
-            field: format!("motion.{n}.kind"),
-            reason: "data motion is for items: a camera follows no live data".into(),
         });
     }
     // The rest is what an item's list checks: the property is the camera's own.
@@ -506,18 +500,31 @@ mod tests {
             field_of(&[drift("a", CameraProperty::Fov), heard]).as_deref(),
             Some("motion.1.kind")
         );
-        // Nor does a MIDI one follow a controller there (ADR-0168).
+        // A MIDI one follows a controller there since 0.164 (ADR-0176), and a data one
+        // live data; each is checked as an item's is.
         let fader: CameraMotionModifier = serde_json::from_value(serde_json::json!({
-            "modifier_id": "fader", "property": "fov", "kind": "midi", "controller": 1
+            "modifier_id": "fader", "property": "fov", "kind": "midi", "controller": 1,
+            "input": "Bitwig", "channel": 16, "from": 60, "to": 20
         }))
         .expect("parses");
-        assert_eq!(field_of(&[fader]).as_deref(), Some("motion.0.kind"));
-        // Nor a data one live data (ADR-0171).
         let daw: CameraMotionModifier = serde_json::from_value(serde_json::json!({
-            "modifier_id": "daw", "property": "fov", "kind": "data", "key": "transport"
+            "modifier_id": "daw", "property": "pan", "kind": "data", "key": "transport"
         }))
         .expect("parses");
-        assert_eq!(field_of(&[daw]).as_deref(), Some("motion.0.kind"));
+        assert_eq!(field_of(&[fader.clone(), daw]), None);
+        let no_controller: CameraMotionModifier = serde_json::from_value(serde_json::json!({
+            "modifier_id": "fader", "property": "position_x", "kind": "midi"
+        }))
+        .expect("parses");
+        assert!(
+            field_of(&[no_controller]).is_some(),
+            "a cc names its controller"
+        );
+        let tilt: CameraMotionModifier = serde_json::from_value(serde_json::json!({
+            "modifier_id": "t", "property": "tilt", "kind": "drift", "rate_per_s": 1.0
+        }))
+        .expect("parses");
+        assert_eq!(tilt.property, CameraProperty::Tilt);
     }
 
     #[test]

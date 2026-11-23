@@ -225,9 +225,14 @@ focus with two keyframe scenes that differ only in `focus_px` and a `move` trans
 Models blur too, each part by its own distance, so a near part of a model goes soft \
 while the focus sits on something past it. \
 A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
-kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
-`fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
-hand-held camera. To follow the pointer over a screen capture, add a `follow_pointer` \
+kinds and clocks of `item.set_motion` (all but `audio`), on `position_x`/`_y`/`_z`, \
+`target_x`/`_y`/`_z`, `pan`, `tilt` (degrees, turning the view about the camera), `fov`, \
+`roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a hand-held \
+camera. A `midi` modifier there takes the same fields as an item's (`controller`, \
+`channel`, `input` such as a JTunnel sender's name, `from`, `to`, `smoothing_ms`), so a \
+fader or knob moves, turns or zooms the camera; a controller reads 0 until it is first \
+sent, so make `from` the value at rest (0 keeps the stored view). A `data` one follows a \
+DAW's live data the same way. To follow the pointer over a screen capture, add a `follow_pointer` \
 filter to the effects of an item showing a `display` or `window` source (`filter.add` \
 on the `item` owner); `scene.set_camera_follow` is a shortcut that does the \
 same. The scene's camera glides after the pointer at an angle (`yaw_deg`, \

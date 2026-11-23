@@ -2381,6 +2381,13 @@ impl<'a> Planner<'a, '_> {
         if motion.is_still() && follow.is_none() {
             return None;
         }
+        // Its controllers and live data follow as an item's do (ADR-0176).
+        out.audio.record_camera(
+            &family,
+            parent.camera_motion(),
+            self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+            self.assets.data(),
+        );
         let follow = follow.and_then(|follow| {
             let item = self
                 .items_of(id)
@@ -7783,6 +7790,7 @@ fn moved_camera(
             captures,
             &mut chains.cameras(),
             live.zooms(&moves.family),
+            shot.audio(),
         ),
         None => base,
     };
@@ -7983,6 +7991,7 @@ fn moving_cameras(
                 captures,
                 &mut chains.cameras(),
                 live.zooms(&moves.family),
+                shot.audio(),
             ),
             None => camera,
         };
