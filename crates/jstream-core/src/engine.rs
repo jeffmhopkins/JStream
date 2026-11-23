@@ -6141,6 +6141,14 @@ impl State {
                 self.set_shown(client_id, request_id, item_id, scene_id, None, wake)?;
                 return Ok(CallResult::action());
             }
+            Action::SourceMute { source_id, to } => {
+                self.set_muted(client_id, request_id, Muting::Source(source_id), to, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::BusMute { bus_id, to } => {
+                self.set_muted(client_id, request_id, Muting::Bus(bus_id), to, wake)?;
+                return Ok(CallResult::action());
+            }
             Action::ValuesSet { name, value } => {
                 if self.values.set(&name, value.clone())? {
                     self.feed_pages();
@@ -6551,6 +6559,74 @@ impl State {
     /// item moves: it appears or disappears with its own effect, over the default
     /// preset's duration and easing ([`item_run`]). Showing a shown item, or hiding a
     /// hidden one, changes nothing.
+    /// Runs `source.mute` or `bus.mute` (ADR-0207): the `source.set_audio` or
+    /// `bus.set_fader` edit that sets the mute `to` asks for, applied as `item.show`'s is,
+    /// never a step of the sender's undo history. Setting the mute it already has changes
+    /// nothing, but what the edit would refuse is refused. The mixer reads the new mute
+    /// on its next block and ramps to it over that block, so nothing clicks or reopens.
+    fn set_muted(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        target: Muting,
+        to: jstream_protocol::MuteTo,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let (now, edit) = match target {
+            Muting::Source(source_id) => {
+                let source = state.source(&source_id).ok_or_else(|| ProtocolError::NotFound {
+                    entity: EntityKind::Source,
+                    id: source_id.to_string(),
+                })?;
+                let now = source.audio().is_some_and(|audio| audio.muted);
+                (
+                    now,
+                    Edit::SourceSetAudio {
+                        source_id,
+                        enabled: None,
+                        follow: None,
+                        gain_db: None,
+                        muted: Some(to.muted(now)),
+                    },
+                )
+            }
+            Muting::Bus(bus_id) => {
+                let bus = state.bus(&bus_id).ok_or_else(|| ProtocolError::NotFound {
+                    entity: EntityKind::Bus,
+                    id: bus_id.to_string(),
+                })?;
+                let now = bus.muted();
+                (
+                    now,
+                    Edit::BusSetFader {
+                        bus_id,
+                        gain_db: None,
+                        muted: Some(to.muted(now)),
+                    },
+                )
+            }
+        };
+        let edits = vec![edit];
+        let running = self.outputs.running();
+        if to.muted(now) == now {
+            // Nothing to change, but a source the edit would refuse is refused here too.
+            self.graph
+                .clone()
+                .apply_with_running(&edits, None, &running)
+                .map_err(action_field)?;
+            return Ok(());
+        }
+        let applied = self
+            .graph
+            .apply_with_running(&edits, None, &running)
+            .map_err(action_field)?;
+        self.history
+            .record_batch(client_id, applied.rev, applied.touched, Vec::new());
+        self.changed(client_id, request_id, &edits, applied.rev, None, wake);
+        Ok(())
+    }
+
     fn set_shown(
         &mut self,
         client_id: &ClientId,
@@ -8224,6 +8300,12 @@ fn preset_run(
 
 /// An error from the `item.set_visible` an item action applies, with its field named
 /// as the action's (`scene_id`, not `edits.0.scene_id`).
+/// What `source.mute` or `bus.mute` mutes.
+enum Muting {
+    Source(jstream_protocol::SourceId),
+    Bus(jstream_protocol::BusId),
+}
+
 fn action_field(error: ProtocolError) -> ProtocolError {
     match error {
         ProtocolError::InvalidArgument {

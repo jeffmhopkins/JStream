@@ -130,6 +130,11 @@ impl Collection {
         restore
     }
 
+    /// Whether bus `id` is muted, or `None` for a bus not in the collection.
+    pub(super) fn bus_muted(&self, id: &BusId) -> Option<bool> {
+        self.buses.get(id).map(|bus| bus.muted)
+    }
+
     fn has_channel(&self, id: &SourceId) -> bool {
         self.sources
             .get(id)

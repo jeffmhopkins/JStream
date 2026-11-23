@@ -191,6 +191,7 @@ fn exists(state: &State, entity: EntityKind, id: &str) -> bool {
             .timeline(&jstream_protocol::TimelineId::new(id))
             .is_some(),
         EntityKind::Channel => state.channel(id).is_some(),
+        EntityKind::Bus => state.buses.keys().any(|b| b.as_str() == id),
         _ => false,
     }
 }

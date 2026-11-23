@@ -1844,6 +1844,35 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
+    /// Mutes or unmutes a source's audio (ADR-0207, since 0.179), as `source.set_audio`'s
+    /// `muted` would: `to` says how, and [`MuteTo`] says what a held key or note does
+    /// with `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:
+    /// `rev` moves on by one, `state.changed` follows and the collection saves it, but it
+    /// is an action, so it is never a step of the sender's undo history, and another
+    /// client's undo that would overwrite it fails with `undo_conflict`. Setting the mute
+    /// it already has succeeds and changes nothing. The mixer ramps the change over one
+    /// block, so it never clicks, and nothing is reopened. Fails with `not_found` for a
+    /// source not in the collection, and `invalid_argument` on `source_id` for one
+    /// without audio or a `scene` source, which has no mute of its own. An action takes
+    /// no `expected_rev` or idempotency key, so a caller that may retry sends `muted` or
+    /// `unmuted`, not `toggle`.
+    #[serde(rename = "source.mute")]
+    SourceMute {
+        /// The source.
+        source_id: SourceId,
+        /// What to do to its mute.
+        to: crate::MuteTo,
+    },
+    /// Mutes or unmutes a bus, the master included (ADR-0207, since 0.179), as
+    /// `bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with
+    /// `not_found` for a bus not in the collection.
+    #[serde(rename = "bus.mute")]
+    BusMute {
+        /// The bus.
+        bus_id: BusId,
+        /// What to do to its mute.
+        to: crate::MuteTo,
+    },
     /// Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in
     /// VISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24
     /// (negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative
@@ -2447,6 +2476,8 @@ impl Action {
             Action::ItemShow { .. } => "item.show",
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
+            Action::SourceMute { .. } => "source.mute",
+            Action::BusMute { .. } => "bus.mute",
             Action::SceneZoomCamera { .. } => "scene.zoom_camera",
             Action::SceneDriveCamera { .. } => "scene.drive_camera",
             Action::SceneAimCamera { .. } => "scene.aim_camera",
@@ -2557,7 +2588,10 @@ impl Action {
             | Action::ChannelNudge { channel_id, .. } => {
                 vec![(EntityKind::Channel, channel_id.as_str())]
             }
-            Action::SourceRestart { source_id } => vec![(EntityKind::Source, source_id.as_str())],
+            Action::SourceRestart { source_id } | Action::SourceMute { source_id, .. } => {
+                vec![(EntityKind::Source, source_id.as_str())]
+            }
+            Action::BusMute { bus_id, .. } => vec![(EntityKind::Bus, bus_id.as_str())],
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
             // A PTZ camera belongs to the machine, not the collection (ADR-0146 §1).
@@ -2739,6 +2773,8 @@ impl Action {
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. }
             | Action::SourceRestart { .. }
+            | Action::SourceMute { .. }
+            | Action::BusMute { .. }
             | Action::PrivacySet { .. } => None,
             Action::TimelinePlay { .. } => self.play_problem(),
             // Bindable, but checked as the call would be, so a saved binding never fails
@@ -2804,6 +2840,8 @@ impl Action {
             | Action::ItemShow { .. }
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
+            | Action::SourceMute { .. }
+            | Action::BusMute { .. }
             | Action::ItemTriggerMotion { .. }
             | Action::SceneSetKeyframe { .. }
             | Action::TimelinePlay { .. }
@@ -2915,6 +2953,37 @@ impl Action {
                 channel_id,
                 to: ChannelSwitch::On | ChannelSwitch::Off,
             } => Some(format!("channel switch {channel_id}")),
+            _ => None,
+        }
+    }
+
+    /// What a held key or note runs when it is released (ADR-0207, since 0.179), or
+    /// `None` for an action that does nothing on release, which is every action but
+    /// these: `source.mute` and `bus.mute` with `push_to_talk` mute again and with
+    /// `push_to_mute` unmute again, and `channel.switch` with `hold_on` switches off and with
+    /// `hold_off` on. A
+    /// hotkey's client sends it as an `action` call when the chord's key goes up (or the
+    /// client stops hearing keys while it is held), and the engine runs it itself for a
+    /// note binding's note-off and a control change binding's fall back past the middle.
+    /// A program change has no release.
+    pub fn on_release(&self) -> Option<Action> {
+        match self {
+            Action::SourceMute { source_id, to } => Some(Action::SourceMute {
+                source_id: source_id.clone(),
+                to: to.released()?,
+            }),
+            Action::BusMute { bus_id, to } => Some(Action::BusMute {
+                bus_id: bus_id.clone(),
+                to: to.released()?,
+            }),
+            Action::ChannelSwitch { channel_id, to } => Some(Action::ChannelSwitch {
+                channel_id: channel_id.clone(),
+                to: match to {
+                    ChannelSwitch::HoldOn => ChannelSwitch::Off,
+                    ChannelSwitch::HoldOff => ChannelSwitch::On,
+                    ChannelSwitch::On | ChannelSwitch::Off | ChannelSwitch::Toggle => return None,
+                },
+            }),
             _ => None,
         }
     }

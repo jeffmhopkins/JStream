@@ -59,7 +59,7 @@ pub use activity::{
 pub use agent::{AgentApproval, AgentTransport, ApprovalDecision, ApprovalOutcome, ApprovedAgent};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
-    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
+    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, MuteTo, SendInfo, SourceAudio, SourceMeter,
     gain_db_problem,
 };
 pub use binding::{

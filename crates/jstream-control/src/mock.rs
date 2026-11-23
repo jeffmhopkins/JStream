@@ -896,6 +896,7 @@ impl State {
                 Edit::EncoderDelete { profile_id } => {
                     Some((EntityKind::Encoder, profile_id.to_string()))
                 }
+                Edit::BusDelete { bus_id } => Some((EntityKind::Bus, bus_id.to_string())),
                 _ => None,
             };
             let mut inverse = next.apply(edit, at, &running)?;
@@ -1119,6 +1120,29 @@ impl State {
         Ok(CallResult::action())
     }
 
+    /// Applies `source.mute` or `bus.mute`'s edit as the engine does (ADR-0207): checked
+    /// but not applied when it changes nothing, and never an undo step.
+    fn set_muted(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        edit: Edit,
+        unchanged: bool,
+    ) -> Result<CallResult, ProtocolError> {
+        if unchanged {
+            let running = self.running();
+            self.collection
+                .clone()
+                .apply(edit, 0, &running)
+                .map_err(action_field)?;
+            return Ok(CallResult::action());
+        }
+        let (rev, _, _) = self.apply(vec![edit]).map_err(action_field)?;
+        self.history.log_only(client_id, rev);
+        self.changed(client_id, request_id, rev, None);
+        Ok(CallResult::action())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -1178,6 +1202,34 @@ impl State {
             }
             Action::ItemToggle { item_id, scene_id } => {
                 return self.set_shown(client_id, request_id, item_id, scene_id, None);
+            }
+            Action::SourceMute { source_id, to } => {
+                let source = self
+                    .collection
+                    .sources
+                    .get(&source_id)
+                    .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+                let now = source.audio.is_some_and(|audio| audio.muted);
+                let edit = Edit::SourceSetAudio {
+                    source_id,
+                    enabled: None,
+                    follow: None,
+                    gain_db: None,
+                    muted: Some(to.muted(now)),
+                };
+                return self.set_muted(client_id, request_id, edit, to.muted(now) == now);
+            }
+            Action::BusMute { bus_id, to } => {
+                let now = self
+                    .collection
+                    .bus_muted(&bus_id)
+                    .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
+                let edit = Edit::BusSetFader {
+                    bus_id,
+                    gain_db: None,
+                    muted: Some(to.muted(now)),
+                };
+                return self.set_muted(client_id, request_id, edit, to.muted(now) == now);
             }
             // The engine zooms its render thread's follow camera; the mock has none, so it
             // only checks the call as the engine does (ADR-0113 §4).
@@ -2899,6 +2951,7 @@ impl Collection {
                 // The mock has only the `cut` preset every collection starts with.
                 EntityKind::Transition => id == INITIAL_PRESET,
                 EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
+                EntityKind::Bus => self.buses.keys().any(|b| b.as_str() == id),
                 _ => false,
             };
             if !exists {

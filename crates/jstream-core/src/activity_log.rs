@@ -147,6 +147,20 @@ fn describe_action(action: &Action, state: &State) -> String {
             format!("Put {} on preview", scene(state, scene_id))
         }
         Action::ItemShow { item_id, .. } => format!("Showed {}", item(state, item_id)),
+        // Described before it runs, so a toggle reads the mute it is about to flip.
+        Action::SourceMute { source_id, to } => {
+            let now = state
+                .source(source_id)
+                .and_then(|s| s.audio())
+                .is_some_and(|audio| audio.muted);
+            format!("{} {}", muted_verb(to.muted(now)), source(state, source_id))
+        }
+        Action::BusMute { bus_id, to } => {
+            let bus = state.bus(bus_id);
+            let now = bus.is_some_and(|bus| bus.muted());
+            let name = named(bus.map(|bus| bus.name()), bus_id.as_str());
+            format!("{} bus {name}", muted_verb(to.muted(now)))
+        }
         Action::ItemHide { item_id, .. } => format!("Hid {}", item(state, item_id)),
         // Described before it runs: it shows an item hidden there, and hides one shown.
         Action::ItemToggle { item_id, scene_id } => format!(
@@ -257,10 +271,10 @@ fn describe_action(action: &Action, state: &State) -> String {
             fade(*fade_ms)
         ),
         Action::ChannelSwitch { channel_id, to } => match to {
-            jstream_protocol::ChannelSwitch::On => {
+            jstream_protocol::ChannelSwitch::On | jstream_protocol::ChannelSwitch::HoldOn => {
                 format!("Switched channel {} on", channel(state, channel_id))
             }
-            jstream_protocol::ChannelSwitch::Off => {
+            jstream_protocol::ChannelSwitch::Off | jstream_protocol::ChannelSwitch::HoldOff => {
                 format!("Switched channel {} off", channel(state, channel_id))
             }
             jstream_protocol::ChannelSwitch::Toggle => {
@@ -737,6 +751,11 @@ fn quote(name: &str) -> String {
 /// The quoted name, or the quoted ID when the object isn't known.
 fn named(name: Option<&str>, id: &str) -> String {
     quote(name.unwrap_or(id))
+}
+
+/// "Muted" or "Unmuted".
+fn muted_verb(muted: bool) -> &'static str {
+    if muted { "Muted" } else { "Unmuted" }
 }
 
 fn scene(state: &State, scene_id: &SceneId) -> String {
