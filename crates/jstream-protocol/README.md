@@ -1535,7 +1535,7 @@ expects; every other trigger is a binding, in `bindings`. Where a client listens
 chord and sends its action, a controller's messages come from an input the engine reads,
 so the engine runs the action itself. Since 0.179 it does
 ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md) decision 4): about 30
-times a second it reads what each MIDI and JTunnel input sent since its last look, in
+times a second (60 while a value moves) it reads what each MIDI and JTunnel input sent since its last look, in
 the order sent, so a press and a release between two looks both run; nothing sent before
 its first look runs. It reads only an input the host lets run bindings: a JTunnel sender
 once the person turns on its "Use this sender's MIDI", off by default

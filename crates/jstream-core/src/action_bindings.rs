@@ -4,8 +4,8 @@
 //! a `binding.set` trigger heard on a MIDI input runs its action, and its release runs
 //! the action's [`Action::on_release`].
 //!
-//! The `jstream-values` thread ticks the runner about 30 times a second while the
-//! collection holds a binding. Each tick reads, from each input a binding listens to
+//! The `jstream-values` thread ticks the runner about 30 times a second (60 while a
+//! value moves, ADR-0190) while the collection holds a binding. Each tick reads, from each input a binding listens to
 //! (each input, for a binding with no `input`), the notes and the control and program
 //! changes logged since the last tick, in the order they arrived, so a pad pressed and
 //! let go between two ticks still fires both. Nothing heard before the first tick that

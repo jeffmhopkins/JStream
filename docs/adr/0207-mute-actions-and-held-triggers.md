@@ -76,8 +76,8 @@ the new one over the block, so a mute set between two blocks fades in one block 
 4. **The engine runs MIDI action bindings.** Each input's state keeps a log of its control
    and program changes beside its note log, lock-free as the note log is
    ([ADR-0122](0122-controller-input-midi-and-one-binding-system.md) decision 2). The
-   `jstream-values` thread, which ticks about 30 times a second while the collection holds
-   a binding, reads each log since its last look and runs, in the order heard: a note
+   `jstream-values` thread, which ticks about 30 times a second (60 while a value moves)
+   while the collection holds a binding, reads each log since its last look and runs, in the order heard: a note
    binding's action on note-on and its release on note-off; a control change binding's
    action when the controller crosses 64 upward and its release when it falls back below;
    a program change binding's action. A press and release between two ticks both run.
