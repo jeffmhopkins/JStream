@@ -7782,10 +7782,10 @@ stamp = { hash = "b3:589d29582ec531e9", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:01d2b4b8c34ac642", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
 
 ["PERF-SUITE#scenes"."file:xtask/perf/bench/gates-lavapipe.json"]
-stamp = { hash = "b3:a50568941b3345ef", by = "agent:claude", note = "the lavapipe gates file gained min_probe_psnr_y and min_probe_ssim_y; a local lavapipe run with Cisco's OpenH264 passed at 47 to 60 dB and SSIM 0.98 to 1.0; the scenes are unchanged" }
+stamp = { hash = "b3:2281e53b3b78b498", by = "agent:claude", note = "The scenes section describes xtask/perf/*.json scene files; the only change under its covers is a new stream_late_frames key in bench/gates-lavapipe.json, a gates file and not a scene, so the text still holds." }
 
 ["PERF-SUITE#thresholds"."body"]
-stamp = { hash = "b3:71234f8ec794e39c", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it | merge: #1424 added quality-probe PSNR/SSIM floors to the gates paragraph; the scene thresholds and nested_deep's floor are unchanged | kept from the merged side: quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:2184920d3a576969", by = "agent:claude", note = "Re-read the thresholds section with the new gates-lavapipe.json sentence: it now states the 30-frame stream_late_frames allowance and why (encode thread starved past a period by lavapipe on a 4-CPU runner, 2 of 395 frames late on small_2d with 4.5 ms mean encode), matching the gates file; the rest of the section is unchanged." }
 
 ["PERF-SUITE#thresholds"."file:xtask/perf/thresholds.toml"]
 stamp = { hash = "b3:0c13bb7844ad136a", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it" }
