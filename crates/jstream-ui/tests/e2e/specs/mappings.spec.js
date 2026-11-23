@@ -1,7 +1,7 @@
 // The Mappings panel (UI-FEATURES MP-01, MP-02): a channel shows as a group in the
 // Mappings tab, opening it from there shows its card, and the Sources tab says where a
 // sender's Mods come from while none is sending.
-import { test, expect, connect, rev } from '../fixtures.js';
+import { test, expect, connect, rev, liveSources } from '../fixtures.js';
 
 async function showFromView(page, name) {
   await page.locator('header.app-header').getByRole('button', { name: 'View' }).click();
@@ -40,4 +40,33 @@ test('the Mappings panel lists a channel and opens it', async ({ page, daemon })
   await expect(panel.getByText('No JTunnel sender is sending its state.')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(panel.getByText('Click a Mod or another source to arm it')).toBeVisible();
+});
+
+test('naming a Mod makes its channel, and the Mappings tab shows it by name', async ({ page, daemon }) => {
+  const send = await liveSources(page);
+  const values = Array.from({ length: 32 }, (_, n) => (n === 19 ? 0.62 : 0));
+  send({ senders: { DAW: { params: { values, names: [] } } } });
+  await connect(page, daemon);
+  await showFromView(page, 'Mappings');
+  const panel = page.locator('.map-panel');
+  await panel.getByRole('tab', { name: 'Sources' }).click();
+  const twenty = panel.getByRole('textbox', { name: 'Name of Mod 20', exact: true });
+  await expect(twenty).toBeVisible();
+  await expect(panel.getByRole('textbox', { name: 'Name of Mod 1', exact: true })).toBeFocused();
+  const before = await rev(page);
+  await twenty.fill('Camera roll');
+  await twenty.press('Enter');
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  await expect(panel.getByRole('textbox', { name: 'Name of Mod 21', exact: true })).toBeFocused();
+  await expect(twenty).toHaveValue('Camera roll');
+
+  await panel.getByRole('button', { name: 'Arm Mod 20', exact: true }).click();
+  await expect(panel.getByText('Armed: Camera roll (Mod 20)')).toBeVisible();
+  await page.keyboard.press(']');
+  await expect(panel.getByText('Armed: Mod 21 · DAW')).toBeVisible();
+
+  await panel.getByRole('tab', { name: 'Mappings' }).click();
+  const group = panel.locator('.map-group', { hasText: 'Camera roll (Mod 20)' });
+  await expect(group).toBeVisible();
+  await expect(group.locator('.map-live')).toContainText('0.62');
 });

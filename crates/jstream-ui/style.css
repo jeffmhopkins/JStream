@@ -2717,8 +2717,9 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .map-bypass[aria-pressed="true"] { color: var(--warn); }
 .map-add { align-self: flex-start; height: 24px; padding: 0 6px; border: none; background: none; color: var(--link); font-size: 12px; }
 .map-add[aria-pressed="true"] { color: var(--accent); }
-.map-sources-tab { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 16px; align-items: start; }
-.map-mods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.map-sources-tab { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; align-items: start; }
+.map-grids { min-width: 0; overflow-x: auto; }
+.map-mods { display: grid; grid-template-columns: repeat(4, minmax(124px, 1fr)); gap: 4px; }
 .map-mod { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; grid-template-rows: auto 3px; gap: 2px 4px; align-items: center; padding: 4px 6px 3px; border: 1px solid var(--line); border-radius: 5px; background: var(--raised); cursor: pointer; }
 .map-mod:hover { border-color: var(--border-strong); }
 .map-mod.armed { border-color: var(--accent); background: var(--selected); }
@@ -2745,7 +2746,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .map-pane { display: flex; flex-direction: column; gap: 8px; height: 320px; padding-right: 4px; overflow-y: auto; }
 .map-help { margin: 0; }
 .map-sender-name { margin: 4px 0; font-weight: 600; }
-.map-mods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.map-mods { display: grid; grid-template-columns: repeat(4, minmax(124px, 1fr)); gap: 4px; }
 button.map-mod { display: flex; flex-direction: column; align-items: stretch; gap: 2px; height: auto; min-height: 46px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--text); text-align: left; }
 button.map-mod:hover { background: var(--hover); }
 button.map-mod.on { border-color: var(--accent); background: var(--selected); }

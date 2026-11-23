@@ -1,249 +1,88 @@
 //! The Mappings panel (UI-FEATURES MP-01 and MP-02): everything that is mapped, in one
 //! dock panel with two tabs.
 //!
-//! - **Mappings**: every channel with what sets it (its inputs, the keys and MIDI that
-//!   switch or set it, the sequences with a lane on it) and everything that follows it or
-//!   that it scales, then every source read directly (a MIDI control or a field of a
-//!   sender's live data) with all its readers. A source with several targets lists them
-//!   under one another. Each target's range, smoothing and curve are edited in place, and
-//!   × removes it. A search, a scene, a kind of source and "Find by moving a control"
-//!   narrow the list. Clicking a channel opens it in the Channels panel.
-//! - **Sources**: each JTunnel sender's Mods 1 to 32 with their live values and what each
-//!   drives, then each MIDI input with its last moved control. A free Mod's Map… makes a
-//!   channel that reads it and opens it; a mapped one shows its rows in Mappings.
+//! - **Mappings**: every mapping grouped by source: each channel (a named Mod shown as
+//!   its name) with what sets it and everything that follows it or that it scales, then
+//!   every source read directly, with all its readers. Each target's amount, smoothing,
+//!   curve and bypass are edited in place, and × removes it; "+ Target…" arms the source.
+//!   A search, "On program now", a kind of source and "Find by moving a control" narrow
+//!   the list. Clicking a channel opens it in the Channels panel.
+//! - **Sources**: each JTunnel sender's 32 Mods, four by eight, to name and arm; what the
+//!   armed source drives; and the other sources (MIDI controls, channels, keys).
 //!
-//! The rows come from [`crate::mapping_index`]; live values from `channel.values`,
-//! `midi.last_controls`, `data.list` and `data.get`, read about ten times a second while
-//! the panel is open ([`feed`]).
+//! The rows come from [`crate::mapping_index`]; live values from `channel.values` and
+//! [`crate::live_sources`], read while the panel is open.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#mappings
 
 use crate::app::SessionContext;
 use crate::dock::PanelId;
 use crate::icons::Icon;
+use crate::live_sources::{self, LiveSources as Feed};
 use crate::mapping_index::{self, Filter, Mode, Reader, Row, Setter, SourceKey, SourceKind};
 use crate::panels::channels::live_values;
 use crate::panels::number::NumberField;
-use crate::store::{Collection, Studio, query};
+use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
-use jstream_control::protocol::{
-    ChannelValueInfo, Edit, Finite32, MidiControlInfo, MotionCurve, MotionKind, Query, QueryResult,
-};
+use jstream_control::protocol::{ChannelValueInfo, Edit, Finite32, MotionCurve, MotionKind};
 use leptos::prelude::*;
-use leptos::task::spawn_local;
 use std::collections::HashMap;
-use std::time::Duration;
-
-/// How often an open panel reads the live sources.
-const POLL: Duration = Duration::from_millis(100);
 
 /// How many Mods a JTunnel sender has (ADR-0181).
-const MOD_SLOTS: u8 = 32;
+const MOD_SLOTS: u8 = live_sources::MOD_COUNT as u8;
 
-/// How far a Mod must move for "Find by moving a control" to take it.
-const MOVED: f32 = 0.02;
-
-/// One JTunnel sender's live data, as the panel shows it.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Sender {
-    /// The sender's name, as `data.list` gives it.
-    pub input: String,
-    /// Its keys with a current message.
-    pub keys: Vec<String>,
-    /// Its Mods' values, 0 to 1, when it sends `params`.
-    pub mods: Vec<f32>,
-    /// Its Mods' names, as `params` carries them (empty for none).
-    pub names: Vec<String>,
-}
-
-/// The live sources: each sender's data, and each MIDI input's last control.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Feed {
-    /// The senders with live data, by name.
-    pub senders: Vec<Sender>,
-    /// Each MIDI input's latest control change.
-    pub controls: Vec<MidiControlInfo>,
-}
-
-impl Feed {
-    /// A source's value now, 0 to 1, if it can be read: a MIDI control change, a Mod, or
-    /// a channel (from `channels`).
-    pub fn value(
-        &self,
-        key: &SourceKey,
-        channels: &HashMap<String, ChannelValueInfo>,
-    ) -> Option<f32> {
-        match key {
-            SourceKey::Midi {
-                control: "cc",
-                number: Some(n),
-                channel,
-                input,
-            } => self
-                .controls
+/// A source's value now, 0 to 1, if it can be read: a MIDI control change, a Mod, or a
+/// channel (from `channels`).
+pub fn source_value(
+    live: &Feed,
+    key: &SourceKey,
+    channels: &HashMap<String, ChannelValueInfo>,
+) -> Option<f32> {
+    match key {
+        SourceKey::Midi {
+            control: "cc",
+            number: Some(n),
+            channel,
+            input,
+        } => live
+            .controls
+            .iter()
+            .filter(|c| {
+                c.controller == *n
+                    && channel.is_none_or(|ch| ch == c.channel)
+                    && input.as_ref().is_none_or(|i| *i == c.input)
+            })
+            .max_by_key(|c| c.count)
+            .map(|c| f32::from(c.value) / 127.0),
+        SourceKey::Data { input, .. } => {
+            let slot = mapping_index::mod_slot(key)?;
+            live.senders
                 .iter()
-                .filter(|c| {
-                    c.controller == *n
-                        && channel.is_none_or(|ch| ch == c.channel)
-                        && input.as_ref().is_none_or(|i| *i == c.input)
-                })
-                .max_by_key(|c| c.count)
-                .map(|c| f32::from(c.value) / 127.0),
-            SourceKey::Data { input, .. } => {
-                let slot = mapping_index::mod_slot(key)?;
-                self.senders
-                    .iter()
-                    .filter(|s| input.as_ref().is_none_or(|i| *i == s.input))
-                    .find_map(|s| s.mods.get(usize::from(slot - 1)).copied())
-            }
-            SourceKey::Channel(id) => channels.get(id).map(|c| c.value.get()),
-            SourceKey::Midi { .. } => None,
+                .filter(|s| input.as_ref().is_none_or(|i| *i == s.input))
+                .find_map(|s| s.mods.get(usize::from(slot - 1)).copied())
         }
+        SourceKey::Channel(id) => channels.get(id).map(|c| c.value.get()),
+        SourceKey::Midi { .. } => None,
     }
+}
 
-    /// The first source that moved since `before`: a MIDI control that sent again, or a
-    /// Mod that moved by more than [`MOVED`].
-    pub fn moved(&self, before: &Feed) -> Option<SourceKey> {
-        if let Some(c) = crate::panels::learn::moved(&before.controls, &self.controls) {
-            return Some(SourceKey::Midi {
-                control: "cc",
-                number: Some(c.controller),
-                channel: Some(c.channel),
-                input: Some(c.input),
-            });
-        }
-        for sender in &self.senders {
-            let old = before.senders.iter().find(|s| s.input == sender.input);
-            for (n, v) in sender.mods.iter().enumerate() {
-                let was = old.and_then(|o| o.mods.get(n)).copied();
-                if was.is_some_and(|was| (v - was).abs() > MOVED) {
-                    return Some(mod_key(Some(&sender.input), n as u8 + 1));
-                }
-            }
-        }
-        None
-    }
+/// The first source that moved since `before`, as `live_sources::moved` hears it.
+pub fn moved_key(now: &Feed, before: &Feed) -> Option<SourceKey> {
+    mapping_index::source_key(&live_sources::moved(before, now)?.reader())
 }
 
 /// The source key of Mod `slot` (1 to 32) of `sender`, or of any sender.
 pub fn mod_key(sender: Option<&str>, slot: u8) -> SourceKey {
     SourceKey::Data {
         input: sender.map(str::to_owned),
-        key: "params".into(),
+        key: live_sources::MODS_KEY.into(),
         field: format!("values.{}", slot.saturating_sub(1)),
     }
 }
 
-/// A reader of Mod `slot` of `sender` over a channel's whole 0 to 1.
+/// A reader of Mod `slot` (1 to 32) of `sender` over 0 to 1.
 pub fn mod_reader(sender: &str, slot: u8) -> MotionKind {
-    MotionKind::Data {
-        input: Some(sender.to_owned()),
-        key: "params".into(),
-        field: format!("values.{}", slot.saturating_sub(1)),
-        range: [Finite32::ZERO, Finite32::ONE],
-        states: Default::default(),
-        smoothing_ms: 50,
-        curve: MotionCurve::Linear,
-        from: Finite32::ZERO,
-        to: Finite32::ONE,
-        color_from: None,
-        palette: Default::default(),
-    }
-}
-
-/// A sender's `params` message read into its Mods' values and names.
-pub fn read_params(value: &serde_json::Value) -> (Vec<f32>, Vec<String>) {
-    let mods = value
-        .get("values")
-        .and_then(serde_json::Value::as_array)
-        .map(|v| {
-            v.iter()
-                .map(|n| n.as_f64().unwrap_or(0.0).clamp(0.0, 1.0) as f32)
-                .collect()
-        })
-        .unwrap_or_default();
-    let names = value
-        .get("names")
-        .and_then(serde_json::Value::as_array)
-        .map(|v| {
-            v.iter()
-                .map(|n| n.as_str().unwrap_or_default().to_owned())
-                .collect()
-        })
-        .unwrap_or_default();
-    (mods, names)
-}
-
-/// Reads the live sources once.
-async fn read(session: &crate::session::Session) -> Feed {
-    let mut feed = Feed::default();
-    if let Ok(QueryResult::MidiLastControls { controls }) =
-        query(session, Query::MidiLastControls).await
-    {
-        feed.controls = controls;
-    }
-    if let Ok(QueryResult::DataList { inputs }) = query(session, Query::DataList).await {
-        for info in inputs {
-            let mut sender = Sender {
-                input: info.input.clone(),
-                keys: info.remote_keys.clone(),
-                ..Sender::default()
-            };
-            if info.remote_keys.iter().any(|k| k == "params")
-                && let Ok(QueryResult::DataGet {
-                    remote_value: Some(value),
-                }) = query(
-                    session,
-                    Query::DataGet {
-                        input: info.input,
-                        key: "params".into(),
-                    },
-                )
-                .await
-            {
-                (sender.mods, sender.names) = read_params(&value);
-            }
-            feed.senders.push(sender);
-        }
-    }
-    feed
-}
-
-/// The live sources, read every [`POLL`] for as long as the calling component lives.
-pub fn feed() -> RwSignal<Feed> {
-    let feed = RwSignal::new(Feed::default());
-    if let Some(session) = use_context::<SessionContext>() {
-        poll(session, feed);
-    }
-    feed
-}
-
-fn poll(session: SessionContext, feed: RwSignal<Feed>) {
-    set_timeout(
-        move || {
-            spawn_local(async move {
-                let Some(s) = session.0.try_get_value().flatten() else {
-                    return;
-                };
-                if feed.try_get_untracked().is_none() {
-                    return;
-                }
-                let now = read(&s).await;
-                let changed = feed.try_with_untracked(|f| *f != now);
-                match changed {
-                    None => return,
-                    Some(true) => {
-                        if feed.try_set(now).is_some() {
-                            return;
-                        }
-                    }
-                    Some(false) => {}
-                }
-                poll(session, feed);
-            });
-        },
-        POLL,
-    );
+    live_sources::mod_reader(Some(sender), usize::from(slot.saturating_sub(1)))
 }
 
 /// The source armed for mapping mode: what a drag on a parameter would map.
@@ -282,7 +121,7 @@ enum Tab {
 pub fn Mappings() -> impl IntoView {
     let tab = RwSignal::new(Tab::Mappings);
     let filter = RwSignal::new(Filter::default());
-    let feed = feed();
+    let feed = live_sources::live_sources();
     let values = live_values();
     let mode = mapping_mode();
     let tab_button = move |t: Tab, label: &'static str| {
@@ -377,7 +216,7 @@ fn MappingsTab(
         let Some(before) = finding.get_untracked() else {
             return;
         };
-        if let Some(key) = now.moved(&before) {
+        if let Some(key) = moved_key(&now, &before) {
             finding.set(None);
             filter.update(|f| f.source = Some(key));
         }
@@ -565,12 +404,12 @@ fn MapGroup(
             setters,
             followers,
         } => {
-            let named = studio.collection.with_untracked(|c| {
+            let named_key = studio.collection.with_untracked(|c| {
                 c.as_ref()
                     .and_then(|c| c.channel(&channel_id))
                     .and_then(mapping_index::named_mod)
-                    .is_some()
             });
+            let named = named_key.is_some();
             // A named Mod is shown once, as its name: its one input is the Mod itself.
             let mut subs: Vec<AnyView> = Vec::new();
             if !named {
@@ -597,7 +436,11 @@ fn MapGroup(
                 });
             }
             let id = channel_id.clone();
-            let level = Signal::derive(move || values.with(|v| v.get(&id).map(|c| c.value.get())));
+            // A named Mod shows the Mod as it arrives; any other channel its value.
+            let level = Signal::derive(move || match &named_key {
+                Some(key) => feed.with(|f| source_value(f, key, &HashMap::new())),
+                None => values.with(|v| v.get(&id).map(|c| c.value.get())),
+            });
             let open = move |_| {
                 studio.channel.set(Some(channel_id.clone()));
                 if let Some(dock) = dock {
@@ -623,7 +466,7 @@ fn MapGroup(
             let key = source.clone();
             let level = Signal::derive(move || {
                 let channels = values.get();
-                feed.with(|f| f.value(&key, &channels))
+                feed.with(|f| source_value(f, &key, &channels))
             });
             (main, Vec::new(), level, readers)
         }
@@ -1350,20 +1193,11 @@ fn OtherSources(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use crate::live_sources::Sender;
 
     #[test]
-    fn params_read_into_values_and_names() {
-        let (mods, names) =
-            read_params(&json!({"values": [0.5, 2.0, -1], "names": ["Camera roll", ""]}));
-        assert_eq!(mods, vec![0.5, 1.0, 0.0]);
-        assert_eq!(names, vec!["Camera roll".to_owned(), String::new()]);
-        assert_eq!(read_params(&json!(null)), (Vec::new(), Vec::new()));
-    }
-
-    #[test]
-    fn a_feed_reads_a_source_and_finds_what_moved() {
-        let control = |n: u8, value: u8, count: u64| MidiControlInfo {
+    fn a_source_is_read_live_and_found_by_moving() {
+        let control = |n: u8, value: u8, count: u64| jstream_control::protocol::MidiControlInfo {
             input: "Pads".into(),
             channel: 1,
             controller: n,
@@ -1374,30 +1208,34 @@ mod tests {
             input: "DAW".into(),
             keys: vec!["params".into()],
             mods: vec![0.0, v],
-            names: Vec::new(),
+            mod_names: Vec::new(),
         };
         let before = Feed {
             senders: vec![sender(0.2)],
             controls: vec![control(21, 0, 1)],
+            loaded: true,
         };
         let none = HashMap::new();
         let cc21 =
             mapping_index::source_key(&crate::panels::channels::midi_input(&control(21, 0, 1)))
                 .expect("a source");
-        assert_eq!(before.value(&cc21, &none), Some(0.0));
-        assert_eq!(before.value(&mod_key(None, 2), &none), Some(0.2));
-        assert_eq!(before.value(&mod_key(Some("Other"), 2), &none), None);
-        assert_eq!(before.moved(&before), None);
+        assert_eq!(source_value(&before, &cc21, &none), Some(0.0));
+        assert_eq!(source_value(&before, &mod_key(None, 2), &none), Some(0.2));
+        assert_eq!(
+            source_value(&before, &mod_key(Some("Other"), 2), &none),
+            None
+        );
+        assert_eq!(moved_key(&before, &before), None);
         let turned = Feed {
             senders: vec![sender(0.6)],
             ..before.clone()
         };
-        assert_eq!(turned.moved(&before), Some(mod_key(Some("DAW"), 2)));
+        assert_eq!(moved_key(&turned, &before), Some(mod_key(Some("DAW"), 2)));
         let pressed = Feed {
             controls: vec![control(21, 127, 2)],
             ..before.clone()
         };
-        assert_eq!(pressed.moved(&before), Some(cc21));
+        assert_eq!(moved_key(&pressed, &before), Some(cc21));
     }
 
     #[test]
