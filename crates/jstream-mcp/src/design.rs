@@ -146,12 +146,12 @@ monitor (`strength` 0.25, `spacing` 3), CRT (0.45, 4, `speed` 12, `rgb_offset` 1
 Holograms: a `hologram` effect turns any picture (a camera, a screen capture, a page) \
 into a projection: its light takes `color` by `tint`, its dark parts turn see-through \
 (`see_through`), with rolling `lines`, a `sweep` band, an `edge` glow, `flicker`, \
-`glitch`, `fringe` and `grain`. For a hologram that pops up in a 3D scene, put the card \
-in a group scene placed with `share_space` on, give the card the effect and blend mode \
-`additive`, and give the group two keyframes: one with `reveal` 0 (and the card smaller \
-or lower), one with `reveal` 1. `scene.set_keyframe` with a `move` preset then projects it \
-in from `reveal_from` behind a bright edge and takes it away again, and `item.set_source` \
-on the card changes what it shows. \
+`glitch`, `fringe` and `grain`, and `reveal` draws it in from `reveal_from` behind a \
+bright line. In a 3D scene, give the card the effect and blend mode `additive`, add a \
+faint card of soft light a few centimetres in front of it for depth, show and hide the \
+cards with `item.show` and `item.hide` (a timeline staggers them), and `item.set_source` \
+on the card changes what it shows. Cards behind a model's centre sort under it: draw \
+them after it with the camera's `depth_sort` off. \
 Borders: one `border` item effect frames an item: `radius` (or `corners` `each` with \
 `radius_top_left` and the rest) rounds it and, with `clip` on, the picture with it; \
 `width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \
