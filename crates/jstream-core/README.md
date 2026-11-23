@@ -2342,12 +2342,19 @@ switch is on, a 3D scene whose `reflections` is on starts its video chain with t
 `screen_space_reflections` pass at `screen_space_steps` (`Chain::with_screen_reflections`,
 before the scene's own filters, and the whole chain when it has none), so its composite
 draws a view depth. Such a chain reads the scene's surface buffer too
-(`Chain::reads_surface`, `Pass::surface`): after the view depth, `draw_surface` clears
-its three `GpuKey::Surface` layers and draws each model the view depth holds into them
-through the scene's camera, a `scene`-lit model whose source has `reflections` on with
-the scene's lights, sky and probe as its layer was lit, any other with none, so it only
-covers what is behind it. `Chains::drew_depth` hands them to the pass as
-`ViewDepth::surface` (`a_metal_floor_reflects_a_card_on_screen`). Since the scene then
+(`Chain::reads_surface`, `Pass::surface`). Each model item in such a scene draws its
+surface with its layer, into three `GpuKey::ModelSurface` layers of its layer's size
+(`Compositor::draw_model_with_surface`, noted in `Chains::surfaced` for the frame), so
+it is shaded once. After the view depth, `draw_surface` clears the scene's three
+`GpuKey::Surface` layers and merges each model the view depth holds into them
+(`Compositor::merge_model_surface`); a model whose layer drew no surface this frame is
+drawn into them again through the scene's camera, a `scene`-lit model whose source has
+`reflections` on with the scene's lights, sky and probe as its layer was lit, any other
+with none, so it only covers what is behind it, and each with its live texture and its
+materials' drives as its layer was drawn. Each model's surface costs three
+canvas-sized half-float layers (about 48 MB at 1080p) while the pass runs.
+`Chains::drew_depth` hands the scene's layers to the pass as `ViewDepth::surface`
+(`a_metal_floor_reflects_a_card_on_screen`, which checks the surface was merged). Since the scene then
 has a chain, a transition shows it as one picture.
 
 A shadow map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,

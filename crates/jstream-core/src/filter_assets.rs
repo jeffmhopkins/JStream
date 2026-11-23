@@ -212,7 +212,7 @@ impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
             motion_heard: Arc::default(),
             tempo: None,
             data: None,
-            features: jstream_protocol::RenderFeatures::ALL,
+            features: jstream_protocol::RenderFeatures::DEFAULT,
         }
     }
 }

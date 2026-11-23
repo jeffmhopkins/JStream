@@ -742,6 +742,9 @@ pub(crate) struct Chains {
     cameras: std::cell::RefCell<crate::follow::Cameras>,
     /// The owners whose chain failed to draw this frame, which draw nothing.
     failed: BTreeSet<ChainOwner>,
+    /// The model items whose surface was drawn with their layer since the chains last
+    /// began a frame (ADR-0170 decision 4): the surface buffer merges theirs.
+    pub(crate) surfaced: BTreeSet<(jstream_protocol::SceneId, jstream_protocol::ItemId)>,
     /// The items whose effects layer failed to be made or drawn and has been logged, so
     /// one that keeps failing logs once; a frame it draws clears it.
     box_warned: BTreeSet<ChainOwner>,
@@ -864,6 +867,7 @@ impl Chains {
             self.runs += 1;
         }
         self.failed.clear();
+        self.surfaced.clear();
         self.staged.clear();
         self.drawn.clear();
         let used = std::mem::take(&mut self.models_used);
@@ -5060,31 +5064,35 @@ mod tests {
             let mut compositor = gpu()?;
             let mut cache = ResourceCache::new();
             let mut chains = Chains::default();
-            Some(
-                draw_points(
-                    &mut compositor,
-                    (&mut cache, &mut chains),
-                    (&shot, &LiveParams::default()),
-                    &[(32, 35)],
-                )[0],
-            )
+            let point = draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 35)],
+            )[0];
+            Some((point, !chains.surfaced.is_empty()))
         };
         let all = jstream_protocol::RenderFeatures::ALL;
-        let Some(reflected) = under(&graph, all) else {
+        let Some((reflected, surfaced)) = under(&graph, all) else {
             return;
         };
+        assert!(
+            surfaced,
+            "the floor's surface is drawn with its layer, not again"
+        );
         let off = jstream_protocol::RenderFeatures {
             screen_space_reflections: false,
             ..all
         };
-        let plain = under(&graph, off).expect("an adapter");
+        let (plain, surfaced) = under(&graph, off).expect("an adapter");
+        assert!(!surfaced, "no surface without the pass");
         assert!(
             u16::from(reflected[0]) > u16::from(plain[0]) + 40
                 && u16::from(reflected[0]) > u16::from(reflected[1]) + 40,
             "the red card is reflected in the floor under it: {reflected:?} (without: {plain:?})"
         );
         apply(&mut graph, vec![reflective(false)]);
-        let unreflective = under(&graph, all).expect("an adapter");
+        let (unreflective, _) = under(&graph, all).expect("an adapter");
         assert_eq!(unreflective, plain, "a scene without reflections");
     }
 

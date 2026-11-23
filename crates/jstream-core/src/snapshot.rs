@@ -1112,7 +1112,7 @@ impl Default for Shot {
             driven: BTreeMap::new(),
             sourced: BTreeMap::new(),
             tempo: None,
-            features: jstream_protocol::RenderFeatures::ALL,
+            features: jstream_protocol::RenderFeatures::DEFAULT,
             audio: crate::reactive::Bindings::default(),
             fired: motion::Fired::default(),
             maps: BTreeMap::new(),
@@ -3750,6 +3750,10 @@ pub(crate) enum GpuKey {
     /// screen-space reflections (ADR-0170 decision 4): its models' normals, their BRDF
     /// and their environment's reflection, drawn with its view depth at the canvas size.
     Surface(SceneId, u8),
+    /// One of the three layers a model item's surface is drawn into with its layer, at
+    /// its layer's size, when its scene's chain reads a surface buffer (ADR-0170
+    /// decision 4), merged into that buffer from there.
+    ModelSurface(SceneId, ItemId, u8),
     /// A model item drawn through its scene's mirrored camera, for that reflection.
     ReflectedModel(SceneId, ItemId),
     /// A lit card's picture flat in its box, before it is lit into its
@@ -6965,6 +6969,25 @@ fn draw_model(
         }
         _ => None,
     };
+    // A model in a scene whose chain reads a surface buffer draws its surface with its
+    // layer (ADR-0170 decision 4), so the buffer merges it rather than drawing it again.
+    let surface_keys = match owner {
+        ChainOwner::Item(scene, item)
+            if depth_key.is_some()
+                && shot
+                    .chains
+                    .get(&ChainOwner::Scene(scene.clone()))
+                    .is_some_and(Chain::reads_surface) =>
+        {
+            let keys = model_surface_keys(scene, item);
+            let [width, height] = boxed.boxed.layer;
+            for key in &keys {
+                cache.layer(compositor, key, width, height)?;
+            }
+            Some(keys)
+        }
+        _ => None,
+    };
     let maps = if lit && shown.receives_shadows {
         shadow_maps(&*cache, chains, scene_id)
     } else {
@@ -6994,6 +7017,7 @@ fn draw_model(
             )
         })
         .flatten();
+    let mut surfaced = false;
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => {
             let draw = jstream_render::ModelDraw {
@@ -7010,21 +7034,37 @@ fn draw_model(
                 reflection,
                 probe,
             };
-            Some(compositor.draw_model(&draw, layer).and_then(|()| {
-                match depth_key.as_ref().and_then(|key| cache.get(key)) {
+            let surface = surface_keys.as_ref().and_then(|keys| {
+                let [Some(normal), Some(brdf), Some(reflected)] =
+                    keys.each_ref().map(|key| cache.get(key))
+                else {
+                    return None;
+                };
+                Some([normal, brdf, reflected])
+            });
+            surfaced = surface.is_some();
+            let layered = match surface {
+                Some(surface) => compositor.draw_model_with_surface(&draw, layer, surface),
+                None => compositor.draw_model(&draw, layer),
+            };
+            Some(layered.and_then(
+                |()| match depth_key.as_ref().and_then(|key| cache.get(key)) {
                     Some(depth) => {
                         clear(compositor, depth)?;
                         compositor.draw_model_depth(&draw, depth)
                     }
                     None => Ok(()),
-                }
-            }))
+                },
+            ))
         }
         _ => None,
     };
     drop(maps);
     chains.lights = lights;
     chains.shadowed = shadowed;
+    if let (true, Some(Ok(())), ChainOwner::Item(scene, item)) = (surfaced, &drawn, owner) {
+        chains.surfaced.insert((scene.clone(), item.clone()));
+    }
     match drawn {
         Some(result) => result,
         None => {
@@ -8280,6 +8320,11 @@ fn surface_keys(id: &SceneId) -> [GpuKey; 3] {
 ///
 /// # Errors
 /// What the compositor reports for drawing into the layers.
+/// The keys of the three layers a model item's surface is drawn into with its layer.
+fn model_surface_keys(scene: &SceneId, item: &ItemId) -> [GpuKey; 3] {
+    [0, 1, 2].map(|n| GpuKey::ModelSurface(scene.clone(), item.clone(), n))
+}
+
 fn draw_surface(
     compositor: &mut Compositor,
     (cache, chains): (&ResourceCache<GpuKey>, &Chains),
@@ -8301,6 +8346,17 @@ fn draw_surface(
         live,
         false,
     ) {
+        // Its surface drawn with its layer this frame, merged; else drawn again here.
+        let (scene, item) = drawn.item;
+        let layers = model_surface_keys(scene, item).map(|key| cache.get(&key));
+        if let (true, [Some(normal), Some(brdf), Some(reflected)]) = (
+            chains.surfaced.contains(&(scene.clone(), item.clone())),
+            layers,
+        ) && (normal.width(), normal.height()) == (targets[0].width(), targets[0].height())
+        {
+            compositor.merge_model_surface([normal, brdf, reflected], targets)?;
+            continue;
+        }
         let shown = drawn.shown;
         pose(compositor, drawn.model, shown);
         let reflects = shown.lighting == Lighting::Scene && shown.reflections;
@@ -8318,7 +8374,17 @@ fn draw_surface(
                 )
             })
             .flatten();
-        let (_, reflection) = model_maps(shot, cache, drawn.source, shown);
+        // Its live texture and its materials' drives, as its layer was drawn with.
+        let (texture, reflection) = model_maps(shot, cache, drawn.source, shown);
+        let owner = ChainOwner::Item(scene.clone(), item.clone());
+        let (drives, driving) = match shot.boxes.get(&owner) {
+            Some(boxed) => crate::sourced::materials(
+                shot.source_drives(&boxed.item),
+                |m| shot.source_value(&boxed.item, m, at),
+                |m| shot.tint(&boxed.item, m),
+            ),
+            None => Default::default(),
+        };
         compositor.draw_model_surface(
             &jstream_render::ModelDraw {
                 model: drawn.model,
@@ -8329,8 +8395,8 @@ fn draw_surface(
                 shadows: &[],
                 environment,
                 floor: None,
-                materials: &[],
-                texture: None,
+                materials: &drives[..driving],
+                texture,
                 reflection: reflection.filter(|_| reflects),
                 probe,
             },
@@ -8400,6 +8466,7 @@ fn depth_models<'a>(
             continue;
         }
         models.push(DepthModel {
+            item: (scene_id, item_id),
             model,
             shown,
             geometry,
@@ -8413,6 +8480,8 @@ fn depth_models<'a>(
 /// A model [`depth_models`] lists: its upload and what it shows, where its item places
 /// it, whether its item carries its depth layer, and its source.
 struct DepthModel<'a> {
+    /// Its item, by the scene its layer's key names.
+    item: (&'a SceneId, &'a ItemId),
     model: &'a jstream_render::GpuModel,
     shown: &'a jstream_sources::ShownModel,
     geometry: ItemGeometry,

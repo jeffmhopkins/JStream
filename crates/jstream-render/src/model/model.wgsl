@@ -680,25 +680,77 @@ fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
 // What a screen-space reflection reads of the nearest opaque surface (ADR-0170 decision
 // 4), where `fs_depth` would write its view depth: the shading normal in the viewing
 // frame and 1 / w; the BRDF and the roughness; the environment's reflection as `fs`
-// added it and whether one found on screen may replace it. The pipeline tests and
-// writes depth, so the nearest surface of every model drawn into the targets wins.
+// added it and whether one found on screen may replace it. All zero where nothing
+// that may be replaced is: past the camera, or under half opaque.
+struct Surface {
+    normal: vec4<f32>,
+    brdf: vec4<f32>,
+    reflected: vec4<f32>,
+}
+
+fn surface_of(shaded: Shaded, in: VsOut) -> Surface {
+    var out: Surface;
+    let p = frame.params.x;
+    let w = (p - in.seen.z) / max(p, 1e-6);
+    if shaded.color.a < 0.5 || p <= 0.0 || w <= 0.0 {
+        out.normal = vec4<f32>(0.0);
+        out.brdf = vec4<f32>(0.0);
+        out.reflected = vec4<f32>(0.0);
+        return out;
+    }
+    out.normal = vec4<f32>(shaded.n, 1.0 / w);
+    out.brdf = vec4<f32>(shaded.brdf, shaded.roughness);
+    out.reflected = vec4<f32>(shaded.reflected, shaded.reflects);
+    return out;
+}
+
+// The depth a surface buffer keeps the nearest by: 1 / w, nearer larger, squeezed into
+// 0..1. `surface_merge.wgsl` writes the same.
+fn surface_depth(inv: f32) -> f32 {
+    return inv / (1.0 + inv);
+}
+
+// The model's layer and its surface at once (ADR-0170 decision 4), so a scene whose
+// screen-space reflections read the surface doesn't shade its models twice.
+struct LayerAndSurface {
+    @location(0) color: vec4<f32>,
+    @location(1) normal: vec4<f32>,
+    @location(2) brdf: vec4<f32>,
+    @location(3) reflected: vec4<f32>,
+}
+
+@fragment
+fn fs_with_surface(in: VsOut, @builtin(front_facing) front_facing: bool) -> LayerAndSurface {
+    let shaded = shade(in, front_facing);
+    let surface = surface_of(shaded, in);
+    var out: LayerAndSurface;
+    out.color = shaded.color;
+    out.normal = surface.normal;
+    out.brdf = surface.brdf;
+    out.reflected = surface.reflected;
+    return out;
+}
+
+// A model drawn into a surface buffer on its own, where its layer had no surface: the
+// pipeline tests and writes `surface_depth`, so the nearest surface of every model
+// drawn into the targets wins.
 struct SurfaceOut {
     @location(0) normal: vec4<f32>,
     @location(1) brdf: vec4<f32>,
     @location(2) reflected: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
 }
 
 @fragment
 fn fs_surface(in: VsOut, @builtin(front_facing) front_facing: bool) -> SurfaceOut {
-    let shaded = shade(in, front_facing);
-    let p = frame.params.x;
-    let w = (p - in.seen.z) / max(p, 1e-6);
-    if shaded.color.a < 0.5 || p <= 0.0 || w <= 0.0 {
+    let surface = surface_of(shade(in, front_facing), in);
+    if surface.normal.w <= 0.0 {
         discard;
     }
     var out: SurfaceOut;
-    out.normal = vec4<f32>(shaded.n, 1.0 / w);
-    out.brdf = vec4<f32>(shaded.brdf, shaded.roughness);
-    out.reflected = vec4<f32>(shaded.reflected, shaded.reflects);
+    out.normal = surface.normal;
+    out.brdf = surface.brdf;
+    out.reflected = surface.reflected;
+    out.depth = surface_depth(surface.normal.w);
     return out;
 }

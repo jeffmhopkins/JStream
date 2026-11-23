@@ -568,8 +568,12 @@ pub(crate) struct ModelRuntime {
     blended: wgpu::RenderPipeline,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
     depth_only: wgpu::RenderPipeline,
-    /// What a screen-space reflection reads of each model (ADR-0170 decision 4).
+    /// What a screen-space reflection reads of each model (ADR-0170 decision 4), for a
+    /// model whose layer was drawn without it.
     surface: wgpu::RenderPipeline,
+    /// The layer's pipelines with a surface buffer beside it, and the merge of such a
+    /// surface into its scene's buffer.
+    with_surface: WithSurface,
     /// Its depth, kept across the models drawn into one set of targets.
     surface_depth: Option<(u32, u32, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
@@ -695,12 +699,47 @@ impl ModelRuntime {
             Opaque,
             Blended,
         }
-        let pipeline = |kind: Kind| {
+        // With `surface`, the pass also has a surface buffer's three targets, which only
+        // the opaque shading writes (`fs_with_surface`, ADR-0170 decision 4).
+        let pipeline = |kind: Kind, surface: bool| {
+            let unwritten = Some(wgpu::ColorTargetState {
+                format: LAYER_FORMAT,
+                blend: None,
+                write_mask: wgpu::ColorWrites::empty(),
+            });
+            let written = Some(wgpu::ColorTargetState {
+                format: LAYER_FORMAT,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            });
+            let beside = if kind == Kind::Opaque {
+                written
+            } else {
+                unwritten
+            };
+            let targets = [
+                Some(wgpu::ColorTargetState {
+                    format: LAYER_FORMAT,
+                    blend: (kind != Kind::Prepass)
+                        .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: if kind == Kind::Prepass {
+                        wgpu::ColorWrites::empty()
+                    } else {
+                        wgpu::ColorWrites::ALL
+                    },
+                }),
+                beside.clone(),
+                beside.clone(),
+                beside,
+            ];
             let desc = wgpu::RenderPipelineDescriptor {
-                label: Some(match kind {
-                    Kind::Prepass => "jstream-render-model-prepass",
-                    Kind::Opaque => "jstream-render-model-opaque",
-                    Kind::Blended => "jstream-render-model-blended",
+                label: Some(match (kind, surface) {
+                    (Kind::Prepass, false) => "jstream-render-model-prepass",
+                    (Kind::Opaque, false) => "jstream-render-model-opaque",
+                    (Kind::Blended, false) => "jstream-render-model-blended",
+                    (Kind::Prepass, true) => "jstream-render-model-prepass-surface",
+                    (Kind::Opaque, true) => "jstream-render-model-opaque-surface",
+                    (Kind::Blended, true) => "jstream-render-model-blended-surface",
                 }),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
@@ -744,33 +783,30 @@ impl ModelRuntime {
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(if kind == Kind::Prepass {
-                        "fs_prepass"
-                    } else {
-                        "fs"
+                    entry_point: Some(match kind {
+                        Kind::Prepass => "fs_prepass",
+                        Kind::Opaque if surface => "fs_with_surface",
+                        _ => "fs",
                     }),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     // The prepass draws in the colour pass, so it has its target, and
                     // writes none of it.
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: LAYER_FORMAT,
-                        blend: (kind != Kind::Prepass)
-                            .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                        write_mask: if kind == Kind::Prepass {
-                            wgpu::ColorWrites::empty()
-                        } else {
-                            wgpu::ColorWrites::ALL
-                        },
-                    })],
+                    targets: if surface { &targets[..] } else { &targets[..1] },
                 }),
                 multiview_mask: None,
                 cache: None,
             };
             gpu.built.render(device, SOURCE, &(), &desc)
         };
-        let prepass = pipeline(Kind::Prepass);
-        let opaque = pipeline(Kind::Opaque);
-        let blended = pipeline(Kind::Blended);
+        let prepass = pipeline(Kind::Prepass, false);
+        let opaque = pipeline(Kind::Opaque, false);
+        let blended = pipeline(Kind::Blended, false);
+        let with_surface = WithSurface {
+            prepass: pipeline(Kind::Prepass, true),
+            opaque: pipeline(Kind::Opaque, true),
+            blended: pipeline(Kind::Blended, true),
+            merge: merge_pipeline(gpu),
+        };
         let largest = wgpu::BlendComponent {
             src_factor: wgpu::BlendFactor::One,
             dst_factor: wgpu::BlendFactor::One,
@@ -937,6 +973,7 @@ impl ModelRuntime {
             blended,
             depth_only,
             surface,
+            with_surface,
             surface_depth: None,
             sampler,
             frame,
@@ -1244,8 +1281,96 @@ impl ModelRuntime {
         draw: &ModelDraw<'_>,
         target: &Image,
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
+        surface: Option<[&Image; 3]>,
     ) -> Result<(), RenderError> {
-        self.draw_as(gpu, owner, draw, target, (live, panoramas), DrawAs::Layer)
+        let how = surface.map_or(DrawAs::Layer, DrawAs::LayerWithSurface);
+        self.draw_as(gpu, owner, draw, target, (live, panoramas), how)
+    }
+
+    /// Merges a model's surface, drawn with its layer into `layers`, into `targets`, its
+    /// scene's surface buffer, where it is nearer than what they hold since
+    /// [`Self::clear_surface`] (ADR-0170 decision 4). Only the box the layer drew in is
+    /// read, when it said which.
+    pub(crate) fn merge_surface(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        layers: [&Image; 3],
+        targets: [&Image; 3],
+    ) -> Result<(), RenderError> {
+        let views = surface_views(owner, targets)?;
+        let (width, height) = (targets[0].width(), targets[0].height());
+        let sources = surface_views(owner, layers)?;
+        if (layers[0].width(), layers[0].height()) != (width, height) {
+            return Err(RenderError::Invalid {
+                what: "layer",
+                detail: "a model's surface layers are not its scene's surface buffer's size".into(),
+            });
+        }
+        let depth = self.surface_depth_view(gpu, width, height);
+        let (layout, pipeline) = &self.with_surface.merge;
+        let read = |n: usize| wgpu::BindGroupEntry {
+            binding: n as u32,
+            resource: wgpu::BindingResource::TextureView(sources[n]),
+        };
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("jstream-render-model-surface-merge"),
+            layout,
+            entries: &[read(0), read(1), read(2)],
+        });
+        let lock = gpu.submit.clone();
+        let submitting = lock.lock();
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-model-surface-merge"),
+            });
+        {
+            let keep = |view| {
+                Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })
+            };
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-model-surface-merge"),
+                color_attachments: &[keep(views[0]), keep(views[1]), keep(views[2])],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if let Some(region) = layers[0].content() {
+                if region.width == 0 || region.height == 0 {
+                    drop(pass);
+                    gpu.submit_work(encoder.finish());
+                    drop(submitting);
+                    return Ok(());
+                }
+                pass.set_scissor_rect(region.x, region.y, region.width, region.height);
+            }
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        gpu.submit_work(encoder.finish());
+        for target in targets {
+            target.mark_changed();
+        }
+        drop(submitting);
+        Ok(())
     }
 
     /// The material bind groups `draw` binds with its live texture `live` (the clear
@@ -1671,9 +1796,19 @@ impl ModelRuntime {
         let live_binds = draw
             .texture
             .map(|texture| self.live_binds(gpu, model, texture.material, live));
-        if let DrawAs::Surface(targets) = how {
-            return self.draw_surface(gpu, owner, (model, &frame, &frame_bind), targets);
-        }
+        let beside = match how {
+            DrawAs::LayerWithSurface(layers) => {
+                let views = surface_views(owner, layers)?;
+                if (layers[0].width(), layers[0].height()) != (width, height) {
+                    return Err(RenderError::Invalid {
+                        what: "layer",
+                        detail: "a model's surface layers are not its layer's size".into(),
+                    });
+                }
+                Some((layers, views))
+            }
+            _ => None,
+        };
         let depth = self.depth_view(gpu, width, height);
         // Blended primitives far to near by their centres.
         self.order.clear();
@@ -1721,15 +1856,25 @@ impl ModelRuntime {
                 gpu.queue.write_buffer(live, 0, &material_bytes(&values));
             }
         }
+        // A surface on its own reads the same materials, live textures and drives.
+        if let DrawAs::Surface(targets) = how {
+            let drawn = self.draw_surface(
+                gpu,
+                owner,
+                (model, &frame_bind, live_binds.as_deref()),
+                targets,
+            );
+            drop(submitting);
+            return drawn;
+        }
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-model"),
             });
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("jstream-render-model"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            let cleared = |view| {
+                Some(wgpu::RenderPassColorAttachment {
                     view,
                     depth_slice: None,
                     resolve_target: None,
@@ -1737,7 +1882,28 @@ impl ModelRuntime {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
                     },
-                })],
+                })
+            };
+            let attachments = match &beside {
+                Some((_, views)) => vec![
+                    cleared(view),
+                    cleared(views[0]),
+                    cleared(views[1]),
+                    cleared(views[2]),
+                ],
+                None => vec![cleared(view)],
+            };
+            let (prepass, opaque, blended) = match beside {
+                Some(_) => (
+                    &self.with_surface.prepass,
+                    &self.with_surface.opaque,
+                    &self.with_surface.blended,
+                ),
+                None => (&self.prepass, &self.opaque, &self.blended),
+            };
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-model"),
+                color_attachments: &attachments,
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth,
                     depth_ops: Some(wgpu::Operations {
@@ -1771,10 +1937,10 @@ impl ModelRuntime {
             };
             // Depth first, then shading only where it is the nearest: a pixel several
             // surfaces cover is shaded once, not once a surface.
-            let opaque =
+            let is_opaque =
                 |p: &&GpuPrimitive| !model.materials.get(p.material).is_some_and(|m| m.blended);
-            pass.set_pipeline(&self.prepass);
-            for p in model.primitives.iter().filter(opaque) {
+            pass.set_pipeline(prepass);
+            for p in model.primitives.iter().filter(is_opaque) {
                 draw_one(&mut pass, p);
             }
             // Last to first: where two primitives lie in one plane both pass the equal
@@ -1782,12 +1948,12 @@ impl ModelRuntime {
             // first of them, as one pass that kept the first nearest fragment did.
             // Inside one primitive its triangles still draw in index order, so of two
             // of its own triangles in one plane the later now shows.
-            pass.set_pipeline(&self.opaque);
-            for p in model.primitives.iter().rev().filter(opaque) {
+            pass.set_pipeline(opaque);
+            for p in model.primitives.iter().rev().filter(is_opaque) {
                 draw_one(&mut pass, p);
             }
             if !self.order.is_empty() {
-                pass.set_pipeline(&self.blended);
+                pass.set_pipeline(blended);
                 for &(_, index) in &self.order {
                     draw_one(&mut pass, &model.primitives[index]);
                 }
@@ -1801,6 +1967,12 @@ impl ModelRuntime {
             .then(|| drawn_box(&clip, model.bounds, (width, height)))
             .flatten();
         target.set_content(content);
+        if let Some((layers, _)) = beside {
+            for layer in layers {
+                layer.mark_changed();
+                layer.set_content(content);
+            }
+        }
         drop(submitting);
         Ok(())
     }
@@ -1970,7 +2142,7 @@ impl ModelRuntime {
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
-        (targets, panoramas): ([&Image; 3], Panoramas<'_>),
+        (targets, (live, panoramas)): ([&Image; 3], (LiveView<'_>, Panoramas<'_>)),
     ) -> Result<(), RenderError> {
         if draw.camera.is_none() {
             return Ok(());
@@ -1980,25 +2152,24 @@ impl ModelRuntime {
             owner,
             draw,
             targets[0],
-            (None, panoramas),
+            (live, panoramas),
             DrawAs::Surface(targets),
         )
     }
 
-    /// The surface pass of [`Self::draw_as`]: every primitive, the nearest kept.
+    /// The surface pass of [`Self::draw_as`], which holds the submit lock and wrote the
+    /// frame and the materials' drives: every primitive, the nearest kept, each bound as
+    /// the layer binds it (its live texture's group where it has one).
     fn draw_surface(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
-        (model, frame, frame_bind): (&Uploaded, &[u8], &wgpu::BindGroup),
+        (model, frame_bind, live_binds): (&Uploaded, &wgpu::BindGroup, Option<&[LiveBind]>),
         targets: [&Image; 3],
     ) -> Result<(), RenderError> {
         let views = surface_views(owner, targets)?;
         let (width, height) = (targets[0].width(), targets[0].height());
         let depth = self.surface_depth_view(gpu, width, height);
-        let lock = gpu.submit.clone();
-        let submitting = lock.lock();
-        gpu.queue.write_buffer(&self.frame, 0, frame);
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2042,7 +2213,10 @@ impl ModelRuntime {
                 let Some(material) = model.materials.get(p.material) else {
                     continue;
                 };
-                pass.set_bind_group(1, &material.bind, &[]);
+                let bind = live_binds
+                    .and_then(|binds| binds.get(p.material)?.as_ref())
+                    .map_or(&material.bind, |(bind, _)| bind);
+                pass.set_bind_group(1, bind, &[]);
                 pass.set_vertex_buffer(0, p.vertices.slice(..));
                 pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..p.index_count, 0, 0..1);
@@ -2052,7 +2226,6 @@ impl ModelRuntime {
         for target in targets {
             target.mark_changed();
         }
-        drop(submitting);
         Ok(())
     }
 
@@ -2112,11 +2285,92 @@ impl ModelRuntime {
     }
 }
 
+/// The model pipelines that draw a layer and its surface at once, and the merge of that
+/// surface into its scene's surface buffer (ADR-0170 decision 4).
+struct WithSurface {
+    prepass: wgpu::RenderPipeline,
+    opaque: wgpu::RenderPipeline,
+    blended: wgpu::RenderPipeline,
+    merge: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
+}
+
+/// The pipeline of `surface_merge.wgsl` and the layout of its three layers.
+fn merge_pipeline(gpu: &Gpu) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline) {
+    const SOURCE: &str = include_str!("surface_merge.wgsl");
+    let device = &gpu.device;
+    let entry = |binding: u32| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    };
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("jstream-render-model-surface-merge"),
+        entries: &[entry(0), entry(1), entry(2)],
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("jstream-render-model-surface-merge"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("jstream-render-model-surface-merge"),
+        source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
+    });
+    let plain = Some(wgpu::ColorTargetState {
+        format: LAYER_FORMAT,
+        blend: None,
+        write_mask: wgpu::ColorWrites::ALL,
+    });
+    let desc = wgpu::RenderPipelineDescriptor {
+        label: Some("jstream-render-model-surface-merge"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::Greater),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[plain.clone(), plain.clone(), plain],
+        }),
+        multiview_mask: None,
+        cache: None,
+    };
+    let pipeline = gpu.built.render(device, SOURCE, &(), &desc);
+    (layout, pipeline)
+}
+
+/// A live texture's whole picture as a model reads it: its texture and its view.
+type LiveView<'a> = Option<(&'a wgpu::Texture, &'a wgpu::TextureView)>;
+
+/// A material's bind group for a live texture, with its uniform, where it has one.
+type LiveBind = Option<(wgpu::BindGroup, wgpu::Buffer)>;
+
 /// What [`ModelRuntime::draw_as`] draws.
 #[derive(Clone, Copy)]
 enum DrawAs<'a> {
     /// The model through its camera, into a layer.
     Layer,
+    /// The model through its camera, into a layer, and its surface into these three
+    /// layers of the layer's size, cleared first (ADR-0170 decision 4).
+    LayerWithSurface([&'a Image; 3]),
     /// A lit card's quad, laid flat over the layer in its texture coordinates.
     InTexture,
     /// What a screen-space reflection reads of it, into these three targets
@@ -2131,22 +2385,16 @@ fn surface_views<'t>(
     targets: [&'t Image; 3],
 ) -> Result<[&'t wgpu::TextureView; 3], RenderError> {
     let size = (targets[0].width(), targets[0].height());
-    let mut views = Vec::with_capacity(3);
-    for target in targets {
-        match target.target() {
-            Some(view) if target.owner().is(owner) && (target.width(), target.height()) == size => {
-                views.push(view);
-            }
-            _ => {
-                return Err(RenderError::Invalid {
-                    what: "layer",
-                    detail: "a surface target is not a layer this compositor made, of one size"
-                        .into(),
-                });
-            }
-        }
-    }
-    Ok([views[0], views[1], views[2]])
+    let view = |target: &'t Image| {
+        target
+            .target()
+            .filter(|_| target.owner().is(owner) && (target.width(), target.height()) == size)
+            .ok_or_else(|| RenderError::Invalid {
+                what: "layer",
+                detail: "a surface target is not a layer this compositor made, of one size".into(),
+            })
+    };
+    Ok([view(targets[0])?, view(targets[1])?, view(targets[2])?])
 }
 
 fn placement(err: jstream_protocol::GeometryError) -> RenderError {

@@ -41,8 +41,8 @@ pub struct RenderFeatures {
     pub max_probe_resolution: u32,
     /// Screen-space reflections (ADR-0170 decision 4, since 0.172), one extra pass over
     /// each scene whose `reflections` is on. Off, its surfaces reflect their probes and
-    /// environment only. Off until turned on, since it costs a frame budget's worth on a
-    /// modest GPU.
+    /// environment only. Off until turned on (ADR-0185), since it can cost a modest GPU
+    /// its frame rate.
     #[serde(default)]
     pub screen_space_reflections: bool,
     /// How many steps a screen-space reflection's ray takes through the view depth: one

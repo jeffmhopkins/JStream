@@ -758,6 +758,7 @@ impl Compositor {
     /// normal in its camera's viewing frame with `1 / w`, the split-sum BRDF its
     /// environment's reflection was weighed by with its roughness, and that reflection
     /// as it was added with 1 where a scene-lit, not blended surface may have it replaced.
+    /// Its live texture and its materials' drives are read as the layer reads them.
     /// Where the material's alpha is under one half nothing is drawn, as for its view
     /// depth. Without a camera nothing is drawn.
     ///
@@ -769,6 +770,12 @@ impl Compositor {
         targets: [&Image; 3],
     ) -> Result<(), RenderError> {
         let errors = self.errors();
+        let chain = draw
+            .texture
+            .and_then(|texture| texture.image)
+            .filter(|image| image.owner().is(&self.owner))
+            .map(|image| self.built_chain(image, "jstream-render-model-texture"));
+        let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
         let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
         let sky = draw
             .reflection
@@ -783,9 +790,9 @@ impl Compositor {
             sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
             probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
         };
-        let drawn = self
-            .models
-            .draw_surface_of(&self.gpu, &self.owner, draw, (targets, panoramas));
+        let drawn =
+            self.models
+                .draw_surface_of(&self.gpu, &self.owner, draw, (targets, (live, panoramas)));
         errors.close(drawn)
     }
 
@@ -881,6 +888,57 @@ impl Compositor {
     /// of their own, made the same way, so a rough surface blurs them smoothly
     /// (ADR-0170 decision 3).
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
+        self.draw_model_beside(draw, target, None)
+    }
+
+    /// Draws `draw` into `target` as [`Self::draw_model`] does, and what a screen-space
+    /// reflection reads of it (ADR-0170 decision 4) into `surface`, three layers of
+    /// `target`'s size, cleared first, from the same shading: its shading normal in its
+    /// camera's viewing frame with `1 / w`, the split-sum BRDF its environment's
+    /// reflection was weighed by with its roughness, and that reflection as it was added
+    /// with 1 where a scene-lit, not blended surface may have it replaced; zero where its
+    /// opaque surfaces aren't or their alpha is under one half.
+    /// [`Self::merge_model_surface`] then puts it in its scene's surface buffer, so the
+    /// model isn't drawn a second time for it.
+    ///
+    /// # Errors
+    /// As for [`Self::draw_model`], and when a `surface` layer isn't a layer this
+    /// compositor made of `target`'s size.
+    pub fn draw_model_with_surface(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+        surface: [&Image; 3],
+    ) -> Result<(), RenderError> {
+        self.draw_model_beside(draw, target, Some(surface))
+    }
+
+    /// Merges a model's surface that [`Self::draw_model_with_surface`] drew into
+    /// `layers` into `targets`, its scene's surface buffer, where it is nearer than what
+    /// they hold since [`Self::clear_surface`]: one full-screen pass, cut to the box the
+    /// model drew in when it said which.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when a layer or target isn't a layer this compositor made,
+    /// or the six aren't one size.
+    pub fn merge_model_surface(
+        &mut self,
+        layers: [&Image; 3],
+        targets: [&Image; 3],
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        errors.close(
+            self.models
+                .merge_surface(&self.gpu, &self.owner, layers, targets),
+        )
+    }
+
+    fn draw_model_beside(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+        surface: Option<[&Image; 3]>,
+    ) -> Result<(), RenderError> {
         let errors = self.errors();
         let chain = draw
             .texture
@@ -903,7 +961,7 @@ impl Compositor {
             sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
             probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
         };
-        let drawn = self.draw_model_focused(draw, target, (live, panoramas));
+        let drawn = self.draw_model_focused(draw, target, (live, panoramas), surface);
         errors.close(drawn)
     }
 
@@ -945,6 +1003,7 @@ impl Compositor {
         draw: &ModelDraw<'_>,
         target: &Image,
         live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
+        surface: Option<[&Image; 3]>,
     ) -> Result<(), RenderError> {
         let canvas = jstream_protocol::Canvas {
             width: target.width(),
@@ -955,11 +1014,13 @@ impl Compositor {
             .and_then(|camera| camera.view(canvas).ok())
             .filter(|view| view.focus().is_some());
         let Some(view) = view else {
-            return self.models.draw(&self.gpu, &self.owner, draw, target, live);
+            return self
+                .models
+                .draw(&self.gpu, &self.owner, draw, target, live, surface);
         };
         let (colour, depth) = self.model_focus_layers(canvas.width, canvas.height)?;
         self.models
-            .draw(&self.gpu, &self.owner, draw, &colour, live)?;
+            .draw(&self.gpu, &self.owner, draw, &colour, live, surface)?;
         let empty = Scene {
             canvas: jstream_media::FrameSize::new(canvas.width, canvas.height).map_err(|_| {
                 RenderError::Invalid {

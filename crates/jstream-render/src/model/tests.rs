@@ -2622,3 +2622,163 @@ fn a_models_surface_marks_where_a_reflection_may_be_replaced() {
     let reflected = read_layer(compositor, &targets[2]);
     assert_eq!(reflected.pixel(80, 50).expect("inside")[3], 0, "cleared");
 }
+
+/// A model's surface drawn with its layer and merged into its scene's buffer is the
+/// surface a second draw of it gives, and the nearer of two merged models wins
+/// (ADR-0170 decision 4).
+#[test]
+fn a_surface_drawn_with_the_layer_merges_as_a_second_draw_would() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = Some(SceneCamera::framing(canvas()));
+    let sphere = compositor
+        .upload_model(&grey_sphere())
+        .expect("the model uploads");
+    let lights = [ambient(1.0)];
+    let at = |geometry, lighting| ModelDraw {
+        model: &sphere,
+        geometry,
+        camera,
+        lighting,
+        lights: (lighting == Lighting::Scene).then_some(&lights[..]),
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let make = |compositor: &mut Compositor| {
+        [(); 3].map(|()| compositor.layer(WIDTH, HEIGHT).expect("a layer"))
+    };
+    let back = at(boxed(80.0, 50.0, 60.0), Lighting::Scene);
+    let mut near = boxed(80.0, 50.0, 30.0);
+    near.depth_px = finite(40.0);
+    let front = at(near, Lighting::Studio);
+
+    // Drawn a second time, each into the buffer.
+    let redrawn = make(compositor);
+    let redrawn = [&redrawn[0], &redrawn[1], &redrawn[2]];
+    compositor.clear_surface(redrawn).expect("it clears");
+    for draw in [&back, &front] {
+        compositor
+            .draw_model_surface(draw, redrawn)
+            .expect("the surface draws");
+    }
+
+    // Drawn with their layers, then merged.
+    let merged = make(compositor);
+    let merged = [&merged[0], &merged[1], &merged[2]];
+    let beside = [make(compositor), make(compositor)];
+    let colour = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    for (draw, layers) in [&back, &front].into_iter().zip(&beside) {
+        compositor
+            .draw_model_with_surface(draw, &colour, [&layers[0], &layers[1], &layers[2]])
+            .expect("the model draws");
+    }
+    compositor.clear_surface(merged).expect("it clears");
+    for layers in &beside {
+        compositor
+            .merge_model_surface([&layers[0], &layers[1], &layers[2]], merged)
+            .expect("it merges");
+    }
+
+    for n in 0..3 {
+        let want = read_layer(compositor, redrawn[n]);
+        let got = read_layer(compositor, merged[n]);
+        for (x, y) in [(80, 50), (56, 50), (104, 50), (80, 30), (2, 2)] {
+            let (a, b) = (
+                want.pixel(x, y).expect("inside"),
+                got.pixel(x, y).expect("inside"),
+            );
+            assert!(
+                a.iter().zip(b).all(|(a, b)| a.abs_diff(b) <= 2),
+                "layer {n} at ({x}, {y}): {a:?} redrawn, {b:?} merged"
+            );
+        }
+    }
+    let reflected = read_layer(compositor, merged[2]);
+    assert_eq!(
+        reflected.pixel(80, 50).expect("inside")[3],
+        0,
+        "the nearer wins"
+    );
+    assert_eq!(
+        reflected.pixel(56, 50).expect("inside")[3],
+        255,
+        "the farther around it"
+    );
+}
+
+/// A model's surface drawn on its own reads its live texture as its layer does: a white
+/// metal sphere showing a red picture weighs its reflection by a red BRDF in both
+/// (ADR-0170 decision 4, ADR-0107 decision 5).
+#[test]
+fn a_surface_reads_the_live_texture_its_layer_shows() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = Some(SceneCamera::framing(canvas()));
+    let metal = Shape::Sphere
+        .model(Material {
+            base_color: [1.0, 1.0, 1.0, 1.0],
+            metallic: 1.0,
+            roughness: 0.2,
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let sphere = compositor.upload_model(&metal).expect("the model uploads");
+    let red = compositor
+        .upload_rgba8(8, 8, &[255, 0, 0, 255].repeat(64))
+        .expect("the picture uploads");
+    let lights = [ambient(1.0)];
+    let draw = ModelDraw {
+        model: &sphere,
+        geometry: boxed(80.0, 50.0, 60.0),
+        camera,
+        lighting: Lighting::Scene,
+        lights: Some(&lights[..]),
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: Some(super::LiveTexture {
+            image: Some(&red),
+            material: None,
+        }),
+        reflection: None,
+        probe: None,
+    };
+    let make = |compositor: &mut Compositor| {
+        [(); 3].map(|()| compositor.layer(WIDTH, HEIGHT).expect("a layer"))
+    };
+    let alone = make(compositor);
+    let alone = [&alone[0], &alone[1], &alone[2]];
+    compositor.clear_surface(alone).expect("it clears");
+    compositor
+        .draw_model_surface(&draw, alone)
+        .expect("the surface draws");
+    let beside = make(compositor);
+    let colour = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model_with_surface(&draw, &colour, [&beside[0], &beside[1], &beside[2]])
+        .expect("the model draws");
+    let alone = read_layer(compositor, alone[1])
+        .pixel(80, 50)
+        .expect("inside");
+    let with = read_layer(compositor, &beside[1])
+        .pixel(80, 50)
+        .expect("inside");
+    assert!(
+        alone[0] > alone[1].saturating_add(40),
+        "the BRDF of a red metal is red: {alone:?}"
+    );
+    assert!(
+        alone.iter().zip(with).all(|(a, b)| a.abs_diff(b) <= 2),
+        "drawn alone {alone:?}, with the layer {with:?}"
+    );
+}

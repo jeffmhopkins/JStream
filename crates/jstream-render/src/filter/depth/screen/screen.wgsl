@@ -144,7 +144,11 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
             thickness = step_depth * 1.5;
             break;
         }
-        last = t;
+        // Only a step in front of the depth starts the halving: one behind a thick
+        // occluder would leave both ends behind.
+        if gap.x <= 0.0 {
+            last = t;
+        }
     }
     if found < 0.0 {
         return c;
