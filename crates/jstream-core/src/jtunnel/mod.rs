@@ -8,7 +8,8 @@
 //! every half second, as JTunnel's keepalive asks, and says bye when it stops. It
 //! drops, and counts, every datagram from outside the LAN ranges, from an address it
 //! did not subscribe to, or that isn't a JTunnel packet it accepts. It never announces
-//! itself and never sends audio or MIDI.
+//! itself and never sends audio or MIDI; besides subscribes and byes it sends only names
+//! packets (below).
 //!
 //! **Finding senders** (ADR-0123 §3). Every 10 s the thread asks the LAN for JTunnel
 //! senders: an mDNS PTR query for `_jtunnel._udp.local` sent to mDNS's group
@@ -20,6 +21,14 @@
 //! sender trusts it with nothing: only an accepted sender is subscribed to, and
 //! `jtunnel.senders` reports the list. Each change to it is sent on the host's
 //! `changed` channel, which the engine turns into `jtunnel.senders_changed`.
+//!
+//! **Naming a sender's params** ([ADR-0181](../../../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md)).
+//! The engine hands the receiver what the collection calls each sender's 32 modulation
+//! params ([`names::param_names`], [`Receiver::set_names`]). To each accepted sender
+//! whose state it uses, the thread sends a names packet beside every keepalive while any
+//! slot is named, and an empty list four more times once none is; a sender it never
+//! named gets none, so names its DAW saved stay. This is the one thing it sends besides
+//! queries, subscribes and byes.
 //!
 //! Each accepted sender has a [`Playout`] (its jitter buffer, sequence tracking and
 //! clock estimate, from `jstream-jtunnel`). The thread pushes each frame in as it
@@ -44,6 +53,8 @@
 //! stops resending goes after 3 s (and comes back with its next resend), and a receiver
 //! that stops forgets its senders' state. A message refused for room is taken again
 //! when it is resent.
+
+pub(crate) mod names;
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -287,6 +298,8 @@ struct JtunnelCounters {
 /// One accepted sender, as both sides see it.
 struct Sender {
     accepted: AcceptedSender,
+    /// What the collection calls its modulation params (ADR-0181).
+    naming: Mutex<Naming>,
     /// Its stream's sample rate, from its latest audio packet; 0 before one.
     rate: AtomicU32,
     /// The open stream that records it; 0 for none. One source at a time.
@@ -294,6 +307,20 @@ struct Sender {
     /// Its playout as the thread last read it, for `profile.get` (#1223).
     seen: Seen,
 }
+
+/// The names a sender's modulation params get (ADR-0181), and whether they still go out.
+#[derive(Debug, Default)]
+struct Naming {
+    /// [`wire::MOD_SLOTS`] names, empty for none; empty until the collection names one.
+    names: Vec<String>,
+    /// How many more keepalives carry an empty list after the last name went, so the
+    /// sender drops names this receiver gave even if a packet is lost. A receiver that
+    /// never named anything sends nothing, and leaves names a project saved alone.
+    clearing: u8,
+}
+
+/// How many keepalives (half a second apart) carry an empty list after the last name goes.
+const CLEAR_ROUNDS: u8 = 4;
 
 /// A sender's playout as its thread last published it: each a plain counter or reading,
 /// read one at a time, so a profile may mix two of the thread's turns.
@@ -392,6 +419,7 @@ impl Receiver {
             .iter()
             .map(|accepted| Sender {
                 accepted: accepted.clone(),
+                naming: Mutex::new(Naming::default()),
                 rate: AtomicU32::new(0),
                 recorder: AtomicU64::new(0),
                 seen: Seen::default(),
@@ -432,6 +460,32 @@ impl Receiver {
             stop,
             thread: Mutex::new(Some(thread)),
         })
+    }
+
+    /// Names each accepted sender's modulation params as `names` says (ADR-0181), from
+    /// its next keepalive on: only a sender whose state it uses, since the names are for
+    /// the `params` key it reads there. Names that didn't change change nothing.
+    pub(crate) fn set_names(&self, names: &names::ParamNames) {
+        for sender in self.senders.iter() {
+            let wanted = if sender.accepted.uses_state() {
+                names::for_sender(names, &sender.accepted.name)
+            } else {
+                Vec::new()
+            };
+            let wanted = if wanted.iter().all(String::is_empty) {
+                Vec::new()
+            } else {
+                wanted
+            };
+            let mut naming = sender.naming.lock().unwrap_or_else(PoisonError::into_inner);
+            if naming.names == wanted {
+                continue;
+            }
+            if wanted.is_empty() {
+                naming.clearing = CLEAR_ROUNDS;
+            }
+            naming.names = wanted;
+        }
     }
 
     /// The address it receives on.
@@ -701,6 +755,7 @@ impl Run {
         while !self.stop.load(Ordering::Acquire) {
             if Instant::now() >= next_subscribe {
                 self.send_all(wire::write_subscribe);
+                self.send_names();
                 next_subscribe += SUBSCRIBE_EVERY;
                 // After a stall, the next keepalive goes out now and then on time.
                 next_subscribe = next_subscribe.max(Instant::now());
@@ -857,6 +912,32 @@ impl Run {
         let mut out = [0_u8; 64];
         for sender in self.senders.iter() {
             if let Some(len) = write(&mut out, sender.accepted.name.as_bytes()) {
+                // ADR-0123 §2: only to LAN addresses, which `AcceptedSender` ensures.
+                let _ = self.socket.send_to(&out[..len], sender.accepted.addr);
+            }
+        }
+    }
+
+    /// Sends each sender its modulation params' names (ADR-0181) beside its keepalive,
+    /// so a lost packet is put right half a second later: while the collection names
+    /// any, and a few times more with none once the last one goes.
+    fn send_names(&self) {
+        let mut out = [0_u8; wire::MAX_PACKET_BYTES];
+        let none = vec![String::new(); wire::MOD_SLOTS];
+        for sender in self.senders.iter() {
+            let len = {
+                let mut naming = sender.naming.lock().unwrap_or_else(PoisonError::into_inner);
+                if naming.names.is_empty() {
+                    if naming.clearing == 0 {
+                        continue;
+                    }
+                    naming.clearing -= 1;
+                    wire::write_names(&mut out, &none)
+                } else {
+                    wire::write_names(&mut out, &naming.names)
+                }
+            };
+            if let Some(len) = len {
                 // ADR-0123 §2: only to LAN addresses, which `AcceptedSender` ensures.
                 let _ = self.socket.send_to(&out[..len], sender.accepted.addr);
             }
