@@ -6753,7 +6753,7 @@ stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:63ac58d116477863", by = "agent:studio-two-up", note = "Studio mode rewritten for the two-up: canvas as preview, program monitor (tapped program-mix stream), StudioControls between them sharing one Panel state with the Transitions panel via provide_transitions; Selection notes the canvas follows the preview scene in studio mode; style.css adds the stage-row, stage-label, monitor and studio-controls rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Rewrote the output dialog passage: a property grid with a Name field (name_problem, send_settings' named ID), Save (Add) with no Apply, and the Edit… and New… links shown only when they can act. | merge: #1633 adds the 3D tools and camera mode bullet (camera.rs) and the pill's field of view; it doesn't touch the output dialog passage this branch rewrote. | kept from the merged side: Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes" }
 
 ["CRATE-jstream-ui#purpose"."body"]
 stamp = { hash = "b3:fbeffbb9a36c16d6", by = "agent:claude", note = "The outputs.rs entry now says the dialog applies nothing until Save; the rest holds." }
@@ -8340,19 +8340,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:0e2255ff983601b0", by = "agent:claude", note = "Added the dialog link button (button.link): link-coloured text beside a field, as the output dialog's Edit… and New…, shown only when it can act." }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Added the dialog link button (button.link): link-coloured text beside a field, as the output dialog's Edit… and New…, shown only when it can act. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:a1ffb6e5ce1aba11", by = "agent:ui-design", note = "Added the Button row (--button, --button-hover), the tokens that replace the hex fills in style.css (PR #1585 N5); every other token unchanged." }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the naming rule: everything in a chain is a filter, and an item's own are item filters, never effects, as the Filters panel, window and Add filter now say." }
@@ -8361,7 +8361,7 @@ stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: copy rules and the (i) side-with-room placement (dialog.rs tip_side, .info-tip.up/.end) still hold; the merge's toast text 'Saved to …' follows them." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the picker rule (C15): Add source and Add filter share one layout, a 320 px list with search and eyebrow groups and row icons, and the pick's 40 px tile, name and line, then what it needs and a callout for where it lands." }
@@ -8370,7 +8370,7 @@ stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the p
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: the dialog shell text still matches style.css (--dialog-s/m/l 440/600/860, 56px header with .modal-sub, sticky ::after fade, 56px footer with 32px buttons and .footer-left); the merge added only .toast-action." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:fe7d423d1ba2d92a", by = "agent:claude", note = "Asset paths now read path, Browse…, then a short root select (Collection / App assets / Absolute); added the file row's order. The grid rules otherwise hold." }
@@ -8379,7 +8379,7 @@ stamp = { hash = "b3:fe7d423d1ba2d92a", by = "agent:claude", note = "Asset paths
 stamp = { hash = "b3:b7f3b69e6dc89b0d", by = "agent:claude", note = "Asset paths now read path, Browse…, then a short root select (Collection / App assets / Absolute); added the file row's order. The grid rules otherwise hold. | merge: #1611 added .looks table rules to style.css (a data grid's Looks setting) and a Looks row in properties.rs; neither touches what this section says, and it still holds. | kept from the merged side: grid source kind: the looks table sits in the settings form's control column, its number fields as the form's other number inputs, its buttons small (button.sm); the form rules hold" }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8388,19 +8388,19 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:6fd304344f110076", by = "agent:claude", note = "The 3D tools bullet now says Depth doubles or halves distance per 200 px with a 10 px floor and Turn leaves billboards alone; matches camera::pose" }
@@ -8613,7 +8613,7 @@ stamp = { hash = "b3:4dc24b8738f93064", by = "agent:ui-design", note = "WS-09 mo
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained the canvas tool bar's text-button width rule; theme tokens unchanged" }
+stamp = { hash = "b3:dfdcde4ed6e5bd34", by = "agent:claude", note = "Re-read: style.css adds the output dialog's Saved key pill, name and kind rows, vcam block, warning callout and a modal link button rule; nothing this section states changes. | merge: #1633 adds only .canvas-tool-text (camera mode's text buttons in the canvas tool bar) to style.css; no token, button, menu, type, tab, dialog, form or copy rule changes, so this section still holds. | kept from the merged side: style.css only gained the canvas tool bar's text-button width rule; theme tokens unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
