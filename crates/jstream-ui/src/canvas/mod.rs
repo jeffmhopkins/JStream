@@ -41,7 +41,7 @@ use crop::{CropGesture, Picture};
 use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
 use jstream_control::protocol::{
-    CameraView, Crop, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneCamera,
+    CameraView, Crop, Edit, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneCamera,
     SceneId, SolidBounds,
 };
 use leptos::ev;
@@ -74,6 +74,40 @@ const HOVER: &str = "rgba(138,180,255,0.6)";
 /// while the live picture isn't under the boxes, since then they are all there is to see.
 const IDLE: &str = "rgba(154,161,172,0.55)";
 
+/// How long the wheel rests before its turn of the camera is committed, in ms.
+const WHEEL_SETTLE: std::time::Duration = std::time::Duration::from_millis(350);
+/// Where camera mode's mouse bindings are kept in this browser.
+const CAMERA_CONTROLS_KEY: &str = "jstream.canvas.camera_controls";
+
+/// Camera mode's mouse bindings as this browser kept them, or the defaults.
+fn load_camera_controls() -> camera::CameraControls {
+    let stored = window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .and_then(|storage| storage.get_item(CAMERA_CONTROLS_KEY).ok().flatten());
+    camera::CameraControls::from_stored(stored.as_deref())
+}
+
+/// Keeps camera mode's mouse bindings in this browser.
+fn store_camera_controls(controls: camera::CameraControls) {
+    if let Ok(Some(storage)) = window().local_storage() {
+        let _ = storage.set_item(CAMERA_CONTROLS_KEY, &controls.stored());
+    }
+}
+
+/// A wheel turn of a 3D scene's camera, live on output until the wheel rests.
+struct Wheeling {
+    /// The scene whose camera turns.
+    scene: SceneId,
+    /// Its camera before the turn.
+    start: SceneCamera,
+    /// The turn's live gesture, when a session is open.
+    live: Option<live::Live>,
+    /// Counts the wheel's events, so only the last one's timer commits.
+    turn: u64,
+}
+
 /// What a drag in progress does.
 #[derive(Clone, Debug, PartialEq)]
 enum Action {
@@ -95,8 +129,10 @@ enum Action {
     },
     /// Moves, scales or rotates every selected item.
     Group(GroupGesture),
-    /// Turns a 3D scene's camera about its target, or with `dolly` moves it along its
-    /// line of sight (ADR-0094): Alt-drag, with Shift for the dolly.
+    /// Moves a 3D scene's camera (ADR-0094): orbits it about its target, turns it where
+    /// it stands, slides it across the picture or dollies it, as `kind` says. Alt-drag
+    /// orbits and Alt+Shift-drag dollies; in camera mode each mouse button does what
+    /// [`camera::CameraControls`] binds it to.
     Orbit {
         /// The scene whose camera the drag moves: the one shown when it started, which
         /// its preview is kept with and its commit goes to.
@@ -105,8 +141,22 @@ enum Action {
         start: SceneCamera,
         /// Where the press was.
         origin: Point,
-        /// Whether the drag dollies rather than orbits.
-        dolly: bool,
+        /// What the drag does to the camera.
+        kind: camera::CameraDrag,
+        /// The canvas the camera sees, which a pan follows.
+        canvas: jstream_control::protocol::Canvas,
+    },
+    /// Pushes the moved items along a 3D scene's line of sight, or turns and tilts them
+    /// (the Depth and Turn tools, or Ctrl-drag for depth).
+    Pose {
+        /// What the drag changes.
+        pose: camera::Pose,
+        /// Each moved item with its geometry when the drag started.
+        starts: Vec<(ItemId, ItemGeometry)>,
+        /// Where the press was.
+        origin: Point,
+        /// The camera the scene was seen through at the press.
+        view: CameraView,
     },
     /// Draws a marquee from `from`: the items it touches are selected, with `base`.
     Marquee {
@@ -205,6 +255,17 @@ pub fn Canvas() -> impl IntoView {
     let marquee = RwSignal::new(None::<(Point, Point)>);
     // The camera an orbit or dolly shows, and its scene, until the collection has it.
     let camera_preview = RwSignal::new(None::<camera::Preview>);
+    // Camera mode: in a 3D scene every drag and the wheel move the camera, and nothing
+    // is selected or moved (docs/UI-FEATURES.md#canvas).
+    let camera_mode = RwSignal::new(false);
+    // Camera mode's mouse bindings, kept in this browser.
+    let camera_controls = RwSignal::new(load_camera_controls());
+    Effect::new(move |_| store_camera_controls(camera_controls.get()));
+    // What a drag on an item does in a 3D scene besides sliding it on its depth plane.
+    let item_pose = RwSignal::new(None::<camera::Pose>);
+    // A wheel turn on the camera waiting to be committed: it commits once the wheel
+    // rests.
+    let wheeling = StoredValue::new_local(None::<Wheeling>);
     let hovered = RwSignal::new(None::<ItemId>);
     let cursor = RwSignal::new("default");
     let stage = NodeRef::<leptos::html::Div>::new();
@@ -561,9 +622,35 @@ pub fn Canvas() -> impl IntoView {
                 drop(open);
             });
         };
+    // Commits a settled wheel turn the way a drop commits an orbit: the camera it
+    // shows, if it still shows the scene it turned in and the camera moved.
+    let settle_wheel = move || {
+        let Some(turn) = wheeling.try_update_value(Option::take).flatten() else {
+            return;
+        };
+        let shown = layout.with_untracked(|l| l.as_ref().and_then(shown_scene).cloned());
+        let moved = camera_preview.with_untracked(|p| {
+            camera::Preview::to_commit(p.as_ref(), &turn.scene, shown.as_ref(), true, turn.start)
+        });
+        match (moved, turn.live) {
+            (Some(camera), Some(gesture)) => {
+                gesture.commit(move |scene, ending| commit_camera(camera, scene, ending));
+            }
+            (Some(camera), None) => commit_camera(camera, turn.scene, None),
+            (None, gesture) => {
+                if let Some(gesture) = gesture {
+                    gesture.cancel();
+                }
+                camera_preview.set(None);
+            }
+        }
+    };
     // The collection has the orbit's camera, or another scene is shown: stop showing it.
     Effect::new(move |_| {
         let shown = layout.with(|l| l.as_ref().map(|l| (shown_scene(l).cloned(), l.camera)));
+        if wheeling.with_value(Option::is_some) {
+            return;
+        }
         if drag.with_value(|d| {
             matches!(
                 d,
@@ -698,88 +785,120 @@ pub fn Canvas() -> impl IntoView {
     let pointer_at = move |event: &ev::PointerEvent| canvas_at(event.client_x(), event.client_y());
 
     // Starts a drag: captures the pointer and remembers what it does.
-    let start = move |event: &ev::PointerEvent,
-                      point: Point,
-                      mut action: Action,
-                      current: &Layout| {
-        let moving: Vec<ItemId> = match &action {
-            Action::One { item_id, .. } | Action::Crop { item_id, .. } => vec![item_id.clone()],
-            Action::Group(gesture) => gesture.starts.iter().map(|(id, _)| id.clone()).collect(),
-            Action::Marquee { .. } | Action::Orbit { .. } => Vec::new(),
-        };
-        // In a 3D scene a move follows the pointer on the moved box's depth plane, so
-        // the gesture starts from the plane point under the press.
-        let seen = seen_in(current);
-        let plane = match (&mut action, seen) {
-            (Action::One { gesture, .. }, Some(view)) if gesture.kind == GestureKind::Move => {
-                let start = gesture.start;
-                camera::on_plane(&start, &view, point).map(|origin| {
-                    gesture.origin = origin;
-                    (view, start)
-                })
-            }
-            (Action::Group(gesture), Some(view)) if gesture.kind == GroupKind::Move => {
-                gesture.starts.first().map(|(_, g)| *g).and_then(|start| {
+    let start =
+        move |event: &ev::PointerEvent, point: Point, mut action: Action, current: &Layout| {
+            let moving: Vec<ItemId> = match &action {
+                Action::One { item_id, .. } | Action::Crop { item_id, .. } => vec![item_id.clone()],
+                Action::Group(gesture) => gesture.starts.iter().map(|(id, _)| id.clone()).collect(),
+                Action::Pose { starts, .. } => starts.iter().map(|(id, _)| id.clone()).collect(),
+                Action::Marquee { .. } | Action::Orbit { .. } => Vec::new(),
+            };
+            // In a 3D scene a move follows the pointer on the moved box's depth plane, so
+            // the gesture starts from the plane point under the press.
+            let seen = seen_in(current);
+            let plane = match (&mut action, seen) {
+                (Action::One { gesture, .. }, Some(view)) if gesture.kind == GestureKind::Move => {
+                    let start = gesture.start;
                     camera::on_plane(&start, &view, point).map(|origin| {
                         gesture.origin = origin;
                         (view, start)
                     })
-                })
+                }
+                (Action::Group(gesture), Some(view)) if gesture.kind == GroupKind::Move => {
+                    gesture.starts.first().map(|(_, g)| *g).and_then(|start| {
+                        camera::on_plane(&start, &view, point).map(|origin| {
+                            gesture.origin = origin;
+                            (view, start)
+                        })
+                    })
+                }
+                _ => None,
+            };
+            let targets = SnapTargets::new(
+                current.canvas,
+                current
+                    .boxes()
+                    .filter(|(id, _)| !moving.contains(id))
+                    .map(|(_, geometry)| geometry),
+            );
+            if let Some(element) = area.get_untracked() {
+                let _captured = element.set_pointer_capture(event.pointer_id());
             }
-            _ => None,
+            active.set(match &action {
+                Action::One { gesture, .. } => Some(Active::One(gesture.kind)),
+                Action::Crop { .. } => Some(Active::Crop),
+                Action::Group(gesture) => Some(Active::Group(gesture.kind)),
+                Action::Marquee { .. } | Action::Orbit { .. } | Action::Pose { .. } => None,
+            });
+            // A box drag opens a gesture, so the output follows it before the drop. On a
+            // keyframe scene its values are the keyframe's (protocol 0.53, #846): they name
+            // the keyframe, as its commit does.
+            let gesture = match (&action, session, current.scene.as_ref()) {
+                (
+                    Action::One { .. }
+                    | Action::Crop { .. }
+                    | Action::Group(_)
+                    | Action::Orbit { .. }
+                    | Action::Pose { .. },
+                    Some(session),
+                    Some((scene_id, _)),
+                ) => {
+                    // Unique for the session, so a remounted canvas never reuses one.
+                    session.get().map(|open| {
+                        let id = GestureId::new(studio.fresh_id(&open, "drag"));
+                        live::Live::new(id, scene_id.clone(), session, problem)
+                    })
+                }
+                _ => None,
+            };
+            live.set_value(gesture);
+            drag.set_value(Some(Drag {
+                action,
+                pointer: Pointer::new(point),
+                targets,
+                plane,
+            }));
         };
-        let targets = SnapTargets::new(
-            current.canvas,
-            current
-                .boxes()
-                .filter(|(id, _)| !moving.contains(id))
-                .map(|(_, geometry)| geometry),
-        );
-        if let Some(element) = area.get_untracked() {
-            let _captured = element.set_pointer_capture(event.pointer_id());
-        }
-        active.set(match &action {
-            Action::One { gesture, .. } => Some(Active::One(gesture.kind)),
-            Action::Crop { .. } => Some(Active::Crop),
-            Action::Group(gesture) => Some(Active::Group(gesture.kind)),
-            Action::Marquee { .. } | Action::Orbit { .. } => None,
-        });
-        // A box drag opens a gesture, so the output follows it before the drop. On a
-        // keyframe scene its values are the keyframe's (protocol 0.53, #846): they name
-        // the keyframe, as its commit does.
-        let gesture = match (&action, session, current.scene.as_ref()) {
-            (
-                Action::One { .. } | Action::Crop { .. } | Action::Group(_) | Action::Orbit { .. },
-                Some(session),
-                Some((scene_id, _)),
-            ) => {
-                // Unique for the session, so a remounted canvas never reuses one.
-                session.get().map(|open| {
-                    let id = GestureId::new(studio.fresh_id(&open, "drag"));
-                    live::Live::new(id, scene_id.clone(), session, problem)
-                })
-            }
-            _ => None,
-        };
-        live.set_value(gesture);
-        drag.set_value(Some(Drag {
-            action,
-            pointer: Pointer::new(point),
-            targets,
-            plane,
-        }));
-    };
 
     let on_down = move |event: ev::PointerEvent| {
-        if event.button() != 0 {
-            return;
-        }
         let Some((fit, point)) = pointer_at(&event) else {
             return;
         };
         let Some(current) = layout.get_untracked() else {
             return;
         };
+        // A wheel turn still settling is committed before anything else moves.
+        settle_wheel();
+        // In camera mode in a 3D scene every button drags the camera.
+        if camera_mode.get_untracked()
+            && let Some(scene) = shown_scene(&current).cloned()
+            && let Some(camera) = camera_preview.with_untracked(|p| {
+                camera::Preview::camera_in(p.as_ref(), Some(&scene), current.camera)
+            })
+        {
+            let Some(kind) = camera_controls
+                .get_untracked()
+                .drag(event.button(), event.shift_key())
+            else {
+                return;
+            };
+            if let Some(element) = stage.get_untracked() {
+                let _focused = element.focus();
+            }
+            event.prevent_default();
+            let orbit = Action::Orbit {
+                scene,
+                start: camera,
+                origin: point,
+                kind,
+                canvas: current.canvas,
+            };
+            start(&event, point, orbit, &current);
+            return;
+        }
+        if event.button() != 0 {
+            return;
+        }
         if let Some(element) = stage.get_untracked() {
             let _focused = element.focus();
         }
@@ -799,7 +918,12 @@ pub fn Canvas() -> impl IntoView {
                 scene,
                 start: camera,
                 origin: point,
-                dolly: shift,
+                kind: if shift {
+                    camera::CameraDrag::Dolly
+                } else {
+                    camera::CameraDrag::Orbit
+                },
+                canvas: current.canvas,
             };
             start(&event, point, orbit, &current);
             return;
@@ -884,6 +1008,27 @@ pub fn Canvas() -> impl IntoView {
         };
         // The click selects a locked item, but a drag moves only the unlocked ones.
         moving.retain(|(id, _)| !current.is_locked(id));
+        // In a 3D scene the Depth and Turn tools, or Ctrl for depth, pose the items
+        // instead of sliding them.
+        let pose = match item_pose.get_untracked() {
+            None if event.ctrl_key() || event.meta_key() => Some(camera::Pose::Depth),
+            pose => pose,
+        };
+        if let Some(pose) = pose
+            && let Some(view) = seen_in(&current)
+        {
+            if moving.is_empty() {
+                return;
+            }
+            let action = Action::Pose {
+                pose,
+                starts: moving,
+                origin: point,
+                view,
+            };
+            start(&event, point, action, &current);
+            return;
+        }
         let action = match moving.as_slice() {
             [] => return,
             [(item_id, geometry)] => Action::One {
@@ -908,6 +1053,15 @@ pub fn Canvas() -> impl IntoView {
         let Some(current) = layout.get_untracked() else {
             return;
         };
+        if camera_mode.get_untracked() && current.camera.is_some() {
+            if cursor.get_untracked() != "grab" {
+                cursor.set("grab");
+            }
+            if hovered.get_untracked().is_some() {
+                hovered.set(None);
+            }
+            return;
+        }
         let selection = selected_boxes(&current);
         let held = selection.iter().any(|(id, _)| current.is_locked(id));
         let handle = if held || current.camera.is_some() {
@@ -965,20 +1119,37 @@ pub fn Canvas() -> impl IntoView {
                 scene,
                 start,
                 origin,
-                dolly,
+                kind,
+                canvas,
             } => {
-                let dx = (point.x - origin.x) * fit.scale;
-                let dy = (point.y - origin.y) * fit.scale;
-                let moved = if *dolly {
-                    camera::dolly(*start, dy)
-                } else {
-                    camera::orbit(*start, dx, dy)
-                };
+                let delta = (point.x - origin.x, point.y - origin.y);
+                let screen = (delta.0 * fit.scale, delta.1 * fit.scale);
+                let moved = camera::drag(*kind, *start, screen, delta, *canvas);
                 camera_preview.set(Some(camera::Preview {
                     scene: scene.clone(),
                     camera: moved,
                 }));
                 live.with_value(|l| l.iter().for_each(|l| l.show_camera(moved)));
+            }
+            Action::Pose {
+                pose,
+                starts,
+                origin,
+                view,
+            } => {
+                let at = current.pointer.follow(point, event.shift_key());
+                let dx = (at.x - origin.x) * fit.scale;
+                let dy = (at.y - origin.y) * fit.scale;
+                let placed: Vec<(ItemId, ItemGeometry)> = starts
+                    .iter()
+                    .filter_map(|(id, g)| {
+                        Some((id.clone(), camera::pose(*pose, *g, view, dx, dy)?))
+                    })
+                    .collect();
+                if !placed.is_empty() {
+                    live.with_value(|l| l.iter().for_each(|l| l.show(placed.clone(), Vec::new())));
+                    show(placed);
+                }
             }
             Action::Marquee { from, to, base } => {
                 *to = point;
@@ -1095,6 +1266,7 @@ pub fn Canvas() -> impl IntoView {
                 vec![(item_id, start)],
             ),
             Action::Group(gesture) => (gesture.starts, Vec::new()),
+            Action::Pose { starts, .. } => (starts, Vec::new()),
         };
         let moved: Vec<(ItemId, ItemGeometry)> = preview.with_untracked(|shown| {
             shown
@@ -1133,6 +1305,123 @@ pub fn Canvas() -> impl IntoView {
         }
     };
 
+    // In camera mode the wheel zooms or dollies the camera, live on output, and the
+    // turn commits as one undo step once the wheel rests.
+    let on_wheel = move |event: ev::WheelEvent| {
+        if !camera_mode.get_untracked() || drag.with_value(Option::is_some) {
+            return;
+        }
+        let Some(current) = layout.get_untracked() else {
+            return;
+        };
+        let Some(scene) = shown_scene(&current).cloned() else {
+            return;
+        };
+        let Some(camera) = camera_preview.with_untracked(|p| {
+            camera::Preview::camera_in(p.as_ref(), Some(&scene), current.camera)
+        }) else {
+            return;
+        };
+        event.prevent_default();
+        if wheeling.with_value(|w| w.as_ref().is_some_and(|w| w.scene != scene)) {
+            settle_wheel();
+        }
+        // A line or a page of scrolling, as pixels.
+        let delta = match event.delta_mode() {
+            1 => event.delta_y() * 16.0,
+            2 => event.delta_y() * 400.0,
+            _ => event.delta_y(),
+        } as f32;
+        let kind = camera_controls.get_untracked().wheel(event.shift_key());
+        let moved = camera::wheel(kind, camera, delta);
+        if wheeling.with_value(Option::is_none) {
+            let gesture = session.and_then(|session| {
+                session.get().map(|open| {
+                    let id = GestureId::new(studio.fresh_id(&open, "wheel"));
+                    live::Live::new(id, scene.clone(), session, problem)
+                })
+            });
+            wheeling.set_value(Some(Wheeling {
+                scene: scene.clone(),
+                start: camera,
+                live: gesture,
+                turn: 0,
+            }));
+        }
+        camera_preview.set(Some(camera::Preview {
+            scene,
+            camera: moved,
+        }));
+        let turn = wheeling
+            .try_update_value(|w| {
+                w.as_mut().map(|w| {
+                    if let Some(l) = &w.live {
+                        l.show_camera(moved);
+                    }
+                    w.turn += 1;
+                    w.turn
+                })
+            })
+            .flatten();
+        set_timeout(
+            move || {
+                if wheeling.with_value(|w| w.as_ref().map(|w| w.turn)) == turn {
+                    settle_wheel();
+                }
+            },
+            WHEEL_SETTLE,
+        );
+    };
+
+    // Saves the camera the canvas shows as a new keyframe scene of the shown scene (or,
+    // on a keyframe, of its parent) with that camera as its own, in one undo step, and
+    // selects it: frame a shot, save it, frame the next.
+    let save_view = move || {
+        settle_wheel();
+        let Some(open) = session.and_then(|s| s.get()) else {
+            return;
+        };
+        let Some(current) = layout.get_untracked() else {
+            return;
+        };
+        let Some(scene) = shown_scene(&current).cloned() else {
+            return;
+        };
+        let Some(camera) = camera_preview.with_untracked(|p| {
+            camera::Preview::camera_in(p.as_ref(), Some(&scene), current.camera)
+        }) else {
+            return;
+        };
+        let Some((parent, count)) = studio.collection.with_untracked(|c| {
+            let c = c.as_ref()?;
+            let parent = c
+                .parent_of(&scene)
+                .map_or_else(|| scene.clone(), |p| p.scene_id.clone());
+            let count = c.keyframes_of(&parent).count();
+            Some((parent, count))
+        }) else {
+            return;
+        };
+        let scene_id = SceneId::new(studio.fresh_id(&open, "scene"));
+        let name = crate::panels::scenes::keyframe_name(count);
+        studio.apply(
+            &open,
+            vec![
+                Edit::SceneCreateVariant {
+                    scene_id: scene_id.clone(),
+                    variant_of: parent,
+                    name: name.clone(),
+                },
+                Edit::SceneSetCamera {
+                    scene_id: scene_id.clone(),
+                    camera: Some(camera),
+                },
+            ],
+        );
+        studio.select_scene(scene_id);
+        studio.notify(format!("Saved this view as “{name}”"));
+    };
+
     let select_all = move || {
         let all = layout.with_untracked(|l| {
             l.iter()
@@ -1152,6 +1441,8 @@ pub fn Canvas() -> impl IntoView {
     // A keyframe scene's items are its parent's, which its edit keys don't add or remove.
     let in_keyframe =
         move || layout.with_untracked(|l| l.as_ref().is_some_and(|l| l.keyframe_of.is_some()));
+    // Whether the canvas shows a 3D scene.
+    let in_3d = move || layout.with_untracked(|l| l.as_ref().is_some_and(|l| l.camera.is_some()));
     let on_key = move |event: ev::KeyboardEvent| {
         let key = event.key();
         let command = event.ctrl_key() || event.meta_key();
@@ -1206,8 +1497,25 @@ pub fn Canvas() -> impl IntoView {
             "y" | "Y" if command => step(HistoryOp::Redo),
             "a" | "A" if command => select_all(),
             "c" | "C" if !command && !event.alt_key() => crop_mode.update(|on| *on = !*on),
-            "v" | "V" if !command && !event.alt_key() => crop_mode.set(false),
+            "v" | "V" if !command && !event.alt_key() => {
+                crop_mode.set(false);
+                camera_mode.set(false);
+                item_pose.set(None);
+            }
+            // A 3D scene's tools: camera mode, and the items' Depth and Turn drags.
+            "k" | "K" if !command && !event.alt_key() && in_3d() => {
+                camera_mode.update(|on| *on = !*on);
+            }
+            "d" | "D" if !command && !event.alt_key() && in_3d() => {
+                camera_mode.set(false);
+                item_pose.set(Some(camera::Pose::Depth));
+            }
+            "r" | "R" if !command && !event.alt_key() && in_3d() => {
+                camera_mode.set(false);
+                item_pose.set(Some(camera::Pose::Turn));
+            }
             "Escape" if drag.with_value(Option::is_some) => end(false),
+            "Escape" if camera_mode.get_untracked() => camera_mode.set(false),
             "Escape" => {
                 crop_mode.set(false);
                 studio.select_item(None);
@@ -1240,6 +1548,9 @@ pub fn Canvas() -> impl IntoView {
 
     // A double click on an item selects it alone and opens its properties.
     let on_double = move |event: ev::MouseEvent| {
+        if camera_mode.get_untracked() && in_3d() {
+            return;
+        }
         let Some((_, point)) = canvas_at(event.client_x(), event.client_y()) else {
             return;
         };
@@ -1262,6 +1573,11 @@ pub fn Canvas() -> impl IntoView {
     let scene_dialog = use_context::<crate::panels::scene_properties::SceneDialog>();
     let filters = use_context::<FilterDialogs>();
     let on_context = move |event: ev::MouseEvent| {
+        // In camera mode a right drag moves the camera, so it opens no menu.
+        if camera_mode.get_untracked() && in_3d() {
+            event.prevent_default();
+            return;
+        }
         let Some(menus) = menus else {
             return;
         };
@@ -1660,7 +1976,11 @@ pub fn Canvas() -> impl IntoView {
             })
         }) {
             let (width, height) = canvas_size();
-            let text = camera::readout(camera);
+            let text = if camera_mode.get() {
+                format!("{}  · camera mode", camera::readout(camera))
+            } else {
+                camera::readout(camera)
+            };
             return Some(
                 pill(
                     fit,
@@ -1860,6 +2180,8 @@ pub fn Canvas() -> impl IntoView {
             }
         })
     };
+    // Whether the canvas shows a 3D scene, tracked for the tool bar.
+    let shows_3d = move || layout.with(|l| l.as_ref().is_some_and(|l| l.camera.is_some()));
     let snap_title = move || {
         if snapping.get() {
             "Snapping on: edges, centers and other items · click to turn off"
@@ -1885,6 +2207,7 @@ pub fn Canvas() -> impl IntoView {
             on:lostpointercapture=move |_| end(true)
             on:dblclick=on_double
             on:contextmenu=on_context
+            on:wheel=on_wheel
         >
             <div
                 class="preview stage"
@@ -1949,9 +2272,21 @@ pub fn Canvas() -> impl IntoView {
                 <button
                     class="canvas-tool"
                     aria-label="Move and resize"
-                    aria-pressed=move || if crop_mode.get() { "false" } else { "true" }
-                    title="Move / resize (V) · Shift: half speed or add to selection · Ctrl: no snap while moving, stretch on handles · Alt on a handle: crop"
-                    on:click=move |_| crop_mode.set(false)
+                    aria-pressed=move || {
+                        let plain = !crop_mode.get()
+                            && !(shows_3d() && (camera_mode.get() || item_pose.get().is_some()));
+                        if plain { "true" } else { "false" }
+                    }
+                    title=move || if shows_3d() {
+                        "Move (V) · drag slides an item on its depth plane · Ctrl-drag: toward or away from the camera · Alt-drag: orbit the camera"
+                    } else {
+                        "Move / resize (V) · Shift: half speed or add to selection · Ctrl: no snap while moving, stretch on handles · Alt on a handle: crop"
+                    }
+                    on:click=move |_| {
+                        crop_mode.set(false);
+                        camera_mode.set(false);
+                        item_pose.set(None);
+                    }
                 >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M5 3l13 8-6 1.5L9 19z" />
@@ -1968,6 +2303,90 @@ pub fn Canvas() -> impl IntoView {
                         <path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" />
                     </svg>
                 </button>
+                {move || shows_3d().then(|| view! {
+                    <button
+                        class="canvas-tool"
+                        aria-label="Depth"
+                        aria-pressed=move || pressed(!camera_mode.get() && item_pose.get() == Some(camera::Pose::Depth))
+                        title="Depth (D) · drag up pushes an item away from the camera, down brings it closer"
+                        on:click=move |_| {
+                            camera_mode.set(false);
+                            item_pose.set(Some(camera::Pose::Depth));
+                        }
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4M5 12h4M15 12h4" />
+                        </svg>
+                    </button>
+                    <button
+                        class="canvas-tool"
+                        aria-label="Turn"
+                        aria-pressed=move || pressed(!camera_mode.get() && item_pose.get() == Some(camera::Pose::Turn))
+                        title="Turn (R) · drag sideways turns an item, up and down tilts it"
+                        on:click=move |_| {
+                            camera_mode.set(false);
+                            item_pose.set(Some(camera::Pose::Turn));
+                        }
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5" />
+                        </svg>
+                    </button>
+                    <span class="canvas-tool-gap" aria-hidden="true"></span>
+                    <button
+                        class="canvas-tool"
+                        aria-label="Camera mode"
+                        aria-pressed=move || pressed(camera_mode.get())
+                        title=move || camera_title(camera_controls.get())
+                        on:click=move |_| camera_mode.update(|on| *on = !*on)
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 8h3l2-3h8l2 3h3v11H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+                        </svg>
+                    </button>
+                    {move || camera_mode.get().then(|| {
+                        let drag_button = move |kind: camera::CameraDrag| view! {
+                            <button
+                                class="canvas-tool canvas-tool-text"
+                                aria-pressed=move || pressed(camera_controls.get().left == kind)
+                                title=move || format!("Left drag: {}", kind.label())
+                                on:click=move |_| camera_controls.update(|c| c.left = kind)
+                            >
+                                {kind.label()}
+                            </button>
+                        };
+                        view! {
+                            <span class="canvas-tool-gap" aria-hidden="true"></span>
+                            {drag_button(camera::CameraDrag::Orbit)}
+                            {drag_button(camera::CameraDrag::Look)}
+                            {drag_button(camera::CameraDrag::Pan)}
+                            <span class="canvas-tool-gap" aria-hidden="true"></span>
+                            <button
+                                class="canvas-tool canvas-tool-text"
+                                title="What the mouse wheel does (Shift+wheel does the other)"
+                                on:click=move |_| camera_controls.update(|c| {
+                                    c.wheel = match c.wheel {
+                                        camera::CameraWheel::Zoom => camera::CameraWheel::Dolly,
+                                        camera::CameraWheel::Dolly => camera::CameraWheel::Zoom,
+                                    };
+                                })
+                            >
+                                {move || match camera_controls.get().wheel {
+                                    camera::CameraWheel::Zoom => "Wheel: zoom",
+                                    camera::CameraWheel::Dolly => "Wheel: dolly",
+                                }}
+                            </button>
+                            <span class="canvas-tool-gap" aria-hidden="true"></span>
+                            <button
+                                class="canvas-tool canvas-tool-text"
+                                title="Save this view as a new keyframe scene with its own camera"
+                                on:click=move |_| save_view()
+                            >
+                                "◆ Save view"
+                            </button>
+                        }
+                    })}
+                })}
                 <span class="canvas-tool-gap" aria-hidden="true"></span>
                 <button
                     class="canvas-tool"
@@ -1990,6 +2409,25 @@ pub fn Canvas() -> impl IntoView {
             {legacy_note}
         </div>
     }
+}
+
+/// An `aria-pressed` value.
+fn pressed(on: bool) -> &'static str {
+    if on { "true" } else { "false" }
+}
+
+/// The camera mode button's tooltip, naming what each mouse input does.
+fn camera_title(controls: camera::CameraControls) -> String {
+    let wheel = match controls.wheel {
+        camera::CameraWheel::Zoom => "zoom (field of view)",
+        camera::CameraWheel::Dolly => "dolly",
+    };
+    format!(
+        "Camera mode (K) · left drag: {} · right or middle drag: {} · Shift-drag: dolly · wheel: {} · Esc leaves",
+        camera::CameraDrag::label(controls.left).to_lowercase(),
+        controls.other().label().to_lowercase(),
+        wheel
+    )
 }
 
 /// The cursor over a handle: the resize arrows nearest its direction, unrotated.
