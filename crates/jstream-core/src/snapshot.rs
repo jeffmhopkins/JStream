@@ -1361,9 +1361,15 @@ impl Shot {
         motion: &[jstream_anim::Modifier],
         at: MediaTime,
     ) -> jstream_anim::Offsets {
-        motion::offsets(motion, at, self.shown_at(item), self.fired.of(item), |id| {
-            self.heard(item, id)
-        })
+        let amounts = self.audio.amounts(item);
+        motion::offsets_scaled(
+            motion,
+            at,
+            self.shown_at(item),
+            self.fired.of(item),
+            |id| self.heard(item, id),
+            |id| crate::reactive::amount_of(amounts, id),
+        )
     }
 
     /// The value `item`'s modifier `modifier` adds at `at`, alone, as a source setting's

@@ -34,6 +34,7 @@ mod audio;
 mod backdrop;
 mod browser;
 mod capture;
+mod channels;
 mod chat;
 mod color;
 pub mod data;
@@ -63,6 +64,7 @@ pub use browser::opens_browser;
 pub use capture::{
     CameraControlSetting, CaptureSpec, DeviceFormatWant, fps_centi, webcam_controls, webcam_device,
 };
+pub use channels::{ChannelCell, ChannelLevels, MAX_CHANNEL_CELLS};
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use data::{
     DataCell, DataReading, DataWatch, LiveData, Refused as DataRefused, STALE_MS as DATA_STALE_MS,

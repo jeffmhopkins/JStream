@@ -26,6 +26,7 @@ fn master_fader() -> Edit {
             target: ValueTarget::BusGain {
                 bus_id: BusId::master(),
             },
+            amount: None,
         },
     }
 }

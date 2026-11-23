@@ -278,6 +278,9 @@ pub enum EntityKind {
     /// An agent's request to connect, or a row of the approved list (0.108, ADR-0131).
     /// Only an error answering `agent.approve` or `agent.forget` names it.
     Approval,
+    /// A channel (0.169, ADR-0183). Only an error answering a `channel.*` command names
+    /// it, so a client that sends none never reads it.
+    Channel,
 }
 
 impl fmt::Display for EntityKind {
@@ -302,6 +305,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Timeline => "timeline",
             EntityKind::File => "file",
             EntityKind::Approval => "approval",
+            EntityKind::Channel => "channel",
         })
     }
 }

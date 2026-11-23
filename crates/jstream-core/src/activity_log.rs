@@ -228,6 +228,37 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::SourceRestart { source_id } => {
             format!("Restarted {}", source(state, source_id))
         }
+        Action::ChannelSetValue {
+            channel_id,
+            value,
+            fade_ms,
+        } => format!(
+            "Set channel {} to {}%{}",
+            channel(state, channel_id),
+            (value.get() * 100.0).round(),
+            fade(*fade_ms)
+        ),
+        Action::ChannelNudge {
+            channel_id,
+            by,
+            fade_ms,
+        } => format!(
+            "Moved channel {} by {:+}%{}",
+            channel(state, channel_id),
+            (by.get() * 100.0).round(),
+            fade(*fade_ms)
+        ),
+        Action::ChannelSwitch { channel_id, to } => match to {
+            jstream_protocol::ChannelSwitch::On => {
+                format!("Switched channel {} on", channel(state, channel_id))
+            }
+            jstream_protocol::ChannelSwitch::Off => {
+                format!("Switched channel {} off", channel(state, channel_id))
+            }
+            jstream_protocol::ChannelSwitch::Toggle => {
+                format!("Toggled channel {}", channel(state, channel_id))
+            }
+        },
         Action::SceneSetKeyframe {
             scene_id,
             keyframe_id,
@@ -568,6 +599,17 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::TimelineDelete { timeline_id } => {
             format!("Deleted timeline {}", timeline(state, timeline_id))
         }
+        Edit::ChannelSet { channel: info } => {
+            let name = if info.name.is_empty() {
+                &info.channel_id
+            } else {
+                &info.name
+            };
+            format!("Set channel {}", quote(name))
+        }
+        Edit::ChannelDelete { channel_id } => {
+            format!("Deleted channel {}", channel(state, channel_id))
+        }
         Edit::TransitionCreate { name, .. } => format!("Created transition {}", quote(name)),
         Edit::TransitionUpdate { preset_id, .. } => format!(
             "Changed transition {}",
@@ -702,6 +744,22 @@ fn source_plain(state: &State, source_id: &SourceId) -> String {
     state
         .source(source_id)
         .map_or_else(|| source_id.as_str().to_owned(), |s| s.name().to_owned())
+}
+
+/// A channel, by its name, or its ID when it has none or isn't known (ADR-0183).
+fn channel(state: &State, channel_id: &str) -> String {
+    match state.channel(channel_id) {
+        Some(info) if !info.name.is_empty() => quote(&info.name),
+        _ => quote(channel_id),
+    }
+}
+
+/// " over N s" for a fade, or nothing.
+fn fade(fade_ms: Option<u32>) -> String {
+    match fade_ms {
+        Some(ms) if ms > 0 => format!(" over {:.1} s", f64::from(ms) / 1000.0),
+        _ => String::new(),
+    }
 }
 
 /// A timeline, by its name, or its ID when it has none or isn't known.

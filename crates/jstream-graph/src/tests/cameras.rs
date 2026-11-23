@@ -214,6 +214,7 @@ fn sway() -> Vec<CameraMotionModifier> {
         },
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     }]
 }
 

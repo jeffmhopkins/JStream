@@ -694,6 +694,53 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..value_bindings().remove(0)
             },
         },
+        // A channel, then its delete (ADR-0183).
+        Edit::ChannelSet {
+            channel: channels().remove(0),
+        },
+        Edit::ChannelDelete {
+            channel_id: "lights".into(),
+        },
+        // Every other way a channel combines its inputs.
+        Edit::ChannelSet {
+            channel: crate::ChannelInfo {
+                combine: crate::ChannelCombine::Min,
+                ..channels().remove(0)
+            },
+        },
+        Edit::ChannelSet {
+            channel: crate::ChannelInfo {
+                combine: crate::ChannelCombine::Sum,
+                ..channels().remove(0)
+            },
+        },
+        Edit::ChannelSet {
+            channel: crate::ChannelInfo {
+                combine: crate::ChannelCombine::Product,
+                ..channels().remove(0)
+            },
+        },
+        Edit::ChannelSet {
+            channel: crate::ChannelInfo {
+                combine: crate::ChannelCombine::Average,
+                ..channels().remove(0)
+            },
+        },
+        // A value binding that follows a channel, scaled by another (ADR-0183).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "master_follows_power".into(),
+                input: MotionKind::Channel {
+                    channel_id: "power".into(),
+                    smoothing_ms: 0,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::new(-60.0).expect("finite"),
+                    to: Finite32::ZERO,
+                },
+                amount: Some("lean".into()),
+                ..value_bindings().remove(0)
+            },
+        },
         // A timeline, then its delete (ADR-0115).
         Edit::TimelineSet {
             scene_id: SceneId::new("scn_1"),
@@ -840,6 +887,7 @@ fn keyframe_edits() -> Vec<Edit> {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         })
         .collect();
     edits.extend(
@@ -871,6 +919,7 @@ fn keyframe_edits() -> Vec<Edit> {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }],
     });
     // A modifier on its source's settings (ADR-0171): one material's glow.
@@ -893,6 +942,7 @@ fn keyframe_edits() -> Vec<Edit> {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }],
     });
     // A light coloured by a track's colour and by its clip's state (ADR-0171
@@ -924,6 +974,7 @@ fn keyframe_edits() -> Vec<Edit> {
                 },
                 clock: MotionClock::Engine,
                 enabled: true,
+                amount: None,
             },
             MotionModifier {
                 modifier_id: "clip-color".into(),
@@ -953,6 +1004,7 @@ fn keyframe_edits() -> Vec<Edit> {
                 },
                 clock: MotionClock::Engine,
                 enabled: true,
+                amount: None,
             },
         ],
     });
@@ -998,6 +1050,8 @@ fn camera_motion(properties: &[crate::CameraProperty]) -> Vec<crate::CameraMotio
             },
             clock: MotionClock::Engine,
             enabled: n % 2 == 0,
+            // The first sways as far as the lean knob says (ADR-0183 decision 7).
+            amount: (n == 0).then(|| "lean".into()),
         })
         .collect()
 }
@@ -1049,6 +1103,7 @@ fn sway() -> Vec<MotionModifier> {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         },
         MotionModifier {
             modifier_id: "sway-roll".into(),
@@ -1063,6 +1118,7 @@ fn sway() -> Vec<MotionModifier> {
             },
             clock: MotionClock::Shown,
             enabled: true,
+            amount: None,
         },
         MotionModifier {
             modifier_id: "scroll".into(),
@@ -1075,6 +1131,7 @@ fn sway() -> Vec<MotionModifier> {
             },
             clock: MotionClock::Engine,
             enabled: false,
+            amount: None,
         },
         MotionModifier {
             modifier_id: "jolt".into(),
@@ -1089,6 +1146,7 @@ fn sway() -> Vec<MotionModifier> {
             },
             clock: MotionClock::Triggered,
             enabled: true,
+            amount: None,
         },
     ]
 }
@@ -1119,6 +1177,7 @@ fn reactive() -> Vec<MotionModifier> {
         kind,
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     };
     vec![
         modifier(
@@ -1238,6 +1297,7 @@ fn keyframe_motion() -> Vec<MotionModifier> {
         },
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     }]
 }
 
@@ -1505,6 +1565,50 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
 
 /// The value bindings the fixtures report (ADR-0178): a fader on a scene filter's
 /// strength, and a DAW's track volume on a bus fader.
+/// A channel of lights a fader and a pad drive, fading, and a power switch (ADR-0183).
+fn channels() -> Vec<crate::ChannelInfo> {
+    vec![
+        crate::ChannelInfo {
+            name: "Cabin lights".into(),
+            scene_id: Some(SceneId::new("scn_1")),
+            default: Finite32::new(0.2).expect("finite"),
+            inputs: vec![
+                MotionKind::Midi {
+                    control: MotionMidiControl::Cc,
+                    controller: Some(21),
+                    channel: None,
+                    input: Some("Bitwig".into()),
+                    smoothing_ms: 50,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::ZERO,
+                    to: Finite32::ONE,
+                },
+                MotionKind::Midi {
+                    control: MotionMidiControl::Note,
+                    controller: Some(36),
+                    channel: Some(10),
+                    input: None,
+                    smoothing_ms: 0,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::ZERO,
+                    to: Finite32::ONE,
+                },
+            ],
+            combine: crate::ChannelCombine::Max,
+            average_ms: 100,
+            rise_ms: 800,
+            fall_ms: 1200,
+            curve: MotionCurve::EaseIn,
+            ..crate::ChannelInfo::new("lights")
+        },
+        crate::ChannelInfo {
+            name: "Vehicle power".into(),
+            on: false,
+            ..crate::ChannelInfo::new("power")
+        },
+    ]
+}
+
 fn value_bindings() -> Vec<ValueBinding> {
     let f = |v: f32| Finite32::new(v).expect("finite");
     vec![
@@ -1527,6 +1631,7 @@ fn value_bindings() -> Vec<ValueBinding> {
                 filter_id: FilterId::new("flt_grade"),
                 param: "strength".into(),
             },
+            amount: None,
         },
         ValueBinding {
             binding_id: "music_volume".into(),
@@ -1546,6 +1651,7 @@ fn value_bindings() -> Vec<ValueBinding> {
             target: ValueTarget::BusGain {
                 bus_id: BusId::new("bus_music"),
             },
+            amount: None,
         },
     ]
 }
@@ -2048,6 +2154,29 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::TimelineStop {
             timeline_id: TimelineId::new("tl_volley"),
         },
+        // Channels (ADR-0183).
+        Action::ChannelSetValue {
+            channel_id: "lights".into(),
+            value: Finite32::new(0.75).expect("finite"),
+            fade_ms: Some(800),
+        },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::Toggle,
+        },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::On,
+        },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::Off,
+        },
+        Action::ChannelNudge {
+            channel_id: "lights".into(),
+            by: Finite32::new(-0.1).expect("finite"),
+            fade_ms: None,
+        },
         Action::SourceRestart {
             source_id: SourceId::new("src_1"),
         },
@@ -2321,6 +2450,7 @@ pub(crate) fn queries() -> Vec<Query> {
             key: "track/0".into(),
         },
         Query::MidiLastControls,
+        Query::ChannelValues,
     ]
 }
 
@@ -3156,6 +3286,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             hotkeys: hotkey_bindings(),
             bindings: controller_bindings(),
             value_bindings: value_bindings(),
+            channels: Box::new(channels()),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -3676,6 +3807,22 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 installed: false,
                 hardware_encoder: false,
             }],
+        },
+        QueryResult::ChannelValues {
+            channels: vec![
+                crate::ChannelValueInfo {
+                    channel_id: "lights".into(),
+                    value: Finite32::new(0.75).expect("finite"),
+                    on: true,
+                    driver: Some(crate::ChannelDriver::Input { index: 0 }),
+                },
+                crate::ChannelValueInfo {
+                    channel_id: "power".into(),
+                    value: Finite32::ZERO,
+                    on: false,
+                    driver: None,
+                },
+            ],
         },
         QueryResult::MidiLastControls {
             controls: vec![crate::MidiControlInfo {

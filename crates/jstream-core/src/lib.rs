@@ -28,6 +28,7 @@ mod audio_sources;
 mod audit;
 mod camera_controls;
 mod chain;
+mod channels;
 mod clock;
 mod codec_downloads;
 mod collection;

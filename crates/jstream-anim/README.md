@@ -66,7 +66,9 @@ Contents:
   (the animation time, time since the item was shown, or `Triggered`: time since its
   last trigger, and nothing before one). `evaluate_with` takes each triggered
   modifier's time and each audio modifier's level from the caller; the wire has no
-  trigger yet, so the engine passes none. `check_list` refuses more than
+  trigger yet, so the engine passes none. `evaluate_scaled` also multiplies each
+  modifier's value by an amount the caller gives by ID (a channel's level, ADR-0183
+  decision 7; 1 applies it as it is). `check_list` refuses more than
   `MAX_MODIFIERS`, duplicate or empty IDs and out-of-range parameters. `evaluate` sums an
   item's modifiers at one moment into `Offsets`, without allocating, so the render
   thread calls it per item per frame: positions, angles and crop add, scale, opacity, width and height
@@ -95,7 +97,8 @@ Contents:
   evaluator hands each smoothed value to `evaluate_with` by modifier ID, as an audio
   level. `evaluate` and `value_at` read it at `from`. A `data` modifier (ADR-0171
   decision 3) is a `Kind::Midi` too: it follows a field of live data, which its
-  evaluator reads as `0..=1` and hands in the same way.
+  evaluator reads as `0..=1` and hands in the same way, and so is a `channel` modifier
+  (ADR-0183), which follows a channel's level.
 - `Timeline`: cues sorted by time, a duration and a `Looping` (`Once`, `Loop`, or `Range`:
   an intro, then a loop). `check` refuses unsorted, unreachable or too many cues and bad
   bounds. `due` gives the cues that fire in a window of the animation clock, each with
@@ -115,7 +118,8 @@ values, and pairing by item. And a seeded walk of 5000 random writes, clears, re
 drops and restores, each of which must undo exactly and leave no empty override.
 For motion: each waveform's landmarks, period and phase, wrapping drifts, a seeded wiggle
 that stays within its amplitude with no jump between frames and stays precise days in,
-how `evaluate` adds, multiplies and skips disabled modifiers, the shown clock, blending,
+how `evaluate` adds, multiplies and skips disabled modifiers, how `evaluate_scaled`
+scales each by its amount, the shown clock, blending,
 every refused parameter, an unchecked bad period and other unchecked input (a tiny
 period, a zero wrap, NaN and infinite parameters) giving 0, sums near the float range
 staying finite, an oscillator unchanged three days in, and an impulse decaying inside

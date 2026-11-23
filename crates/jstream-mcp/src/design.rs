@@ -19,7 +19,8 @@
 //! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
 //! controller (ADR-0168), how a `data` one follows a sender's live data and colours a
 //! setting from it (ADR-0171), how a value binding puts one on any other number
-//! (ADR-0178), and how to write a custom shader the Filters window's
+//! (ADR-0178), how a channel gathers controls into one switched, faded value that
+//! anything can follow or be scaled by (ADR-0183), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -408,6 +409,18 @@ and `binding.clear_value` hands the setting back. Only `live` settings take one 
 (`kind.describe` marks them). An item's placement, effects and source settings and a \
 camera take modifiers instead, which add to what is stored. `width` and `height` stretch \
 an item's box alone, as `scale` does both. \
+When several things should follow one control (a master power switch, a lights \
+level for a scene), make a channel: `channel.set` stores a `channel_id`, a `name`, up \
+to 8 `inputs` (the `midi`, `data` or `channel` fields a modifier takes; a `note` \
+control reads 1 while its note is held), how they `combine` (`latest`, `max`, `min`, \
+`sum`, `product`, `average`), `average_ms`, `rise_ms` and `fall_ms` fades, a `curve`, a \
+`default`, a `scene_id` whose going on program puts it back to its default, and `on` with \
+an `off_value`. Its value, 0 to 1, lives only while JStream runs. Follow it with a \
+modifier or value binding of `kind` `channel` and its `channel_id`, or scale one by it \
+with `amount` set to the channel's ID (a missing channel scales by 1). \
+`channel.set_value` (with an optional `fade_ms`), `channel.nudge` and `channel.switch` \
+(`on`, `off` or `toggle`) change it; a hotkey or a timeline cue can run them, and \
+`channel.values` reads every channel's value and what last drove it. \
 For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
 scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
 `browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \
@@ -437,7 +450,7 @@ loop) belongs in a timeline, not in a page: `timeline.set` stores in a scene a \
 or a `range` with `from_ms` and `to_ms` for an intro then a loop) and `cues` in time order, \
 each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`, \
-`source.restart` (a page or video from its start) or another timeline's `play`, `stop` \
+`channel.set_value`, `channel.switch`, `channel.nudge`, `source.restart` (a page or video from its start) or another timeline's `play`, `stop` \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \

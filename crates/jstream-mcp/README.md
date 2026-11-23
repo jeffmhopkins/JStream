@@ -270,7 +270,10 @@ setting can set the colour from a `#rrggbb` field or a `palette` (`color_from`),
 no motion list, a filter's or a source's setting, a fader or a send, a value binding
 (`binding.set_value`), which replaces the value once its control moves, with `width` and
 `height` modifiers to stretch an item,
-[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), a timed
+[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), a channel
+(`channel.set`) that gathers controls into one switched, faded value anything can follow
+or be scaled by with `amount`, its `channel.*` actions reversible
+([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
 ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), one label on an

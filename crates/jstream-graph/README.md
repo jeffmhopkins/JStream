@@ -518,6 +518,14 @@ that does not want to change the graph it has.
   names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
   a number's ends and whether it is whole, or a switch), `None` while it is missing, and
   `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
+- **Channels** (`channel.rs`, ADR-0183): `channel.set` sets one whole by its
+  `channel_id` (inverse `channel.delete`, or `channel.set` with the one it replaced)
+  after `ChannelInfo::problem` (`invalid_argument` at `channel.<field>`), the limit of
+  256 (at `channel`), and no cycle through its `channel` inputs (at `channel.inputs`).
+  `channel.delete` is `not_found` (entity `channel`) for an ID none has, and leaves what
+  reads the channel in place. `Graph::channels` and `Graph::channel` read them; the
+  collection file saves them in `channels` (schema version 20) and loads them before
+  the value bindings.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its

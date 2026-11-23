@@ -249,6 +249,7 @@ pub fn with_added(list: &[MotionModifier]) -> Option<Vec<MotionModifier>> {
         kind: default_kind("Wiggle", MotionProperty::X)?,
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     });
     Some(next)
 }

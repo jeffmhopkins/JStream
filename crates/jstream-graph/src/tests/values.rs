@@ -29,6 +29,7 @@ fn bind(id: &str, target: ValueTarget) -> Edit {
             binding_id: id.into(),
             input: fader(7),
             target,
+            amount: None,
         },
     }
 }
@@ -192,6 +193,7 @@ fn a_binding_reads_a_controller_or_a_data_field_only() {
                     wrap: None,
                 },
                 target: tint_amount(),
+                amount: None,
             },
         }],
     );

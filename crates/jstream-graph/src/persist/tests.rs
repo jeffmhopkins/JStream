@@ -92,10 +92,14 @@ const V17: &str = include_str!("fixtures/v17.json");
 /// reflecting each other (ADR-0170 decision 2). It must keep loading as version 1 must.
 const V18: &str = include_str!("fixtures/v18.json");
 
-/// A collection file at schema version 19, the current one: version 18 with a value
-/// binding of a controller to the master's fader (ADR-0178). The same rule applies once
-/// version 20 exists.
+/// A collection file at schema version 19: version 18 with a value binding of a
+/// controller to the master's fader (ADR-0178). It must keep loading as version 1 must.
 const V19: &str = include_str!("fixtures/v19.json");
+
+/// A collection file at schema version 20, the current one: version 19 with a channel a
+/// controller drives and the master fader's binding scaled by it (ADR-0183). The same
+/// rule applies once version 21 exists.
+const V20: &str = include_str!("fixtures/v20.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -289,6 +293,7 @@ fn v4_graph() -> Graph {
                         },
                         clock: MotionClock::Engine,
                         enabled: true,
+                        amount: None,
                     },
                     MotionModifier {
                         modifier_id: "roll".into(),
@@ -303,6 +308,7 @@ fn v4_graph() -> Graph {
                         },
                         clock: MotionClock::Shown,
                         enabled: false,
+                        amount: None,
                     },
                 ],
             },
@@ -320,6 +326,7 @@ fn v4_graph() -> Graph {
                     },
                     clock: MotionClock::Engine,
                     enabled: true,
+                    amount: None,
                 }],
             },
         ],
@@ -368,6 +375,7 @@ fn v5_graph() -> Graph {
                     },
                     clock: MotionClock::Engine,
                     enabled: true,
+                    amount: None,
                 }],
             },
             Edit::SceneSetCameraFollow {
@@ -639,6 +647,7 @@ fn v12_graph() -> Graph {
         },
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     });
     let applied = graph.apply(
         &[Edit::ItemSetMotion {
@@ -774,6 +783,7 @@ fn v17_graph() -> Graph {
         },
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     });
     let applied = graph.apply(
         &[Edit::ItemSetMotion {
@@ -831,6 +841,7 @@ fn v19_graph() -> Graph {
                 target: ValueTarget::BusGain {
                     bus_id: BusId::master(),
                 },
+                amount: None,
             },
         }],
         None,
@@ -839,9 +850,82 @@ fn v19_graph() -> Graph {
     graph
 }
 
+/// [`v19_graph`] with a channel `power` that a controller drives, and the master fader's
+/// binding scaled by it (ADR-0183).
+fn v20_graph() -> Graph {
+    use jstream_protocol::{
+        ChannelInfo, Finite32, MotionCurve, MotionKind, MotionMidiControl, ValueBinding,
+    };
+    let mut graph = v19_graph();
+    let mut power = ChannelInfo::new("power");
+    power.name = "Power".into();
+    power.inputs = vec![MotionKind::Midi {
+        control: MotionMidiControl::Note,
+        controller: Some(36),
+        channel: Some(10),
+        input: None,
+        smoothing_ms: 0,
+        curve: MotionCurve::Linear,
+        from: Finite32::ZERO,
+        to: Finite32::ONE,
+    }];
+    power.rise_ms = 500;
+    let mut binding: ValueBinding = graph
+        .value_bindings()
+        .next()
+        .cloned()
+        .expect("the v19 binding");
+    binding.amount = Some("power".into());
+    let applied = graph.apply(
+        &[
+            Edit::ChannelSet { channel: power },
+            Edit::BindingSetValue { binding },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v19_graph().to_collection_json(), V19);
+    assert_eq!(v20_graph().to_collection_json(), V20);
+}
+
+#[test]
+fn the_v20_fixture_loads_exactly() {
+    let expected = v20_graph();
+    let loaded = load(V20);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(18)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 20 adds channels, `amount` and the `note` control (ADR-0183): each in a
+/// version 19 file is refused, as version 19 refused it.
+#[test]
+fn a_version_19_channel_amount_or_note_is_refused() {
+    let current: Value = serde_json::from_str(V20).expect("the v20 fixture");
+    let mut channels = current.clone();
+    channels["schema_version"] = json!(19);
+    if let Some(bindings) = channels["value_bindings"].as_array_mut() {
+        for binding in bindings {
+            binding.as_object_mut().map(|b| b.remove("amount"));
+        }
+    }
+    let mut amount = current.clone();
+    amount["schema_version"] = json!(19);
+    amount.as_object_mut().map(|f| f.remove("channels"));
+    let mut note: Value = serde_json::from_str(V19).expect("the v19 fixture");
+    note["value_bindings"][0]["input"]["control"] = json!("note");
+    for (what, file) in [("channels", channels), ("amount", amount), ("note", note)] {
+        assert!(
+            matches!(
+                load(&file.to_string()),
+                Err(LoadError::Migration { from: 19, .. })
+            ),
+            "a version 19 {what} loaded"
+        );
+    }
 }
 
 #[test]

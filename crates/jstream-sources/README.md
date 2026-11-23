@@ -199,6 +199,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   half-scale sine read at its amplitude by a band around it and not by one away from
   it, an inverted or NaN band reading 0, with its raw level, peak and onset, and a levels-only
   measure hearing the level with no spectrum.
+- `ChannelLevels` (`channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)):
+  each channel's live level as a lock-free `ChannelCell` (an `f32` in an atomic, 0 to 1,
+  or absent), shared by ID between the engine's channel driver, which stores it, and
+  the render and values threads, which read it; `LiveData::channels` carries it. A
+  cell no one holds is dropped, at most 1,024 kept.
 - `LiveData` (`data.rs`, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decision 2): each JTunnel sender's newest state message per key, as a JSON value,
   which the engine's JTunnel receiver fills with `put` (one JSON value of at most

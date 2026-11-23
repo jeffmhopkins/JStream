@@ -1637,6 +1637,9 @@ impl Engine {
                     })
                     .collect(),
             }),
+            Query::ChannelValues => Some(QueryResult::ChannelValues {
+                channels: lock(&self.shared.state).channels.values(),
+            }),
             Query::MidiLastControls => Some(QueryResult::MidiLastControls {
                 controls: lock(&self.shared.state)
                     .live
@@ -4942,9 +4945,14 @@ struct State {
     ticking: bool,
     /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
     driver: crate::value_bindings::ValueDriver,
-    /// Whether the `jstream-values` thread is running: it ticks [`State::driver`] while
-    /// the collection holds a value binding.
+    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`] and
+    /// [`State::driver`] while the collection holds a channel or a value binding.
     values_ticking: bool,
+    /// The channels' live values (ADR-0183): never stored.
+    channels: crate::channels::ChannelDriver,
+    /// The program scene the channels last saw, so a scene's channels start again when
+    /// it goes on program.
+    channels_program: Option<SceneId>,
     /// The engine this state belongs to, for the live ticker.
     shared: Weak<Shared>,
     /// The program mixer's controls while it runs: it follows the collection's audio.
@@ -6070,6 +6078,12 @@ impl State {
                 self.timeline_stop(&timeline_id, wake)?;
                 return Ok(CallResult::action());
             }
+            Action::ChannelSetValue { .. }
+            | Action::ChannelSwitch { .. }
+            | Action::ChannelNudge { .. } => {
+                self.channel_action(&action)?;
+                return Ok(CallResult::action());
+            }
             Action::SceneSetKeyframe {
                 scene_id,
                 keyframe_id,
@@ -7017,7 +7031,9 @@ impl State {
         // The value bindings' settings, after the gestures': a moved control wins
         // (ADR-0178).
         settings.extend(self.driver.edits().iter().cloned());
-        if !self.values_ticking && self.graph.value_bindings().len() > 0 {
+        if !self.values_ticking
+            && (self.graph.value_bindings().len() > 0 || self.graph.channels().len() > 0)
+        {
             self.values_ticking = spawn_values(self.shared.clone());
         }
         let had = self.shown.is_some();
@@ -7246,16 +7262,75 @@ impl State {
         next
     }
 
+    /// Runs a channel action (ADR-0183): checks it as a binding would, and sets the
+    /// channel's live value or switch. The `jstream-values` thread, which it starts if it
+    /// isn't running, carries it to what follows the channel on its next tick.
+    fn channel_action(&mut self, action: &Action) -> Result<(), ProtocolError> {
+        if let Some((field, reason)) = action.channel_problem() {
+            return Err(ProtocolError::invalid_argument(field, reason));
+        }
+        let now = Instant::now();
+        // A channel the collection has just gained is followed before it is set.
+        if let Some(engine) = self.shared.upgrade() {
+            let midi = self.live.midi();
+            self.channels
+                .keep(&self.graph, midi.as_deref(), &engine.data);
+        }
+        let missing = |channel_id: &str| ProtocolError::NotFound {
+            entity: EntityKind::Channel,
+            id: channel_id.to_owned(),
+        };
+        let done = match action {
+            Action::ChannelSetValue {
+                channel_id,
+                value,
+                fade_ms,
+            } => self
+                .channels
+                .set_value(channel_id, value.get(), *fade_ms, now)
+                .map_err(|_| missing(channel_id)),
+            Action::ChannelNudge {
+                channel_id,
+                by,
+                fade_ms,
+            } => self
+                .channels
+                .nudge(channel_id, by.get(), *fade_ms, now)
+                .map_err(|_| missing(channel_id)),
+            Action::ChannelSwitch { channel_id, to } => self
+                .channels
+                .switch(channel_id, *to)
+                .map_err(|_| missing(channel_id)),
+            _ => Ok(()),
+        };
+        if !self.values_ticking && self.graph.channels().len() > 0 {
+            self.values_ticking = spawn_values(self.shared.clone());
+        }
+        done
+    }
+
     /// Follows the value bindings for one tick (ADR-0178) and, when the settings they
     /// give changed, draws and hears the collection with them. Returns whether to keep
     /// ticking: while the collection holds a binding or a value it drove is shown.
     fn values_tick(&mut self, now: Instant, data: &jstream_sources::LiveData) -> bool {
         let midi = self.live.midi();
+        // The channels first (ADR-0183), so a value binding reads this tick's values. A
+        // scene's channels start again when it goes on program.
+        if self.channels_program.as_ref() != self.studio.program() {
+            self.channels_program = self.studio.program().cloned();
+            if let Some(program) = &self.channels_program {
+                self.channels.scene_live(program);
+            }
+        }
+        self.channels.tick(&self.graph, midi.as_deref(), data, now);
         let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
         if changed && self.refresh_shown() {
             self.redraw();
         }
-        self.graph.value_bindings().len() > 0 || !self.driver.edits().is_empty()
+        self.graph.value_bindings().len() > 0
+            || !self.driver.edits().is_empty()
+            || self.graph.channels().len() > 0
+            || !self.channels.is_empty()
     }
 
     /// Brings the program mixer in line with the collection's audio as drawn (the open
