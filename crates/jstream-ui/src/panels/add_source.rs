@@ -254,7 +254,7 @@ fn known(kind: &str) -> Option<Known> {
 }
 
 /// The prototype's order of the kinds it knows.
-const ORDER: [&str; 19] = [
+const ORDER: [&str; 20] = [
     "display",
     "window",
     "webcam",
