@@ -78,6 +78,14 @@ impl Rect {
     }
 }
 
+/// How many sets of targets of sizes other than the last one rendered at are kept.
+pub(crate) const SPARE_TARGETS: usize = 3;
+
+/// How many renders a set of targets is kept for after the last render into it: a few
+/// seconds of an output's picture and a preview's, and long enough for a preview that
+/// gives way to the outputs to come back to its own.
+pub(crate) const SPARE_RENDERS: u64 = 240;
+
 /// The copy of what is below an item that the modes reading it sample (ADR-0082). It
 /// only grows, so targets of different sizes in one frame share it, each copying to the
 /// same texels it reads from.
@@ -105,6 +113,8 @@ struct SceneDepth {
 struct Targets {
     width: u32,
     height: u32,
+    /// For a set kept aside, [`Compositor::renders`] when it was last rendered into.
+    used: u64,
     /// The FP16 texture, which a backdrop copies from.
     working: wgpu::Texture,
     working_view: wgpu::TextureView,
@@ -157,7 +167,17 @@ pub struct Compositor {
     /// Whether the last [`Self::render`] resolved straight from a layer.
     #[cfg(test)]
     resolved_layer: bool,
+    /// The targets of the size last rendered at.
     targets: Option<Targets>,
+    /// The targets of the other sizes rendered at lately, so a tick that renders at two
+    /// sizes (an output's picture and a preview's) makes no texture: at most
+    /// [`SPARE_TARGETS`], each let go [`SPARE_RENDERS`] renders after its last.
+    spare: Vec<Targets>,
+    /// How many times [`Self::render`] has readied its targets.
+    renders: u64,
+    /// How many sets of targets were made, for tests.
+    #[cfg(test)]
+    targets_made: usize,
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
@@ -555,6 +575,12 @@ impl Compositor {
     #[cfg(test)]
     pub(crate) fn resolved_layer(&self) -> bool {
         self.resolved_layer
+    }
+
+    /// How many sets of targets [`Self::render`] has made, and how many are kept aside.
+    #[cfg(test)]
+    pub(crate) fn targets_kept(&self) -> (usize, usize) {
+        (self.targets_made, self.spare.len())
     }
 
     /// How many texels the last composite's draws could reach (#1070).
@@ -1822,6 +1848,10 @@ impl Compositor {
             #[cfg(test)]
             resolved_layer: false,
             targets: None,
+            spare: Vec::new(),
+            renders: 0,
+            #[cfg(test)]
+            targets_made: 0,
             vertices: Vec::new(),
             vertex_buffer,
             draws: Vec::new(),
@@ -2112,13 +2142,43 @@ impl Compositor {
         Ok(())
     }
 
+    /// Readies the targets of `width` by `height`: the ones last rendered into, ones
+    /// kept aside from an earlier render at that size, or new ones. The ones another
+    /// size was rendered into are kept aside for it, a few and not for long, so
+    /// renders that alternate between sizes reuse theirs.
     fn ensure_targets(&mut self, width: u32, height: u32) -> Result<(), RenderError> {
+        self.renders += 1;
+        let renders = self.renders;
+        self.spare.retain(|set| renders - set.used <= SPARE_RENDERS);
         if self
             .targets
             .as_ref()
             .is_some_and(|t| t.width == width && t.height == height)
         {
             return Ok(());
+        }
+        // Taken out before the last set is set aside, so that never pushes it out.
+        let kept = self
+            .spare
+            .iter()
+            .position(|set| set.width == width && set.height == height)
+            .map(|kept| self.spare.remove(kept));
+        if let Some(mut last) = self.targets.take() {
+            // Rendered into by the render before this one.
+            last.used = renders - 1;
+            if self.spare.len() == SPARE_TARGETS {
+                // Oldest first: sets are pushed as they are set aside.
+                self.spare.remove(0);
+            }
+            self.spare.push(last);
+        }
+        if kept.is_some() {
+            self.targets = kept;
+            return Ok(());
+        }
+        #[cfg(test)]
+        {
+            self.targets_made += 1;
         }
         let working = texture(
             &self.gpu.device,
@@ -2163,6 +2223,7 @@ impl Compositor {
         self.targets = Some(Targets {
             width,
             height,
+            used: renders,
             working,
             working_view,
             output,
@@ -2808,8 +2869,6 @@ fn bound_of(
     })
 }
 
-/// Appends one item's triangles, a fan from its first vertex, and returns how many
-/// vertices that is.
 /// Whether `shape` is a flat quad that lays its image over the whole canvas texel for
 /// texel: the four corners of the canvas, each with its own corner of the image, with
 /// no perspective, edge or blur.
@@ -2824,6 +2883,8 @@ fn covers_whole(shape: &Shape, width: f32, height: f32) -> bool {
         })
 }
 
+/// Appends one item's triangles, a fan from its first vertex, and returns how many
+/// vertices that is.
 fn push_shape(
     buf: &mut Vec<u8>,
     shape: &Shape,
