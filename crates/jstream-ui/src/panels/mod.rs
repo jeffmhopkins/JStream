@@ -17,6 +17,7 @@ pub mod codec_downloads;
 mod confirm;
 pub mod curve;
 pub mod custom_shader;
+pub mod data_read;
 pub mod device_preview;
 pub mod encoders;
 pub mod events;

@@ -112,6 +112,7 @@ pub fn kind_name(kind: &MotionKind) -> &'static str {
         MotionKind::Audio { .. } => "Audio",
         MotionKind::Midi { .. } => "MIDI",
         MotionKind::Data { .. } => "DAW data",
+        MotionKind::Channel { .. } => "Channel",
         _ => "Other",
     }
 }
@@ -366,6 +367,7 @@ impl Param {
                 Param::RangeHigh,
                 Param::Smoothing,
             ],
+            MotionKind::Channel { .. } => &[Param::From, Param::To, Param::Smoothing],
             _ => &[],
         }
     }
@@ -407,6 +409,8 @@ impl Param {
             (MotionKind::Midi { .. }, Param::To) => "At highest",
             (MotionKind::Data { .. }, Param::From) => "At 0 (off)",
             (MotionKind::Data { .. }, Param::To) => "At 1 (on)",
+            (MotionKind::Channel { .. }, Param::From) => "At 0 %",
+            (MotionKind::Channel { .. }, Param::To) => "At 100 %",
             _ => self.field().0,
         }
     }
@@ -444,9 +448,12 @@ pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
         (MotionKind::Midi { controller, .. }, Param::Controller) => controller.map(f64::from),
         (MotionKind::Midi { channel, .. }, Param::Channel) => Some(channel.map_or(0.0, f64::from)),
         (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing)
-        | (MotionKind::Data { smoothing_ms, .. }, Param::Smoothing) => {
+        | (MotionKind::Data { smoothing_ms, .. }, Param::Smoothing)
+        | (MotionKind::Channel { smoothing_ms, .. }, Param::Smoothing) => {
             Some(f64::from(smoothing_ms))
         }
+        (MotionKind::Channel { from, .. }, Param::From) => f(from),
+        (MotionKind::Channel { to, .. }, Param::To) => f(to),
         (MotionKind::Data { from, .. }, Param::From) => f(from),
         (MotionKind::Data { to, .. }, Param::To) => f(to),
         (MotionKind::Data { range, .. }, Param::RangeLow) => f(range[0]),
@@ -504,9 +511,12 @@ pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionK
             *channel = (c > 0).then_some(c);
         }
         (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing)
-        | (MotionKind::Data { smoothing_ms, .. }, Param::Smoothing) => {
+        | (MotionKind::Data { smoothing_ms, .. }, Param::Smoothing)
+        | (MotionKind::Channel { smoothing_ms, .. }, Param::Smoothing) => {
             *smoothing_ms = value.clamp(0.0, 10_000.0) as u32
         }
+        (MotionKind::Channel { from, .. }, Param::From) => *from = v,
+        (MotionKind::Channel { to, .. }, Param::To) => *to = v,
         (MotionKind::Data { from, .. }, Param::From) => *from = v,
         (MotionKind::Data { to, .. }, Param::To) => *to = v,
         // The two ends must differ: one set onto the other is refused.

@@ -2517,6 +2517,9 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .chan-add { border: none; background: none; color: var(--link); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .chan-add.learning { color: var(--accent); }
 .chan-popover { padding: 6px; background: var(--menu); border: 1px solid var(--border); border-radius: 8px; }
+/* The "+ Data" popover: DataReads' fields stacked, then Cancel and Add input. */
+.chan-data { display: flex; flex-direction: column; gap: 6px; }
+.chan-data-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .chan-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .chan-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 6px 0 10px; border-radius: 5px; background: var(--raised); }
 .chan-row.link { cursor: pointer; }
