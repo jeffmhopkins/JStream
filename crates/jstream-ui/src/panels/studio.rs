@@ -587,7 +587,7 @@ pub fn picker_label(
 }
 
 /// The preset the ⋯ menu's Duplicate adds: the same kind, timing and settings, named
-/// "<name> copy", with an unused ID.
+/// `"<name> copy"`, with an unused ID.
 pub fn duplicate_edit(
     existing: &TransitionsInfo,
     preset: &TransitionPresetInfo,
