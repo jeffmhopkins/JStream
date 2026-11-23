@@ -1406,7 +1406,7 @@ from the sky before ([ADR-0187](adr/0187-a-warp-can-travel-straight-ahead.md)), 
 showing flat pictures pinned in it, the first near its straight ahead, that change as
 each warp ends
 ([ADR-0188](adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
-[ADR-0193](adr/0193-an-arrival-can-be-a-planet-with-its-sun.md)),
+[ADR-0198](adr/0198-an-arrival-can-be-a-planet-with-its-sun.md)),
 with nebulae and a galaxy band baked once per seed into cube maps
 ([ADR-0174](adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md))
 and procedural stars laid out about the direction of travel,

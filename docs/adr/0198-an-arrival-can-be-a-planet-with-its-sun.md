@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0193"
+id = "ADR-0198"
 title = "An arrival can be several pictures pinned around one another, the last lighting the scene"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0193: An arrival can be several pictures pinned around one another, the last lighting the scene
+# ADR-0198: An arrival can be several pictures pinned around one another, the last lighting the scene
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

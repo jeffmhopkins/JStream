@@ -320,7 +320,7 @@ wide shows its picture half as wide, so size each item to the sky it should span
 in the sky, make one arrival a scene source showing a scene of up to four pictures: its \
 bottom item (the planet) shows near straight ahead, each other is placed by its item's \
 `turn_deg` (to the right) and `tilt_deg` (up) from it, and the top one (the sun) lights \
-the scene (ADR-0193). \
+the scene (ADR-0198). \
 A flat photo stretched as a panorama smears toward \
 the top and bottom, so prefer a real panorama or the procedural sky. \
 A group placed in a 3D scene is one flat card unless it shares the space: \

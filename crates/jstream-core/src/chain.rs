@@ -4613,7 +4613,7 @@ mod tests {
         arrives_at(false);
     }
 
-    /// ADR-0193: an arrival of several pictures, a nested scene's, shows its first ahead
+    /// ADR-0198: an arrival of several pictures, a nested scene's, shows its first ahead
     /// and the others turned from it, and lights the scene from its last: a sun turned
     /// a quarter to the right of a planet lights it from the right in the sun's colour.
     #[test]

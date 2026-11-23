@@ -88,7 +88,7 @@ and calls this crate.
   it, bottom first, each read through the tangent plane at its centre (`pinned`, one
   texture binding each, 7 to 10), covering what is behind it and fading as the deep sky
   does at warp ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
-  [ADR-0193](../../docs/adr/0193-an-arrival-can-be-a-planet-with-its-sun.md),
+  [ADR-0198](../../docs/adr/0198-an-arrival-can-be-a-planet-with-its-sun.md),
   `golden_sky_a_pinned_picture_covers_the_sky_where_it_is`). The engine places the layer under the scene's items with no camera.
   Its two pipelines (the frame's and the bright stars' table's) are made on the first
   draw, and the bake's on the first sky with nebulae or a band, unless `warm_3d` made

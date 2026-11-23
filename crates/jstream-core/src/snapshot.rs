@@ -1088,7 +1088,7 @@ impl Transitioning {
     }
 }
 
-/// One picture of an arrival (ADR-0188, ADR-0193): what its item shows, how wide and where.
+/// One picture of an arrival (ADR-0188, ADR-0198): what its item shows, how wide and where.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SkyPart {
     /// The source whose frame it shows.
@@ -3617,7 +3617,7 @@ impl<'a> Planner<'a, '_> {
                     continue;
                 }
                 let state = self.state;
-                // A nested scene is one arrival of several pictures (ADR-0193): its first is the
+                // A nested scene is one arrival of several pictures (ADR-0198): its first is the
                 // one ahead, and the others are placed by their turn and tilt from it.
                 let parts = match state.source(item.source_id()).map(Source::kind) {
                     Some(SourceKind::Scene { scene_id }) if scene_id != &scene => {
@@ -3655,7 +3655,7 @@ impl<'a> Planner<'a, '_> {
         }
     }
 
-    /// What arrival picture item `item` shows (ADR-0188, ADR-0193): its frame, uploaded though no
+    /// What arrival picture item `item` shows (ADR-0188, ADR-0198): its frame, uploaded though no
     /// item places it, with its width and its turn and tilt; `None` for an item showing
     /// a light, a model, a probe, a scene or a capture.
     fn sky_part(&mut self, item: &GraphItem, out: &mut Shot) -> Option<SkyPart> {
@@ -8151,7 +8151,7 @@ fn draw_sky_of(
     let (environment, look, opacity) =
         environment_at((shot, cache), (placed, light, sky), at, live);
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
-    // Its arrival's pictures (ADR-0188, ADR-0193), where their frames were uploaded this frame.
+    // Its arrival's pictures (ADR-0188, ADR-0198), where their frames were uploaded this frame.
     let pinned = |arrival: Option<crate::chain::Arrival>| {
         let mut pictures = [None; jstream_render::MAX_SKY_PICTURES];
         let parts =
@@ -8252,7 +8252,7 @@ pub(crate) fn arrival_light(
     let state = chains.skies.borrow().get(scene_id).copied()?;
     let arrival = state.arrival?;
     // The arrival lights the scene from its last picture: a sun over a planet
-    // (ADR-0193).
+    // (ADR-0198).
     let part = arrival_parts(shot, placed, arrival)?.last()?;
     let source = &part.source;
     let (environment, look, opacity) =
@@ -8377,7 +8377,7 @@ fn arrival_parts<'s>(
         .map(Vec::as_slice)
 }
 
-/// Where in the sky (ADR-0193) a picture `offset_deg` (turn to the right, tilt up) from an
+/// Where in the sky (ADR-0198) a picture `offset_deg` (turn to the right, tilt up) from an
 /// arrival's first picture at `main` is, in the sky's frame (x right, y down): turned
 /// about the sky's up through `main`, then tilted toward it.
 pub(crate) fn part_direction(main: [f64; 3], [turn_deg, tilt_deg]: [f32; 2]) -> [f64; 3] {
