@@ -31,7 +31,7 @@ use std::time::Duration;
 /// How often an open panel reads the channels' values.
 const POLL: Duration = Duration::from_millis(100);
 
-/// Each channel's live value by ID, read with `channel.values` every [`POLL`] for as
+/// Each channel's live value by ID, read with `channel.values` every 100 ms for as
 /// long as the calling component lives.
 pub fn live_values() -> RwSignal<HashMap<String, ChannelValueInfo>> {
     let values = RwSignal::new(HashMap::new());

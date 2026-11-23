@@ -6783,7 +6783,7 @@ stamp = { hash = "b3:30f9ee975f087129", by = "agent:claude", note = "Agent activ
 stamp = { hash = "b3:af60373bb41b621a", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/channels.rs"]
-stamp = { hash = "b3:f5e239a65d08717c", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
+stamp = { hash = "b3:24b45270ecda7e10", by = "agent:claude", note = "doc comment on live_values no longer links the private POLL constant; section text unaffected" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -7023,7 +7023,7 @@ stamp = { hash = "b3:30f9ee975f087129", by = "agent:claude", note = "Agent activ
 stamp = { hash = "b3:af60373bb41b621a", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/channels.rs"]
-stamp = { hash = "b3:f5e239a65d08717c", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
+stamp = { hash = "b3:24b45270ecda7e10", by = "agent:claude", note = "doc comment on live_values no longer links the private POLL constant; section text unaffected" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -8583,7 +8583,7 @@ stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Eyebrows fo
 stamp = { hash = "b3:ee31832813e9a6ab", by = "agent:claude", note = "New area: VC-01, VC-02, SQ-01 to SQ-03, checked against the built panels in a browser against a real daemon." }
 
 ["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/channels.rs"]
-stamp = { hash = "b3:f5e239a65d08717c", by = "agent:claude", note = "New area: VC-01, VC-02, SQ-01 to SQ-03, checked against the built panels in a browser against a real daemon." }
+stamp = { hash = "b3:24b45270ecda7e10", by = "agent:claude", note = "doc comment on live_values no longer links the private POLL constant; section text unaffected" }
 
 ["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/sequence.rs"]
 stamp = { hash = "b3:14d6f9b2fb4898cb", by = "agent:claude", note = "New area: VC-01, VC-02, SQ-01 to SQ-03, checked against the built panels in a browser against a real daemon." }
