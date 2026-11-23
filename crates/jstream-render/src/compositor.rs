@@ -529,6 +529,14 @@ impl Compositor {
         self.drawn.map_or(0, |rect| rect.width * rect.height)
     }
 
+    /// How many texels the last composite's decode pass covered in a `size` target
+    /// cleared `transparent` or not, in browser-style blending.
+    #[cfg(test)]
+    pub(crate) fn decoded_texels(&self, transparent: bool, size: (u32, u32)) -> u32 {
+        self.decoded(transparent, size)
+            .map_or(0, |rect| rect.width * rect.height)
+    }
+
     /// Composites `scene` into a new [`Image`] that a later scene on this compositor can
     /// place, as a nested scene is placed in its parent.
     ///
@@ -2261,30 +2269,46 @@ impl Compositor {
             first = end;
         }
         if encoded {
-            self.record_decode(encoder, (view, texture));
+            // Over a transparent background only what the items reached holds encoded
+            // colour: every other texel is zero, which decodes to itself. So the decode
+            // covers that box alone, and a pass that drew nothing has none.
+            let transparent = clear.r == 0.0 && clear.g == 0.0 && clear.b == 0.0 && clear.a == 0.0;
+            let reached = self.decoded(transparent, (texture.width(), texture.height()));
+            if let Some(rect) = reached {
+                self.record_decode(encoder, (view, texture), rect);
+            }
         }
     }
 
-    /// The decode pass of browser-style blending (ADR-0126 §3): the whole target is
+    /// The texels of a `size` target the decode pass covers after the prepared draws:
+    /// all of it over a background, and over a `transparent` one only what the draws
+    /// could reach, `None` when that is nothing.
+    fn decoded(&self, transparent: bool, (width, height): (u32, u32)) -> Option<Rect> {
+        let reached = if transparent {
+            self.drawn
+        } else {
+            Some(Rect {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            })
+        };
+        reached.filter(|rect| rect.width > 0 && rect.height > 0)
+    }
+
+    /// The decode pass of browser-style blending (ADR-0126 §3): `rect` of the target is
     /// copied into the backdrop, and drawn back as premultiplied linear light.
     fn record_decode(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
+        rect: Rect,
     ) {
         let Some(backdrop) = &self.backdrop else {
             return;
         };
-        self.record_backdrop_copy(
-            encoder,
-            texture,
-            Rect {
-                x: 0,
-                y: 0,
-                width: texture.width(),
-                height: texture.height(),
-            },
-        );
+        self.record_backdrop_copy(encoder, texture, rect);
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-decode"),
             color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
@@ -2293,6 +2317,7 @@ impl Compositor {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        pass.set_scissor_rect(rect.x, rect.y, rect.width, rect.height);
         pass.set_pipeline(&self.decode);
         pass.set_bind_group(0, &backdrop.bind, &[]);
         pass.draw(0..3, 0..1);

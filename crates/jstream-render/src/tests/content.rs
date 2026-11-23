@@ -513,3 +513,83 @@ fn a_bounded_filter_drawn_again_keeps_nothing_of_the_last_frame() {
         same(kind, &again, &once);
     }
 }
+
+/// In browser-style blending a layer over a transparent background is decoded only where
+/// its items reached, and not at all when it drew nothing: the rest is zero, which
+/// decodes to itself. Its pixels are those of a whole decode, and a redraw leaves nothing
+/// of what the layer held before.
+#[test]
+fn a_browser_style_layer_is_decoded_only_where_it_drew() {
+    let Some(Opened { mut compositor, .. }) = open() else {
+        return;
+    };
+    compositor.set_blending(jstream_protocol::Blending::Srgb);
+    let layer = sparse(&mut compositor);
+    let reached = compositor.drawn_texels();
+    assert!(reached > 0 && reached < 32 * 32, "{reached} texels reached");
+    assert_eq!(compositor.decoded_texels(true, (32, 32)), reached);
+    assert_eq!(compositor.decoded_texels(false, (32, 32)), 32 * 32);
+    let shown = |compositor: &mut Compositor| {
+        let items = [item(&layer, Placement::IDENTITY, Crop::NONE, 1.0)];
+        compositor
+            .render(
+                &Scene {
+                    canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+                    background: Color::BLACK,
+                    items: &items,
+                },
+                true,
+            )
+            .expect("render")
+            .pixels()
+            .expect("invariant: readback was requested")
+            .clone()
+    };
+    let shot = shown(&mut compositor);
+    super::near(&shot, 5, 6, [255, 0, 0, 255], 1);
+    // Half-opaque green over black, mixed encoded: half its code value.
+    super::near(&shot, 22, 25, [0, 128, 0, 255], 2);
+    super::near(&shot, 15, 15, [0, 0, 0, 255], 0);
+    super::near(&shot, 0, 0, [0, 0, 0, 255], 0);
+
+    // Drawn again with one item elsewhere: the old boxes are wiped, and stay zero
+    // without a decode over them.
+    let blue = solid(&compositor, 2, 2, [0, 0, 255, 255]);
+    let items = [item(
+        &blue,
+        at([12.0, 12.0], [1.0, 1.0], 0.0),
+        Crop::NONE,
+        1.0,
+    )];
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &items,
+            },
+            &layer,
+        )
+        .expect("render into the layer again");
+    assert!(compositor.decoded_texels(true, (32, 32)) <= 16);
+    let shot = shown(&mut compositor);
+    super::near(&shot, 12, 12, [0, 0, 255, 255], 1);
+    super::near(&shot, 5, 6, [0, 0, 0, 255], 0);
+    super::near(&shot, 22, 25, [0, 0, 0, 255], 0);
+
+    // And with nothing: no decode at all.
+    compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &[],
+            },
+            &layer,
+        )
+        .expect("an empty layer");
+    assert_eq!(compositor.decoded_texels(true, (32, 32)), 0);
+    let shot = shown(&mut compositor);
+    super::near(&shot, 12, 12, [0, 0, 0, 255], 0);
+}
