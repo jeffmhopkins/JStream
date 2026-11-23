@@ -31,7 +31,9 @@ The options were:
 
 It is agent tier ([R-GOV-005](../RULES.md#R-GOV-005)): it adds no setting and no protocol
 field, and changes no licence, security or privacy posture, compatibility promise or
-spending. It extends ADR-0188, whose single-picture arrivals are unchanged.
+spending. It extends ADR-0188, whose single-picture arrivals are unchanged, and amends
+ADR-0188 decision 2: an item of the `sky_pictures` scene showing a nested scene, which
+that decision leaves out, is now one arrival of that scene's pictures (decision 1 below).
 
 <a id="decision"></a>
 ## Decision
