@@ -6801,7 +6801,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:aaa787f28e1b6463", by = "agent:mappings-panel", note = "Merged #1708's Keys and MIDI triggers; the Mappings bullet now names the Triggers tab over triggers::KeysAndMidi and sequence_triggers; store.rs keeps one Collection.bindings | kept from the merged side: Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652) | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; Escape reaches the topmost dialog, near-plane outline fallback; holds beside #1662's restyle and #1657's smoothing | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; re-read the canvas paragraph beside #1679's near-plane fallback (merged in #1686 itself), #1685's group sharing and #1662's restyle, holds" }
+stamp = { hash = "b3:1c36ca1dc15e5cc7", by = "agent:bindings", note = "Re-read the Inspector's Hotkey row text: Set key now adds beside the chord's other actions and unbinds only another scene's switch (bind_edits, ADR-0208); edited. | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652) | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; Escape reaches the topmost dialog, near-plane outline fallback; holds beside #1662's restyle and #1657's smoothing | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; re-read the canvas paragraph beside #1679's near-plane fallback (merged in #1686 itself), #1685's group sharing and #1662's restyle, holds" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07872d274f206a2e", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
@@ -6879,7 +6879,7 @@ stamp = { hash = "b3:6c3b60e3f9d78afd", by = "agent:claude", note = "C18: the In
 stamp = { hash = "b3:079faff276dab0c0", by = "agent:claude", note = "Re-read: Jeff asked for Use this sender's state on by default once a sender is accepted; host.rs reads a missing state as on and the checkbox note says so; this section names the checkbox without a default. Still holds. | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/hotkeys.rs"]
-stamp = { hash = "b3:55691a8e30fa059d", by = "agent:mappings-panel", note = "Merged #1708's Keys and MIDI triggers; the Mappings bullet now names the Triggers tab over triggers::KeysAndMidi and sequence_triggers; store.rs keeps one Collection.bindings | kept from the merged side: Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
+stamp = { hash = "b3:dfded5c9c51768f0", by = "agent:bindings", note = "Re-read the Inspector's Hotkey row text: Set key now adds beside the chord's other actions and unbinds only another scene's switch (bind_edits, ADR-0208); edited." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/icons.rs"]
 stamp = { hash = "b3:f6309095a048ad27", by = "agent:claude", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
@@ -7143,7 +7143,7 @@ stamp = { hash = "b3:6c3b60e3f9d78afd", by = "agent:claude", note = "C18: projec
 stamp = { hash = "b3:079faff276dab0c0", by = "agent:claude", note = "Re-read: Jeff asked for Use this sender's state on by default once a sender is accepted; the JTunnel entry names the checkbox and its JSON tests without a default. Still holds. | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/hotkeys.rs"]
-stamp = { hash = "b3:55691a8e30fa059d", by = "agent:mappings-panel", note = "Merged #1708 (bindings.rs, panels/triggers.rs, hotkeys.rs several actions per chord) beside the Mappings panel, which gains a Triggers tab; contents re-read, both entries hold | kept from the merged side: Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
+stamp = { hash = "b3:dfded5c9c51768f0", by = "agent:bindings", note = "Re-read the Hotkeys bullet against the B1 fix: bind_edits now keeps a chord's other actions, unbinding only a conflicting switch or same-item visibility action; the bullet still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/icons.rs"]
 stamp = { hash = "b3:f6309095a048ad27", by = "agent:claude", note = "C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds" }
@@ -8079,7 +8079,7 @@ stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 n
 stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Checked against the HD-01 edit (Keys & MIDI page): this walkthrough lists no Settings pages. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
-stamp = { hash = "b3:ee04cdff297d3730", by = "agent:bindings", note = "Checked against the HD-01 edit (Keys & MIDI page): this walkthrough lists no Settings pages." }
+stamp = { hash = "b3:16975ca4b9fd6f31", by = "agent:bindings", note = "Re-read against the IN-08 Set key change: the scene walkthrough doesn't bind hotkeys, so nothing here changed." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#menus"]
 stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited: File › Video settings… opens Settings on Video with Save, and Check for updates is a desktop-app item; checked against header.rs and settings.rs." }
@@ -8922,7 +8922,7 @@ stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1
 stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#inspector"."body"]
-stamp = { hash = "b3:ee04cdff297d3730", by = "agent:bindings", note = "Re-read IN-08: × now unbinds only the scene's switch from the chord, via Collection::unbind_edits." }
+stamp = { hash = "b3:16975ca4b9fd6f31", by = "agent:bindings", note = "Re-read IN-08: Set key now sets beside the chord's other actions, clearing only another scene's switch by name; edited to match bind_edits." }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:8dae814cb2db9042", by = "agent:bindings", note = "Re-read IN-08: × now unbinds only the scene's switch from the chord, via Collection::unbind_edits." }
@@ -8931,7 +8931,7 @@ stamp = { hash = "b3:8dae814cb2db9042", by = "agent:bindings", note = "Re-read I
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.rs passes the setting's label and value to the control button; the Inspector rows still hold, the menu is described under Channels and sequences." }
 
 ["UI-FEATURES#keyboard"."body"]
-stamp = { hash = "b3:d5a92854b670d2f2", by = "agent:bindings", note = "Re-read KB-07 (every action in bind order) and added KB-08 for Settings › Keys & MIDI; covers gained bindings.rs and triggers.rs." }
+stamp = { hash = "b3:e10f50b856fcc8ff", by = "agent:bindings", note = "Re-read KB-08: added how a row's Set key adds to a shared chord (unbinding only a conflicting action) and that the scene dialog still refuses one, per review N1." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Re-read: the mod.rs change only passes a shape instead of a model's bounds to outline and hit; no key binding changed" }
@@ -8940,16 +8940,7 @@ stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Re-r
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/hotkeys.rs"]
-stamp = { hash = "b3:55691a8e30fa059d", by = "agent:mappings-panel", note = "hotkeys.rs only makes typed_in_field and overlay_open pub(crate) for the Sources tab's [ ] and arrows; key handling unchanged | merge: Merged #1708: KB-07 says each chord runs every action bound to it (ADR-0208); hotkeys.rs's pub(crate) helpers for the Mappings panel unchanged | kept from the merged side: Re-read KB-07 (every action in bind order) and added KB-08 for Settings › Keys & MIDI; covers gained bindings.rs and triggers.rs." }
-
-["UI-FEATURES#mappings"."body"]
-stamp = { hash = "b3:fd2877baf6ee2b81", by = "agent:mappings-panel", note = "MP-03 Triggers tab added: keys and MIDI from KB-07's list, then sequence starts and stops with Edit and Remove; DAW events and audio crossings not built" }
-
-["UI-FEATURES#mappings"."file:crates/jstream-ui/src/mapping_index.rs"]
-stamp = { hash = "b3:8a7acffa43b68d81", by = "agent:mappings-panel", note = "MP-03 Triggers tab added: keys and MIDI from KB-07's list, then sequence starts and stops with Edit and Remove; DAW events and audio crossings not built" }
-
-["UI-FEATURES#mappings"."file:crates/jstream-ui/src/panels/mappings.rs"]
-stamp = { hash = "b3:5ac677dfdff03ae2", by = "agent:mappings-panel", note = "MP-03 Triggers tab added: keys and MIDI from KB-07's list, then sequence starts and stops with Edit and Remove; DAW events and audio crossings not built" }
+stamp = { hash = "b3:dfded5c9c51768f0", by = "agent:bindings", note = "Re-read KB-08: added how a row's Set key adds to a shared chord (unbinding only a conflicting action) and that the scene dialog still refuses one, per review N1." }
 
 ["UI-FEATURES#menus"."body"]
 stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited CM-02: the Duplicate opener is off for several items or in a keyframe; checked against item_menu.rs." }
