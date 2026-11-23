@@ -31,7 +31,7 @@ use jstream_protocol::{
 use jstream_render::transition::{Effect, Endpoint, Stops, Timing, Track};
 
 use crate::motion::TrackMotion;
-use crate::snapshot::SourceRef;
+use crate::snapshot::{SourceRef, TrackGroups};
 
 /// What a running transition does: its preset, resolved.
 #[derive(Clone, Debug, PartialEq)]
@@ -164,6 +164,10 @@ pub(crate) struct Visual {
     /// Its motion modifiers (ADR-0099): its own on both sides, and once a Move pairs it
     /// with an item it leaves, that item's on the leaving side.
     pub(crate) motion: TrackMotion,
+    /// For a 3D group's child, where it is in its group's space and the group items it
+    /// is placed through (ADR-0164 §4), paired as `motion` is: the transition places it
+    /// through them each frame. Empty for an item of the scene itself.
+    pub(crate) groups: TrackGroups,
 }
 
 impl Visual {
@@ -351,6 +355,8 @@ impl Planned {
                     effects: blended_look(visual, track, elapsed_ms)
                         .unwrap_or_else(|| visual.effects.clone()),
                     blend_from: None,
+                    // Held where it is on screen then, in the scene's space.
+                    groups: TrackGroups::default(),
                     inside: visual.inside.as_ref().map(|inside| {
                         Arc::new(Inside {
                             planned: inside.planned.held(elapsed_ms, canvas),
@@ -531,11 +537,18 @@ pub(crate) fn plan(
                             .collect(),
                     );
                 }
-                // Both sides' modifiers, blended as it moves (ADR-0099).
-                arriving_motion = Some(TrackMotion {
-                    from: from[j].motion.to.clone(),
-                    to: item.motion.to.clone(),
-                });
+                // Both sides' modifiers, blended as it moves (ADR-0099), and both
+                // sides' groups (ADR-0164 §4).
+                arriving_motion = Some((
+                    TrackMotion {
+                        from: from[j].motion.to.clone(),
+                        to: item.motion.to.clone(),
+                    },
+                    TrackGroups {
+                        from: from[j].groups.to.clone(),
+                        to: item.groups.to.clone(),
+                    },
+                ));
                 Track::Pair {
                     from: from[j].at,
                     to: item.at,
@@ -551,8 +564,9 @@ pub(crate) fn plan(
             },
         };
         let mut item = item.clone();
-        if let Some(motion) = arriving_motion {
+        if let Some((motion, groups)) = arriving_motion {
             item.motion = motion;
+            item.groups = groups;
         }
         item.blend_from = blend_from;
         arriving.push((item, track));
@@ -783,6 +797,7 @@ mod tests {
             inside: None,
             seen: super::Seen::AsPlanned,
             motion: super::TrackMotion::same(ItemId::new(item_id), std::sync::Arc::from([])),
+            groups: crate::snapshot::TrackGroups::default(),
         }
     }
 

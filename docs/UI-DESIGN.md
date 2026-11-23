@@ -64,6 +64,11 @@ covers = ["crates/jstream-ui/style.css"]
   panel (the Arrange panel's Fit, Match, Rotate and Crop rows, Set key). Its label can be
   short when a heading above says the rest ("Width" under Match); its tooltip and
   accessible name stay whole ("Match width").
+- **Icon** (a panel row's or card's Start, filters funnel, Hear, + or ⋯): 28 px square,
+  no fill until hovered, `--muted`, and link-coloured while on (a funnel whose chain holds
+  filters shows their count beside it). Its accessible name says what it acts on
+  ("output-1 filters", "More for this preset"); a ⋯ opens the [menu](#menus) of what the
+  row's icons don't show.
 - A dialog that only informs (About, Settings) ends with a secondary "Close", not a
   primary one.
 - Focus is a 2 px accent ring outside the button.
@@ -240,6 +245,7 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
 - A warning or a consequence that needs reading is a one-line callout (`.callout`, with
   the info icon; `.warn` when it stops something), not a paragraph.
 - An empty list says so in a few words ("No motion yet.") next to the action that fills
-  it.
+  it. A whole panel with nothing to show is an empty state (`.empty-state`): an icon, a
+  short title ("No chat to show") and one line saying what will show there.
 - Everything in a chain is a filter: a source's, a scene's, an output's or one item's.
   An item's own are "item filters", never "effects".

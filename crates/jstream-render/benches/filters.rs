@@ -322,7 +322,11 @@ fn scene_filters(c: &mut Criterion) {
             .expect("invariant: the canvas fits")
     };
     let composite = layer(&compositor);
-    let depth = Arc::new(layer(&compositor));
+    let depth = Arc::new(
+        compositor
+            .depth_layer(WIDTH, HEIGHT)
+            .expect("invariant: the canvas fits"),
+    );
     compositor.render_into(&scene, &composite).expect("render");
     compositor
         .render_view_depth(&scene, &depth)

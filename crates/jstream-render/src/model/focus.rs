@@ -1,6 +1,6 @@
 //! Depth of field on a model's layer (ADR-0165): the layer blurred by the depth of the
-//! surface each pixel shows, in five fullscreen passes over the model's colour and view
-//! depth. [`crate::Compositor::draw_model`] runs it when the model's camera has depth of
+//! surface each pixel shows, in six fullscreen passes over the model's colour and view
+//! depth, the gather of the wider blurs at half the layer's size (ADR-0193). [`crate::Compositor::draw_model`] runs it when the model's camera has depth of
 //! field; otherwise the model draws with no pass.
 
 use crate::error::RenderError;
@@ -47,6 +47,12 @@ const SMOOTH: Shader = Shader {
     blend: Blend::Replace,
 };
 
+const RESOLVE: Shader = Shader {
+    label: "model-focus-resolve",
+    source: include_str!("focus/resolve.wgsl"),
+    blend: Blend::Replace,
+};
+
 const GATHER: Shader = Shader {
     label: "model-focus-gather",
     source: concat!(
@@ -55,6 +61,9 @@ const GATHER: Shader = Shader {
     ),
     blend: Blend::Replace,
 };
+
+/// The largest blur radius, in canvas pixels: ADR-0108's cap.
+const MAX_BLUR_PX: f32 = 64.0;
 
 /// The kind name the pass runs under; it is no filter kind a chain can hold.
 pub(crate) const KIND: &str = "model_depth_of_field";
@@ -91,9 +100,16 @@ impl Pass for ModelFocus {
                 detail: "no view depth of the layer's size, or no focus".into(),
             });
         };
+        // The blur and its cap count in canvas pixels. A layer drawn with fewer pixels
+        // than the canvas it stands for (ADR-0197) blurs over as much of the picture.
+        let scale = match input.extent().0 {
+            0 => 1.0,
+            canvas => width as f32 / canvas as f32,
+        };
         let params = Uniforms::new()
             .f32(focus.distance / depth.focal_px)
-            .f32(focus.blur)
+            .f32(focus.blur * scale)
+            .f32(MAX_BLUR_PX * scale)
             .finish();
         let tiled = (width.div_ceil(TILE), height.div_ceil(TILE));
         let tiles = ctx.scratch(tiled.0, tiled.1)?;
@@ -120,7 +136,7 @@ impl Pass for ModelFocus {
             params: &params,
             target: &packed,
         })?;
-        let gathered = ctx.scratch(width, height)?;
+        let gathered = ctx.scratch(width.div_ceil(2), height.div_ceil(2))?;
         ctx.draw(&Draw {
             shader: GATHER,
             input,
@@ -128,12 +144,16 @@ impl Pass for ModelFocus {
             params: &params,
             target: &gathered,
         })?;
+        let smoothed = ctx.scratch(gathered.width(), gathered.height())?;
         ctx.draw(&Draw {
             shader: SMOOTH,
             input: &gathered,
             aux: Some(&packed),
             params: &params,
-            target: output,
-        })
+            target: &smoothed,
+        })?;
+        let inputs = [input.clone(), packed.clone(), smoothed];
+        let system = crate::filter::program_system(input, output, &inputs);
+        ctx.draw_program(RESOLVE.into(), &inputs, &system, &params, output)
     }
 }

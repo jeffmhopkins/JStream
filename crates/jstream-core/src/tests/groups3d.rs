@@ -556,3 +556,376 @@ fn an_effect_setting_changed_later_reaches_a_3d_card() {
         "then black again"
     );
 }
+
+/// #1632: a Move between two views of a 3D scene drawn as one picture through its chain,
+/// started once the Fade onto it from a 2D scene has ended but before a plan let that
+/// go, moves item by item as from the scene at rest, so the group's red child, 200 px
+/// nearer than the wall, stays in front of it half-way; it is not the Fade's flat
+/// picture of the scene leaving under the keyframe's items.
+#[test]
+fn a_3d_groups_children_stay_in_its_space_in_a_move_after_a_fade() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    if pixel(&control, 960, 540).is_none() {
+        return;
+    }
+    let preset = |id: &str, kind: &str| Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new(id),
+        name: id.into(),
+        kind: kind.into(),
+        duration_ms: 400,
+        easing: Easing::Linear,
+        settings: Settings::default(),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("z"),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some({
+                    let mut camera = SceneCamera::framing(Canvas::DEFAULT);
+                    camera.position.z = finite(camera.position.z.get() + 300.0);
+                    camera
+                }),
+            },
+            // The scene has a chain, as a 3D set with depth effects has: a Fade onto it
+            // from another scene shows it as one picture (ADR-0065 §6).
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            preset("move", "move"),
+            preset("fade", "fade"),
+        ]),
+    )
+    .expect("a keyframe and presets");
+    let switch = |scene: &str, preset: Option<&str>| {
+        let action = Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+            preset_id: preset.map(TransitionPresetId::new),
+            via: Vec::new(),
+        };
+        super::block_on(control.call(Call::Action { action })).expect("switch");
+    };
+    switch("z", None);
+    switch("main", Some("fade"));
+    // Past the Fade's end, with no plan since to let it go.
+    clock.advance(600_000);
+    switch("k", Some("move"));
+    clock.advance(200_000);
+    engine.replan();
+    assert!(
+        engine.render_hub().load().shot().transitioning(),
+        "the Move runs"
+    );
+    assert_eq!(
+        pixel(&control, 960, 540),
+        Some(RED),
+        "the child is still in front of the wall half-way"
+    );
+}
+
+// Follow-ups of #1591's review (#1596): group motion while a transition runs, the pass
+// and the transition splitting the same groups, and a legacy-transform child.
+
+/// `item`'s motion: one drift along x at `rate` pixels a second on the engine's clock.
+fn drift_x(item: &str, rate: f32) -> Edit {
+    Edit::ItemSetMotion {
+        item_id: ItemId::new(item),
+        scene_id: None,
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "drift".into(),
+            property: jstream_protocol::MotionProperty::X,
+            effect: None,
+            source: None,
+            kind: jstream_protocol::MotionKind::Drift {
+                rate_per_s: finite(rate),
+                wrap: None,
+            },
+            clock: jstream_protocol::MotionClock::Engine,
+            enabled: true,
+            amount: None,
+        }],
+    }
+}
+
+fn secs(s: f64) -> jstream_media::MediaTime {
+    jstream_media::MediaTime::new((s * 1e6) as i64, jstream_media::Timebase::MICROS)
+}
+
+/// [`rig`] with `more` applied, then a keyframe scene `k` of `main` that only moves the
+/// wall nearer, and a 400 ms Move from `main` to it started: the engine, mid-switch.
+fn moving_rig(more: Vec<Edit>) -> Engine {
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let (engine, control) = rig(true);
+    let mut list = more;
+    list.extend([
+        Edit::SceneCreateVariant {
+            scene_id: SceneId::new("k"),
+            variant_of: SceneId::new("main"),
+            name: "K".into(),
+        },
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("wall"),
+            scene_id: Some(SceneId::new("k")),
+            geometry: boxed(960.0, 540.0, (1920.0, 1080.0), 100.0),
+        },
+        Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new("move"),
+            name: "Move".into(),
+            kind: "move".into(),
+            duration_ms: 400,
+            easing: Easing::Linear,
+            settings: Settings::default(),
+        },
+    ]);
+    batch(&control, edits(list)).expect("a keyframe and a move");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let action = Action::SceneSwitch {
+        scene_id: SceneId::new("k"),
+        preset_id: Some(TransitionPresetId::new("move")),
+        via: Vec::new(),
+    };
+    super::block_on(control.call(Call::Action { action })).expect("switch");
+    engine
+}
+
+/// The centre and width of each of the running transition's tracks `elapsed_ms` into it,
+/// at `at`, with their motion, in drawing order.
+fn tracks_at(engine: &Engine, elapsed_ms: f32, at: f64) -> Vec<(f32, f32, f32)> {
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .tracks_moved_at(elapsed_ms, secs(at))
+        .expect("a transition runs")
+        .into_iter()
+        .flatten()
+        .map(|end| {
+            let g = end.geometry;
+            (g.center.x.get(), g.center.y.get(), g.size.width.get())
+        })
+        .collect()
+}
+
+/// A 3D group item's motion moves its children while a transition runs, as it does in
+/// the scene's pass (#1596 N1, ADR-0164 §4): two seconds into its 100 px a second drift,
+/// half-way through a Move, the red child is 200 px right of where it is planned.
+#[test]
+fn a_3d_groups_motion_moves_its_children_during_a_transition() {
+    let engine = moving_rig(vec![drift_x("rig_item", 100.0)]);
+    let tracks = tracks_at(&engine, 200.0, 2.0);
+    assert!(
+        tracks.contains(&(1160.0, 540.0, 400.0)),
+        "the child moved with its group: {tracks:?}"
+    );
+    assert!(
+        tracks.contains(&(960.0, 540.0, 1920.0)),
+        "the wall stays: {tracks:?}"
+    );
+}
+
+/// A child's own motion moves it in its group's space while a transition runs, as it
+/// does in the scene's pass (#1596 N1): in a group turned half a turn in the canvas
+/// plane, the child's drift to the right moves it left on the canvas.
+#[test]
+fn a_3d_groups_childs_motion_is_in_its_groups_space_during_a_transition() {
+    let mut turned = boxed(960.0, 540.0, (1920.0, 1080.0), 0.0);
+    turned.rotation_deg = finite(180.0);
+    let engine = moving_rig(vec![move_to("rig_item", turned), drift_x("part", 100.0)]);
+    let tracks = tracks_at(&engine, 200.0, 2.0);
+    assert!(
+        tracks.iter().any(|&(x, y, width)| (x - 760.0).abs() < 0.01
+            && (y - 540.0).abs() < 0.01
+            && width == 400.0),
+        "the child drifted left, in its turned group's space: {tracks:?}"
+    );
+}
+
+/// A second item placing the same 3D group draws it flat in the scene's pass, since a
+/// group shares a scene's space once; a transition takes it the same way, so the two
+/// agree on what is drawn (#1596 N2): at the start of a Move, the tracks are the pass's
+/// items at the same sizes, the flat group's card among them.
+#[test]
+fn a_transition_splits_the_groups_the_scenes_pass_splits() {
+    let engine = moving_rig(vec![place(
+        "main",
+        "rig_again",
+        "rig_src",
+        boxed(480.0, 270.0, (960.0, 540.0), 0.0),
+    )]);
+    let mut widths: Vec<f32> = tracks_at(&engine, 0.0, 0.0)
+        .into_iter()
+        .map(|(_, _, width)| width)
+        .collect();
+    widths.sort_by(f32::total_cmp);
+    assert_eq!(
+        widths,
+        [400.0, 960.0, 1920.0],
+        "one child, the second placement's card and the wall"
+    );
+}
+
+/// A run of `levels` 3D groups, each placing the next over its whole canvas, the last
+/// holding the red card, inside scene `s`, 3D through its own camera, which `main`
+/// places over its whole canvas: so a Move flattens `s` into `main`'s tracks.
+fn deep_rig(levels: usize) -> Vec<Edit> {
+    let mut list = vec![
+        create("s"),
+        Edit::SceneSetCamera {
+            scene_id: SceneId::new("s"),
+            camera: Some(SceneCamera::framing(Canvas::DEFAULT)),
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("s_src"),
+            name: "S".into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new("s"),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        },
+        Edit::ItemRemove {
+            item_id: ItemId::new("rig_item"),
+        },
+        place(
+            "main",
+            "s_item",
+            "s_src",
+            boxed(960.0, 540.0, (1920.0, 1080.0), 0.0),
+        ),
+    ];
+    let whole = boxed(960.0, 540.0, (1920.0, 1080.0), 0.0);
+    for level in 0..levels {
+        let group = format!("g{level}");
+        list.extend([
+            create(&group),
+            Edit::SceneSetRole {
+                scene_id: SceneId::new(&group),
+                role: SceneRole::Group,
+            },
+            Edit::SceneSetOptions {
+                scene_id: SceneId::new(&group),
+                options: SceneOptions {
+                    share_space: true,
+                    reflections: false,
+                    ..SceneOptions::default()
+                },
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new(format!("{group}_src")),
+                name: group.to_uppercase(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new(&group),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+            },
+        ]);
+        let parent = match level {
+            0 => String::from("s"),
+            _ => format!("g{}", level - 1),
+        };
+        list.push(place(
+            &parent,
+            &format!("{group}_item"),
+            &format!("{group}_src"),
+            whole,
+        ));
+    }
+    list.push(place(
+        &format!("g{}", levels - 1),
+        "deep_part",
+        "red",
+        boxed(960.0, 540.0, (400.0, 400.0), 200.0),
+    ));
+    list
+}
+
+/// Groups nested as deep as a scene's pass splits them are split as deep by a
+/// transition, which counts groups as the pass does, not the nested scenes it flattens
+/// on the way (#1596 N2): with the most groups a pass splits, inside a scene a Move
+/// flattens, the innermost child is still a track of its own, 400 px wide, rather than
+/// the innermost group's card over the canvas.
+#[test]
+fn a_transition_nests_3d_groups_as_deep_as_the_pass() {
+    let engine = moving_rig(deep_rig(crate::snapshot::MAX_NESTING - 1));
+    let widths: Vec<f32> = tracks_at(&engine, 0.0, 0.0)
+        .into_iter()
+        .map(|(_, _, width)| width)
+        .collect();
+    assert!(
+        widths.contains(&400.0),
+        "the innermost child is its own track: {widths:?}"
+    );
+}
+
+/// A 3D group's child with a legacy transform is placed through the group as any child
+/// is, as the box its transform draws (#1596 N3, ADR-0164 §1 and §2): here a fifth of
+/// the red source's size at the group's centre, in a group moved 600 px right.
+#[test]
+fn a_3d_groups_legacy_transform_child_is_placed_through_it() {
+    use jstream_protocol::ItemTransform;
+    let _gpu = super::one_gpu_test_at_a_time();
+    let (_engine, control) = rig(true);
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("wall"),
+            },
+            Edit::ItemRemove {
+                item_id: ItemId::new("part"),
+            },
+            Edit::ItemAdd {
+                scene_id: SceneId::new("rig"),
+                item_id: ItemId::new("legacy"),
+                source_id: SourceId::new("red"),
+                transform: Some(ItemTransform {
+                    position: Vec2 {
+                        x: finite(768.0),
+                        y: finite(432.0),
+                    },
+                    scale: Vec2 {
+                        x: finite(0.2),
+                        y: finite(0.2),
+                    },
+                    rotation_deg: finite(0.0),
+                }),
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+            move_to("rig_item", boxed(1560.0, 540.0, (1920.0, 1080.0), 0.0)),
+        ]),
+    )
+    .expect("a legacy child");
+    let Some(placed) = pixel(&control, 1560, 540) else {
+        return;
+    };
+    assert_eq!(placed, RED, "the child, where the group places it");
+    assert_eq!(
+        pixel(&control, 960, 540),
+        Some([0, 0, 0, 0xff]),
+        "not where it is in the group's own canvas"
+    );
+}

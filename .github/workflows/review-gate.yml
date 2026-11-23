@@ -144,7 +144,8 @@ jobs:
             //    is the same at both, that review's verdict stands for the head. The reviewed
             //    head's diff is taken against the base its marker names, else the current one
             //    (ADR-0154: a stacked PR's base squash-merged under it). Any doubt (an API error,
-            //    a truncated list, a file without a patch) leaves it pending, as before.
+            //    a truncated list, a file without a patch) leaves it pending, as before. So
+            //    does a file of the PR whose mode the PR changes differently (ADR-0199).
             let carry = null;
             const from = carryCandidate(comments, head);
             if (from) {
@@ -178,8 +179,17 @@ jobs:
                 if (commits.length > 0 && onlyBaseMerges(commits)) {
                   const files = async (base, sha) => (await cmp(`${base}...${sha}`, 300)).files ?? null;
                   const reviewed = reviewedBase(comments, from) ?? pr.base.sha;
-                  if (sameChange(await files(reviewed, from), await files(pr.base.sha, head))) carry = { from };
-                  else core.info(`${from.slice(0, 7)} and ${head.slice(0, 7)} differ in the PR's own change: no carry`);
+                  const was = await files(reviewed, from);
+                  if (sameChange(was, await files(pr.base.sha, head))) {
+                    // ADR-0199: the compare API gives no file modes, so read them from the trees.
+                    const tree = async (sha) =>
+                      (await github.rest.git.getTree({ owner, repo, tree_sha: sha, recursive: 'true' })).data;
+                    const side = async (base, sha) => ({ base: await tree(base), head: await tree(sha) });
+                    if (sameModes(was, await side(reviewed, from), await side(pr.base.sha, head))) carry = { from };
+                    else core.info(`${from.slice(0, 7)} and ${head.slice(0, 7)} differ in a file mode of the PR's change: no carry`);
+                  } else {
+                    core.info(`${from.slice(0, 7)} and ${head.slice(0, 7)} differ in the PR's own change: no carry`);
+                  }
                 } else {
                   core.info(`commits after ${from.slice(0, 7)} aren't only merges of the base branch: no carry`);
                 }
@@ -274,6 +284,26 @@ jobs:
               return ka !== null && kb !== null && ka === kb;
             }
 
+            // ADR-0199: whether the PR changes the mode of each of its files (`files`, the
+            // compare-API list sameChange accepted) the same way on both sides. Each side is
+            // { base, head }, git-tree API responses for the base and head commits. A file's
+            // mode change is its mode at the base (its old path, if renamed) against its mode at
+            // the head, or nothing when they match, so a mode change the base branch made
+            // itself doesn't count. Fails closed on a missing or truncated tree.
+            function sameModes(files, a, b) {
+              const ledger = 'docs/verified.toml';
+              const modes = (t) => t && t.truncated === false && Array.isArray(t.tree)
+                ? new Map(t.tree.map((e) => [e.path, e.mode])) : null;
+              const sides = [a, b].map((s) => s && [modes(s.base), modes(s.head)]);
+              if (!Array.isArray(files) || sides.some((s) => !s || !s[0] || !s[1])) return false;
+              const change = ([base, head], f) => {
+                const was = base.get(f.previous_filename ?? f.filename) ?? '';
+                const now = head.get(f.filename) ?? '';
+                return was === now ? '' : `${was}>${now}`;
+              };
+              return files.every((f) => f.filename === ledger || change(sides[0], f) === change(sides[1], f));
+            }
+
             function verdictFor(markers, authors, sha) {
               const forSha = markers.filter((x) => x.sha === sha);
               const sha7 = sha.slice(0, 7);
@@ -288,7 +318,7 @@ jobs:
             }
 
             // carry: { from } when the caller found that `from` is an ancestor of `head` with the
-            // same PR change (sameChange), else null.
+            // same PR change (sameChange and sameModes), else null.
             function decide(comments, authors, head, carry) {
               const markers = markersOf(comments);
               const sha7 = head.slice(0, 7);

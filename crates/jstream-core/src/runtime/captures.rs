@@ -699,7 +699,11 @@ impl RenderCaptures {
                     if let Some(frame) = readable_cpu_frame(surface) {
                         self.versions += 1;
                         slot.version = self.versions;
-                        slot.frame = Some(Latest::Cpu(frame));
+                        // The frame it replaces goes back to the stream, which fills
+                        // its memory again rather than allocating the next one.
+                        if let Some(Latest::Cpu(old)) = slot.frame.replace(Latest::Cpu(frame)) {
+                            stream.recycle(VideoSurface::Cpu(old));
+                        }
                     } else if !slot.warned_format {
                         slot.warned_format = true;
                         tracing::warn!(
@@ -1437,6 +1441,48 @@ mod tests {
             size_rx.recv().is_err(),
             "stopping closes the channel, sending nothing more"
         );
+    }
+
+    /// The render thread hands each CPU frame a newer one replaces back to its stream,
+    /// so a webcam's capture thread fills that memory again instead of allocating a
+    /// frame's megabytes for every frame. The frame it shows is never handed back.
+    #[test]
+    fn a_replaced_webcam_frame_goes_back_to_its_stream() {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let devices = FakeVideoDevices::new(clock.clone());
+        let (size_tx, _size_rx) = std::sync::mpsc::channel();
+        let mut captures = spawn(
+            backends(&clock, &devices, Arc::new(FakeCodecs)),
+            Timebase::MICROS,
+            size_tx,
+        )
+        .expect("the capture thread starts");
+        let webcam = CaptureKey::for_source(
+            CaptureSpec::Device(Some(FAKE_WEBCAM.into()), DeviceFormatWant::default()),
+            jstream_protocol::SourceId::new("cam"),
+        );
+        let wanted = BTreeSet::from([webcam.clone()]);
+        let version =
+            |captures: &super::RenderCaptures| captures.frame(&webcam).map(|frame| frame.version);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while version(&captures).is_none() {
+            assert!(Instant::now() < deadline, "the webcam delivers");
+            clock.advance(1_000);
+            captures.tick(&wanted, clock.now());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(devices.recycled(), 0, "its first frame replaces none");
+        let first = version(&captures);
+        for round in 1..=3 {
+            clock.advance(1_000);
+            captures.tick(&wanted, clock.now());
+            assert_eq!(devices.recycled(), round, "one handed back per new frame");
+        }
+        assert!(version(&captures) > first);
+        // A tick with no new frame hands nothing back.
+        captures.tick(&wanted, clock.now());
+        assert_eq!(devices.recycled(), 3);
+        captures.stop();
     }
 
     /// The fake devices "on the compositor's device": the same devices (clones share

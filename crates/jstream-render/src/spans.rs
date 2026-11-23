@@ -364,4 +364,62 @@ mod tests {
             .compositor
             .gpu_units(|tag, unit, _| panic!("frame {tag} unit {unit} came back twice"));
     }
+
+    /// A frame's way out is timed with the unit named around it: a readback's copy, and
+    /// its conversion to NV12 first, are submits of their own after the composite, and
+    /// come back under that unit. Before, they were submitted past the spans, so no
+    /// unit carried their GPU time.
+    #[test]
+    fn a_readback_and_its_conversion_are_timed_in_the_unit_named() {
+        use crate::convert::Nv12Converter;
+        use crate::readback::ReadbackRing;
+        use crate::{Color, Scene};
+        use jstream_media::{ColorInfo, FrameSize};
+
+        let Some(mut opened) = open() else {
+            return;
+        };
+        if !opened.compositor.times_gpu() {
+            return;
+        }
+        let size = FrameSize::new(64, 36).expect("invariant: non-zero");
+        let scene = Scene {
+            canvas: size,
+            background: Color::BLACK,
+            items: &[],
+        };
+        let converter = Nv12Converter::new(opened.compositor.device());
+        let planes = converter.planes(size).expect("planes");
+        for (tag, planar) in [(51, false), (52, true)] {
+            // The composite itself outside any unit: only the way out is timed.
+            let output = opened.compositor.render(&scene, false).expect("render");
+            let mut ring = ReadbackRing::<u64>::default();
+            assert!(opened.compositor.begin_gpu_frame(tag));
+            opened.compositor.gpu_unit(Some(9));
+            let recorded = if planar {
+                let pass = converter
+                    .bind(output.texture(), &planes.target(), ColorInfo::default())
+                    .expect("bound");
+                ring.record_nv12(&opened.compositor, &pass, &planes, tag)
+            } else {
+                ring.record(&opened.compositor, &output, tag)
+            };
+            assert!(recorded.expect("recorded"), "a free buffer");
+            opened.compositor.gpu_unit(None);
+            opened.compositor.end_gpu_frame();
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let mut times = Vec::new();
+            while times.is_empty() && Instant::now() < deadline {
+                let _ = opened
+                    .compositor
+                    .device()
+                    .poll(wgpu::PollType::wait_indefinitely());
+                opened
+                    .compositor
+                    .gpu_units(|tag, unit, took| times.push((tag, unit, took)));
+            }
+            assert_eq!(times.len(), 1, "{times:?}");
+            assert_eq!((times[0].0, times[0].1), (tag, 9));
+        }
+    }
 }

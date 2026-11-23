@@ -296,36 +296,11 @@ impl<K: Ord + Clone> ResourceCache<K> {
         planned: f32,
         rgba: impl FnOnce() -> Option<B>,
     ) -> Result<Option<&Image>, RenderError> {
-        let small = u64::from(width) * u64::from(height) < DRAWN_MIN_TEXELS;
-        if !self.drawn_small || small {
+        if !self.holds_small((width, height)) {
             return self.upload_if_needed(compositor, key, version, (width, height), rgba);
         }
         let frame = self.frame;
-        let held = self.live.get(key).and_then(|entry| {
-            (entry.image.is_upload() && entry.image.full() == (width, height))
-                .then_some(entry.scale)
-        });
-        let scale = match held {
-            None if planned > 0.0 => drawn_scale(planned),
-            None => 1.0,
-            Some(held) => {
-                let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
-                // Read once a frame, so every mix of the frame draws the same texels,
-                // and never under what the placements plan: a mix that isn't due on
-                // a tick draws nothing then, and must not shrink what it shows.
-                let need = if entry.used == frame {
-                    0.0
-                } else {
-                    entry.image.take_need().max(planned.max(0.0))
-                };
-                let wanted = drawn_scale(need);
-                if need == 0.0 || (need <= held && wanted > held / 2.0) {
-                    held
-                } else {
-                    wanted
-                }
-            }
-        };
+        let (held, scale) = self.drawn_plan(key, (width, height), planned)?;
         if held == Some(scale) {
             let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
             entry.used = frame;
@@ -381,6 +356,89 @@ impl<K: Ord + Clone> ResourceCache<K> {
         }
         let image = compositor.upload_frame(frame)?;
         Ok(self.replace(key, image, version))
+    }
+
+    /// [`Self::upload_frame`] of a frame that only items draw, held at the size the
+    /// compositor drew it at over the frames before, as [`Self::upload_drawn`] holds an
+    /// upload (#1139, ADR-0117 §2): a webcam shown as a small picture is converted
+    /// straight into the texels it is drawn with, not into a texture of its frame's size
+    /// that every frame then has to shrink. `planned` is as for [`Self::upload_drawn`].
+    ///
+    /// # Errors
+    /// As for [`Compositor::upload_frame`]. The entry is left as it was.
+    pub fn upload_frame_drawn(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        version: u64,
+        frame: &jstream_media::VideoFrame,
+        planned: f32,
+    ) -> Result<&Image, RenderError> {
+        let size = frame.info().size;
+        let full = (size.width(), size.height());
+        if !self.holds_small(full) {
+            return self.upload_frame(compositor, key, version, frame);
+        }
+        let at = self.frame;
+        let (held, scale) = self.drawn_plan(key, full, planned)?;
+        if held == Some(scale) {
+            let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+            if entry.version != version {
+                compositor.rewrite_frame(&entry.image, frame)?;
+                entry.version = version;
+            }
+            entry.used = at;
+            return Ok(&entry.image);
+        }
+        let to = (scaled(full.0, scale), scaled(full.1, scale));
+        let image = compositor.upload_frame_into(frame, to)?;
+        self.replace(key, image, version);
+        let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+        entry.scale = scale;
+        Ok(&entry.image)
+    }
+
+    /// Whether an upload of a `full` frame may be held smaller than it
+    /// ([`Self::draw_uploads_small`], and a frame of at least [`DRAWN_MIN_TEXELS`]).
+    fn holds_small(&self, (width, height): (u32, u32)) -> bool {
+        self.drawn_small && u64::from(width) * u64::from(height) >= DRAWN_MIN_TEXELS
+    }
+
+    /// The scale the upload under `key` of a `full` frame is held at now, if it holds
+    /// one, and the scale it should be held at this frame, as [`Self::upload_drawn`]
+    /// describes. Takes the need its draws recorded, once a frame.
+    fn drawn_plan(
+        &mut self,
+        key: &K,
+        full: (u32, u32),
+        planned: f32,
+    ) -> Result<(Option<f32>, f32), RenderError> {
+        let frame = self.frame;
+        let held = self.live.get(key).and_then(|entry| {
+            (entry.image.is_upload() && entry.image.full() == full).then_some(entry.scale)
+        });
+        let scale = match held {
+            None if planned > 0.0 => drawn_scale(planned),
+            None => 1.0,
+            Some(held) => {
+                let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+                // Read once a frame, so every mix of the frame draws the same texels,
+                // and never under what the placements plan: a mix that isn't due on
+                // a tick draws nothing then, and must not shrink what it shows.
+                let need = if entry.used == frame {
+                    0.0
+                } else {
+                    entry.image.take_need().max(planned.max(0.0))
+                };
+                let wanted = drawn_scale(need);
+                if need == 0.0 || (need <= held && wanted > held / 2.0) {
+                    held
+                } else {
+                    wanted
+                }
+            }
+        };
+        Ok((held, scale))
     }
 
     /// The image for `key` showing `frame`, a frame on this compositor's device, and
@@ -524,6 +582,38 @@ impl<K: Ord + Clone> ResourceCache<K> {
             return Ok(&entry.image);
         }
         let image = compositor.layer(width, height)?;
+        Ok(self.replace(key, image, 0))
+    }
+
+    /// The depth layer for `key` at `width` by `height`, for
+    /// [`Compositor::render_view_depth`] and [`Compositor::draw_model_depth`], and marks
+    /// it used this frame. A depth layer of the same size is reused, as [`Self::layer`]
+    /// reuses a layer.
+    ///
+    /// # Errors
+    /// As for [`Compositor::depth_layer`].
+    pub fn depth_layer(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        width: u32,
+        height: u32,
+    ) -> Result<&Image, RenderError> {
+        let frame = self.frame;
+        let reuse = self.live.get(key).is_some_and(|entry| {
+            entry.image.is_depth_layer()
+                && entry.image.width() == width
+                && entry.image.height() == height
+        });
+        if reuse {
+            let entry = self
+                .live
+                .get_mut(key)
+                .ok_or_else(|| missing("a depth layer"))?;
+            entry.used = frame;
+            return Ok(&entry.image);
+        }
+        let image = compositor.depth_layer(width, height)?;
         Ok(self.replace(key, image, 0))
     }
 
