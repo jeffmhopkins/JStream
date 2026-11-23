@@ -125,23 +125,6 @@ impl fmt::Debug for Plane {
     }
 }
 
-impl PartialEq for Plane {
-    fn eq(&self, other: &Self) -> bool {
-        self.stride == other.stride && self.data() == other.data()
-    }
-}
-
-impl Eq for Plane {}
-
-impl fmt::Debug for Plane {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Plane")
-            .field("data", &self.data())
-            .field("stride", &self.stride)
-            .finish()
-    }
-}
-
 /// A video frame in CPU memory whose planes are checked against its format.
 ///
 /// Invariants, checked by [`VideoFrame::new`]: the plane count matches the format, each
