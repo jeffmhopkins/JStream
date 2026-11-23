@@ -581,10 +581,14 @@ fn unit(key: &UnitKey) -> ProfileUnit {
             ChainOwner::Scene(scene_id) => ProfileUnit::SceneChain {
                 scene_id: scene_id.clone(),
             },
-            ChainOwner::Item(scene_id, item_id) => ProfileUnit::ItemEffects {
-                scene_id: scene_id.clone(),
-                item_id: item_id.clone(),
-            },
+            // A model source's filters over an item's layer are timed with the item
+            // (`run_chains`), so this arm only names them the same way.
+            ChainOwner::Item(scene_id, item_id) | ChainOwner::Shown(_, scene_id, item_id) => {
+                ProfileUnit::ItemEffects {
+                    scene_id: scene_id.clone(),
+                    item_id: item_id.clone(),
+                }
+            }
             ChainOwner::Master(mix_id) => ProfileUnit::MasterChain {
                 mix_id: mix_id.clone(),
             },

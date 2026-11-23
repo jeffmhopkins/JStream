@@ -2317,12 +2317,21 @@ names in the shot when it places the light (`look_sky`), so it is uploaded thoug
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
 drawn for a sky alone. A reflection's models take the same sky
 (`an_environment_light_lights_a_scene_lit_model_with_its_sky`).
+A model source's own video filters run over that layer, not over its transparent
+stand-in ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6): `Planner::shown`
+plans no chain for a source whose frame carries a model, and `boxed` plans one per item
+that shows it (`ChainOwner::Shown`, by source, scene and item) over the item's layer,
+which the item's effects then read in place of the layer. Its output is what the pass
+places when the item has no effects (`boxed_key`, `key`), `GpuKey::boxed_item` names
+the item behind any of the three images, and `ChainOrder::chain` draws the layer before
+whichever chain reads it. A profile counts it toward the item's effects, as its box is
+(`golden_a_models_source_filters_run_over_its_layer`).
 A model whose layer nothing has to read is shaded in its scene's pass
 ([ADR-0191](../../docs/adr/0191-a-model-is-drawn-in-its-scenes-pass.md),
 `snapshot/direct.rs`). `draw_model` then makes its draw ready with
 `Compositor::prepare_model` and keeps it in `Chains::direct` instead of drawing the
 layer; its depth layer is drawn as before. It draws the layer, as it always did, for an
-item with effects (a chain reads the layer), while a transition runs (its tracks place
+item with effects or a source with filters (a chain reads the layer), while a transition runs (its tracks place
 layers), when the compositor returns no draw (a canvas that mixes encoded colour, a
 camera with a depth of field), and for a model more than one pass showed in the frame
 before. Each pass that draws a scene's colour fills its items with `fill_shown`, which
