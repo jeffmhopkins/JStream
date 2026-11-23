@@ -168,6 +168,10 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
   heavy to change waits in a draft for Save, with Cancel beside it; Save closes the
   dialog, and no dialog has Apply. In Settings only the Video page is a draft: the
   footer reads Cancel and Save while it is shown or holds a change, and Close otherwise.
+- **A picker** (Add source, Add filter) is one layout: a 320 px list on the left, its
+  search on top (it takes the focus) and its groups under eyebrows, an icon on each row;
+  on the right the pick's 40 px icon tile (`.picker-tile`), name and one line, then
+  what the pick needs, and where it lands as a callout. A double-click on a row adds it.
 - **A code to read out** (Pair a device): 28 px mono, letter-spaced, on an inset card
   (`--app` with a `--line` border) with the time it has left under it, then the steps
   as a numbered list.
