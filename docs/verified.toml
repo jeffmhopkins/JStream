@@ -8202,7 +8202,7 @@ stamp = { hash = "b3:b3c1af2c942651ae", by = "agent:dxc-packaging", note = 'The 
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:0cc2f39ad38daeed", by = "agent:release-alpha8", note = "Version bumped to 0.1.0-alpha.8 in [workspace.package]; Cargo.lock updated by cargo update -w; the section's rules (shipped apps inherit it, pre-release part) still hold." }
+stamp = { hash = "b3:dac454073ad55b4d", by = "agent:release-alpha9", note = "Cargo.toml's workspace version moves from 0.1.0-alpha.8 to 0.1.0-alpha.9 for the alpha.9 train; the section names no version number and its rules for the field and the pre-release part hold." }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
