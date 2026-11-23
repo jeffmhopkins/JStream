@@ -6801,7 +6801,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:b3441b0442b8b02a", by = "agent:mappings-panel", note = "Mappings bullet re-read against mappings.rs after the swap to the shared MappingMode: the bar steps a Mod reader and Escape disarms, the panel steps a named Mod's channel" }
+stamp = { hash = "b3:285e8bffe3cfc9e6", by = "agent:mappings-panel", note = "Mapping mode and Mappings bullets re-read after moving [ ] stepping into stepped_in: a named Mod is armed and stepped as its channel, the panel no longer steps" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed. | merge: #1645 (screen-space reflections, 1f65ffa) merged: the rendering page's new switch and steps, beside the train's control button and panels; holds | kept from the merged side: Checked the scene dialog's Reflections paragraph: updated it to say the info tip also covers models reflecting what is on screen and the Settings switch, as scene_properties.rs's tip now reads; the rest holds against the control design." }
@@ -6897,7 +6897,7 @@ stamp = { hash = "b3:ebda66bc50983247", by = "agent:mappings-panel", note = "Map
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/mapping_index.rs"]
-stamp = { hash = "b3:a5a4a9c29f175bcb", by = "agent:mappings-panel", note = "Mappings design bullet re-read against mappings.rs and mapping_index.rs: readers, rows, write_all, name_mods_edits, MappingMode, live_sources reads; Collection.bindings in store.rs; PanelId::Mappings in dock.rs" }
+stamp = { hash = "b3:9c3ae3b0a422887d", by = "agent:mappings-panel", note = "Mapping mode and Mappings bullets re-read after moving [ ] stepping into stepped_in: a named Mod is armed and stepped as its channel, the panel no longer steps" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/menu.rs"]
 stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Right-click menus bullet names menu::keys/focus_first/asks_for_menu; control button bullet says an existing lane only opens and the keyboard opening; sequences bullet covers unchanged edits sending nothing, point focus keys, the Events editor's editable/(missing)/position rules and chip keys; style.css only adds a .seq-dot focus ring" }
@@ -6963,10 +6963,10 @@ stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:bc840946aeca3c6b", by = "agent:mappings-panel", note = "Mappings bullet re-read against mappings.rs after the swap to the shared MappingMode: the bar steps a Mod reader and Escape disarms, the panel steps a named Mod's channel" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mapping_mode.rs"]
-stamp = { hash = "b3:89836de0a13c6203", by = "agent:mappings-panel", note = "Mappings bullet re-read against mappings.rs after the swap to the shared MappingMode: the bar steps a Mod reader and Escape disarms, the panel steps a named Mod's channel" }
+stamp = { hash = "b3:9d1e16034cc05f4d", by = "agent:mappings-panel", note = "Mapping mode and Mappings bullets re-read after moving [ ] stepping into stepped_in: a named Mod is armed and stepped as its channel, the panel no longer steps" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mappings.rs"]
-stamp = { hash = "b3:162afd8e29051bd4", by = "agent:mappings-panel", note = "Mappings bullet re-read against mappings.rs after the swap to the shared MappingMode: the bar steps a Mod reader and Escape disarms, the panel steps a named Mod's channel" }
+stamp = { hash = "b3:05f87cbb634d8d3b", by = "agent:mappings-panel", note = "Mapping mode and Mappings bullets re-read after moving [ ] stepping into stepped_in: a named Mod is armed and stepped as its channel, the panel no longer steps" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mixer.rs"]
 stamp = { hash = "b3:1c139dc118fb27f1", by = "agent:claude", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
@@ -7155,7 +7155,7 @@ stamp = { hash = "b3:ebda66bc50983247", by = "agent:mappings-panel", note = "Con
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/mapping_index.rs"]
-stamp = { hash = "b3:a5a4a9c29f175bcb", by = "agent:mappings-panel", note = "Contents list the Mappings panel over live_sources and mapping_index with what is tested natively; the module list matches lib.rs and panels/mod.rs after the Map control merge" }
+stamp = { hash = "b3:9c3ae3b0a422887d", by = "agent:mappings-panel", note = "mapping_index gains channel_reader; mapping_mode's stepped_in steps named Mods as channels; the contents list still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/menu.rs"]
 stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Events lane entry now names editable and position tests; menu.rs, learn.rs and sequence.rs entries still hold for the keyboard additions" }
@@ -7221,10 +7221,10 @@ stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:bc840946aeca3c6b", by = "agent:mappings-panel", note = "The Mappings panel entry now says it arms through the Shell's MappingMode; mapping_mode.rs is described by the Map control thread's entry" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mapping_mode.rs"]
-stamp = { hash = "b3:89836de0a13c6203", by = "agent:mappings-panel", note = "The Mappings panel entry now says it arms through the Shell's MappingMode; mapping_mode.rs is described by the Map control thread's entry" }
+stamp = { hash = "b3:9d1e16034cc05f4d", by = "agent:mappings-panel", note = "mapping_index gains channel_reader; mapping_mode's stepped_in steps named Mods as channels; the contents list still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mappings.rs"]
-stamp = { hash = "b3:162afd8e29051bd4", by = "agent:mappings-panel", note = "The Mappings panel entry now says it arms through the Shell's MappingMode; mapping_mode.rs is described by the Map control thread's entry" }
+stamp = { hash = "b3:05f87cbb634d8d3b", by = "agent:mappings-panel", note = "mapping_index gains channel_reader; mapping_mode's stepped_in steps named Mods as channels; the contents list still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mixer.rs"]
 stamp = { hash = "b3:1c139dc118fb27f1", by = "agent:claude", note = "C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds" }
@@ -8925,13 +8925,13 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:a3019d945bd2ab8b", by = "agent:mappings-panel", note = "hotkeys.rs only makes typed_in_field and overlay_open pub(crate) for the Sources tab's [ ] and arrows; key handling unchanged" }
 
 ["UI-FEATURES#mappings"."body"]
-stamp = { hash = "b3:742d4b7953ba49c9", by = "agent:mappings-panel", note = "MP-01 and MP-02 re-read after the swap to the shared mapping mode: arming is app-wide through VC-04's bar; not-built lists updated" }
+stamp = { hash = "b3:e16254fd5def678e", by = "agent:mappings-panel", note = "MP-02 says [ and ] step a named Mod as its channel, and the arrow keys don't (they nudge canvas items)" }
 
 ["UI-FEATURES#mappings"."file:crates/jstream-ui/src/mapping_index.rs"]
-stamp = { hash = "b3:a5a4a9c29f175bcb", by = "agent:mappings-panel", note = "MP-01 and MP-02 re-read against mappings.rs and mapping_index.rs: what is built, the 20 ms floor, bypass on motion only, and what is not built yet" }
+stamp = { hash = "b3:9c3ae3b0a422887d", by = "agent:mappings-panel", note = "MP-02 says [ and ] step a named Mod as its channel, and the arrow keys don't (they nudge canvas items)" }
 
 ["UI-FEATURES#mappings"."file:crates/jstream-ui/src/panels/mappings.rs"]
-stamp = { hash = "b3:162afd8e29051bd4", by = "agent:mappings-panel", note = "MP-01 and MP-02 re-read after the swap to the shared mapping mode: arming is app-wide through VC-04's bar; not-built lists updated" }
+stamp = { hash = "b3:05f87cbb634d8d3b", by = "agent:mappings-panel", note = "MP-02 says [ and ] step a named Mod as its channel, and the arrow keys don't (they nudge canvas items)" }
 
 ["UI-FEATURES#menus"."body"]
 stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited CM-02: the Duplicate opener is off for several items or in a keyframe; checked against item_menu.rs." }
