@@ -565,7 +565,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   group scene has filters, or the group's look, or a keyframe scene's, can't become its
   items' own (`Kept` in `item_menu.rs`). The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
-  backdrop cancel, and Enter presses the button marked `data-primary`. A primary press
+  backdrop cancel, and Enter presses the button marked `data-primary`. Escape reaches the
+  topmost dialog wherever the focus is: a capture-phase window listener takes one pressed
+  outside it (before its first field has the focus, or on a dialog under it) unless a
+  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). A primary press
   on that dialog's own header drags it, as a `translate` from the centred place, clamped
   so the box stays inside the window (a box wider than the window keeps covering it; the
   top never goes above the window). The offset is remembered for the dialog's label in
@@ -1687,8 +1690,21 @@ beside it ([Design › Studio mode](#design)).
   `CanvasItem::solid`, [ADR-0107](../../docs/adr/0107-3d-models.md) decision 8) is
   outlined, labelled, hit and touched by a marquee by its model's bounds instead: its box
   extruded by the model's depth, the hull of their eight corners through the camera
-  (`ItemGeometry::solid_outline`), none while a corner is behind it. In a 2D scene it
-  keeps its box, as cards keep theirs. The name uses the projected top-left when that corner and
+  (`ItemGeometry::solid_outline`). While a corner is behind the camera (the model reaches
+  past the near plane) it falls back to its box clipped to the near plane, as a card's,
+  so it stays outlined and selectable (#1601). In a 2D scene it
+  keeps its box, as cards keep theirs. An item placing a group that shares the scene's
+  space (a 3D group, [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)
+  decision 6) is outlined, labelled and touched by a marquee by the convex hull of its
+  children's outlines, each child placed through the item's pose as the engine places it
+  (`GroupPose`, nested groups in turn), and hit only inside a child's outline, at that
+  child's depth, so a press in the gap between children reaches what is behind
+  (`camera::Shape`, worked out by `Layout::sized` as the engine plans the pass: a group
+  shared once per scene, by a visible item placing it by a geometry, never through
+  itself, at most `MAX_NESTING` deep). Its children are the group scene's own visible
+  geometry items, without a keyframe's overrides of them, and a group with none is
+  outlined by its box. A drag moves the group's own item, and the outline follows it.
+  The name uses the projected top-left when that corner and
   the far end of the top edge are both in front of the camera, and stays upright on the
   visible part's bounds when either is not. A press hits the box the engine
   draws on top: the nearest along the view (`CameraView::depth_of`) when the

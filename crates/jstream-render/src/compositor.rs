@@ -47,6 +47,98 @@ struct Draw {
     /// For a mode that reads the backdrop, the target's texels it covers, which are
     /// copied into the backdrop before it draws.
     rect: Option<Rect>,
+    /// Whether it is a premultiplied linear image of the canvas's size laid over the
+    /// whole canvas texel for texel, opaque and in `normal`: a scene of that alone is
+    /// resolved straight from the image ([`Compositor::record_layer_resolve`]).
+    whole: bool,
+    /// The target's texels it can touch ([`covered`]), `None` when it is off the target.
+    reach: Option<Rect>,
+}
+
+/// What a layer's last [`Compositor::render_into`] drew into it, kept on the layer
+/// ([`Image::drawn_as`]) so the same draw of unchanged images is not made again
+/// (ADR-0194).
+#[derive(Default)]
+pub(crate) struct Drawn {
+    /// The layer's generation once it was drawn: any write since moves it on.
+    at: u64,
+    blending: Blending,
+    background: [u32; 4],
+    /// The vertices as they were written: each item's place, texture coordinates,
+    /// opacity, alpha mode, edges and blur.
+    vertices: Vec<u8>,
+    draws: Vec<DrawnDraw>,
+}
+
+/// One draw of a [`Drawn`]: what its vertices don't say.
+#[derive(PartialEq)]
+struct DrawnDraw {
+    first_vertex: u32,
+    vertex_count: u32,
+    /// The image and the texels it held.
+    image: image::Seen,
+    /// Its mip chain, by identity: kept weakly, so no other chain takes its place.
+    mips: Option<WeakMips>,
+    blend: BlendMode,
+    rect: Option<Rect>,
+    reach: Option<Rect>,
+}
+
+/// A mip chain remembered without keeping it, equal only to itself.
+struct WeakMips(std::sync::Weak<Mips>);
+
+impl PartialEq for WeakMips {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ptr_eq(&other.0)
+    }
+}
+
+impl DrawnDraw {
+    fn of(draw: &Draw, item: &crate::Item<'_>) -> Self {
+        Self {
+            first_vertex: draw.first_vertex,
+            vertex_count: draw.vertex_count,
+            image: item.image.seen(),
+            mips: draw
+                .mips
+                .as_ref()
+                .map(|mips| WeakMips(Arc::downgrade(mips))),
+            blend: draw.blend,
+            rect: draw.rect,
+            reach: draw.reach,
+        }
+    }
+
+    /// Whether it draws what `other` does, wherever in the vertex buffer each is.
+    fn shows(&self, other: &Self) -> bool {
+        self.image == other.image
+            && self.mips == other.mips
+            && self.blend == other.blend
+            && self.rect == other.rect
+    }
+
+    /// Its vertices' bytes in `vertices`, the buffer it was built into.
+    fn bytes<'a>(&self, vertices: &'a [u8]) -> &'a [u8] {
+        let stride = VERTEX_STRIDE as usize;
+        let first = self.first_vertex as usize * stride;
+        vertices
+            .get(first..first + self.vertex_count as usize * stride)
+            .unwrap_or(&[])
+    }
+}
+
+/// Adds `rect` to `patches`, joined with every box there it shares a texel with, so
+/// the boxes stay apart.
+fn join(patches: &mut Vec<Rect>, mut rect: Rect) {
+    while let Some(met) = patches.iter().position(|at| at.meets(rect)) {
+        rect = rect.union(patches.swap_remove(met));
+    }
+    patches.push(rect);
+}
+
+/// A background colour as the bits compared for [`Drawn`].
+fn background_bits(color: crate::Color) -> [u32; 4] {
+    [color.r, color.g, color.b, color.a].map(f32::to_bits)
 }
 
 /// Texels of the target: `x`, `y`, `width`, `height`, none of them past its edge.
@@ -59,6 +151,14 @@ struct Rect {
 }
 
 impl Rect {
+    /// Whether the two share a texel.
+    fn meets(self, other: Self) -> bool {
+        self.x < other.x + other.width
+            && other.x < self.x + self.width
+            && self.y < other.y + other.height
+            && other.y < self.y + self.height
+    }
+
     /// The smallest rectangle holding both.
     fn union(self, other: Self) -> Self {
         let x = self.x.min(other.x);
@@ -73,6 +173,18 @@ impl Rect {
         }
     }
 }
+
+/// The most boxes a layer is redrawn in ([`Compositor::changed`]): with more changed
+/// places than this the whole layer is drawn.
+const MAX_PATCHES: usize = 8;
+
+/// How many sets of targets of sizes other than the last one rendered at are kept.
+pub(crate) const SPARE_TARGETS: usize = 3;
+
+/// How many renders a set of targets is kept for after the last render into it: a few
+/// seconds of an output's picture and a preview's, and long enough for a preview that
+/// gives way to the outputs to come back to its own.
+pub(crate) const SPARE_RENDERS: u64 = 240;
 
 /// The copy of what is below an item that the modes reading it sample (ADR-0082). It
 /// only grows, so targets of different sizes in one frame share it, each copying to the
@@ -101,6 +213,8 @@ struct SceneDepth {
 struct Targets {
     width: u32,
     height: u32,
+    /// For a set kept aside, [`Compositor::renders`] when it was last rendered into.
+    used: u64,
     /// The FP16 texture, which a backdrop copies from.
     working: wgpu::Texture,
     working_view: wgpu::TextureView,
@@ -143,9 +257,39 @@ pub struct Compositor {
     resolve_input: wgpu::BindGroupLayout,
     resolve_sampler: wgpu::Sampler,
     resolve: wgpu::RenderPipeline,
+    /// The resolve of a working target left sRGB-encoded (`fs_encoded`).
+    resolve_encoded: wgpu::RenderPipeline,
     /// Decodes an sRGB-encoded target back to linear light, from the backdrop.
     decode: wgpu::RenderPipeline,
+    /// Resolves a scene that is one whole layer straight from the layer (`fs_layer`),
+    /// with the background and the space it is laid over in in `over`.
+    resolve_layer: wgpu::RenderPipeline,
+    over: wgpu::Buffer,
+    over_bind: wgpu::BindGroup,
+    /// Whether the last [`Self::render`] resolved straight from a layer.
+    #[cfg(test)]
+    resolved_layer: bool,
+    /// The targets of the size last rendered at.
     targets: Option<Targets>,
+    /// The targets of the other sizes rendered at lately, so a tick that renders at two
+    /// sizes (an output's picture and a preview's) makes no texture: at most
+    /// [`SPARE_TARGETS`], each let go [`SPARE_RENDERS`] renders after its last.
+    spare: Vec<Targets>,
+    /// How many times [`Self::render`] has readied its targets.
+    renders: u64,
+    /// How many sets of targets were made, for tests.
+    #[cfg(test)]
+    targets_made: usize,
+    /// How many [`Self::render_into`] calls left their layer as it was, for tests.
+    #[cfg(test)]
+    kept_layers: usize,
+    /// The boxes of its layer the [`Self::render_into`] under way redraws, when it
+    /// redraws less than all of it ([`Self::changed`]). Kept for its capacity.
+    patches: Vec<Rect>,
+    /// How many texels the last [`Self::render_into`] redrew as boxes, 0 when it drew
+    /// the whole layer or none of it, for tests.
+    #[cfg(test)]
+    patched_texels: u32,
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
@@ -444,14 +588,32 @@ impl Compositor {
             .targets
             .as_ref()
             .expect("invariant: ensure_targets just set them");
-        self.record_mips(&mut encoder, scene);
-        self.record_composite(
-            &mut encoder,
-            (&targets.working_view, &targets.working),
-            scene,
-            None,
-        );
-        self.record_resolve(&mut encoder, targets);
+        // A scene that is one finished layer over the whole canvas (a scene's filter
+        // chain's output, a master or an output chain's) is resolved straight from the
+        // layer: no composite of it into the working target first.
+        let whole = match self.draws.as_slice() {
+            [draw] if draw.whole => Some(scene.items[draw.index].image),
+            _ => None,
+        };
+        #[cfg(test)]
+        {
+            self.resolved_layer = whole.is_some();
+        }
+        match whole {
+            Some(layer) => self.record_layer_resolve(&mut encoder, targets, scene, layer),
+            None => {
+                self.record_mips(&mut encoder, scene);
+                self.record_composite(
+                    &mut encoder,
+                    (&targets.working_view, &targets.working),
+                    scene,
+                    None,
+                    // The resolve reads the encoded colour itself.
+                    false,
+                );
+                self.record_resolve(&mut encoder, targets);
+            }
+        }
         if let Some(buffer) = &readback_buffer {
             encoder.copy_texture_to_buffer(
                 wgpu::TexelCopyTextureInfo {
@@ -505,8 +667,8 @@ impl Compositor {
     /// Sets the space every scene this compositor draws from now on mixes in: the
     /// project's [`Blending`] (ADR-0126). A new compositor mixes in linear light. In
     /// [`Blending::Srgb`] each composite target holds sRGB-encoded colour while its
-    /// items draw, and one pass decodes it after the last, so what a render leaves is
-    /// premultiplied linear light either way.
+    /// items draw. A layer's is decoded by one pass after the last, so a layer holds
+    /// premultiplied linear light either way; a frame's own is decoded by its resolve.
     pub fn set_blending(&mut self, blending: Blending) {
         self.blending = blending;
     }
@@ -521,6 +683,30 @@ impl Compositor {
     /// A profile counts it apart from the composite it follows (ADR-0103).
     pub fn readback_wait(&self) -> std::time::Duration {
         self.readback_wait
+    }
+
+    /// Whether the last [`Self::render`] resolved its scene straight from a layer.
+    #[cfg(test)]
+    pub(crate) fn resolved_layer(&self) -> bool {
+        self.resolved_layer
+    }
+
+    /// How many texels the last [`Self::render_into`] redrew as boxes.
+    #[cfg(test)]
+    pub(crate) fn patched_texels(&self) -> u32 {
+        self.patched_texels
+    }
+
+    /// How many [`Self::render_into`] calls left their layer as it was.
+    #[cfg(test)]
+    pub(crate) fn kept_layers(&self) -> usize {
+        self.kept_layers
+    }
+
+    /// How many sets of targets [`Self::render`] has made, and how many are kept aside.
+    #[cfg(test)]
+    pub(crate) fn targets_kept(&self) -> (usize, usize) {
+        (self.targets_made, self.spare.len())
     }
 
     /// How many texels the last composite's draws could reach (#1070).
@@ -602,7 +788,25 @@ impl Compositor {
     /// [`Self::render_into`], its errors not yet collected.
     fn draw_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
         let view = self.scene_target(scene, target, false)?;
-        self.load(scene)?;
+        self.ready(scene)?;
+        // A layer that still holds this very draw is left as it is (ADR-0194): the
+        // same vertices over the same images, none of them changed since.
+        #[cfg(test)]
+        {
+            self.patched_texels = 0;
+        }
+        if self.holds(scene, target) {
+            #[cfg(test)]
+            {
+                self.kept_layers += 1;
+            }
+            return Ok(());
+        }
+        // Where only some items changed, only their boxes are drawn again.
+        let mut patches = std::mem::take(&mut self.patches);
+        self.changed(scene, target, &mut patches);
+        self.patches = patches;
+        self.load_ready(scene)?;
         // The submit lock is held from staging through the submit, as in `render`.
         let lock = self.gpu.submit.clone();
         let submitting = lock.lock();
@@ -619,10 +823,19 @@ impl Compositor {
         let prior = (scene.background.a == 0.0)
             .then(|| target.content())
             .flatten();
-        self.record_composite(&mut encoder, (view, target.texture()), scene, prior);
+        if self.patches.is_empty() {
+            self.record_composite(&mut encoder, (view, target.texture()), scene, prior, true);
+        } else {
+            self.record_patches(&mut encoder, (view, target.texture()), scene);
+            #[cfg(test)]
+            {
+                self.patched_texels = self.patches.iter().map(|at| at.width * at.height).sum();
+            }
+        }
         self.record_release(&mut encoder);
         self.gpu.submit_work(encoder.finish());
         target.mark_changed();
+        self.note_drawn(scene, target);
         // Outside what the items reached the layer holds its clear colour, which is
         // nothing when that is transparent: a scene placing it draws only over the rest.
         let content = (scene.background.a == 0.0).then(|| {
@@ -1255,12 +1468,25 @@ impl Compositor {
         errors.close(image::upload_frame(&self.maker(), frame))
     }
 
-    /// Refills `image`, an upload this compositor made at `frame`'s size, with `frame`
-    /// as [`Self::upload_frame`] reads it, without allocating a texture.
+    /// [`Self::upload_frame`] into a texture of `to` texels, smaller than the frame each
+    /// way or its size, placed at the frame's size: each texel is the mean of the
+    /// frame's texels under it, in premultiplied linear light (#1139).
+    pub(crate) fn upload_frame_into(
+        &self,
+        frame: &jstream_media::VideoFrame,
+        to: (u32, u32),
+    ) -> Result<Image, RenderError> {
+        let errors = self.errors();
+        errors.close(image::upload_frame_into(&self.maker(), frame, to))
+    }
+
+    /// Refills `image`, an upload this compositor made of a frame of `frame`'s size
+    /// (whole, or held smaller), with `frame` as [`Self::upload_frame`] reads it, without
+    /// allocating a texture.
     ///
     /// # Errors
     /// As for [`Self::upload_frame`], and [`RenderError::Invalid`] when `image` is not
-    /// an upload this compositor made at the frame's size.
+    /// an upload this compositor made of a frame of that size.
     pub fn rewrite_frame(
         &self,
         image: &Image,
@@ -1693,6 +1919,12 @@ impl Compositor {
             &resolve_shader,
             ("fs", wgpu::TextureFormat::Rgba8UnormSrgb),
         );
+        let resolve_encoded = resolve_pipeline(
+            &gpu.device,
+            &resolve_input,
+            &resolve_shader,
+            ("fs_encoded", wgpu::TextureFormat::Rgba8UnormSrgb),
+        );
         // The decode reads the backdrop with a load, so it binds the texture alone.
         let decode = resolve_pipeline(
             &gpu.device,
@@ -1700,6 +1932,41 @@ impl Compositor {
             &resolve_shader,
             ("fs_decode", wgpu::TextureFormat::Rgba16Float),
         );
+        let over_layout = gpu
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("jstream-render-resolve-over"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(OVER_BYTES),
+                    },
+                    count: None,
+                }],
+            });
+        let resolve_layer = resolve_pipeline_of(
+            &gpu.device,
+            &[&image_layout, &over_layout],
+            &resolve_shader,
+            ("fs_layer", wgpu::TextureFormat::Rgba8UnormSrgb),
+        );
+        let over = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render-resolve-over"),
+            size: OVER_BYTES,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let over_bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("jstream-render-resolve-over"),
+            layout: &over_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: over.as_entire_binding(),
+            }],
+        });
         // Nearest and clamped: the resolve samples each texel's centre.
         let resolve_sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-resolve"),
@@ -1733,8 +2000,23 @@ impl Compositor {
             resolve_input,
             resolve_sampler,
             resolve,
+            resolve_encoded,
             decode,
+            resolve_layer,
+            over,
+            over_bind,
+            #[cfg(test)]
+            resolved_layer: false,
             targets: None,
+            spare: Vec::new(),
+            renders: 0,
+            #[cfg(test)]
+            targets_made: 0,
+            #[cfg(test)]
+            kept_layers: 0,
+            patches: Vec::new(),
+            #[cfg(test)]
+            patched_texels: 0,
             vertices: Vec::new(),
             vertex_buffer,
             draws: Vec::new(),
@@ -1872,6 +2154,9 @@ impl Compositor {
             // that (#1070): the rest adds nothing in the modes that leave what is below
             // a transparent texel as it was. Not with a chain, whose levels spread the
             // drawn texels past the margin, nor in a mode that reads the backdrop.
+            // Asked before the trim, which only leaves out texels that are transparent
+            // in the image.
+            let covers = covers_whole(shape, canvas_w, canvas_h);
             if most <= MINIFIED
                 && matches!(
                     item.blend,
@@ -1921,9 +2206,18 @@ impl Compositor {
             } else {
                 item.image.alpha()
             };
-            if let Some(reach) = covered(shape, scene.canvas.width(), scene.canvas.height()) {
+            let reach = covered(shape, scene.canvas.width(), scene.canvas.height());
+            if let Some(reach) = reach {
                 self.drawn = Some(self.drawn.map_or(reach, |drawn| drawn.union(reach)));
             }
+            let whole = mips.is_none()
+                && alpha == Alpha::Premultiplied
+                && item.opacity == 1.0
+                && item.blend == BlendMode::Normal
+                && item.depth.is_none()
+                && item.image.sync().is_none()
+                && texels == (scene.canvas.width(), scene.canvas.height())
+                && covers;
             let vertex_count = push_shape(
                 &mut self.vertices,
                 shape,
@@ -1939,6 +2233,8 @@ impl Compositor {
                 mips,
                 blend: item.blend,
                 rect,
+                whole,
+                reach,
             });
         }
         let limit = self.gpu.max_texture_dimension_2d;
@@ -2013,13 +2309,43 @@ impl Compositor {
         Ok(())
     }
 
+    /// Readies the targets of `width` by `height`: the ones last rendered into, ones
+    /// kept aside from an earlier render at that size, or new ones. The ones another
+    /// size was rendered into are kept aside for it, a few and not for long, so
+    /// renders that alternate between sizes reuse theirs.
     fn ensure_targets(&mut self, width: u32, height: u32) -> Result<(), RenderError> {
+        self.renders += 1;
+        let renders = self.renders;
+        self.spare.retain(|set| renders - set.used <= SPARE_RENDERS);
         if self
             .targets
             .as_ref()
             .is_some_and(|t| t.width == width && t.height == height)
         {
             return Ok(());
+        }
+        // Taken out before the last set is set aside, so that never pushes it out.
+        let kept = self
+            .spare
+            .iter()
+            .position(|set| set.width == width && set.height == height)
+            .map(|kept| self.spare.remove(kept));
+        if let Some(mut last) = self.targets.take() {
+            // Rendered into by the render before this one.
+            last.used = renders - 1;
+            if self.spare.len() == SPARE_TARGETS {
+                // Oldest first: sets are pushed as they are set aside.
+                self.spare.remove(0);
+            }
+            self.spare.push(last);
+        }
+        if kept.is_some() {
+            self.targets = kept;
+            return Ok(());
+        }
+        #[cfg(test)]
+        {
+            self.targets_made += 1;
         }
         let working = texture(
             &self.gpu.device,
@@ -2064,6 +2390,7 @@ impl Compositor {
         self.targets = Some(Targets {
             width,
             height,
+            used: renders,
             working,
             working_view,
             output,
@@ -2077,8 +2404,180 @@ impl Compositor {
     /// stages the frame holds after this and every other step that can fail, so an
     /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
+        self.ready(scene)?;
+        self.load_ready(scene)
+    }
+
+    /// The first half of [`Self::load`]: validates `scene` and builds its vertices and
+    /// draws, writing nothing to the GPU.
+    fn ready(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         color::validate(scene.background)?;
-        self.prepare(scene)?;
+        self.prepare(scene)
+    }
+
+    /// Whether `target` still holds exactly what drawing `scene`, readied
+    /// ([`Self::ready`]), would leave in it (ADR-0194): its last
+    /// [`Self::render_into`] drew the same vertices, of the same images in the same
+    /// modes over the same background in the same space, nothing has written to it
+    /// since, and none of those images has changed. A scene with a model's depth is
+    /// always drawn: its pass also writes the depth target.
+    fn holds(&self, scene: &Scene<'_>, target: &Image) -> bool {
+        let drawn = target.drawn_as();
+        let Some(drawn) = drawn.as_ref() else {
+            return false;
+        };
+        drawn.at == target.generation()
+            && drawn.blending == self.blending
+            && drawn.background == background_bits(scene.background)
+            && drawn.vertices == self.vertices
+            && drawn.draws.len() == self.draws.len()
+            && drawn.draws.iter().zip(&self.draws).all(|(was, draw)| {
+                let item = &scene.items[draw.index];
+                item.depth.is_none() && *was == DrawnDraw::of(draw, item)
+            })
+    }
+
+    /// Records on `target` what was just drawn into it and marked, for [`Self::holds`].
+    /// The lists it kept before are refilled, so a steady frame allocates nothing.
+    fn note_drawn(&self, scene: &Scene<'_>, target: &Image) {
+        let mut kept = target.drawn_as();
+        let mut drawn = kept.take().unwrap_or_default();
+        drawn.at = target.generation();
+        drawn.blending = self.blending;
+        drawn.background = background_bits(scene.background);
+        drawn.vertices.clear();
+        drawn.vertices.extend_from_slice(&self.vertices);
+        drawn.draws.clear();
+        drawn.draws.extend(
+            self.draws
+                .iter()
+                .map(|draw| DrawnDraw::of(draw, &scene.items[draw.index])),
+        );
+        *kept = Some(drawn);
+    }
+
+    /// Fills `patches` with the boxes of `target` that drawing `scene`, readied, would
+    /// change (ADR-0201), or leaves it empty when the whole layer is to be
+    /// drawn. They are the boxes, before and now, of each draw that is not what the
+    /// layer's last [`Self::render_into`] drew in its place: other vertices, another
+    /// image or mode, or an image whose texels changed. Boxes that meet are joined, so
+    /// no texel is in two.
+    ///
+    /// The whole layer is drawn instead when the layer does not hold that last draw any
+    /// more, the background is not transparent or the space changed, a draw was added
+    /// or removed, a draw reads its backdrop or the scene has a model's depth, there are
+    /// more than [`MAX_PATCHES`] boxes, or they cover more than half the layer.
+    fn changed(&self, scene: &Scene<'_>, target: &Image, patches: &mut Vec<Rect>) {
+        patches.clear();
+        let drawn = target.drawn_as();
+        let Some(drawn) = drawn.as_ref() else {
+            return;
+        };
+        let background = background_bits(scene.background);
+        if drawn.at != target.generation()
+            || drawn.blending != self.blending
+            || drawn.background != background
+            || scene.background.a != 0.0
+            || drawn.draws.len() != self.draws.len()
+        {
+            return;
+        }
+        for (was, draw) in drawn.draws.iter().zip(&self.draws) {
+            let item = &scene.items[draw.index];
+            let now = DrawnDraw::of(draw, item);
+            if item.depth.is_some() || was.rect.is_some() || now.rect.is_some() {
+                patches.clear();
+                return;
+            }
+            if was.shows(&now) && was.bytes(&drawn.vertices) == now.bytes(&self.vertices) {
+                continue;
+            }
+            for reach in [was.reach, now.reach].into_iter().flatten() {
+                join(patches, reach);
+            }
+            if patches.len() > MAX_PATCHES {
+                patches.clear();
+                return;
+            }
+        }
+        let texels: u64 = patches
+            .iter()
+            .map(|at| u64::from(at.width) * u64::from(at.height))
+            .sum();
+        let whole = u64::from(target.width()) * u64::from(target.height());
+        if texels * 2 > whole {
+            patches.clear();
+        }
+    }
+
+    /// The composite of `scene` over [`Self::patches`] alone, into a `target` that holds
+    /// the scene's last draw everywhere else: each box is made transparent, the draws
+    /// that reach it are drawn clipped to it, and in the encoded space it is decoded.
+    /// The boxes share no texel, so none is blended or decoded twice.
+    fn record_patches(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        (view, texture): (&wgpu::TextureView, &wgpu::Texture),
+        scene: &Scene<'_>,
+    ) {
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-composite-patches"),
+                color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            let size = (scene.canvas.width(), scene.canvas.height());
+            for patch in &self.patches {
+                let region = Region {
+                    x: patch.x,
+                    y: patch.y,
+                    width: patch.width,
+                    height: patch.height,
+                };
+                self.wipe.record(&mut pass, region, size, false);
+                pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                let encoded = self.blending == Blending::Srgb;
+                let blends = if encoded {
+                    &self.encoded_blends
+                } else {
+                    &self.blends
+                };
+                for draw in &self.draws {
+                    if !draw.reach.is_some_and(|reach| reach.meets(*patch)) {
+                        continue;
+                    }
+                    // `changed` let no draw through that reads its backdrop.
+                    let Ok(Steps::Fixed(pipelines)) = blends.steps(draw.blend) else {
+                        continue;
+                    };
+                    let bind_group = match &draw.mips {
+                        Some(mips) => &mips.bind_group,
+                        None => scene.items[draw.index].image.bind_group(),
+                    };
+                    for pipeline in pipelines {
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, bind_group, &[]);
+                        pass.draw(
+                            draw.first_vertex..draw.first_vertex + draw.vertex_count,
+                            0..1,
+                        );
+                    }
+                }
+            }
+        }
+        if self.blending == Blending::Srgb {
+            for patch in &self.patches {
+                self.record_decode(encoder, (view, texture), *patch);
+            }
+        }
+    }
+
+    /// The second half of [`Self::load`]: what the readied scene needs on the GPU.
+    fn load_ready(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         self.ensure_vertex_buffer()?;
         if self.blending == Blending::Srgb || self.draws.iter().any(|draw| draw.rect.is_some()) {
             self.ensure_backdrop(scene.canvas.width(), scene.canvas.height());
@@ -2228,7 +2727,10 @@ impl Compositor {
     }
 
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
-    /// the items, premultiplied linear. An item whose mode reads the backdrop ends the
+    /// the items, premultiplied linear. In the encoded space the target is decoded
+    /// back to linear light after the last item when `decode` says so; without, it is
+    /// left holding premultiplied sRGB-encoded colour for a reader that expects that
+    /// ([`Self::record_resolve`]). An item whose mode reads the backdrop ends the
     /// pass: the texels it covers are copied into the backdrop, and a new pass draws it
     /// and the items after it (ADR-0082).
     fn record_composite(
@@ -2237,6 +2739,7 @@ impl Compositor {
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
         scene: &Scene<'_>,
         prior: Option<Region>,
+        decode: bool,
     ) {
         let encoded = self.blending == Blending::Srgb;
         let clear = if encoded {
@@ -2281,7 +2784,7 @@ impl Compositor {
             }
             first = end;
         }
-        if encoded {
+        if encoded && decode {
             // Over a transparent background only what the items reached holds encoded
             // colour: every other texel is zero, which decodes to itself. So the decode
             // covers that box alone, and a pass that drew nothing has none.
@@ -2392,12 +2895,16 @@ impl Compositor {
             let vertices = draw.first_vertex..draw.first_vertex + draw.vertex_count;
             // `prepare` checked every item's mode.
             let encoded = self.blending == Blending::Srgb;
-            let model_depth = scene.items[draw.index].depth;
+            let item = &scene.items[draw.index];
+            let model_depth = item.depth;
             // With a depth target, a model's own layer draws untested and every other
-            // item tests against the models drawn before it (ADR-0107 decision 7).
+            // item seen through a camera tests against the models drawn before it
+            // (ADR-0107 decision 7). An item on the screen itself (no camera) isn't in
+            // the models' space, so a near model never hides it.
+            let untested = model_depth.is_some() || item.camera.is_none();
             let depths = self.depth_pipelines.as_ref().filter(|_| self.depth_on);
             let blends = match depths {
-                Some(depths) if model_depth.is_some() => &depths.untested[usize::from(encoded)],
+                Some(depths) if untested => &depths.untested[usize::from(encoded)],
                 Some(depths) => &depths.tested[usize::from(encoded)],
                 None if encoded => &self.encoded_blends,
                 None => &self.blends,
@@ -2468,7 +2975,10 @@ impl Compositor {
         );
     }
 
-    /// The resolve pass: the FP16 working target to the straight sRGB output.
+    /// The resolve pass: the FP16 working target to the straight sRGB output. In the
+    /// encoded space the target holds premultiplied sRGB-encoded colour, left so by
+    /// the composite, and the pass decodes it as it resolves (`fs_encoded`): no
+    /// backdrop copy and no decode pass of its own.
     ///
     /// Its triangle writes every texel, so what the output held before is never seen. A
     /// GPU starts it cleared, which costs it little and spares a tiled GPU reading the
@@ -2488,8 +2998,59 @@ impl Compositor {
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        pass.set_pipeline(&self.resolve);
+        pass.set_pipeline(if self.blending == Blending::Srgb {
+            &self.resolve_encoded
+        } else {
+            &self.resolve
+        });
         pass.set_bind_group(0, &targets.resolve_bind, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
+    /// The composite of `scene`, which is `layer` alone over the whole canvas
+    /// ([`Draw::whole`]), and its resolve in one pass straight from `layer` into the
+    /// sRGB output: `fs_layer` lays it over the background in the scene's blending
+    /// space as the composite pass, its decode and the resolve would, without the
+    /// working target, the backdrop copy or their passes.
+    fn record_layer_resolve(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        targets: &Targets,
+        scene: &Scene<'_>,
+        layer: &Image,
+    ) {
+        let encoded = self.blending == Blending::Srgb;
+        let background = if encoded {
+            premultiplied_srgb(scene.background)
+        } else {
+            premultiplied_linear(scene.background)
+        };
+        let flag = if encoded { 1.0f32 } else { 0.0 };
+        let mut over = [0u8; OVER_BYTES as usize];
+        for (bytes, value) in over
+            .chunks_exact_mut(4)
+            .zip(background.into_iter().chain([flag, 0.0, 0.0, 0.0]))
+        {
+            bytes.copy_from_slice(&value.to_le_bytes());
+        }
+        // Ordered before the submit that reads it, as the vertex buffer's write is.
+        self.gpu.queue.write_buffer(&self.over, 0, &over);
+        let load = if self.gpu.software {
+            wgpu::LoadOp::Load
+        } else {
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+        };
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-resolve-layer"),
+            color_attachments: &[Some(color_attachment(&targets.output_view, load))],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.resolve_layer);
+        pass.set_bind_group(0, layer.bind_group(), &[]);
+        pass.set_bind_group(1, &self.over_bind, &[]);
         pass.draw(0..3, 0..1);
     }
 
@@ -2662,6 +3223,20 @@ fn bound_of(
     })
 }
 
+/// Whether `shape` is a flat quad that lays its image over the whole canvas texel for
+/// texel: the four corners of the canvas, each with its own corner of the image, with
+/// no perspective, edge or blur.
+fn covers_whole(shape: &Shape, width: f32, height: f32) -> bool {
+    let corners = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+    let vertices = shape.vertices();
+    !shape.is_3d()
+        && shape.dof == [0.0; 3]
+        && vertices.len() == corners.len()
+        && vertices.iter().zip(corners).all(|(vertex, [u, v])| {
+            vertex.w == 1.0 && vertex.uv == [u, v] && vertex.canvas == [u * width, v * height]
+        })
+}
+
 /// Appends one item's triangles, a fan from its first vertex, and returns how many
 /// vertices that is.
 fn push_shape(
@@ -2823,17 +3398,31 @@ fn resolve_input_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
+/// The bytes of `resolve.wgsl`'s `Over`: two `vec4<f32>`.
+const OVER_BYTES: u64 = 32;
+
 /// A full-target pass over one unfiltered FP16 texture: the resolve (`fs`, into the
 /// sRGB output) or the decode (`fs_decode`, back into an FP16 target).
 fn resolve_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     shader: &wgpu::ShaderModule,
+    entry: (&str, wgpu::TextureFormat),
+) -> wgpu::RenderPipeline {
+    resolve_pipeline_of(device, &[layout], shader, entry)
+}
+
+/// [`resolve_pipeline`] with each of `layouts` as a bind group, in order.
+fn resolve_pipeline_of(
+    device: &wgpu::Device,
+    layouts: &[&wgpu::BindGroupLayout],
+    shader: &wgpu::ShaderModule,
     (entry, format): (&str, wgpu::TextureFormat),
 ) -> wgpu::RenderPipeline {
+    let layouts: Vec<_> = layouts.iter().copied().map(Some).collect();
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("jstream-render-resolve"),
-        bind_group_layouts: &[Some(layout)],
+        bind_group_layouts: &layouts,
         immediate_size: 0,
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

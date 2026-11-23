@@ -5,6 +5,9 @@
 //! values, then its motion) and the child's own resolved geometry is placed through them
 //! ([`GroupPose`]), so the scene's sort, lights, models and focus take it as an item of
 //! the scene. A camera that rides with a group is placed through its chain the same way.
+//! In a transition, each child is a track of its own whose ends keep the child's place in
+//! its group's space ([`TrackGroups`]), so the group's live values and motion move it
+//! while the transition runs too.
 
 use std::sync::Arc;
 
@@ -13,10 +16,11 @@ use jstream_media::MediaTime;
 use jstream_protocol::{
     Canvas, GroupPose, ItemGeometry, ItemId, SceneCamera, SceneRole, SourceKind,
 };
+use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{Crop, Placement};
 
-use super::{LiveParams, Shot, Through, placement};
-use crate::motion::{self, TrackMotion};
+use super::{LiveParams, Shot, Through, moved_track, placement};
+use crate::motion::{self, Motion, TrackMotion};
 
 /// One group item a child of a 3D group is placed through, as planned: everything that
 /// resolves its pose at a frame.
@@ -154,8 +158,47 @@ pub(super) fn place_at(
     Some((pose.place(geometry).ok()?, opacity * theirs))
 }
 
+/// A 3D group's child with a legacy transform as the box that transform draws for an
+/// image of `extent` with `crop`, so it is placed through its groups as any child is
+/// (ADR-0164 §1 and §2: every child is placed in the scene's space, its geometry in its
+/// group's canvas pixels). A transition's ends take the same box (`endpoint_geometry`).
+/// Anything else, and a child of no group, is as it is.
+pub(super) fn legacy_box(
+    groups: &Groups,
+    placement: Placement,
+    crop: Crop,
+    extent: (u32, u32),
+) -> Placement {
+    let (Some(_), Placement::Legacy(transform)) = (groups, placement) else {
+        return placement;
+    };
+    let (Some(position), Some(scale), Some(rotation_deg)) = (
+        jstream_protocol::Vec2::new(transform.position[0], transform.position[1]),
+        jstream_protocol::Vec2::new(transform.scale[0], transform.scale[1]),
+        jstream_protocol::Finite32::new(transform.rotation_deg),
+    ) else {
+        return placement;
+    };
+    let transform = jstream_protocol::ItemTransform {
+        position,
+        scale,
+        rotation_deg,
+    };
+    let crop = jstream_protocol::Crop {
+        left: crop.left,
+        top: crop.top,
+        right: crop.right,
+        bottom: crop.bottom,
+    };
+    match ItemGeometry::from_legacy(transform, crop, extent.0, extent.1) {
+        Ok(Some(boxed)) => Placement::Geometry(boxed.geometry),
+        _ => placement,
+    }
+}
+
 /// [`place_at`] for a placement: a geometry or a model's layer is placed, and anything
-/// else (a legacy transform, which has no box to place) draws nothing in a 3D group.
+/// else (a legacy transform not yet made a box by [`legacy_box`]) draws nothing in a 3D
+/// group.
 pub(super) fn place_placement(
     groups: &Groups,
     (placement, opacity): (Placement, f32),
@@ -188,6 +231,99 @@ pub(super) fn place_camera_at(
     pose_at(anchor, shot, at, live)
         .and_then(|(pose, _)| pose.place_camera(camera, shot.canvas).ok())
         .unwrap_or(camera)
+}
+
+/// One end of a transition's track for a 3D group's child (ADR-0164 §4): where the child
+/// is in its group's space as planned, and the group items it is placed through.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GroupEnd {
+    /// The group items, outermost first.
+    pub(super) links: Arc<[GroupLink]>,
+    /// The child's own endpoint, in its group's canvas pixels, at its own opacity.
+    pub(super) at: Endpoint,
+}
+
+/// The [`GroupEnd`]s of a track's two sides, as [`TrackMotion`] holds their modifiers:
+/// `None` on a side whose item is the scene's own, which its track already holds where it
+/// is drawn.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct TrackGroups {
+    /// The side it leaves.
+    pub(crate) from: Option<Arc<GroupEnd>>,
+    /// The side it arrives at.
+    pub(crate) to: Option<Arc<GroupEnd>>,
+}
+
+impl TrackGroups {
+    /// One child's end on both sides.
+    pub(super) fn same(end: GroupEnd) -> Self {
+        let end = Arc::new(end);
+        Self {
+            from: Some(Arc::clone(&end)),
+            to: Some(end),
+        }
+    }
+
+    /// Whether neither side is a 3D group's child.
+    pub(crate) fn is_none(&self) -> bool {
+        self.from.is_none() && self.to.is_none()
+    }
+
+    /// Which sides are not a group's child, as [`TrackMotion::offsets_on`] takes them: a
+    /// child's own motion moves it in its group's space, in [`resolved_track`], not on
+    /// top of where it is placed.
+    pub(super) fn ungrouped(&self) -> [bool; 2] {
+        [self.from.is_none(), self.to.is_none()]
+    }
+}
+
+/// `track` with each end that is a 3D group's child placed as the child is now (ADR-0164
+/// §4): its own motion modifiers (from `moved`) in its group's space, then the group items'
+/// live values and motion, as the scene's pass places it. A transition then moves the
+/// child between where it is placed on each side at each frame, so a swaying rig sways
+/// on while it runs. `None` when an end's groups can't be placed, so the track draws
+/// nothing that frame. Allocates nothing beyond the track's clone.
+pub(super) fn resolved_track(
+    track: &Track,
+    (ends, moved): (&TrackGroups, &TrackMotion),
+    canvas_box: bool,
+    shot: &Shot,
+    at: MediaTime,
+    live: &LiveParams,
+) -> Option<Track> {
+    let place = |end: &GroupEnd, (item, modifiers): &(ItemId, Motion)| -> Option<Endpoint> {
+        let by = shot.motion_at(item, modifiers, at);
+        let own = moved_track(canvas_box, &by, end.at);
+        let (geometry, opacity) =
+            place_at(&end.links, (own.geometry, own.opacity), shot, at, live)?;
+        Some(Endpoint {
+            geometry,
+            opacity,
+            ..own
+        })
+    };
+    let mut track = track.clone();
+    match &mut track {
+        Track::Pair { from, to, .. } => {
+            if let Some(end) = &ends.from {
+                *from = place(end, &moved.from)?;
+            }
+            if let Some(end) = &ends.to {
+                *to = place(end, &moved.to)?;
+            }
+        }
+        Track::Appear { to, .. } | Track::Through { at: to, .. } => {
+            if let Some(end) = &ends.to {
+                *to = place(end, &moved.to)?;
+            }
+        }
+        Track::Disappear { from, .. } => {
+            if let Some(end) = &ends.from {
+                *from = place(end, &moved.from)?;
+            }
+        }
+    }
+    Some(track)
 }
 
 /// [`place_camera_at`] as planned, with no live values or motion.

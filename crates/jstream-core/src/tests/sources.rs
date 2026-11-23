@@ -1028,16 +1028,22 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
     // the frame slot, with no plan (ADR-0117 §3).
     let plans = engine.plans();
     clock.advance(250);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    // Real time, for a heavily loaded runner (#1604: a Windows run took 595 s for these
+    // tests and missed a 5 s deadline). A pass takes milliseconds.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while shown(&engine, "video") != Some(FakeClip::pixel(2))
         && std::time::Instant::now() < deadline
     {
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
+    // On a failure, say where it stalled: the painter's own frame is the thread's last
+    // paint; the shot's is what it handed over through the frame slot.
     assert_eq!(
         shown(&engine, "video"),
         Some(FakeClip::pixel(2)),
-        "frame 2 at 250 ms"
+        "frame 2 at 250 ms (the painter holds {:?}, resting {:?})",
+        engine.painted_pixel("video"),
+        engine.resting("video"),
     );
     assert_eq!(engine.plans(), plans, "by itself, with no plan");
 

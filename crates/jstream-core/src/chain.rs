@@ -6255,6 +6255,21 @@ mod tests {
     /// first frame showed the wall unshadowed.
     #[test]
     fn the_first_frame_shadows_with_every_model() {
+        first_frame_shadows(false);
+    }
+
+    /// As [`the_first_frame_shadows_with_every_model`], with effects on the cube's item:
+    /// its layer is then its effects' output, which isn't made until its chain runs,
+    /// after the wall drawn first drew the maps. The maps take the cube's placement
+    /// without that layer, so its first frame shadows the wall too (#1674).
+    #[test]
+    fn the_first_frame_shadows_with_a_model_with_effects() {
+        first_frame_shadows(true);
+    }
+
+    /// The body of the two tests above: with `effects`, the cube's item has an effect
+    /// that leaves its picture as it is.
+    fn first_frame_shadows(effects: bool) {
         use jstream_sources::SourceKind as _;
         let sides = [(22, 18), (42, 18)];
         let kind = jstream_sources::ModelKind::new();
@@ -6276,6 +6291,9 @@ mod tests {
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
         for on_top in [true, false] {
             let mut graph = shadow_wall(0.0);
+            if effects {
+                apply(&mut graph, vec![item_tint("card", "#ffffff")]);
+            }
             if !on_top {
                 apply(
                     &mut graph,
@@ -6307,11 +6325,11 @@ mod tests {
             let second = frame();
             assert_eq!(
                 first, second,
-                "the first frame shows what the next does (cube on top: {on_top})"
+                "the first frame shows what the next does (cube on top: {on_top}, effects: {effects})"
             );
             assert!(
                 luma(first[0]).abs_diff(luma(first[1])) > 100,
-                "the cube shadows one side of the wall (cube on top: {on_top}): {first:?}"
+                "the cube shadows one side of the wall (cube on top: {on_top}, effects: {effects}): {first:?}"
             );
         }
     }

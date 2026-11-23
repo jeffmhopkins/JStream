@@ -259,6 +259,11 @@ pub(crate) struct MixFrame {
     pub(crate) landing: Vec<u8>,
     /// Whether the mix's `shown` frame is NV12: `out_planar`, moved with it.
     pub(crate) shown_planar: bool,
+    /// Buffers that were the mix's `shown` frame and that a reader may still hold (a
+    /// session's queue, a picture stream): a shown frame is shared with its readers, not
+    /// copied for each. One comes back as `out` once only the mix holds it, so a steady
+    /// run allocates nothing; beyond [`RETIRED_BUFFERS`] the oldest goes to the collector.
+    retired: Vec<Arc<Vec<u8>>>,
     /// Set by the draw when `out` holds a frame newly read back, to the time it was
     /// drawn for: the pts it goes out with.
     pub(crate) ready: Option<MediaTime>,
@@ -367,6 +372,22 @@ impl MixFrame {
                 free(Garbage::Pixels(pixels));
             }
         }
+        while self.retired.len() > RETIRED_BUFFERS {
+            free(Garbage::Shared(self.retired.remove(0)));
+        }
+    }
+
+    /// Takes `shown`, the mix's shown frame until now, and returns a buffer to read the
+    /// next frame back into: one of the retired buffers no reader holds any more, or an
+    /// empty one, which the readback's copy then sizes.
+    fn retire(&mut self, shown: Arc<Vec<u8>>) -> Vec<u8> {
+        self.retired.push(shown);
+        let free = self
+            .retired
+            .iter()
+            .position(|buffer| Arc::strong_count(buffer) == 1);
+        free.and_then(|at| Arc::try_unwrap(self.retired.swap_remove(at)).ok())
+            .unwrap_or_default()
     }
 
     /// A frame of `mix` not yet drawn or due.
@@ -393,6 +414,7 @@ impl MixFrame {
             earlier_dropped: 0,
             landing: Vec::new(),
             shown_planar: false,
+            retired: Vec::new(),
             ready: None,
             fresh: None,
             awaiting: false,
@@ -437,6 +459,11 @@ fn yields(local: bool, busy: bool, yielded: &mut u32) -> bool {
         false
     }
 }
+
+/// The most buffers a mix keeps that were its shown frame and that a reader may still
+/// hold ([`MixFrame::retire`]): a session's queue and the frame its encoder reads, and
+/// a few more for the picture streams. Past it a buffer is the collector's to free.
+const RETIRED_BUFFERS: usize = 8;
 
 /// How many ticks' encode-target conversions the GPU may still be running when the
 /// render thread records another: it records frame N while the GPU runs N − 1
@@ -3442,15 +3469,33 @@ impl From<VideoInput> for TapInput {
 
 impl TapInput {
     /// Pushes the frame `pixels` of `size`, stamped `pts`: NV12 when `planar`, else
-    /// RGBA8. A picture stream and a session opened for RGBA8 (the preview's H.264)
-    /// take only RGBA8, so they skip an NV12 frame, one left from before they were
+    /// RGBA8. A picture stream and a session opened for RGBA8 (a preview's H.264 at an
+    /// odd size) take only RGBA8, so they skip an NV12 frame, one left from before they were
     /// attached. `false` once its reader has gone.
     fn push(&self, size: FrameSize, pts: MediaTime, pixels: &[u8], planar: bool) -> bool {
         match self {
             Self::Session(input) if planar && input.format() != PixelFormat::Nv12 => true,
             Self::Session(input) => push_frame(input, size, pts, pixels, planar),
             Self::Pictures(_) if planar => true,
-            Self::Pictures(pictures) => pictures.push(size, pts, pixels),
+            Self::Pictures(pictures) => pictures.push(size, pts, || Arc::new(pixels.to_vec())),
+        }
+    }
+
+    /// [`Self::push`] for the mix's shown frame, which the reader shares rather than
+    /// takes a copy of: a session's frame is planes over `pixels`, and a picture is
+    /// `pixels` itself.
+    fn push_shared(
+        &self,
+        size: FrameSize,
+        pts: MediaTime,
+        pixels: &Arc<Vec<u8>>,
+        planar: bool,
+    ) -> bool {
+        match self {
+            Self::Session(input) if planar && input.format() != PixelFormat::Nv12 => true,
+            Self::Session(input) => push_shared_frame(input, size, pts, pixels, planar),
+            Self::Pictures(_) if planar => true,
+            Self::Pictures(pictures) => pictures.push(size, pts, || Arc::clone(pixels)),
         }
     }
 
@@ -3473,8 +3518,9 @@ pub(crate) struct Picture {
     pub(crate) size: FrameSize,
     /// The time it was drawn for.
     pub(crate) pts: MediaTime,
-    /// Tightly packed RGBA8.
-    pub(crate) rgba: Vec<u8>,
+    /// Tightly packed RGBA8, shared with the stage, which never writes it again while
+    /// a picture holds it.
+    pub(crate) rgba: Arc<Vec<u8>>,
 }
 
 /// The render thread's end of a JPEG or PNG preview stream's pictures: never blocks, and
@@ -3514,10 +3560,10 @@ pub(crate) fn picture_queue() -> (PictureInput, PictureOutput) {
 }
 
 impl PictureInput {
-    /// Copies `rgba` into a new picture unless the stream already has
-    /// [`PICTURE_DEPTH`] waiting, when this frame is dropped (R-RT-004). `false` once the
-    /// reader has gone.
-    fn push(&self, size: FrameSize, pts: MediaTime, rgba: &[u8]) -> bool {
+    /// Queues a picture of the pixels `rgba` returns, unless the stream already has
+    /// [`PICTURE_DEPTH`] waiting, when this frame is dropped (R-RT-004) and `rgba` is not
+    /// called. `false` once the reader has gone.
+    fn push(&self, size: FrameSize, pts: MediaTime, rgba: impl FnOnce() -> Arc<Vec<u8>>) -> bool {
         if self.shared.closed.load(Ordering::Acquire) {
             return false;
         }
@@ -3528,7 +3574,7 @@ impl PictureInput {
         let picture = Picture {
             size,
             pts,
-            rgba: rgba.to_vec(),
+            rgba: rgba(),
         };
         match self.pictures.try_send(picture) {
             Ok(()) => true,
@@ -3684,8 +3730,9 @@ struct Frames {
     /// The pictures drawn for the sessions, one per [`Feed`]: where a tick composites.
     mixes: Vec<MixFrame>,
     /// For each of `mixes`, the last frame composited in full, repeated when a tick
-    /// cannot draw; swapped with the mix's `out` when a draw succeeds.
-    shown: Vec<Vec<u8>>,
+    /// cannot draw; a frame read back takes its place when a draw succeeds. Shared with
+    /// the readers it is pushed to, so no push copies it.
+    shown: Vec<Arc<Vec<u8>>>,
     /// For each of `mixes`, the sessions it feeds.
     targets: Vec<Vec<VideoTap>>,
     /// For each of `mixes`, its encode targets, for the sessions on the GPU path.
@@ -3720,7 +3767,7 @@ impl Frames {
                     scene: feed.scene,
                     ..MixFrame::new(feed.mix, feed.size, feed.divisor, feed.owner)
                 });
-                self.shown.push(Vec::new());
+                self.shown.push(Arc::default());
                 self.targets.push(vec![tap]);
                 self.encode.push(MixEncode::default());
             }
@@ -3741,7 +3788,10 @@ impl Frames {
                 if mix.landing.capacity() > 0 {
                     free(Garbage::Pixels(mix.landing));
                 }
-                free(Garbage::Pixels(self.shown.swap_remove(at)));
+                for buffer in mix.retired.drain(..) {
+                    free(Garbage::Shared(buffer));
+                }
+                free(Garbage::Shared(self.shown.swap_remove(at)));
                 // `shown` is a clone of one of the ring's targets.
                 let MixEncode { ring, shown, .. } = self.encode.swap_remove(at);
                 drop(shown);
@@ -3773,7 +3823,7 @@ impl Frames {
             if self.program_frame(size, self.held[at].as_ref()).is_none() {
                 let owner = self.held[at].clone();
                 self.mixes.push(MixFrame::new(None, size, 1, owner));
-                self.shown.push(Vec::new());
+                self.shown.push(Arc::default());
                 self.targets.push(Vec::new());
                 self.encode.push(MixEncode::default());
             }
@@ -3850,9 +3900,10 @@ impl Frames {
             let probed = taps.iter().any(|tap| tap.probed());
             frame.readback = fed || probed;
             frame.probe_only = frame.readback && !fed;
-            // Only encoder sessions opened for NV12 take it: a camera, a picture stream
-            // and a session opened for RGBA (the preview's H.264) need RGBA, and so does
-            // a probe's reference.
+            // Only encoder sessions opened for NV12 take it, a preview's H.264 at an
+            // even size among them: a camera, a picture stream and a session opened
+            // for RGBA (a preview's at an odd size) need RGBA, and so does a probe's
+            // reference.
             frame.planar = fed
                 && !held
                 && !probed
@@ -3935,7 +3986,8 @@ impl Frames {
             // A frame read back reaches `shown` once its map has finished, whatever this
             // tick's draw did.
             if let Some(pts) = frame.ready.take() {
-                std::mem::swap(&mut frame.out, shown);
+                let read = Arc::new(std::mem::take(&mut frame.out));
+                frame.out = frame.retire(std::mem::replace(shown, read));
                 frame.shown_planar = frame.out_planar;
                 frame.fresh = Some(pts);
             }
@@ -4402,7 +4454,12 @@ fn render_loop(job: RenderJob) {
                                         || frame.earlier_pushed().all(|(at, pixels, planar)| {
                                             input.push(frame.size, *at, pixels, *planar)
                                         }))
-                                        && input.push(frame.size, pts, shown, frame.shown_planar)
+                                        && input.push_shared(
+                                            frame.size,
+                                            pts,
+                                            shown,
+                                            frame.shown_planar,
+                                        )
                                 }
                                 None => true,
                             },
@@ -4685,10 +4742,10 @@ fn render_open_error(err: &RenderError) -> String {
 /// Pushes one frame, NV12 (`width * height` Y bytes then the interleaved CbCr plane)
 /// when `planar`, else RGBA8. `false` when the session has closed.
 ///
-/// The encoder session takes ownership of the frame's planes, so this is the one
-/// allocation a tick makes per session: `VideoInput::push` has no way to hand buffers
-/// back. A session takes NV12 ([`encoder_config`]) and converts an RGBA8 frame on its
-/// own thread.
+/// It copies `pixels` for the session: only a frame read back before the newest goes
+/// this way (two readbacks that land on one tick), and the mix's shown frame is shared
+/// instead ([`push_shared_frame`]). A session takes NV12 ([`encoder_config`]) and
+/// converts an RGBA8 frame on its own thread.
 fn push_frame(
     input: &VideoInput,
     size: FrameSize,
@@ -4696,9 +4753,24 @@ fn push_frame(
     pixels: &[u8],
     planar: bool,
 ) -> bool {
+    push_shared_frame(input, size, pts, &Arc::new(pixels.to_vec()), planar)
+}
+
+/// Pushes the frame `pixels` of `size`, stamped `pts`, as planes over `pixels` itself:
+/// NV12 when `planar` (luma, then interleaved chroma), else RGBA8. Nothing is copied;
+/// the session holds `pixels` until it has encoded or dropped the frame. `false` when
+/// the session has closed.
+fn push_shared_frame(
+    input: &VideoInput,
+    size: FrameSize,
+    pts: MediaTime,
+    pixels: &Arc<Vec<u8>>,
+    planar: bool,
+) -> bool {
     let width = size.width() as usize;
+    let luma = width * size.height() as usize;
+    let plane = |range, stride| Plane::shared(Arc::clone(pixels), range, stride);
     let (info, planes) = if planar {
-        let (y, uv) = pixels.split_at(width * size.height() as usize);
         let info = VideoFrameInfo {
             size,
             format: PixelFormat::Nv12,
@@ -4706,11 +4778,15 @@ fn push_frame(
             color: ColorInfo::default(),
             pts,
         };
-        let planes = vec![
-            Plane::new(y.to_vec(), width),
-            Plane::new(uv.to_vec(), width),
-        ];
-        (info, planes)
+        (
+            info,
+            [
+                plane(0..luma.min(pixels.len()), width),
+                plane(luma..pixels.len(), width),
+            ]
+            .into_iter()
+            .collect::<Option<Vec<_>>>(),
+        )
     } else {
         let info = VideoFrameInfo {
             size,
@@ -4721,12 +4797,21 @@ fn push_frame(
             },
             pts,
         };
-        (info, vec![Plane::new(pixels.to_vec(), width * 4)])
+        (
+            info,
+            plane(0..pixels.len(), width * 4).map(|plane| vec![plane]),
+        )
     };
-    let frame = match VideoFrame::new(info, planes) {
-        Ok(frame) => frame,
-        Err(err) => {
+    // A frame shorter than its luma plane has no chroma to point at; `VideoFrame::new`
+    // refuses every other wrong size.
+    let frame = match planes.map(|planes| VideoFrame::new(info, planes)) {
+        Some(Ok(frame)) => frame,
+        Some(Err(err)) => {
             tracing::warn!(error = %err, "encoded frame rejected");
+            return true;
+        }
+        None => {
+            tracing::warn!("encoded frame rejected: shorter than its luma plane");
             return true;
         }
     };
@@ -5876,7 +5961,7 @@ mod tests {
         );
     }
 
-    /// A session opened for RGBA8, as the preview's H.264 is, skips an NV12 frame: one
+    /// A session opened for RGBA8, as a preview's H.264 at an odd size is, skips an NV12 frame: one
     /// shown before it joined a mix read back as NV12. It takes the next RGBA8 frame.
     #[test]
     fn a_session_opened_for_rgba_skips_an_nv12_frame() {
@@ -6626,20 +6711,118 @@ mod tests {
         let size = FrameSize::new(2, 1).expect("size");
         let at = |ms| MediaTime::new(ms, Timebase::MILLIS);
         for ms in 0..4 {
-            assert!(input.push(size, at(ms), &[ms as u8; 8]));
+            assert!(input.push(size, at(ms), || Arc::new([ms as u8; 8].to_vec())));
         }
         let first = output.recv(Duration::ZERO).expect("first");
         assert_eq!(first.pts, at(0));
-        assert_eq!(first.rgba, [0; 8]);
+        assert_eq!(*first.rgba, [0; 8]);
         assert_eq!(output.recv(Duration::ZERO).expect("second").pts, at(1));
         assert!(
             output.recv(Duration::ZERO).is_err(),
             "the rest were dropped"
         );
-        assert!(input.push(size, at(9), &[9; 8]));
+        assert!(input.push(size, at(9), || Arc::new([9; 8].to_vec())));
         assert_eq!(output.recv(Duration::ZERO).expect("room again").pts, at(9));
         drop(output);
-        assert!(!input.push(size, at(10), &[10; 8]), "the reader has gone");
+        assert!(
+            !input.push(size, at(10), || Arc::new([10; 8].to_vec())),
+            "the reader has gone"
+        );
+    }
+
+    /// The mix's shown frame goes to a picture stream as the buffer itself, and a full
+    /// stream takes no hold on it.
+    #[test]
+    fn a_shown_frame_is_shared_with_a_picture_stream_not_copied() {
+        let (input, output) = super::picture_queue();
+        let tap = super::TapInput::Pictures(input);
+        let size = FrameSize::new(2, 1).expect("size");
+        let shown = Arc::new(vec![7u8; 8]);
+        for ms in 0..4 {
+            assert!(tap.push_shared(size, us(ms), &shown, false));
+        }
+        assert_eq!(
+            Arc::strong_count(&shown),
+            1 + super::PICTURE_DEPTH,
+            "only the queued pictures hold it"
+        );
+        let picture = output.recv(Duration::ZERO).expect("a picture");
+        assert!(Arc::ptr_eq(&picture.rgba, &shown), "the same buffer");
+        // An NV12 frame is not a picture.
+        assert!(tap.push_shared(size, us(9), &shown, true));
+        assert_eq!(Arc::strong_count(&shown), 1 + super::PICTURE_DEPTH);
+    }
+
+    /// A session's frame is planes over the shown buffer; one too short for its planes
+    /// is refused without a panic and the session stays.
+    #[test]
+    fn a_shown_frame_is_shared_with_a_session_not_copied() {
+        let size = FrameSize::new(4, 2).expect("size");
+        let feed = Feed {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            scene: None,
+        };
+        let config = video_config(&feed, &EncoderProfile::DEFAULT, FRAME_DEN).expect("config");
+        // Never started: the frames stay in its queue, holding the buffer.
+        let session = super::VideoSession::open(
+            &jstream_platform::fake::FakeCodecs,
+            config,
+            super::SessionOptions::default(),
+        )
+        .expect("fake session");
+        let tap = super::TapInput::Session(session.input());
+        let short = Arc::new(vec![0u8; 4]);
+        assert!(
+            tap.push_shared(size, us(0), &short, true),
+            "refused, not closed"
+        );
+        assert_eq!(
+            Arc::strong_count(&short),
+            1,
+            "nothing holds a refused frame"
+        );
+        assert_eq!(session.stats().received, 0);
+        let nv12 = Arc::new(vec![0u8; 4 * 2 * 3 / 2]);
+        assert!(tap.push_shared(size, us(33_333), &nv12, true));
+        assert_eq!(session.stats().received, 1, "the NV12 frame was taken");
+        session
+            .finish()
+            .expect("the encoder took every frame it was given");
+    }
+
+    /// A buffer that was the shown frame is read into again once no reader holds it,
+    /// and the mix keeps at most `RETIRED_BUFFERS` that readers still hold.
+    #[test]
+    fn a_retired_buffer_comes_back_once_no_reader_holds_it() {
+        use crate::runtime::render::Garbage;
+        let size = FrameSize::new(2, 1).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        let first = Arc::new(vec![1u8; 8]);
+        let reader = Arc::clone(&first);
+        assert!(
+            frame.retire(first).is_empty(),
+            "a reader holds it: the next frame gets a new buffer"
+        );
+        drop(reader);
+        let second = Arc::new(vec![2u8; 8]);
+        let reader = Arc::clone(&second);
+        assert_eq!(frame.retire(second), [1; 8], "the first is free again");
+        // Readers that never let go: the oldest buffers go to the collector.
+        let held: Vec<_> = (0..super::RETIRED_BUFFERS + 1)
+            .map(|at| {
+                let buffer = Arc::new(vec![at as u8; 8]);
+                assert!(frame.retire(Arc::clone(&buffer)).is_empty());
+                buffer
+            })
+            .collect();
+        let mut freed = Vec::new();
+        frame.recycle_earlier(|garbage| freed.push(garbage));
+        assert_eq!(freed.len(), 2, "the second frame's and the oldest held");
+        assert!(matches!(&freed[0], Garbage::Shared(buffer) if Arc::ptr_eq(buffer, &reader)));
+        assert!(matches!(&freed[1], Garbage::Shared(buffer) if Arc::ptr_eq(buffer, &held[0])));
     }
 
     /// ADR-0117 §7: the warm scenes' captures run beside the program's, and the set is
