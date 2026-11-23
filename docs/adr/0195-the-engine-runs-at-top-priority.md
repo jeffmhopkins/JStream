@@ -30,7 +30,7 @@ A first switch for this (`JSTREAM_GPU_PRIORITY`) landed off by default, waiting 
 A/B on Windows hardware, because a higher class also gets ahead of the desktop
 compositor, which display capture and the UI depend on.
 
-The maintainer then decided the default, on 2026-11-23: "I want you to default to that
+The maintainer then decided the default: "I want you to default to that
 priority. This will be the single application running on the computer and it needs top
 priority real time". A machine that streams is there to stream. What else it runs
 (a browser, a chat window, the desktop) matters less than the program's frames.
