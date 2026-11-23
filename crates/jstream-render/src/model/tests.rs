@@ -86,11 +86,23 @@ fn draw_lit(
     lights: Option<&[SceneLight]>,
 ) -> Snapshot {
     let uploaded = compositor.upload_model(model).expect("the model uploads");
+    draw_uploaded(compositor, &uploaded, geometry, camera, lighting, lights)
+}
+
+/// [`draw_lit`], of a model uploaded already.
+fn draw_uploaded(
+    compositor: &mut Compositor,
+    uploaded: &crate::GpuModel,
+    geometry: ItemGeometry,
+    camera: Option<SceneCamera>,
+    lighting: Lighting,
+    lights: Option<&[SceneLight]>,
+) -> Snapshot {
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
     compositor
         .draw_model(
             &ModelDraw {
-                model: &uploaded,
+                model: uploaded,
                 geometry,
                 camera,
                 lighting,
@@ -309,6 +321,55 @@ fn golden_model_a_textured_plane_reads_upright() {
     assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
     assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
     assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+}
+
+/// ADR-0177 decision 1: a model another thread uploaded for a compositor draws as one
+/// the compositor uploaded itself, and a texture level written in more than one band
+/// (2048 px wide, so four of 512 rows) lands whole.
+#[test]
+fn golden_model_one_uploaded_on_another_thread_draws_the_same() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    const SIDE: u32 = 2048;
+    // A solid colour in each quadrant: red, green, blue, white.
+    let quadrant = |x: u32, y: u32| match (x < SIDE / 2, y < SIDE / 2) {
+        (true, true) => [255, 0, 0, 255],
+        (false, true) => [0, 255, 0, 255],
+        (true, false) => [0, 0, 255, 255],
+        (false, false) => [255, 255, 255, 255],
+    };
+    let rgba: Vec<u8> = (0..SIDE)
+        .flat_map(|y| (0..SIDE).flat_map(move |x| quadrant(x, y)))
+        .collect();
+    let texture = ModelTexture::new(SIDE, SIDE, rgba, TextureColor::Srgb).expect("a texture");
+    let plane = Shape::Plane
+        .model(Material::default())
+        .expect("the plane builds");
+    let material = Material {
+        base_color_texture: Some(TextureRef { texture: 0 }),
+        unlit: true,
+        ..plane.materials()[0].clone()
+    };
+    let model = Model::new(plane.primitives().to_vec(), vec![material], vec![texture])
+        .expect("the plane builds");
+    let uploader = opened.compositor.model_uploader();
+    let aside = std::thread::scope(|scope| {
+        scope
+            .spawn(|| uploader.upload(&model))
+            .join()
+            .expect("the upload doesn't panic")
+    })
+    .expect("the model uploads");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let compositor = &mut opened.compositor;
+    let shot = draw_uploaded(compositor, &aside, geometry, None, Lighting::Studio, None);
+    assert_near(rgb(&shot, 60, 30), [255, 0, 0], (60, 30));
+    assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
+    assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
+    assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+    let here = draw(compositor, &model, geometry, None, Lighting::Studio);
+    assert_eq!(shot.rgba(), here.rgba(), "uploaded here, it draws the same");
 }
 
 /// ADR-0107 decision 4: the studio key light is above and to the left, so a sphere is

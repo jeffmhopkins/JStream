@@ -4505,6 +4505,9 @@ struct WarmCaptures {
     captures: Arc<BTreeSet<CaptureKey>>,
     /// Every source the warm scenes draw, which the live sources keep from resting.
     sources: BTreeSet<SourceId>,
+    /// The 3D models those sources show now, which the program stage keeps uploaded
+    /// (ADR-0177).
+    models: Arc<crate::runtime::WarmModels>,
     /// The size each source's frame last had, so a source that stopped or rests is
     /// still estimated at it.
     seen: BTreeMap<SourceId, [u32; 2]>,
@@ -4611,7 +4614,29 @@ impl WarmCaptures {
             self.sources = sources;
             self.kept = kept;
         }
+        // A model changes with its source's settings, with no new plan of the warm
+        // scenes: looked at on every update, and replaced only when one changed.
+        let shown = || {
+            self.sources
+                .iter()
+                .filter_map(|id| Some((id, live.model(id)?)))
+        };
+        let same = shown().count() == self.models.len()
+            && shown().all(|(id, model)| {
+                self.models
+                    .get(id)
+                    .is_some_and(|held| held.version() == model.version())
+            });
+        if !same {
+            self.models = Arc::new(shown().map(|(id, model)| (id.clone(), model)).collect());
+        }
         &self.captures
+    }
+
+    /// The 3D models the warm scenes' sources show, as the last [`Self::update`] found
+    /// them.
+    fn models(&self) -> &Arc<crate::runtime::WarmModels> {
+        &self.models
     }
 
     /// Plans what each of `scenes` draws.
@@ -6659,6 +6684,7 @@ impl State {
             &limit,
         );
         self.render.publish_warm(warm);
+        self.render.publish_warm_models(self.warm.models());
         self.live.set_warm(self.warm.sources());
         // A source that left the warm scenes rests now if nothing drew it in the
         // latest plans, as it would after one.
@@ -6759,6 +6785,7 @@ impl State {
             frames,
         };
         render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));
+        render.publish_warm_models(warm.models());
         live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();

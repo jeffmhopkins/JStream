@@ -544,15 +544,17 @@ fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
         seen.lock()
             .unwrap_or_else(PoisonError::into_inner)
             .on_context = Some(context.is_some());
-        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
-            let freed = inner(shot, scenes, live, captures, frames, at, meter)?;
-            // The first mix drawn this tick; with no video mixes, the program.
-            let drawn = frames.iter().find(|frame| frame.due);
-            if let Some(pixel) = drawn.and_then(first_pixel) {
-                seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(pixel);
-            }
-            Ok(freed)
-        });
+        let draw: DrawFn = Box::new(
+            move |shot, scenes, live, captures, frames, at, meter, warm| {
+                let freed = inner(shot, scenes, live, captures, frames, at, meter, warm)?;
+                // The first mix drawn this tick; with no video mixes, the program.
+                let drawn = frames.iter().find(|frame| frame.due);
+                if let Some(pixel) = drawn.and_then(first_pixel) {
+                    seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(pixel);
+                }
+                Ok(freed)
+            },
+        );
         Ok(draw)
     })
 }
@@ -897,31 +899,33 @@ fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
         }
         let mut inner = (gpu_draw())(context)?;
         let opens = Arc::clone(&opens);
-        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
-            let gpu_frame = shot.captures().iter().any(|key| {
-                captures
-                    .frame(key)
-                    .is_some_and(|frame| matches!(frame.image, CaptureImage::Gpu(_)))
-            });
-            match breaks {
-                Breaks::GpuFrames if gpu_frame => {
-                    return Err(DrawError::Failed("unsupported format".to_owned()));
+        let draw: DrawFn = Box::new(
+            move |shot, scenes, live, captures, frames, at, meter, warm| {
+                let gpu_frame = shot.captures().iter().any(|key| {
+                    captures
+                        .frame(key)
+                        .is_some_and(|frame| matches!(frame.image, CaptureImage::Gpu(_)))
+                });
+                match breaks {
+                    Breaks::GpuFrames if gpu_frame => {
+                        return Err(DrawError::Failed("unsupported format".to_owned()));
+                    }
+                    Breaks::Context | Breaks::Everywhere if on_context => {
+                        return Err(DrawError::Failed("device removed".to_owned()));
+                    }
+                    _ => {}
                 }
-                Breaks::Context | Breaks::Everywhere if on_context => {
-                    return Err(DrawError::Failed("device removed".to_owned()));
+                let freed = inner(shot, scenes, live, captures, frames, at, meter, warm)?;
+                let drawn = frames.iter().find(|frame| frame.due);
+                if !on_context && let Some(pixel) = drawn.and_then(first_pixel) {
+                    opens
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .own_pixel = Some(pixel);
                 }
-                _ => {}
-            }
-            let freed = inner(shot, scenes, live, captures, frames, at, meter)?;
-            let drawn = frames.iter().find(|frame| frame.due);
-            if !on_context && let Some(pixel) = drawn.and_then(first_pixel) {
-                opens
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .own_pixel = Some(pixel);
-            }
-            Ok(freed)
-        });
+                Ok(freed)
+            },
+        );
         Ok(draw)
     })
 }
@@ -1565,13 +1569,15 @@ fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
         }
         let mut inner = (cpu_draw())(context)?;
         let mut drawn = false;
-        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
-            if drawn {
-                return Err(DrawError::Failed("device removed".to_owned()));
-            }
-            drawn = true;
-            inner(shot, scenes, live, captures, frames, at, meter)
-        });
+        let draw: DrawFn = Box::new(
+            move |shot, scenes, live, captures, frames, at, meter, warm| {
+                if drawn {
+                    return Err(DrawError::Failed("device removed".to_owned()));
+                }
+                drawn = true;
+                inner(shot, scenes, live, captures, frames, at, meter, warm)
+            },
+        );
         Ok(draw)
     })
 }
@@ -1905,13 +1911,15 @@ fn flaky_draw(from: u64, to: u64, draws: Arc<AtomicU64>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
         let mut inner = (gpu_draw())(context)?;
         let draws = Arc::clone(&draws);
-        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
-            let n = draws.fetch_add(1, Ordering::Relaxed) + 1;
-            if (from..=to).contains(&n) {
-                return Err(DrawError::Failed("unsupported format".to_owned()));
-            }
-            inner(shot, scenes, live, captures, frames, at, meter)
-        });
+        let draw: DrawFn = Box::new(
+            move |shot, scenes, live, captures, frames, at, meter, warm| {
+                let n = draws.fetch_add(1, Ordering::Relaxed) + 1;
+                if (from..=to).contains(&n) {
+                    return Err(DrawError::Failed("unsupported format".to_owned()));
+                }
+                inner(shot, scenes, live, captures, frames, at, meter, warm)
+            },
+        );
         Ok(draw)
     })
 }

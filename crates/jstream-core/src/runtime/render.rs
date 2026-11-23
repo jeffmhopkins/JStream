@@ -25,7 +25,7 @@ use std::thread::{self, JoinHandle};
 use arc_swap::ArcSwap;
 use jstream_encode::{AudioInput, VideoInput};
 use jstream_platform::GpuFrame;
-use jstream_protocol::SceneId;
+use jstream_protocol::{SceneId, SourceId};
 use jstream_render::Reclaimed;
 
 use crate::audio::{MonitorRoute, ScopeTap};
@@ -38,6 +38,10 @@ use crate::snapshot::{CaptureKey, LiveParams, Shot};
 /// planned after the program, which the program stage's render thread draws as extra
 /// mixes.
 pub(crate) type SceneShots = BTreeMap<SceneId, Arc<RenderSnapshot>>;
+
+/// The 3D models the warm scenes' sources show (ADR-0177 decision 5), which the program stage's
+/// render thread keeps uploaded.
+pub(crate) type WarmModels = BTreeMap<SourceId, Arc<jstream_media::model::Model>>;
 
 /// The reader slot's value while no render thread is adopting snapshots: the thread is
 /// stopped, or never ran. A gesture waits on nothing while it is set.
@@ -90,6 +94,8 @@ pub(crate) struct RenderHub {
     /// The captures of the warm scenes (ADR-0117 §7), kept running beside the program's,
     /// published when the warm scenes or what they capture change.
     warm: ArcSwap<BTreeSet<CaptureKey>>,
+    /// The models the warm scenes' sources show (ADR-0177 decision 5), published when they change.
+    warm_models: ArcSwap<WarmModels>,
     /// The generation the render thread adopted last, or [`STOPPED`] / [`STARTING`].
     adopted: AtomicU64,
     /// Ticks the render thread has composited since the engine started, across every
@@ -107,6 +113,7 @@ impl Default for RenderHub {
             live: ArcSwap::from_pointee(LiveParams::default()),
             scenes: ArcSwap::from_pointee(SceneShots::new()),
             warm: ArcSwap::from_pointee(BTreeSet::new()),
+            warm_models: ArcSwap::from_pointee(WarmModels::new()),
             adopted: AtomicU64::new(STOPPED),
             drawn: AtomicU64::new(0),
         }
@@ -171,6 +178,20 @@ impl RenderHub {
         }
     }
 
+    /// Publishes the models the warm scenes' sources show, unless they are the ones
+    /// published. Called with the collection lock held, like [`publish`](Self::publish).
+    pub(crate) fn publish_warm_models(&self, models: &Arc<WarmModels>) {
+        if !Arc::ptr_eq(&self.warm_models.load(), models) {
+            self.warm_models.store(Arc::clone(models));
+        }
+    }
+
+    /// The warm scenes' models published last, for tests.
+    #[cfg(test)]
+    pub(crate) fn load_warm_models(&self) -> Arc<WarmModels> {
+        self.warm_models.load_full()
+    }
+
     /// The warm scenes' captures published last, for tests.
     #[cfg(test)]
     pub(crate) fn load_warm(&self) -> Arc<BTreeSet<CaptureKey>> {
@@ -217,6 +238,8 @@ pub(crate) struct RenderReader {
     scenes: Option<Arc<SceneShots>>,
     /// The warm scenes' captures it read last, loaded with `held`.
     warm: Option<Arc<BTreeSet<CaptureKey>>>,
+    /// The warm scenes' models it read last, loaded with `held`.
+    warm_models: Option<Arc<WarmModels>>,
     collector: Collector,
 }
 
@@ -228,6 +251,7 @@ impl RenderReader {
             live: None,
             scenes: None,
             warm: None,
+            warm_models: None,
             collector,
         }
     }
@@ -288,6 +312,18 @@ impl RenderReader {
         if fresh && let Some(old) = self.warm.replace(arc_swap::Guard::into_inner(warm)) {
             self.collector.free(Garbage::Warm(old));
         }
+        let models = self.hub.warm_models.load();
+        let fresh = !self
+            .warm_models
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, &models));
+        if fresh
+            && let Some(old) = self
+                .warm_models
+                .replace(arc_swap::Guard::into_inner(models))
+        {
+            self.collector.free(Garbage::WarmModels(old));
+        }
         self.held
             .as_deref()
             .expect("invariant: the first adopt always stores a snapshot")
@@ -320,6 +356,13 @@ impl RenderReader {
             .expect("invariant: adopt always stores the warm captures")
     }
 
+    /// The warm scenes' models the last [`adopt`](Self::adopt) read.
+    pub(crate) fn warm_models(&self) -> &WarmModels {
+        self.warm_models
+            .as_deref()
+            .expect("invariant: adopt always stores the warm models")
+    }
+
     /// Counts one composited tick in the hub's [`drawn`](RenderHub::drawn): one
     /// relaxed atomic add, so it is fine on the render thread.
     pub(crate) fn count_drawn(&self) {
@@ -347,6 +390,9 @@ impl RenderReader {
         if let Some(warm) = self.warm.take() {
             self.collector.free(Garbage::Warm(warm));
         }
+        if let Some(models) = self.warm_models.take() {
+            self.collector.free(Garbage::WarmModels(models));
+        }
     }
 }
 
@@ -366,6 +412,8 @@ pub(crate) enum Garbage {
     Scenes(Arc<SceneShots>),
     /// The warm scenes' captures the render thread replaced, for the same reason.
     Warm(Arc<BTreeSet<CaptureKey>>),
+    /// The warm scenes' models the render thread replaced, for the same reason.
+    WarmModels(Arc<WarmModels>),
     /// The captures the render thread started for the program, the monitored scenes and
     /// the warm scenes,
     /// replaced when they change, with the scenes they were read from.
@@ -446,6 +494,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Live(live) => drop(live),
             Garbage::Scenes(scenes) => drop(scenes),
             Garbage::Warm(warm) => drop(warm),
+            Garbage::WarmModels(models) => drop(models),
             Garbage::Wanted(wanted, scenes) => drop((wanted, scenes)),
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),

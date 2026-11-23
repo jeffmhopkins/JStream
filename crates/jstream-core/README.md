@@ -1684,7 +1684,7 @@ The engine keeps the keyframe each placed scene is switched to
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 
@@ -2266,6 +2266,22 @@ drew the frame before, as it was before maps were kept: the maps are drawn befor
 card's chain runs (`a_filtered_cards_shadow_follows_its_picture`). `Chains::begin` drops
 what is kept for a scene whose shadows the last run didn't draw.
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
+The program stage's render thread doesn't make the upload itself
+([ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)): its `Chains`
+(`upload_models_aside`) asks the `jstream-models` thread for it (`model_uploads.rs`,
+over the compositor's `ModelUploader`) and takes it when a later frame begins, never
+waiting. Until then the item draws nothing, or the version it had, and both versions
+are held while the new one uploads
+(`a_model_uploaded_aside_draws_once_its_upload_is_back`). A refused upload fails its
+item as before and isn't asked for again until the model changes
+(`a_refused_upload_is_not_asked_for_again_until_the_model_changes`). The thread
+skips a model that a newer one of the same source already waits behind, and if it dies
+with uploads owed they are refused, not awaited
+(`a_superseded_job_is_skipped_and_a_dead_thread_refuses_what_it_owed`). The thread starts
+with the first model and ends with the `Chains`. Every other compositor (the snapshot
+thread's, a preview's) uploads where it draws. `Chains::keep_models` uploads the
+models the warm scenes show the same way and keeps them while they are kept, though no
+frame draws them (decision 5; `a_kept_model_stays_uploaded_though_no_frame_draws_it`).
 A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 7) is posed before it is drawn: `pose` writes its source's `ShownModel::pose`
 to the upload with `Compositor::pose_model`, before its layer, its reflection and its
@@ -3013,7 +3029,14 @@ is looked at again): a `restart_on_show` media file goes to its start and holds 
 first frame, which the sources' thread takes once decoded, so the switch to its scene
 shows that frame in its first plan and plays on with no seek. A preview that looks at
 a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
-composited unless it is monitored. The set is also published after `studio.set_warm`
+composited unless it is monitored. The 3D models the warm scenes' sources show are
+published beside the captures (`RenderHub::publish_warm_models`, a `WarmModels` map the
+plan replaces only when a model changed;
+[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md) decision 5):
+the render thread's draw uploads and keeps them (`Chains::keep_models`), so a switch
+to a warm scene uploads nothing
+(`a_warm_scenes_model_is_published_for_the_program_stage`). The limit's estimate
+doesn't count them. The set is also published after `studio.set_warm`
 changes the budget, and after each plan when an edit kept a scene warm or bound one.
 The GPU-memory limit (ADR-0150) is applied to what was planned on every update, since
 the sizes it reads change without a new plan (`WarmCaptures::trim`): each source a
@@ -4623,7 +4646,9 @@ whole period behind the clock skips to the current tick and counts the skipped o
 too; a tick that fails part-way is discarded), which allocates nothing in a steady
 frame and publishes one snapshot of its totals about once a second, the meter's only
 allocation, handing the totals it replaces to the collector (*Profile* in
-[Purpose](#purpose)). None of those threads lock the collection: the render thread reads the
+[Purpose](#purpose)). The render thread uploads no 3D model: its draw's `Chains` asks the
+`jstream-models` thread for each (`Chains::upload_models_aside`, see *Snapshots*;
+[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
 values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a

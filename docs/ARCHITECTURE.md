@@ -529,6 +529,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
 | Render | Composites every mix on each base-rate tick, then the monitored scenes preview streams show; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. A monitored scene not begun within the tick's period is skipped and counted, so the program never waits for one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
 | Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8, or NV12 for a mix only NV12 encoders take, and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
+| Models (`jstream-models`, one per program stage while it draws 3D models) | Uploads each model the render thread asks for, on its compositor's device, and hands the upload back; it submits nothing ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)) | The render thread sends and takes on channels and never waits for it. A texture level is written in bands of at most 4 MiB, so the queue's lock is held for one band at a time. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Preview (one per engine, while any preview stream is open) | For a stream of the program or of a scene, holds the program stage (opening it with no output) and hands it the stream's H.264 encoder, or a JPEG or PNG stream's picture queue, which the render thread feeds with the program, or the scene as a monitored scene, at the stream's size; a sender thread per such stream forwards its packets, or encodes and sends its pictures ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a source, a draft, or any stream of an engine without backends) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -1326,7 +1327,9 @@ depth as its layer is drawn ([ADR-0165](adr/0165-depth-of-field-on-models.md)): 
 and view depth are drawn first, then five fullscreen passes gather each pixel's
 neighbours whose circle of confusion reaches it, so a soft near part spreads over a
 sharp far one and the silhouette softens outward.
-A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
+A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version, for the
+program stage by a thread of its own, which also keeps the warm scenes' models
+uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's

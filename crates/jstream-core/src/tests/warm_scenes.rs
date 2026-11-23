@@ -562,3 +562,51 @@ fn a_reflection_probe_counts_its_capture() {
     let reflective = bytes_of_a(&control).expect("a is warm");
     assert!(reflective >= plain + capture, "{reflective} after {plain}");
 }
+
+/// ADR-0177 decision 5: the 3D model a warm scene's source shows is published for the
+/// program stage to keep uploaded, and no longer once its scene isn't warm.
+#[test]
+fn a_warm_scenes_model_is_published_for_the_program_stage() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let cube = Edit::SourceCreate {
+        source_id: SourceId::new("cube"),
+        name: "Cube".into(),
+        kind: SourceKind::Builtin {
+            kind: "model".into(),
+        },
+        settings: jstream_protocol::Settings(
+            [("shape".to_owned(), json!("cube"))].into_iter().collect(),
+        ),
+        duplicated_from: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("main"),
+            create("a"),
+            create("b"),
+            cube,
+            add("a", "a_cube", "cube"),
+        ]),
+    )
+    .expect("scenes");
+    assert!(hub.load_warm_models().is_empty(), "no scene is warm yet");
+
+    assert!(engine.settle_sources(), "the sources were built in time");
+    preview(&control, "a");
+    let models = hub.load_warm_models();
+    let model = models
+        .get(&SourceId::new("cube"))
+        .expect("the Preview scene's model is published");
+    assert!(!model.primitives().is_empty());
+    preview(&control, "a");
+    assert!(
+        std::sync::Arc::ptr_eq(&models, &hub.load_warm_models()),
+        "published again only when a model changed"
+    );
+
+    preview(&control, "b");
+    assert!(hub.load_warm_models().is_empty(), "a is no longer warm");
+}
