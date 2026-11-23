@@ -148,7 +148,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   stops a recording; a settings edit dropped on Cancel; the server URL and an encoder
   profile sent on Save (there is no Apply), both read back by a fresh page; a recording's Bus select
   moving it to another bus on Save, read back by a fresh page; in the Encoders & mixes
-  dialog's list and editor, a new profile named "Default H.264", making an AV1 VBR
+  dialog's rail (its + buttons, New encoder and New video mix) and editor, a new profile named "Default H.264", making an AV1 VBR
   encoder profile (a peak under the average is named in the form, which stays open; once
   saved the editor stays on it, with its short summary in the list and the whole in the
   editor) and a vertical video mix, a recording using both (neither can then be

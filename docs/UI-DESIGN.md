@@ -174,6 +174,11 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
   search on top (it takes the focus) and its groups under eyebrows, an icon on each row;
   on the right the pick's 40 px icon tile (`.picker-tile`), name and one line, then
   what the pick needs, and where it lands as a callout. A double-click on a row adds it.
+- **A library** (Encoders & mixes) is a 240 px rail of grouped rows, each its name and a
+  right-aligned summary, an icon + beside each group's eyebrow and an empty text for a
+  group with none; the picked one is edited on the right under its name and summary.
+  The open form's Delete, Cancel and Save are the dialog's footer, which reads Close
+  while nothing is open.
 - **A code to read out** (Pair a device): 28 px mono, letter-spaced, on an inset card
   (`--app` with a `--line` border) with the time it has left under it, then the steps
   as a numbered list.
