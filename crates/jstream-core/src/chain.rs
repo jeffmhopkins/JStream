@@ -718,6 +718,9 @@ pub(crate) struct Chains {
     /// The models drawn since the chains last began a frame: one no frame drew is let
     /// go when the next begins.
     models_used: BTreeSet<SourceId>,
+    /// The thread that uploads the models, for the program stage's render thread
+    /// ([`Self::upload_models_aside`]). `None` uploads them where they are drawn.
+    models_aside: Option<crate::model_uploads::ModelUploads>,
     /// The lights of the scene a model is drawn in this frame (ADR-0143 decision 3),
     /// kept to reuse its allocation.
     pub(crate) lights: Vec<jstream_render::SceneLight>,
@@ -794,6 +797,16 @@ impl Chains {
         self.drawn.clear();
         let used = std::mem::take(&mut self.models_used);
         self.models.retain(|source, _| used.contains(source));
+        if let Some(aside) = &mut self.models_aside {
+            // The uploads that came back, for the models the last frame still drew.
+            let models = &mut self.models;
+            aside.finished(
+                |source| used.contains(source),
+                |source, version, model| {
+                    models.insert(source, (version, model));
+                },
+            );
+        }
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
             let keep = chains.contains_key(source) || stages.contains_key(source);
@@ -1147,8 +1160,29 @@ impl Chains {
         }
     }
 
+    /// Has the models `compositor` draws uploaded by a thread of their own from now on
+    /// (ADR-0177): for the program stage's render thread, which must not stop for an
+    /// upload.
+    pub(crate) fn upload_models_aside(&mut self, compositor: &Compositor) {
+        let uploader = compositor.model_uploader();
+        self.models_aside = Some(crate::model_uploads::ModelUploads::new(move |model| {
+            uploader.upload(model)
+        }));
+    }
+
+    /// Whether a model's upload was asked of the thread and isn't back, for tests.
+    #[cfg(test)]
+    pub(crate) fn models_coming(&self) -> bool {
+        self.models_aside
+            .as_ref()
+            .is_some_and(crate::model_uploads::ModelUploads::busy)
+    }
+
     /// Uploads the model `source` shows, unless the upload kept for it is of the same
-    /// version (ADR-0107): drawing it again then allocates nothing.
+    /// version (ADR-0107): drawing it again then allocates nothing. With a thread for
+    /// the uploads ([`Self::upload_models_aside`]) it only asks for the upload, which a
+    /// later frame's [`Self::begin`] takes: [`Self::model`] is the version before
+    /// until then, or none.
     ///
     /// # Errors
     /// What the compositor reports for the upload.
@@ -1156,7 +1190,7 @@ impl Chains {
         &mut self,
         compositor: &Compositor,
         source: &SourceId,
-        model: &jstream_media::model::Model,
+        model: &std::sync::Arc<jstream_media::model::Model>,
     ) -> Result<(), RenderError> {
         self.models_used.insert(source.clone());
         if self
@@ -1166,12 +1200,37 @@ impl Chains {
         {
             return Ok(());
         }
+        if let Some(aside) = &mut self.models_aside {
+            match aside.ask(source, model) {
+                Ok(crate::model_uploads::Asked::Coming) => return Ok(()),
+                Ok(crate::model_uploads::Asked::Here) => {}
+                Err(error) => {
+                    // A refused version is not drawn as the one before it.
+                    self.models.remove(source);
+                    return Err(error);
+                }
+            }
+        }
         // The old upload goes first, so two versions are never held at once.
         self.models.remove(source);
         let uploaded = compositor.upload_model(model)?;
         self.models
             .insert(source.clone(), (model.version(), uploaded));
         Ok(())
+    }
+
+    /// Keeps `models`, which the warm scenes' sources show, uploaded though no frame
+    /// draws them (ADR-0177 decision 5): each is uploaded as a drawn one is
+    /// ([`Self::upload_model`]) and not let go of when the next frame begins. One whose
+    /// upload is refused is left for the draw that shows it to report.
+    pub(crate) fn keep_models(
+        &mut self,
+        compositor: &Compositor,
+        models: &BTreeMap<SourceId, std::sync::Arc<jstream_media::model::Model>>,
+    ) {
+        for (source, model) in models {
+            let _refused = self.upload_model(compositor, source, model);
+        }
     }
 
     /// The upload kept for the model `source` shows.
@@ -2968,6 +3027,136 @@ mod tests {
             ",
             "the pose moves it",
         );
+    }
+
+    /// ADR-0177 decisions 1 and 2: with a thread for the uploads, a draw asks for a
+    /// model's upload and doesn't make it. The item draws nothing until the upload is
+    /// back, and a model that changed is drawn as it was until the new one is.
+    #[test]
+    fn a_model_uploaded_aside_draws_once_its_upload_is_back() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        chains.upload_models_aside(&compositor);
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        let live = LiveParams::default();
+        let middle = [(16, 18)];
+        // Draws `shot` until its middle is `want`, each draw a frame of its own.
+        fn draw_until(
+            compositor: &mut Compositor,
+            (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+            shot: &Shot,
+            want: [u8; 4],
+        ) {
+            let live = LiveParams::default();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            loop {
+                let drawn = draw_points(
+                    compositor,
+                    (&mut *cache, &mut *chains),
+                    (shot, &live),
+                    &[(16, 18)],
+                );
+                if drawn[0] == want {
+                    return;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "never drew {want:?}: {:?}",
+                    drawn[0]
+                );
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }
+
+        let white = model_shot(&graph, "plane");
+        let first = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&white, &live),
+            &middle,
+        );
+        assert_eq!(first[0], BLACK, "nothing is drawn in the frame that asks");
+        assert!(chains.models_coming(), "the thread was asked");
+        draw_until(&mut compositor, (&mut cache, &mut chains), &white, WHITE);
+        assert!(!chains.models_coming());
+
+        // The same plane in blue is another model, so another version.
+        let blue = model_shot_with(&graph, "plane", |shown| {
+            let model = &shown.model;
+            let materials = model
+                .materials()
+                .iter()
+                .map(|m| jstream_media::model::Material {
+                    base_color: [0.0, 0.0, 1.0, 1.0],
+                    ..m.clone()
+                })
+                .collect();
+            let model = jstream_media::model::Model::new(
+                model.primitives().to_vec(),
+                materials,
+                model.textures().to_vec(),
+            )
+            .expect("a model");
+            jstream_sources::ShownModel {
+                model: std::sync::Arc::new(model),
+                ..shown
+            }
+        });
+        let changed = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&blue, &live),
+            &middle,
+        );
+        assert_eq!(changed[0], WHITE, "the version before is drawn meanwhile");
+        assert!(chains.models_coming());
+        draw_until(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &blue,
+            [0, 0, 255, 255],
+        );
+    }
+
+    /// ADR-0177 decision 5: a model a warm scene's source shows is uploaded and kept
+    /// though no frame draws it, and let go of once it is no longer kept.
+    #[test]
+    fn a_kept_model_stays_uploaded_though_no_frame_draws_it() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let live = LiveParams::default();
+        let plain = shot(&graph(&[]));
+        let cube = SourceId::new("cube");
+        let model = jstream_media::model::shapes::Shape::Cube
+            .model(jstream_media::model::Material::default())
+            .expect("a cube");
+        let kept: std::collections::BTreeMap<_, _> =
+            [(cube.clone(), std::sync::Arc::new(model))].into();
+        for _ in 0..3 {
+            chains.keep_models(&compositor, &kept);
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&plain, &live),
+                &[(2, 2)],
+            );
+            let held = chains.model(&cube).expect("the kept model is uploaded");
+            assert_eq!(held.version(), kept[&cube].version());
+        }
+        for _ in 0..2 {
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&plain, &live),
+                &[(2, 2)],
+            );
+        }
+        assert!(chains.model(&cube).is_none(), "let go of once not kept");
     }
 
     /// A model item draws its model where its box is, posed by its geometry and moved by

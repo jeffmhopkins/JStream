@@ -43,7 +43,8 @@ and calls this crate.
   `Item.depth_run` (`0` but for a stinger's items).
 - A **3D model** ([ADR-0107](../../docs/adr/0107-3d-models.md)) is not an item of its
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
-  version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
+  version (or its `ModelUploader` does, on another thread,
+  [ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)), and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
   scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
   and their shadow maps, ADR-0151, maybe another source's picture as its texture and
@@ -757,7 +758,16 @@ face needs it turned over though that cross product isn't, and the raw flag is f
 either alone and true with both. A material with no normal map keeps the interpolated
 normal as it is.
 `upload_model` refuses a primitive whose vertex or index buffer would pass the
-adapter's `max_buffer_size` (wgpu panics there rather than failing). A vertex is 88
+adapter's `max_buffer_size` (wgpu panics there rather than failing).
+`Compositor::model_uploader` gives a `ModelUploader`, which makes the same upload on
+whichever thread calls it
+([ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)): it holds
+clones of the device's handles and of the model pipelines' layouts (`UploadKit`), and
+submits nothing, so what it wrote goes with the queue's next submit, before any draw of
+the model. Each texture level is written from the model's own bytes in bands of at most
+4 MiB (`TEXTURE_BAND_BYTES`), since wgpu holds the queue's lock while a write is copied
+in: a thread that submits meanwhile waits for one band
+(`golden_model_one_uploaded_on_another_thread_draws_the_same`). A vertex is 88
 bytes: position, normal, tangent, UV and colour as `f32`s, then four joints as `u16`s
 and four weights.
 

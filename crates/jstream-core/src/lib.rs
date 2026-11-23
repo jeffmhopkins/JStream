@@ -48,6 +48,7 @@ mod kinds;
 mod lan;
 mod live;
 mod load;
+mod model_uploads;
 mod motion;
 mod output_stats;
 mod outputs;

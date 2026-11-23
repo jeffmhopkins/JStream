@@ -91,7 +91,7 @@ use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
-    RenderSnapshot, SceneShots,
+    RenderSnapshot, SceneShots, WarmModels,
 };
 use crate::snapshot::{self, CaptureImage, CaptureKey, Captures, GpuKey, LiveParams, Shot, View};
 
@@ -178,6 +178,7 @@ pub(crate) type DrawFn = Box<
             &mut [MixFrame],
             MediaTime,
             &mut DrawMeter,
+            &WarmModels,
         ) -> Result<Option<Reclaimed>, DrawError>,
 >;
 
@@ -485,7 +486,8 @@ pub(crate) fn cpu_draw() -> OpenDraw {
              captures: &dyn Captures,
              frames: &mut [MixFrame],
              at: MediaTime,
-             _: &mut DrawMeter| {
+             _: &mut DrawMeter,
+             _: &WarmModels| {
                 for frame in frames
                     .iter_mut()
                     .filter(|frame| frame.due && frame.readback)
@@ -1919,136 +1921,85 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
         // A still drawn small holds only the texels it is drawn with (#1139).
         cache.draw_uploads_small(true);
         let mut chains = Chains::default();
+        // This thread never stops for a model's upload (ADR-0177).
+        chains.upload_models_aside(&compositor);
         let mut nv12 = Nv12Passes::default();
         let mut readbacks = Readbacks::copied();
         // Whether the compositor was asked to time the pack passes yet: once a meter
         // guards them (#349).
         let mut timing = false;
-        let draw: DrawFn = Box::new(move |program, scenes, live, captures, frames, at, meter| {
-            if let Some(hook) = &hook {
-                hook(&compositor);
-            }
-            // A lost device is left at once, even when nothing on it fails: calls on a
-            // destroyed device can all succeed, so a tick that waited for an error could
-            // draw on it for good (#1457).
-            if let Some(why) = compositor.lost() {
-                return Err(DrawError::Lost(why));
-            }
-            // The pack passes' GPU times that came back since the last tick, a tick or
-            // two late, go to the guard (#349).
-            if let Some(guard) = meter.pass_guard() {
-                if !timing {
-                    timing = true;
-                    compositor.time_passes();
+        let draw: DrawFn = Box::new(
+            move |program, scenes, live, captures, frames, at, meter, warm| {
+                if let Some(hook) = &hook {
+                    hook(&compositor);
                 }
-                compositor.gpu_times(|kind, took| guard.measured(kind, took));
-                guard.end_tick();
-            }
-            // The units' GPU times that came back, and this tick's timing when it is
-            // one of the timed ones (`profile.get`'s `gpu_ms`).
-            meter.begin_gpu(&mut compositor);
-            // One frame of the cache for every mix of the tick, so the uploads and
-            // nested-scene layers they share are kept for all of them. A mix not due on
-            // this tick claims its layers without drawing, so they aren't retired and
-            // reallocated when it is due again.
-            cache.begin_frame();
-            readbacks.retain(frames);
-            // Read once, after the poll above brought back what the GPU has finished:
-            // every mix of the tick is converted, or none is.
-            let behind = flights.behind();
-            let mut converted = false;
-            // A monitored scene not planned (deleted, or not yet) draws nothing.
-            let shot_of = |frame: &MixFrame| match &frame.scene {
-                Some(scene) => scenes.get(scene).map(|scene| scene.shot()),
-                None => Some(program),
-            };
-            for frame in frames.iter().filter(|frame| !frame.due) {
-                let Some(shot) = shot_of(frame) else { continue };
-                let claimed = snapshot::claim_layers(
-                    &mut compositor,
-                    (&mut cache, &mut chains),
-                    shot,
-                    view_of(frame),
-                    frame.size,
-                );
-                claimed.map_err(|err| draw_error(&compositor, &err))?;
-            }
-            // The mixes first, then the monitored scenes: the program never waits for
-            // one (ADR-0117 §6).
-            for scenes_now in [false, true] {
-                for frame in frames
-                    .iter_mut()
-                    .filter(|frame| frame.due && frame.scene.is_some() == scenes_now)
-                {
+                // A lost device is left at once, even when nothing on it fails: calls on a
+                // destroyed device can all succeed, so a tick that waited for an error could
+                // draw on it for good (#1457).
+                if let Some(why) = compositor.lost() {
+                    return Err(DrawError::Lost(why));
+                }
+                // The pack passes' GPU times that came back since the last tick, a tick or
+                // two late, go to the guard (#349).
+                if let Some(guard) = meter.pass_guard() {
+                    if !timing {
+                        timing = true;
+                        compositor.time_passes();
+                    }
+                    compositor.gpu_times(|kind, took| guard.measured(kind, took));
+                    guard.end_tick();
+                }
+                // The units' GPU times that came back, and this tick's timing when it is
+                // one of the timed ones (`profile.get`'s `gpu_ms`).
+                meter.begin_gpu(&mut compositor);
+                // One frame of the cache for every mix of the tick, so the uploads and
+                // nested-scene layers they share are kept for all of them. A mix not due on
+                // this tick claims its layers without drawing, so they aren't retired and
+                // reallocated when it is due again.
+                cache.begin_frame();
+                readbacks.retain(frames);
+                // The warm scenes' models stay uploaded, so showing one uploads nothing
+                // (ADR-0177 decision 5).
+                chains.keep_models(&compositor, warm);
+                // Read once, after the poll above brought back what the GPU has finished:
+                // every mix of the tick is converted, or none is.
+                let behind = flights.behind();
+                let mut converted = false;
+                // A monitored scene not planned (deleted, or not yet) draws nothing.
+                let shot_of = |frame: &MixFrame| match &frame.scene {
+                    Some(scene) => scenes.get(scene).map(|scene| scene.shot()),
+                    None => Some(program),
+                };
+                for frame in frames.iter().filter(|frame| !frame.due) {
                     let Some(shot) = shot_of(frame) else { continue };
-                    // Field by field, so the frame's other fields stay free to write.
-                    let view = match frame.scene {
-                        Some(_) => View::monitored(),
-                        None => View::output(frame.mix.as_ref(), frame.owner.as_ref()),
-                    };
-                    // A monitored scene the tick has no time left for is skipped, its
-                    // layers kept, and counted (R-RT-004).
-                    if frame
-                        .deadline
-                        .is_some_and(|deadline| Instant::now() >= deadline)
+                    let claimed = snapshot::claim_layers(
+                        &mut compositor,
+                        (&mut cache, &mut chains),
+                        shot,
+                        view_of(frame),
+                        frame.size,
+                    );
+                    claimed.map_err(|err| draw_error(&compositor, &err))?;
+                }
+                // The mixes first, then the monitored scenes: the program never waits for
+                // one (ADR-0117 §6).
+                for scenes_now in [false, true] {
+                    for frame in frames
+                        .iter_mut()
+                        .filter(|frame| frame.due && frame.scene.is_some() == scenes_now)
                     {
-                        frame.unread += 1;
-                        frame.awaiting = true;
-                        snapshot::claim_layers(
-                            &mut compositor,
-                            (&mut cache, &mut chains),
-                            shot,
-                            view,
-                            frame.size,
-                        )
-                        .map_err(|err| draw_error(&compositor, &err))?;
-                        continue;
-                    }
-                    // The GPU is still running the conversions of two ticks back: this
-                    // tick's frame is dropped for the sessions on the GPU path, and
-                    // counted, so the queue doesn't grow (ADR-0117 §1, R-RT-004). Its
-                    // target goes back to the ring unwritten.
-                    if behind && frame.nv12.take().is_some() {
-                        frame.starved = true;
-                    }
-                    // Nothing takes this tick's picture: no target for the GPU sessions,
-                    // and no readback. Its layers are kept, as a mix not due keeps them.
-                    if frame.starved && !frame.readback {
-                        snapshot::claim_layers(
-                            &mut compositor,
-                            (&mut cache, &mut chains),
-                            shot,
-                            view,
-                            frame.size,
-                        )
-                        .map_err(|err| draw_error(&compositor, &err))?;
-                        continue;
-                    }
-                    // Read back without waiting for the GPU (ADR-0117 §4): what has mapped
-                    // is collected first, freeing its buffer.
-                    if frame.readback {
-                        let ring = readbacks.ring(frame);
-                        let planar = ring.format() == ReadbackFormat::Nv12;
-                        // Each frame that lands goes to `out`, and the one it replaces to
-                        // `earlier`, so a tick that collects two keeps both.
-                        ring.collect(&compositor, &mut frame.landing, |pts, landed| {
-                            if let Some(before) = frame.ready.replace(pts) {
-                                let pixels = std::mem::take(&mut frame.out);
-                                frame.earlier.push((before, pixels, frame.out_planar));
-                            }
-                            std::mem::swap(&mut frame.out, landed);
-                            frame.out_planar = planar;
-                        });
-                        // Every buffer still on its way: the GPU is behind. A mix only read
-                        // back skips its composite, so the queue doesn't grow, and the tick
-                        // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
-                        // are kept, as a mix not due keeps them.
-                        if ring.is_full() && frame.nv12.is_none() {
-                            // A lost device's maps may never finish (DX12), so the ring
-                            // stays full and no draw would fail to say so (#349).
-                            if let Some(why) = compositor.lost() {
-                                return Err(DrawError::Lost(why));
-                            }
+                        let Some(shot) = shot_of(frame) else { continue };
+                        // Field by field, so the frame's other fields stay free to write.
+                        let view = match frame.scene {
+                            Some(_) => View::monitored(),
+                            None => View::output(frame.mix.as_ref(), frame.owner.as_ref()),
+                        };
+                        // A monitored scene the tick has no time left for is skipped, its
+                        // layers kept, and counted (R-RT-004).
+                        if frame
+                            .deadline
+                            .is_some_and(|deadline| Instant::now() >= deadline)
+                        {
                             frame.unread += 1;
                             frame.awaiting = true;
                             snapshot::claim_layers(
@@ -2061,30 +2012,30 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                             .map_err(|err| draw_error(&compositor, &err))?;
                             continue;
                         }
-                    }
-                    let drawn = snapshot::compose_metered(
-                        &mut compositor,
-                        (&mut cache, &mut chains, &mut *meter),
-                        (shot, at),
-                        view,
-                        live,
-                        captures,
-                        // The readback is the ring's, recorded after the draw.
-                        snapshot::DrawAt {
-                            size: frame.size,
-                            readback: false,
-                        },
-                    )
-                    .and_then(|output| {
-                        let started = Instant::now();
+                        // The GPU is still running the conversions of two ticks back: this
+                        // tick's frame is dropped for the sessions on the GPU path, and
+                        // counted, so the queue doesn't grow (ADR-0117 §1, R-RT-004). Its
+                        // target goes back to the ring unwritten.
+                        if behind && frame.nv12.take().is_some() {
+                            frame.starved = true;
+                        }
+                        // Nothing takes this tick's picture: no target for the GPU sessions,
+                        // and no readback. Its layers are kept, as a mix not due keeps them.
+                        if frame.starved && !frame.readback {
+                            snapshot::claim_layers(
+                                &mut compositor,
+                                (&mut cache, &mut chains),
+                                shot,
+                                view,
+                                frame.size,
+                            )
+                            .map_err(|err| draw_error(&compositor, &err))?;
+                            continue;
+                        }
+                        // Read back without waiting for the GPU (ADR-0117 §4): what has mapped
+                        // is collected first, freeing its buffer.
                         if frame.readback {
-                            // Recorded now and collected once mapped, a tick or two on.
-                            if !readbacks.record(&compositor, frame, &output, at)? {
-                                frame.unread += 1;
-                            }
                             let ring = readbacks.ring(frame);
-                            // Pushes wait for what is on its way rather than repeat.
-                            frame.awaiting = ring.pending() > 0;
                             let planar = ring.format() == ReadbackFormat::Nv12;
                             // Each frame that lands goes to `out`, and the one it replaces to
                             // `earlier`, so a tick that collects two keeps both.
@@ -2096,28 +2047,86 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                                 std::mem::swap(&mut frame.out, landed);
                                 frame.out_planar = planar;
                             });
+                            // Every buffer still on its way: the GPU is behind. A mix only read
+                            // back skips its composite, so the queue doesn't grow, and the tick
+                            // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
+                            // are kept, as a mix not due keeps them.
+                            if ring.is_full() && frame.nv12.is_none() {
+                                // A lost device's maps may never finish (DX12), so the ring
+                                // stays full and no draw would fail to say so (#349).
+                                if let Some(why) = compositor.lost() {
+                                    return Err(DrawError::Lost(why));
+                                }
+                                frame.unread += 1;
+                                frame.awaiting = true;
+                                snapshot::claim_layers(
+                                    &mut compositor,
+                                    (&mut cache, &mut chains),
+                                    shot,
+                                    view,
+                                    frame.size,
+                                )
+                                .map_err(|err| draw_error(&compositor, &err))?;
+                                continue;
+                            }
                         }
-                        let submitted = match &frame.nv12 {
-                            Some(target) => nv12
-                                .submit(&compositor, output.texture(), target)
-                                .map(|()| converted = true),
-                            None => Ok(()),
-                        };
-                        meter.phase_since(Phase::Finish, started);
-                        submitted
-                    });
-                    drawn.map_err(|err| draw_error(&compositor, &err))?;
+                        let drawn = snapshot::compose_metered(
+                            &mut compositor,
+                            (&mut cache, &mut chains, &mut *meter),
+                            (shot, at),
+                            view,
+                            live,
+                            captures,
+                            // The readback is the ring's, recorded after the draw.
+                            snapshot::DrawAt {
+                                size: frame.size,
+                                readback: false,
+                            },
+                        )
+                        .and_then(|output| {
+                            let started = Instant::now();
+                            if frame.readback {
+                                // Recorded now and collected once mapped, a tick or two on.
+                                if !readbacks.record(&compositor, frame, &output, at)? {
+                                    frame.unread += 1;
+                                }
+                                let ring = readbacks.ring(frame);
+                                // Pushes wait for what is on its way rather than repeat.
+                                frame.awaiting = ring.pending() > 0;
+                                let planar = ring.format() == ReadbackFormat::Nv12;
+                                // Each frame that lands goes to `out`, and the one it replaces to
+                                // `earlier`, so a tick that collects two keeps both.
+                                ring.collect(&compositor, &mut frame.landing, |pts, landed| {
+                                    if let Some(before) = frame.ready.replace(pts) {
+                                        let pixels = std::mem::take(&mut frame.out);
+                                        frame.earlier.push((before, pixels, frame.out_planar));
+                                    }
+                                    std::mem::swap(&mut frame.out, landed);
+                                    frame.out_planar = planar;
+                                });
+                            }
+                            let submitted = match &frame.nv12 {
+                                Some(target) => nv12
+                                    .submit(&compositor, output.texture(), target)
+                                    .map(|()| converted = true),
+                                None => Ok(()),
+                            };
+                            meter.phase_since(Phase::Finish, started);
+                            submitted
+                        });
+                        drawn.map_err(|err| draw_error(&compositor, &err))?;
+                    }
                 }
-            }
-            meter.end_gpu(&mut compositor);
-            // After the tick's last submit, so the count comes down once all of it ran.
-            if converted {
-                flights.launch(compositor.queue());
-            }
-            // A failed frame skips this: what it retired waits for the next frame's
-            // fence, which also covers it, so nothing is freed on this thread.
-            Ok(cache.end_frame(&compositor))
-        });
+                meter.end_gpu(&mut compositor);
+                // After the tick's last submit, so the count comes down once all of it ran.
+                if converted {
+                    flights.launch(compositor.queue());
+                }
+                // A failed frame skips this: what it retired waits for the next frame's
+                // fence, which also covers it, so nothing is freed on this thread.
+                Ok(cache.end_frame(&compositor))
+            },
+        );
         Ok(draw)
     })
 }
@@ -3811,7 +3820,7 @@ impl Frames {
     fn draw(
         &mut self,
         draw: &mut DrawFn,
-        (shot, scenes, live): (&Shot, &SceneShots, &LiveParams),
+        (shot, scenes, live, warm): (&Shot, &SceneShots, &LiveParams, &WarmModels),
         captures: &RenderCaptures,
         (at, deadline): (MediaTime, Instant),
         meter: &mut DrawMeter,
@@ -3819,7 +3828,16 @@ impl Frames {
         for frame in &mut self.mixes {
             frame.deadline = frame.scene.is_some().then_some(deadline);
         }
-        let drawn = draw(shot, scenes, live, captures, &mut self.mixes, at, meter);
+        let drawn = draw(
+            shot,
+            scenes,
+            live,
+            captures,
+            &mut self.mixes,
+            at,
+            meter,
+            warm,
+        );
         for (((frame, shown), encode), taps) in self
             .mixes
             .iter_mut()
@@ -4107,7 +4125,7 @@ fn render_loop(job: RenderJob) {
                 let deadline = started + budget;
                 frames.draw(
                     &mut draw,
-                    (shot, scenes, live),
+                    (shot, scenes, live, reader.warm_models()),
                     &captures,
                     (due, deadline),
                     &mut meter,
@@ -6030,6 +6048,7 @@ mod tests {
                 &mut frames,
                 MediaTime::zero(Timebase::NANOS),
                 &mut crate::profile::DrawMeter::default(),
+                &crate::runtime::WarmModels::new(),
             )
             .expect("draw");
             assert_eq!(frames[0].out, rgba[..8], "from a {own:?} capture");
@@ -6071,6 +6090,7 @@ mod tests {
                 &mut [],
                 MediaTime::zero(Timebase::NANOS),
                 &mut crate::profile::DrawMeter::default(),
+                &crate::runtime::WarmModels::new(),
             )
         };
         assert!(call().is_ok(), "a usable device draws");
@@ -6316,7 +6336,7 @@ mod tests {
         let long = Duration::from_secs(30);
         let opens: OpenDraw = Arc::new(|context: Option<&GpuContext>| {
             assert!(context.is_none(), "opened on the context");
-            let draw: DrawFn = Box::new(|_, _, _, _, _, _, _| Ok(None));
+            let draw: DrawFn = Box::new(|_, _, _, _, _, _, _, _| Ok(None));
             Ok(draw)
         });
         let released = Arc::new(AtomicBool::new(false));
@@ -6443,6 +6463,7 @@ mod tests {
                 &mut frames,
                 at,
                 &mut meter,
+                &crate::runtime::WarmModels::new(),
             )
             .expect("drawn");
             if frames[1].ready.is_some() {

@@ -51,6 +51,8 @@ const FRAME_BYTES: u64 = 64
 const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 1;
 /// Bytes of a material's uniform: five `vec4`.
 const MATERIAL_BYTES: u64 = 80;
+/// The most bytes of a texture level one queue write copies ([`upload_texture`]).
+const TEXTURE_BAND_BYTES: usize = 4 << 20;
 
 pub use jstream_media::model::Lighting;
 
@@ -506,7 +508,7 @@ impl ModelRuntime {
                 count: None,
             }],
         });
-        let rest_pose = pose_bind(gpu, &pose_layout, &[IDENTITY_MAT4]).1;
+        let rest_pose = pose_bind(&gpu.device, &pose_layout, &[IDENTITY_MAT4]).1;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
             // The filters' colour helpers, so a picture decodes as every pass decodes it.
@@ -709,21 +711,57 @@ impl ModelRuntime {
         }
     }
 
+    /// What an upload of a model `owner`'s compositor draws takes of it.
+    pub(crate) fn upload_kit(&self, gpu: &Gpu, owner: &Owner) -> UploadKit {
+        UploadKit {
+            device: gpu.device.clone(),
+            queue: gpu.queue.clone(),
+            max_texture_dimension_2d: gpu.max_texture_dimension_2d,
+            max_buffer_size: gpu.max_buffer_size,
+            owner: owner.clone(),
+            material_layout: self.material_layout.clone(),
+            pose_layout: self.pose_layout.clone(),
+            sampler: self.sampler.clone(),
+            white: self.white.clone(),
+            flat_normal: self.flat_normal.clone(),
+        }
+    }
+}
+
+/// What uploading a model takes of the compositor that draws it: its device's handles
+/// and the model pipelines' layouts, sampler and stand-in textures. It holds clones, so
+/// an upload can run on another thread than the compositor's
+/// ([`crate::ModelUploader`]). It writes buffers and textures and submits nothing, so
+/// what it wrote goes with the queue's next submit, before any draw of the model.
+pub(crate) struct UploadKit {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    max_texture_dimension_2d: u32,
+    max_buffer_size: u64,
+    owner: Owner,
+    material_layout: wgpu::BindGroupLayout,
+    pose_layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    white: wgpu::TextureView,
+    flat_normal: wgpu::TextureView,
+}
+
+impl UploadKit {
+    /// The device it uploads to.
+    pub(crate) fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
     /// Uploads `model`: its vertex and index buffers, its textures with their mips, and a
     /// bind group per material.
-    pub(crate) fn upload(
-        &self,
-        gpu: &Gpu,
-        owner: &Owner,
-        model: &Model,
-    ) -> Result<GpuModel, RenderError> {
-        let device = &gpu.device;
+    pub(crate) fn upload(&self, model: &Model) -> Result<GpuModel, RenderError> {
+        let device = &self.device;
         // Every primitive is one vertex and one index buffer, which wgpu panics on, rather
         // than refuses, past the device's limit: check before uploading anything.
         for p in model.primitives() {
             let vertex_bytes = p.vertices.len() as u64 * VERTEX_STRIDE;
             let index_bytes = p.indices.len() as u64 * 4;
-            if vertex_bytes.max(index_bytes) > gpu.max_buffer_size {
+            if vertex_bytes.max(index_bytes) > self.max_buffer_size {
                 return Err(RenderError::Invalid {
                     what: "model",
                     detail: format!(
@@ -731,14 +769,14 @@ impl ModelRuntime {
                         p.vertices.len(),
                         p.indices.len(),
                         vertex_bytes.max(index_bytes),
-                        gpu.max_buffer_size
+                        self.max_buffer_size
                     ),
                 });
             }
         }
         let mut textures = Vec::with_capacity(model.textures().len());
         for texture in model.textures() {
-            textures.push(upload_texture(gpu, texture)?);
+            textures.push(upload_texture(self, texture)?);
         }
         let view =
             |texture: Option<TextureRef>, fallback: &wgpu::TextureView| -> wgpu::TextureView {
@@ -880,7 +918,7 @@ impl ModelRuntime {
         let bounds = model.bounds();
         Ok(GpuModel {
             inner: Arc::new(Uploaded {
-                owner: owner.clone(),
+                owner: self.owner.clone(),
                 version: model.version(),
                 bounds: SolidBounds {
                     min: bounds.min,
@@ -889,14 +927,16 @@ impl ModelRuntime {
                 primitives,
                 materials,
                 pose: (!rest.is_empty()).then(|| {
-                    let (buffer, bind) = pose_bind(gpu, &self.pose_layout, &rest);
+                    let (buffer, bind) = pose_bind(device, &self.pose_layout, &rest);
                     (buffer, bind, rest.len())
                 }),
                 live: Mutex::new(None),
             }),
         })
     }
+}
 
+impl ModelRuntime {
     /// Writes `palette` as `model`'s pose for its next draws (ADR-0151 decision 7). A
     /// model without a rig, or a palette of another length, is left as it is.
     pub(crate) fn pose(gpu: &Gpu, model: &GpuModel, palette: &[rig::Mat4]) {
@@ -1964,7 +2004,7 @@ const IDENTITY_MAT4: rig::Mat4 = [
 
 /// A palette's storage buffer, holding `palette`, and its bind group.
 fn pose_bind(
-    gpu: &Gpu,
+    device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     palette: &[rig::Mat4],
 ) -> (wgpu::Buffer, wgpu::BindGroup) {
@@ -1973,14 +2013,12 @@ fn pose_bind(
         .flatten()
         .flat_map(|v| v.to_le_bytes())
         .collect();
-    let buffer = gpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("jstream-render-model-pose"),
-            contents: &bytes,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
-    let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("jstream-render-model-pose"),
+        contents: &bytes,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    });
+    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("jstream-render-model-pose"),
         layout,
         entries: &[wgpu::BindGroupEntry {
@@ -1991,8 +2029,11 @@ fn pose_bind(
     (buffer, bind)
 }
 
-fn upload_texture(gpu: &Gpu, texture: &ModelTexture) -> Result<wgpu::TextureView, RenderError> {
-    let limit = gpu.max_texture_dimension_2d;
+fn upload_texture(
+    kit: &UploadKit,
+    texture: &ModelTexture,
+) -> Result<wgpu::TextureView, RenderError> {
+    let limit = kit.max_texture_dimension_2d;
     if texture.width() > limit || texture.height() > limit {
         return Err(RenderError::TooLarge {
             what: "image",
@@ -2005,26 +2046,56 @@ fn upload_texture(gpu: &Gpu, texture: &ModelTexture) -> Result<wgpu::TextureView
         TextureColor::Srgb => wgpu::TextureFormat::Rgba8UnormSrgb,
         TextureColor::Linear => wgpu::TextureFormat::Rgba8Unorm,
     };
-    let data: Vec<u8> = texture.levels().iter().flatten().copied().collect();
-    let uploaded = gpu.device.create_texture_with_data(
-        &gpu.queue,
-        &wgpu::TextureDescriptor {
-            label: Some("jstream-render-model-texture"),
-            size: wgpu::Extent3d {
-                width: texture.width(),
-                height: texture.height(),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: texture.levels().len() as u32,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
+    let uploaded = kit.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("jstream-render-model-texture"),
+        size: wgpu::Extent3d {
+            width: texture.width(),
+            height: texture.height(),
+            depth_or_array_layers: 1,
         },
-        wgpu::util::TextureDataOrder::LayerMajor,
-        &data,
-    );
+        mip_level_count: texture.levels().len() as u32,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    // Each level is written from where it is, a band of rows at a time: the queue is
+    // locked for one band's copy, not a level's, so a thread that submits meanwhile
+    // waits for little (ADR-0177).
+    for (level, texels) in texture.levels().iter().enumerate() {
+        let width = (texture.width() >> level).max(1);
+        let height = (texture.height() >> level).max(1);
+        let row = width as usize * 4;
+        let band = (TEXTURE_BAND_BYTES / row).max(1);
+        for (at, rows) in texels.chunks(row * band).enumerate() {
+            let rows_here = (rows.len() / row) as u32;
+            kit.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &uploaded,
+                    mip_level: level as u32,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: (at * band) as u32,
+                        z: 0,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                rows,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(width * 4),
+                    rows_per_image: Some(rows_here),
+                },
+                wgpu::Extent3d {
+                    width,
+                    height: rows_here,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        debug_assert_eq!(texels.len(), row * height as usize);
+    }
     Ok(uploaded.create_view(&wgpu::TextureViewDescriptor::default()))
 }
 

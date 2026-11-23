@@ -240,6 +240,27 @@ impl Errors {
     }
 }
 
+/// Uploads 3D models for the [`Compositor`] that made it
+/// ([`Compositor::model_uploader`]), on whichever thread calls it. Cheap to clone.
+#[derive(Clone)]
+pub struct ModelUploader {
+    kit: Arc<crate::model::UploadKit>,
+    own_errors: bool,
+}
+
+impl ModelUploader {
+    /// Uploads `model` as [`Compositor::upload_model`] does. It submits nothing: what it
+    /// wrote goes with the next submit on the compositor's queue, so the model can be
+    /// drawn as soon as this returns.
+    ///
+    /// # Errors
+    /// What [`Compositor::upload_model`] reports.
+    pub fn upload(&self, model: &jstream_media::model::Model) -> Result<GpuModel, RenderError> {
+        let errors = Errors::open(self.kit.device(), self.own_errors);
+        errors.close(self.kit.upload(model))
+    }
+}
+
 impl Compositor {
     /// Opens a device and compiles the compositor pipelines.
     ///
@@ -748,7 +769,17 @@ impl Compositor {
         model: &jstream_media::model::Model,
     ) -> Result<GpuModel, RenderError> {
         let errors = self.errors();
-        errors.close(self.models.upload(&self.gpu, &self.owner, model))
+        errors.close(self.models.upload_kit(&self.gpu, &self.owner).upload(model))
+    }
+
+    /// This compositor's model uploads, for another thread to make (ADR-0177): a model
+    /// it uploads is this compositor's to draw, as one from [`Self::upload_model`] is.
+    /// It keeps the device alive, not the compositor.
+    pub fn model_uploader(&self) -> ModelUploader {
+        ModelUploader {
+            kit: Arc::new(self.models.upload_kit(&self.gpu, &self.owner)),
+            own_errors: self.own_errors,
+        }
     }
 
     /// Poses a rigged model for its next draws (ADR-0151 decision 7): `palette` is its

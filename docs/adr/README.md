@@ -185,4 +185,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0170](0170-generic-reflections-and-3d-rendering-switches.md) | Generic reflections between scene surfaces, and app-wide 3D rendering switches | accepted | agent |  |
 | [ADR-0171](0171-live-data-from-a-daw-drives-scenes.md) | Live data from a DAW drives scenes: JTunnel state, data bindings, source settings and grids | accepted | agent |  |
 | [ADR-0172](0172-a-media-clock-a-client-can-hold-and-step.md) | A media clock a client can hold and step | accepted | agent |  |
+| [ADR-0177](0177-models-upload-off-the-render-thread.md) | A 3D model is uploaded off the render thread, and a warm scene's stays uploaded | accepted | agent |  |
 <!-- @generated end adr-index -->
