@@ -2457,7 +2457,7 @@ impl Compositor {
     }
 
     /// Fills `patches` with the boxes of `target` that drawing `scene`, readied, would
-    /// change (ADR-0194 decision 6), or leaves it empty when the whole layer is to be
+    /// change (ADR-0201), or leaves it empty when the whole layer is to be
     /// drawn. They are the boxes, before and now, of each draw that is not what the
     /// layer's last [`Self::render_into`] drew in its place: other vertices, another
     /// image or mode, or an image whose texels changed. Boxes that meet are joined, so

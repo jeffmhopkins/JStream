@@ -601,7 +601,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    `a_parent_is_kept_while_the_layers_it_places_are`).
    When the scene does not match but the layer still holds its last draw, over a
    transparent background in the same space with as many draws, only what changed is
-   drawn (`Compositor::changed`, ADR-0194 decisions 6 and 7): each draw that differs
+   drawn (`Compositor::changed`,
+   [ADR-0201](../../docs/adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)): each draw that differs
    from the one last drawn in its place (its vertices' bytes, its image and that
    image's count of writes, its mode or mip chain) gives the box it could touch then
    and the one it can touch now, boxes that share a texel are joined, and

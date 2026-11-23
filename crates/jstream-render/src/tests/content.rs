@@ -927,7 +927,7 @@ fn cells<'a>(images: &'a [Image; 4], moved: f32, faded: f32) -> [Item<'a>; 4] {
 }
 
 /// A layer in which a few items changed is drawn again only over their boxes
-/// (ADR-0194), to the very pixels a whole redraw gives, in both blending spaces: an
+/// (ADR-0201), to the very pixels a whole redraw gives, in both blending spaces: an
 /// item moved, one faded under another, an image's texels changed. A change over more
 /// than half of it, an added item, or a background draws it whole.
 #[test]

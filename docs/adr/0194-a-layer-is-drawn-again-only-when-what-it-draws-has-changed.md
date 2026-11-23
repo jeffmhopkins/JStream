@@ -57,18 +57,8 @@ light.
    or an upload must call `Image::mark_changed`, and an import must be handed its
    frames through the resource cache, which marks each new one.
 
-6. **A layer in which a few items changed is drawn again only over their boxes.** When
-   the layer still holds its last draw, over a transparent background in the same
-   space, and the scene has the same number of draws, each draw is compared with the
-   one last drawn in its place. One that differs (other vertices, another image or
-   mode, or an image whose texels changed) gives two boxes: the texels it could touch
-   then and the ones it can touch now. Boxes that share a texel are joined, so no
-   texel is in two. Each box is made transparent, every draw that reaches it is drawn
-   again clipped to it, in order, and in the browser-style space the box is decoded.
-   The rest of the layer is not touched.
-7. **The whole layer is drawn instead** when a draw was added or removed, the
-   background is not transparent, a draw reads its backdrop, the scene has a model's
-   depth, there are more than 8 boxes, or the boxes cover more than half the layer.
+This is the first step. A scene in which a few items change still redraws whole;
+redrawing only the boxes that changed is left for a later decision.
 
 No setting, switch, protocol message or file changes. The pixels are those a redraw
 would give.
@@ -84,16 +74,6 @@ would give.
 - **Risk moved to the write count.** A write into an image that does not mark it would
   now leave a stale layer on screen, where before it left only a stale mip chain. The
   compositor's own writers all mark; decision 5 is the rule for new ones.
-- **A scene with a few moving parts costs about what those parts cover.** A grid of
-  cells in which a meter or a clock changes each frame redraws those boxes, not the
-  grid. Every draw that reaches a box is drawn in it, so a box under many stacked
-  items costs each of them there.
-- **A parent redraws all of a changed layer it places.** A layer redrawn in boxes is
-  marked changed as a whole, so the scene that places it draws the layer's whole
-  content box again, not only the boxes. Passing the boxes up is a later step.
-- **The same pixels.** Inside a box the draws, their order and their blending are those
-  of a whole redraw, and outside it the layer holds what the last one left, so the
-  result is bit for bit a whole redraw's on the same GPU.
 - **What does not benefit.** A scene that shows a live source (a capture, a video, a
   browser page that repaints) changes every frame and is drawn every frame, as are the
   scenes that place it. Filter chains, models and the final composite are not covered.
