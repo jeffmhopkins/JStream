@@ -6675,7 +6675,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:e9fb385cc6c88d12", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:e9fb385cc6c88d12", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:a5184aecff315beb", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
@@ -6783,7 +6783,7 @@ stamp = { hash = "b3:30f9ee975f087129", by = "agent:claude", note = "Agent activ
 stamp = { hash = "b3:af60373bb41b621a", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/channels.rs"]
-stamp = { hash = "b3:ac888abeb67e86ce", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:ac888abeb67e86ce", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -6804,7 +6804,7 @@ stamp = { hash = "b3:5ff0c8373b6af2f5", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:2db221a6045a18ed", by = "agent:claude", note = "N1-N5 follow-up to #1373: the Outputs bullet now says Stop all sits beside Start all while any output runs, a copied recording gets a free path, Save/Delete wait for the engine (Saving…, Saved.), and a read an output.state_changed arrived during is re-read rather than applied (Panel::refresh's loop, REREADS); checked against outputs.rs and encoders.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/events.rs"]
-stamp = { hash = "b3:6859a219baa03555", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:380d5ad5aee70336", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
 stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Updated the Add filter and preset lists with the hologram and its four presets, matching filters.rs and filter_presets.rs." }
@@ -6822,7 +6822,7 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty lanes/starts/stops and delay_ms None in literals." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:a8307c56ffca6b3b", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:a8307c56ffca6b3b", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch: looks.rs's table in the settings form, small buttons, duplicate states refused, bytes; README's looks paragraph matches; the merge brought #1606's settings pages and pairing dialog CSS, separate from the .looks rules" }
@@ -6831,7 +6831,7 @@ stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:b43915a2af0fa768", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:db7850897408fba3", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:db7850897408fba3", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:a003b05cd35bbef4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
@@ -6849,10 +6849,10 @@ stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "New Channel
 stamp = { hash = "b3:3921e5a4a1123dc4", by = "agent:release-alpha8", note = """Updated: Depth of field turns autofocus on and shows Autofocus and Aperture (blur); camera motion offers Autofocus. | merge: The Add source text lists reflection_probe after light (#1609) and the Fog card's 1024 x 576 box (fog card), matching the 20-kind ORDER; "+ Add motion" up to 32 and the camera's Autofocus and Aperture (blur) (#1631), the Reflections check (#1609), the hologram's Style and presets (hologram follow-up) and the Controller learn bullet (CC PR 3 value bindings) match too, as does the control mock keeping value bindings.""" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sequence.rs"]
-stamp = { hash = "b3:a6c5739943cf923a", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:a6c5739943cf923a", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs." }
@@ -6918,10 +6918,10 @@ stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:1a79eae80d56c2e4", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "control button paragraph now lists Add to sequence and Set key with KeyCapture; Channels card names its Key row; Sequences paragraph describes the Events lane and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:9f756bd2e65a2b0e", by = "agent:claude", note = "re-read after events.rs (Events lane), Scenes sequence rows, KeyCapture and Add to sequence/Set key in learn.rs, the channel card's Key row; the module list now names events.rs" }
+stamp = { hash = "b3:9f756bd2e65a2b0e", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -7026,7 +7026,7 @@ stamp = { hash = "b3:30f9ee975f087129", by = "agent:claude", note = "Agent activ
 stamp = { hash = "b3:af60373bb41b621a", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/channels.rs"]
-stamp = { hash = "b3:ac888abeb67e86ce", by = "agent:claude", note = "re-read after events.rs (Events lane), Scenes sequence rows, KeyCapture and Add to sequence/Set key in learn.rs, the channel card's Key row; the module list now names events.rs" }
+stamp = { hash = "b3:ac888abeb67e86ce", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -7047,7 +7047,7 @@ stamp = { hash = "b3:5ff0c8373b6af2f5", by = "agent:claude", note = "filters.rs'
 stamp = { hash = "b3:2db221a6045a18ed", by = "agent:claude", note = "N1-N5 follow-up to #1373: outputs.rs and encoders.rs changed (Stop all beside Start all, a free path for a copied recording, the copy refusal, Save and Delete waiting for the engine, refresh re-reading instead of applying an overtaken read); the purpose entries for both still describe them." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/events.rs"]
-stamp = { hash = "b3:6859a219baa03555", by = "agent:claude", note = "re-read after events.rs (Events lane), Scenes sequence rows, KeyCapture and Add to sequence/Set key in learn.rs, the channel card's Key row; the module list now names events.rs" }
+stamp = { hash = "b3:380d5ad5aee70336", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
 stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Re-read: the Add filter catalogue gains Hologram under Style and its presets; purpose unchanged." }
@@ -7065,7 +7065,7 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty fields in literals." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:a8307c56ffca6b3b", by = "agent:claude", note = "re-read after events.rs (Events lane), Scenes sequence rows, KeyCapture and Add to sequence/Set key in learn.rs, the channel card's Key row; the module list now names events.rs" }
+stamp = { hash = "b3:a8307c56ffca6b3b", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch adds looks.rs, the grid's Looks table (rows, Own colour, brightness, blink, add/remove, the clip launcher preset), which now refuses duplicate states and counts bytes, as the README says; the merge brought #1606's Video and Audio settings pages and Pair a device dialog, which the purpose already covers" }
@@ -7074,7 +7074,7 @@ stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:b43915a2af0fa768", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:db7850897408fba3", by = "agent:claude", note = "re-read after events.rs (Events lane), Scenes sequence rows, KeyCapture and Add to sequence/Set key in learn.rs, the channel card's Key row; the module list now names events.rs" }
+stamp = { hash = "b3:db7850897408fba3", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:a003b05cd35bbef4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
@@ -7092,10 +7092,10 @@ stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Module list
 stamp = { hash = "b3:3921e5a4a1123dc4", by = "agent:release-alpha8", note = "Re-read against round 2 of ADR-0176 (0.167: SceneCamera.autofocus, CameraProperty autofocus, MAX_MOTION_MODIFIERS 32): purpose unchanged. | merge: The contents list covers the panels code that #1609 (Reflections check, probe switch and cap), the fog card bundle (fog_card in ORDER), the hologram follow-up (hologram in filters.rs KNOWN) and CC PR 3 value bindings (learn.rs, the store's value bindings, learn in both filters.rs forms) changed; the panels it names and their tests match the merged files." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "re-read after events.rs (Events lane), Scenes sequence rows, KeyCapture and Add to sequence/Set key in learn.rs, the channel card's Key row; the module list now names events.rs" }
+stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sequence.rs"]
-stamp = { hash = "b3:a6c5739943cf923a", by = "agent:claude", note = "re-read after events.rs (Events lane), Scenes sequence rows, KeyCapture and Add to sequence/Set key in learn.rs, the channel card's Key row; the module list now names events.rs" }
+stamp = { hash = "b3:a6c5739943cf923a", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection." }
@@ -8523,19 +8523,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:374275300293be0b", by = "agent:ui-design", note = "Added the small button (button.sm, 24 px, 12 px text) used by the Arrange panel rows and matched by Set key; checked against style.css and transform.rs." }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:1fdba0e3b5a5b18c", by = "agent:claude", note = "added: a sequence's own mark is --code-type (Scenes row icon, event chip edge); the playing badge is teal, not the on-air red; checked style.css" }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "added: a sequence's own mark is --code-type (Scenes row icon, event chip edge); the playing badge is teal, not the on-air red; checked style.css" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the naming rule: everything in a chain is a filter, and an item's own are item filters, never effects, as the Filters panel, window and Add filter now say." }
@@ -8544,7 +8544,7 @@ stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: copy rules and the (i) side-with-room placement (dialog.rs tip_side, .info-tip.up/.end) still hold; the merge's toast text 'Saved to …' follows them." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the picker rule (C15): Add source and Add filter share one layout, a 320 px list with search and eyebrow groups and row icons, and the pick's 40 px tile, name and line, then what it needs and a callout for where it lands." }
@@ -8553,7 +8553,7 @@ stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the p
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: the dialog shell text still matches style.css (--dialog-s/m/l 440/600/860, 56px header with .modal-sub, sticky ::after fade, 56px footer with 32px buttons and .footer-left); the merge added only .toast-action." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
@@ -8562,7 +8562,7 @@ stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn butto
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8571,28 +8571,28 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css adds seq-tree-row, seq-event, seq-event-editor, chan-key and key-capture rules; none changes this section's buttons, menus, type, controls, tabs, dialogs, forms or copy rules (the capture line is a menuitem, the editor's footer puts the primary rightmost)" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
 
 ["UI-FEATURES#automation"."body"]
-stamp = { hash = "b3:e3285a5b2022fa60", by = "agent:claude", note = "VC-01 now has Add to sequence and Set key; VC-02 the Key row; SQ-02 drops the events lane from not built; SQ-03 points to SC-12 for a sequence's key; new SQ-04 Events lane matching events.rs" }
+stamp = { hash = "b3:e3685116f5c2367e", by = "agent:claude", note = "VC-01 has Add to sequence and Set key; VC-02 the Key row; SQ-02 drops the events lane from not built; SQ-03 points to SC-12 for a sequence's key; new SQ-04 Events lane, where a cue with another action opens read-only; matches events.rs, learn.rs, channels.rs" }
 
 ["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/channels.rs"]
-stamp = { hash = "b3:ac888abeb67e86ce", by = "agent:claude", note = "VC-01 now has Add to sequence and Set key; VC-02 the Key row; SQ-02 drops the events lane from not built; SQ-03 points to SC-12 for a sequence's key; new SQ-04 Events lane matching events.rs" }
+stamp = { hash = "b3:ac888abeb67e86ce", by = "agent:claude", note = "VC-01 has Add to sequence and Set key; VC-02 the Key row; SQ-02 drops the events lane from not built; SQ-03 points to SC-12 for a sequence's key; new SQ-04 Events lane, where a cue with another action opens read-only; matches events.rs, learn.rs, channels.rs" }
 
 ["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/sequence.rs"]
-stamp = { hash = "b3:a6c5739943cf923a", by = "agent:claude", note = "VC-01 now has Add to sequence and Set key; VC-02 the Key row; SQ-02 drops the events lane from not built; SQ-03 points to SC-12 for a sequence's key; new SQ-04 Events lane matching events.rs" }
+stamp = { hash = "b3:a6c5739943cf923a", by = "agent:claude", note = "VC-01 has Add to sequence and Set key; VC-02 the Key row; SQ-02 drops the events lane from not built; SQ-03 points to SC-12 for a sequence's key; new SQ-04 Events lane, where a cue with another action opens read-only; matches events.rs, learn.rs, channels.rs" }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:cde78ab12de7f331", by = "agent:release-alpha8", note = """#1631 raised the Inspector's "+ Add motion" limit to 32 and CC PR 3 value bindings added Width and Height to MotionProperty::ALL, which the Moves select offers, so the Moves list now names Width and Height after a crop edge. | kept from the merged side: The 3D tools bullet now says Depth doubles or halves distance per 200 px with a 10 px floor and Turn leaves billboards alone; matches camera::pose""" }
@@ -8805,7 +8805,7 @@ stamp = { hash = "b3:fc75ed935227848b", by = "agent:claude", note = "icons.rs ad
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:53ec5f2051ecab65", by = "agent:claude", note = "style.css additions are scoped to the new sequence rows, events lane and key capture; the shared controls this section lists are unchanged" }
+stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note, scoped to the event editor" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
