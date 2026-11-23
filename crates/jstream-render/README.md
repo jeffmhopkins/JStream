@@ -675,7 +675,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 |---|---|
 | Device, queue, pipelines, sampler, layouts | Compositor |
 | The blend, depth, model, sky, sky bake and filter pipelines, once made | Every compositor on the device holds its own clone; the device's shared pipelines keep one too (`pipelines.rs`, in the `GpuContext`, or with the compositor for a device of its own), up to 1024, so a later compositor makes none of them again ([Scope](#purpose)) |
-| FP16 target, sRGB target, resolve bind group | Recreated when the canvas size changes |
+| FP16 target, sRGB target, resolve bind group | One set for each size `render` is given. The set of the size last rendered at is used again; those of up to 3 other sizes are kept aside for 240 renders after their last, so a tick that renders an output's picture and a preview's of another size makes no texture (`renders_at_alternating_sizes_keep_their_targets`). A 1920 × 1080 set is about 25 MB |
 | Vertex buffer | Grown when the scene needs more vertices, never shrunk; `queue.write_buffer` otherwise |
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
