@@ -112,14 +112,24 @@ impl Graph {
     /// that doesn't apply (its source was deleted meanwhile) is skipped.
     #[must_use]
     pub fn with_values(&self, values: &[Edit]) -> Graph {
-        let mut copy = self.clone();
-        for (at, edit) in values.iter().enumerate() {
-            let mut work = copy.state.clone();
-            if apply_edit(&mut work, &copy.kinds, edit, at, &BTreeSet::new()).is_ok() {
-                copy.state = work;
+        // The values are applied in place on one copy. An edit that fails may have
+        // changed part of the state first, so on a failure the copy is made again
+        // without it: a clone per failure, not per value, since this runs under the
+        // engine's lock as often as the values change (ADR-0178).
+        let mut skipped = BTreeSet::new();
+        'again: loop {
+            let mut copy = self.clone();
+            for (at, edit) in values.iter().enumerate() {
+                if skipped.contains(&at) {
+                    continue;
+                }
+                if apply_edit(&mut copy.state, &copy.kinds, edit, at, &BTreeSet::new()).is_err() {
+                    skipped.insert(at);
+                    continue 'again;
+                }
             }
+            return copy;
         }
-        copy
     }
 
     /// [`apply`](Self::apply), for an engine whose outputs in `running` are running: an

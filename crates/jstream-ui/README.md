@@ -766,7 +766,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   over the setting's whole range (a fader's over -60 to +6 dB), 50 ms smoothed, as
   `learn_<hash of the target>`, so learning again replaces it. A bound button shows its
   control (`CC 7`) and unbinds it on a click; a learning one says "Move…" and stops on a
-  click. An engine that reads no MIDI controls says so in the problem bar.
+  click, or once its form closes (its signals are read with `try_`, so a closed form ends
+  the loop). An engine that reads no MIDI controls says so in the problem bar.
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
   its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
   (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source

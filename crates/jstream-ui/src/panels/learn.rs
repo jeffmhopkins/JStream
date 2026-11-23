@@ -167,7 +167,8 @@ async fn controls(session: &crate::session::Session) -> Option<Vec<MidiControlIn
 }
 
 /// Reads the controls after [`POLL`] and binds the first that moved since `baseline`,
-/// or reads again, `tries` more times, while `learning` holds.
+/// or reads again, `tries` more times, while `learning` holds. The button's signals are
+/// read with `try_`: once its form closes they are gone, and the loop stops.
 fn watch(
     session: crate::session::Session,
     studio: Studio,
@@ -180,16 +181,22 @@ fn watch(
     set_timeout(
         move || {
             spawn_local(async move {
-                if !learning.get_untracked() {
+                if learning.try_get_untracked() != Some(true) {
                     return;
                 }
                 let now = controls(&session).await.unwrap_or_default();
+                if learning.try_get_untracked() != Some(true) {
+                    return;
+                }
                 if let Some(control) = moved(&baseline, &now) {
-                    let binding = target.with_value(|t| learned(&control, t, range));
+                    let Some(binding) = target.try_with_value(|t| learned(&control, t, range))
+                    else {
+                        return;
+                    };
                     studio.apply(&session, vec![Edit::BindingSetValue { binding }]);
-                    learning.set(false);
+                    learning.try_set(false);
                 } else if tries == 0 {
-                    learning.set(false);
+                    learning.try_set(false);
                 } else {
                     watch(
                         session,
@@ -233,9 +240,14 @@ pub fn Learn(
         learning.set(true);
         spawn_local(async move {
             match controls(&s).await {
+                // The form closed while the baseline was read: nothing to learn for.
+                Some(_) if learning.try_get_untracked() != Some(true) => {}
                 Some(baseline) => watch(s, studio, learning, target, range, baseline, TRIES),
                 None => {
-                    learning.set(false);
+                    // `try_set` hands the value back when the form has closed.
+                    if learning.try_set(false).is_some() {
+                        return;
+                    }
                     studio
                         .problem
                         .set(Some("This engine reads no MIDI controls.".into()));

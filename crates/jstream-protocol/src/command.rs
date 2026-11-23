@@ -1055,10 +1055,12 @@ pub enum Edit {
     },
     /// Sets a value binding (since 0.168, ADR-0178): a MIDI control or a live-data field
     /// driving one number, a new one or the whole of one with the same `binding_id` in
-    /// its place. Like `binding.set` it never adds to an undo history. Rejected with
+    /// its place. Setting it is an undoable edit, but what it drives is never stored, so
+    /// moving its control never adds to an undo history. Rejected with
     /// `invalid_argument` at `binding.<field>` for what [`ValueBinding::problem`]
-    /// refuses, at `binding.target` for a setting its kind doesn't mark `live` or that
-    /// isn't a number or `bool`, a `scene` source's fader, or a send that doesn't exist,
+    /// refuses, at `binding.target.param` for a setting its kind doesn't mark `live` or
+    /// that isn't a number or `bool`, at `binding.target` for a `scene` source's fader or
+    /// a send that doesn't exist,
     /// and at `binding` for a 257th binding ([`MAX_VALUE_BINDINGS`](crate::MAX_VALUE_BINDINGS));
     /// with `not_found` for a source, filter or bus it names that doesn't exist.
     /// Deleting that object later leaves the binding in place, driving nothing, as a
