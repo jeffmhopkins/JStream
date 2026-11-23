@@ -447,7 +447,7 @@ pub fn Modal(
                 }
                 on:pointercancel=move |event: ev::PointerEvent| end_drag(&event, false)
                 on:contextmenu=move |event: ev::MouseEvent| {
-                    // A setting's row hands the click to its control button (VC-08).
+                    // A setting's row hands the click to its control button (VC-03).
                     if let Some(at) = control_menu {
                         crate::panels::learn::row_context(at, &event);
                     }

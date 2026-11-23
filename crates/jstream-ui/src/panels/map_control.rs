@@ -1,4 +1,4 @@
-//! The Map control dialog (UI-FEATURES VC-08): one place to choose what drives a
+//! The Map control dialog (UI-FEATURES VC-03): one place to choose what drives a
 //! setting. A right-click on a mappable setting, or its control button, offers "Map
 //! control…", which opens it on that setting. The person picks a source from what is
 //! arriving now, each with its live value and what it drives already: a JTunnel
@@ -17,8 +17,7 @@
 use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::live_sources::{
-    self, LiveSources, MOD_COUNT, MODS_KEY, Moved, live_sources, mod_drives, mod_of, mod_reader,
-    reader_name,
+    self, MOD_COUNT, MODS_KEY, Moved, live_sources, mod_drives, mod_of, mod_reader, reader_name,
 };
 use crate::panels::channels::{ChannelSearch, live_values, new_channel};
 use crate::panels::learn::{KeyCapture, follows, fraction, learn_id, set_smoothing, smoothing_of};
@@ -72,18 +71,20 @@ impl Default for MapControlDialog {
 /// The dialog's tabs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
+    Key,
     Jtunnel,
     Midi,
     Channel,
-    Key,
+    Data,
 }
 
 impl Tab {
-    const ALL: [(Tab, &'static str); 4] = [
+    const ALL: [(Tab, &'static str); 5] = [
+        (Tab::Key, "Hotkey"),
         (Tab::Jtunnel, "JTunnel"),
         (Tab::Midi, "MIDI"),
         (Tab::Channel, "Channel"),
-        (Tab::Key, "Hotkey"),
+        (Tab::Data, "Other data"),
     ];
 
     /// The tab that lists `reader`.
@@ -91,6 +92,7 @@ impl Tab {
         match reader {
             MotionKind::Midi { .. } => Tab::Midi,
             MotionKind::Channel { .. } => Tab::Channel,
+            MotionKind::Data { .. } if mod_of(reader).is_none() => Tab::Data,
             _ => Tab::Jtunnel,
         }
     }
@@ -390,6 +392,99 @@ pub fn ReaderFields(
     }
 }
 
+/// How long Learn waits on the only source that moved before it takes it.
+const ACCEPT_AFTER: Duration = Duration::from_millis(900);
+
+/// Learn, from a setting's menu: listens for what moves and lists it, farthest first.
+/// When only one source has moved it is taken after a short pause; when several have,
+/// the person picks. What was moving already when it opened is left out, so it works
+/// while a DAW plays.
+#[component]
+pub fn LearnPopover(
+    /// Takes the reader of the source chosen, over 0 to 1.
+    accept: impl Fn(MotionKind) + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    let live = live_sources();
+    let listening = StoredValue::new(None::<live_sources::Listening>);
+    let heard = RwSignal::new(Vec::<(Moved, f32)>::new());
+    let settling = RwSignal::new(true);
+    // Bumped each time the set of sources heard changes, so a pause is only over when
+    // nothing new joined during it.
+    let round = StoredValue::new(0_u32);
+    Effect::new(move |_| {
+        let now = live.get();
+        // Until the first read, everything would look as if it had just arrived.
+        if !now.loaded {
+            return;
+        }
+        let mut state = listening.get_value();
+        let next = match state.as_mut() {
+            None => {
+                state = Some(live_sources::Listening::start(now));
+                Vec::new()
+            }
+            Some(l) => l.hear(&now),
+        };
+        settling.set(
+            state
+                .as_ref()
+                .is_some_and(live_sources::Listening::settling),
+        );
+        listening.set_value(state);
+        let changed = heard.with_untracked(|was| {
+            was.len() != next.len() || was.iter().zip(&next).any(|(a, b)| !a.0.same(&b.0))
+        });
+        if changed {
+            heard.set(next);
+            round.update_value(|r| *r += 1);
+            let mine = round.get_value();
+            set_timeout(
+                move || {
+                    if round.try_get_value() != Some(mine) {
+                        return;
+                    }
+                    let only = heard.try_with_untracked(|h| match &h[..] {
+                        [(source, _)] => Some(source.reader()),
+                        _ => None,
+                    });
+                    if let Some(Some(reader)) = only {
+                        accept(reader);
+                    }
+                },
+                ACCEPT_AFTER,
+            );
+        }
+    });
+    let rows = move || {
+        heard
+            .get()
+            .into_iter()
+            .map(|(source, travel)| {
+                let reader = source.reader();
+                let name = reader_name(None, &reader);
+                view! {
+                    <button type="button" class="menuitem map-field" on:click=move |_| accept(reader.clone())>
+                        <span class="ctx-label">{name}</span>
+                        {bar(move || travel)}
+                    </button>
+                }
+            })
+            .collect_view()
+    };
+    view! {
+        <div class="ctx-head">"Learn"</div>
+        <p class="hint control-menu-note" role="status">
+            {move || match (settling.get(), heard.with(Vec::len)) {
+                (true, _) => "Listening…",
+                (false, 0) => "Move a knob, fader or button, or a Mod in the DAW.",
+                (false, 1) => "Heard one. Taking it…",
+                (false, _) => "Several moved. Pick one:",
+            }}
+        </p>
+        <div class="map-list">{rows}</div>
+    }
+}
+
 /// Draws the Map control dialog while one is open.
 #[component]
 pub fn MapControlHost() -> impl IntoView {
@@ -451,32 +546,73 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
         draft.with(|d| d.as_ref().is_some_and(|d| same_source(d, reader)))
     };
 
-    // Learn: whichever MIDI control or Mod moves first since the button was pressed.
-    let learning = RwSignal::new(None::<LiveSources>);
+    // Learn: lists what moves once it has settled, and pre-selects what moved farthest.
+    // Nothing is mapped until Use.
+    let listener = StoredValue::new(None::<live_sources::Listening>);
+    let learning = RwSignal::new(false);
+    let heard = RwSignal::new(Vec::<(Moved, f32)>::new());
     Effect::new(move |_| {
         let now = live.get();
-        let Some(baseline) = learning.get_untracked() else {
+        if !learning.get_untracked() {
+            return;
+        }
+        let mut state = listener.get_value();
+        let Some(next) = state.as_mut().map(|l| l.hear(&now)) else {
             return;
         };
-        if let Some(moved) = live_sources::moved(&baseline, &now) {
-            let reader = moved.reader();
+        listener.set_value(state);
+        // The first thing heard is chosen, and stays so while more join the list.
+        if heard.with_untracked(Vec::is_empty)
+            && let Some((first, _)) = next.first()
+        {
+            let reader = first.reader();
             tab.set(Tab::of(&reader));
             pick(reader);
-            learning.set(None);
+        }
+        let changed = heard.with_untracked(|was| {
+            was.len() != next.len() || was.iter().zip(&next).any(|(a, b)| !a.0.same(&b.0))
+        });
+        if changed {
+            heard.set(next);
         }
     });
     let learn = move |_| {
-        if learning.get_untracked().is_some() {
-            learning.set(None);
+        if learning.get_untracked() {
+            learning.set(false);
             return;
         }
-        learning.set(Some(live.get_untracked()));
+        listener.set_value(Some(live_sources::Listening::start(live.get_untracked())));
+        heard.set(Vec::new());
+        learning.set(true);
         set_timeout(
             move || {
-                learning.try_set(None);
+                learning.try_set(false);
             },
             LEARN_FOR,
         );
+    };
+    let heard_strip = move || {
+        let list = heard.get();
+        (!list.is_empty()).then(|| {
+            let chips = list
+                .into_iter()
+                .map(|(source, _)| {
+                    let reader = source.reader();
+                    let name = reader_name(None, &reader);
+                    let is_chosen = {
+                        let reader = reader.clone();
+                        move || chosen(&reader)
+                    };
+                    view! {
+                        <button type="button" class="map-key" class:on=is_chosen
+                            on:click=move |_| { tab.set(Tab::of(&reader)); pick(reader.clone()); }>
+                            {name}
+                        </button>
+                    }
+                })
+                .collect_view();
+            view! { <div class="map-heard"><span class="hint">"Moved:"</span>{chips}</div> }
+        })
     };
 
     // JTunnel: Mods, and any other field of a sender's data.
@@ -494,7 +630,7 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
             opened.try_set(Some((sender, key, fields)));
         });
     };
-    let mods = move |sender: Option<String>, values: Vec<f32>, names: Vec<String>| {
+    let mods = move |sender: Option<String>, names: Vec<String>| {
         (0..MOD_COUNT)
             .map(|slot| {
                 let from = sender.clone();
@@ -524,43 +660,97 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                         if line.is_empty() { own.clone() } else { line }
                     }
                 };
-                let level = values.get(slot).copied();
+                // Read as it arrives, so the cell itself is never drawn again under a click.
+                let level = sender.clone().map(|from| {
+                    move || {
+                        live.with(|l| {
+                            l.senders
+                                .iter()
+                                .find(|s| s.input == from)
+                                .and_then(|s| s.mods.get(slot).copied())
+                                .unwrap_or(0.0)
+                        })
+                    }
+                });
                 view! {
                     <button type="button" class="map-mod" class:on=is_chosen.clone() aria-pressed=move || is_chosen().to_string()
                         on:click=move |_| pick(reader())>
                         <span class="map-mod-name">{format!("Mod {}", slot + 1)}</span>
                         <span class="map-mod-drives">{drives}</span>
-                        {level.map(|v| bar(move || v))}
+                        {level.map(bar)}
                     </button>
                 }
             })
             .collect_view()
     };
+    // Who is sending what, without the values: the lists are drawn again only when a
+    // sender, a key or a name comes or goes.
+    let shape = Memo::new(move |_| {
+        live.with(|l| {
+            l.senders
+                .iter()
+                .map(|s| {
+                    (
+                        s.input.clone(),
+                        s.keys.clone(),
+                        !s.mods.is_empty(),
+                        s.mod_names.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    });
     let jtunnel = move || {
-        let senders = live.with(|l| l.senders.clone());
+        let senders = shape.get();
         if senders.is_empty() {
             return view! {
                 <p class="hint map-help">
                     "No JTunnel sender is sending data. Accept one in Settings › JTunnel, with “Use this sender's state” on. A Mod can still be mapped now and will follow once a sender sends it."
                 </p>
-                <div class="map-mods">{mods(None, Vec::new(), Vec::new())}</div>
+                <div class="map-mods">{mods(None, Vec::new())}</div>
             }
             .into_any();
         }
         senders
             .into_iter()
-            .map(|sender| {
-                let name = sender.input.clone();
-                let keys = sender
-                    .keys
-                    .iter()
-                    .filter(|k| *k != MODS_KEY)
-                    .cloned()
+            .map(|(name, _, has_mods, names)| {
+                view! {
+                    <div class="map-sender">
+                        <div class="map-sender-name">{name.clone()}</div>
+                        {if has_mods {
+                            view! { <div class="map-mods">{mods(Some(name.clone()), names)}</div> }.into_any()
+                        } else {
+                            view! { <p class="hint map-help">"This sender sends no Mods."</p> }.into_any()
+                        }}
+                    </div>
+                }
+            })
+            .collect_view()
+            .into_any()
+    };
+    let other_data = move || {
+        let senders = shape.get();
+        if senders.is_empty() {
+            return view! {
+                <p class="hint map-help">"No JTunnel sender is sending data."</p>
+            }
+            .into_any();
+        }
+        senders
+            .into_iter()
+            .map(|(name, keys, _, _)| {
+                let keys = keys
+                    .into_iter()
+                    .filter(|k| k != MODS_KEY)
                     .map(|key| {
                         let from = name.clone();
                         let shown = key.clone();
+                        let is_open = {
+                            let (from, key) = (name.clone(), key.clone());
+                            move || opened.with(|o| o.as_ref().is_some_and(|(s, k, _)| *s == from && *k == key))
+                        };
                         view! {
-                            <button type="button" class="map-key" on:click=move |_| open_key(from.clone(), key.clone())>
+                            <button type="button" class="map-key" class:on=is_open on:click=move |_| open_key(from.clone(), key.clone())>
                                 {shown}
                             </button>
                         }
@@ -588,21 +778,14 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                             })
                             .collect_view();
                         Some(view! {
-                            <div class="ctx-head">{format!("Fields of {key}")}</div>
+                            <div class="ctx-head">{format!("Fields of {key}, as they were when opened")}</div>
                             <div class="map-list">{rows}</div>
                         })
                     }
                 };
-                let has_mods = !sender.mods.is_empty();
                 view! {
                     <div class="map-sender">
                         <div class="map-sender-name">{name.clone()}</div>
-                        {if has_mods {
-                            view! { <div class="map-mods">{mods(Some(name.clone()), sender.mods.clone(), sender.mod_names.clone())}</div> }.into_any()
-                        } else {
-                            view! { <p class="hint map-help">"This sender sends no Mods."</p> }.into_any()
-                        }}
-                        <div class="ctx-head">"Other data"</div>
                         <div class="map-keys">{keys}</div>
                         {fields}
                     </div>
@@ -625,25 +808,49 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
             &typed_input.get_untracked(),
         ));
     };
+    // The controls seen, without their values, so a row isn't drawn again while its
+    // control moves.
+    let seen_controls = Memo::new(move |_| {
+        live.with(|l| {
+            l.controls
+                .iter()
+                .map(|c| (c.input.clone(), c.channel, c.controller))
+                .collect::<Vec<_>>()
+        })
+    });
     let seen = move || {
-        let controls = live.with(|l| l.controls.clone());
+        let controls = seen_controls.get();
         if controls.is_empty() {
             return view! { <p class="hint map-help">"No MIDI control has moved yet. Move one, or press Learn."</p> }.into_any();
         }
         controls
             .into_iter()
-            .map(|control| {
-                let reader = Moved::Midi(control.clone()).reader();
+            .map(|(input, channel, controller)| {
+                let reader = midi_reader(MotionMidiControl::Cc, controller, channel, &input);
                 let is_chosen = {
                     let reader = reader.clone();
                     move || chosen(&reader)
                 };
-                let level = f32::from(control.value) / 127.0;
+                let value = {
+                    let input = input.clone();
+                    move || {
+                        live.with(|l| {
+                            l.controls
+                                .iter()
+                                .find(|c| c.input == input && c.channel == channel && c.controller == controller)
+                                .map_or(0, |c| c.value)
+                        })
+                    }
+                };
+                let level = {
+                    let value = value.clone();
+                    move || f32::from(value()) / 127.0
+                };
                 view! {
                     <button type="button" class="menuitem map-field" class:on=is_chosen on:click=move |_| pick(reader.clone())>
-                        <span class="ctx-label">{format!("CC {} · channel {} · {}", control.controller, control.channel, control.input)}</span>
-                        {bar(move || level)}
-                        <span class="hint mono">{control.value}</span>
+                        <span class="ctx-label">{format!("CC {controller} · channel {channel} · {input}")}</span>
+                        {bar(level)}
+                        <span class="hint mono">{value}</span>
                     </button>
                 }
             })
@@ -802,18 +1009,52 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                 }],
             );
         }
-        close();
+        draft.set(None);
     };
-    let now_line = move || {
-        let mapped = bound().map(|b| {
-            studio
-                .collection
-                .with(|c| reader_name(c.as_ref(), &b.input))
+    let value_line = request.with_value(|r| match r.current {
+        Some(v) => format!(
+            "Value {}",
+            crate::panels::number::format_number(v, 2, false)
+        ),
+        None => String::new(),
+    });
+    // The setting's mapping as a row: its source, the range it maps onto, and Remove.
+    let mapped_rows = move || {
+        let binding = bound()?;
+        let name = studio
+            .collection
+            .with(|c| reader_name(c.as_ref(), &binding.input));
+        let onto = ends(&binding.input).map_or_else(String::new, |(low, high)| {
+            let n = |v: f32| crate::panels::number::format_number(f64::from(v), 2, false);
+            format!("{} → {}", n(low), n(high))
         });
-        match mapped {
-            Some(name) => format!("Mapped to {name}"),
-            None => "Not mapped".to_owned(),
-        }
+        Some(view! {
+            <div class="section-head"><span class="eyebrow">"Mapped to"</span></div>
+            <ul class="chan-rows">
+                <li class="chan-row">
+                    <span class="chan-row-name">{name}</span>
+                    <span class="hint mono">{onto}</span>
+                    <span class="hint">"Override"</span>
+                    <button type="button" class="chan-x" title="Remove this mapping" aria-label="Remove this mapping" on:click=remove>
+                        "×"
+                    </button>
+                </li>
+            </ul>
+        })
+    };
+    // What Use does, in words, when the draft isn't the mapping the setting has.
+    let replaces = move || {
+        let binding = bound()?;
+        let same = match tab.get() {
+            Tab::Key => chord.with(Option::is_none),
+            _ => draft.with(|d| d.as_ref().is_none_or(|d| same_source(d, &binding.input))),
+        };
+        (!same).then(|| {
+            let name = studio
+                .collection
+                .with(|c| reader_name(c.as_ref(), &binding.input));
+            format!("A setting takes one source that overrides it: Use replaces {name}.")
+        })
     };
     let draft_line = move || {
         draft.with(|d| {
@@ -849,18 +1090,21 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
             <div class="modal-header">
                 <div class="modal-titles">
                     <h2 class="modal-title">{title}</h2>
-                    <p class="modal-subtitle">{now_line}</p>
+                    <p class="modal-subtitle">{value_line}</p>
                 </div>
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
             </div>
             <div class="map-body">
+                {mapped_rows}
+                <div class="section-head"><span class="eyebrow">{move || if bound().is_some() { "Change the source" } else { "Choose a source" }}</span></div>
                 <div class="map-top">
                     <div class="segmented map-tabs" role="tablist" aria-label="Source">{tabs}</div>
-                    <button type="button" class="secondary map-learn" class:learning=move || learning.with(Option::is_some) on:click=learn
+                    <button type="button" class="secondary map-learn" class:learning=learning on:click=learn
                         title="Move a knob, fader or button on a MIDI controller, or a Mod in the DAW: the first to move is chosen">
-                        {move || if learning.with(Option::is_some) { "Move a control…" } else { "Learn" }}
+                        {move || if learning.get() { "Move a control…" } else { "Learn" }}
                     </button>
                 </div>
+                {heard_strip}
                 <div class="map-pane">
                     {move || match tab.get() {
                         Tab::Jtunnel => view! {
@@ -870,6 +1114,10 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                                 "Follow this Mod from any sender"
                             </label>
                             {jtunnel}
+                        }.into_any(),
+                        Tab::Data => view! {
+                            <p class="hint map-help">"Any number, switch or text a sender is sending. Open a key to see its fields."</p>
+                            {other_data}
                         }.into_any(),
                         Tab::Midi => view! {
                             <div class="ctx-head">"Moved last, by input"</div>
@@ -931,11 +1179,9 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                 </div>
             </div>
             <div class="modal-footer">
-                {move || bound().is_some().then(|| view! {
-                    <button type="button" class="secondary footer-left" on:click=remove>"Remove mapping"</button>
-                })}
+                <span class="hint footer-left">{replaces}</span>
                 <button type="button" class="secondary" on:click=move |_| close()>"Cancel"</button>
-                <button type="button" class="primary" data-primary disabled=move || !ready() on:click=map>"Map"</button>
+                <button type="button" class="primary" data-primary disabled=move || !ready() on:click=map>"Use"</button>
             </div>
         </Modal>
     }

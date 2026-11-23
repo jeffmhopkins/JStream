@@ -50,6 +50,9 @@ pub struct LiveSources {
     pub senders: Vec<Sender>,
     /// Each MIDI input's latest control change.
     pub controls: Vec<MidiControlInfo>,
+    /// Whether the engine has been read yet: before the first read nothing is known, which
+    /// is not the same as nothing arriving.
+    pub loaded: bool,
 }
 
 /// A sender's Mods from its `params` message: `values` as numbers kept within 0 to 1, and
@@ -234,15 +237,38 @@ impl Moved {
     }
 }
 
-/// What moved between `baseline` and `now`: a MIDI input whose count of control changes
-/// grew (or that is new), else the Mod that travelled farthest, if any went at least
-/// [`MOD_MOVED`]. A sender that wasn't there at the baseline has moved nothing: its
-/// first message only says where its Mods rest.
-pub fn moved(baseline: &LiveSources, now: &LiveSources) -> Option<Moved> {
-    if let Some(control) = crate::panels::learn::moved(&baseline.controls, &now.controls) {
-        return Some(Moved::Midi(control));
+impl Moved {
+    /// Whether this and `other` are the same source: a MIDI control by its input,
+    /// channel and controller whatever its value, or a Mod by its sender and slot.
+    pub fn same(&self, other: &Moved) -> bool {
+        match (self, other) {
+            (Moved::Midi(a), Moved::Midi(b)) => {
+                a.input == b.input && a.channel == b.channel && a.controller == b.controller
+            }
+            (a @ Moved::Mod { .. }, b @ Moved::Mod { .. }) => a == b,
+            _ => false,
+        }
     }
-    let mut best: Option<(f32, Moved)> = None;
+}
+
+/// Everything that moved between `baseline` and `now`, with how far it travelled as a
+/// share of its whole range, farthest first: each MIDI input whose count of control
+/// changes grew (or that is new), by its latest control, and each Mod that went at
+/// least [`MOD_MOVED`]. A sender that wasn't there at the baseline has moved nothing:
+/// its first message only says where its Mods rest.
+pub fn travelled(baseline: &LiveSources, now: &LiveSources) -> Vec<(Moved, f32)> {
+    let mut all = Vec::new();
+    for control in &now.controls {
+        let before = baseline.controls.iter().find(|b| b.input == control.input);
+        if before.is_some_and(|b| control.count <= b.count) {
+            continue;
+        }
+        let same =
+            before.filter(|b| b.channel == control.channel && b.controller == control.controller);
+        let travel = same.map_or(1.0, |b| f32::from(control.value.abs_diff(b.value)) / 127.0);
+        // A control that sent a change has moved, however little.
+        all.push((Moved::Midi(control.clone()), travel.max(1.0 / 127.0)));
+    }
     for sender in &now.senders {
         let Some(before) = baseline.senders.iter().find(|s| s.input == sender.input) else {
             continue;
@@ -252,18 +278,84 @@ pub fn moved(baseline: &LiveSources, now: &LiveSources) -> Option<Moved> {
                 continue;
             };
             let travel = (value - was).abs();
-            if travel >= MOD_MOVED && best.as_ref().is_none_or(|(most, _)| travel > *most) {
-                best = Some((
-                    travel,
+            if travel >= MOD_MOVED {
+                all.push((
                     Moved::Mod {
                         sender: sender.input.clone(),
                         slot,
                     },
+                    travel,
                 ));
             }
         }
     }
-    best.map(|(_, moved)| moved)
+    all.sort_by(|a, b| b.1.total_cmp(&a.1));
+    all
+}
+
+/// What moved between `baseline` and `now`: a MIDI control first, else the Mod that
+/// travelled farthest.
+pub fn moved(baseline: &LiveSources, now: &LiveSources) -> Option<Moved> {
+    let all = travelled(baseline, now);
+    all.iter()
+        .find(|(m, _)| matches!(m, Moved::Midi(_)))
+        .or(all.first())
+        .map(|(m, _)| m.clone())
+}
+
+/// How many reads Learn spends finding what is moving already, before it listens.
+pub const SETTLE_READS: u8 = 2;
+
+/// Learn, listening (UI-FEATURES VC-03). Its first [`SETTLE_READS`] reads find what is
+/// moving already, such as a DAW's automation while it plays, and those sources are
+/// left out; what moves after that is a candidate.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Listening {
+    /// What was arriving when it last took stock.
+    baseline: LiveSources,
+    /// The reads still spent settling.
+    settling: u8,
+    /// What was moving already.
+    noisy: Vec<Moved>,
+}
+
+impl Listening {
+    /// Starts listening from what is arriving `now`.
+    pub fn start(now: LiveSources) -> Self {
+        Listening {
+            baseline: now,
+            settling: SETTLE_READS,
+            noisy: Vec::new(),
+        }
+    }
+
+    /// Whether it is still finding what moves by itself.
+    pub fn settling(&self) -> bool {
+        self.settling > 0
+    }
+
+    /// Takes one read. While settling it answers nothing and notes what moved; after,
+    /// it answers the candidates: what has moved since it settled, farthest first,
+    /// without what was moving already.
+    pub fn hear(&mut self, now: &LiveSources) -> Vec<(Moved, f32)> {
+        let moved = travelled(&self.baseline, now);
+        if self.settling > 0 {
+            for (source, _) in moved {
+                if !self.noisy.iter().any(|n| n.same(&source)) {
+                    self.noisy.push(source);
+                }
+            }
+            self.settling -= 1;
+            if self.settling == 0 {
+                self.baseline = now.clone();
+            }
+            return Vec::new();
+        }
+        moved
+            .into_iter()
+            .filter(|(source, _)| !self.noisy.iter().any(|n| n.same(source)))
+            .collect()
+    }
 }
 
 /// A message's leaves as `(field, value)` rows, in order, for picking a field: numbers,
@@ -348,7 +440,11 @@ pub async fn read(session: &Session) -> LiveSources {
     let controls = crate::panels::learn::controls(session)
         .await
         .unwrap_or_default();
-    LiveSources { senders, controls }
+    LiveSources {
+        senders,
+        controls,
+        loaded: true,
+    }
 }
 
 /// What is arriving, read every 150 ms for as long as the calling component lives.
@@ -461,17 +557,20 @@ mod tests {
     #[test]
     fn learn_takes_a_midi_control_first_then_the_mod_that_travelled_farthest() {
         let baseline = LiveSources {
+            loaded: true,
             senders: vec![sender("Bitwig", &[0.0, 0.5, 0.5])],
             controls: vec![control("Pads", 7, 3)],
         };
         assert_eq!(moved(&baseline, &baseline), None);
         // Noise under the threshold is not a move.
         let noise = LiveSources {
+            loaded: true,
             senders: vec![sender("Bitwig", &[0.01, 0.5, 0.5])],
             ..baseline.clone()
         };
         assert_eq!(moved(&baseline, &noise), None);
         let swept = LiveSources {
+            loaded: true,
             senders: vec![sender("Bitwig", &[0.05, 0.5, 0.9])],
             ..baseline.clone()
         };
@@ -483,16 +582,65 @@ mod tests {
             })
         );
         let both = LiveSources {
+            loaded: true,
             controls: vec![control("Pads", 21, 4)],
             ..swept.clone()
         };
         assert!(matches!(moved(&baseline, &both), Some(Moved::Midi(c)) if c.controller == 21));
         // A sender heard for the first time only says where its Mods rest.
         let arrived = LiveSources {
+            loaded: true,
             senders: vec![sender("Bitwig", &[0.0, 0.5, 0.5]), sender("Live", &[1.0])],
             ..baseline.clone()
         };
         assert_eq!(moved(&baseline, &arrived), None);
+    }
+
+    #[test]
+    fn learn_leaves_out_what_was_moving_before_it_listened() {
+        let at = |mods: &[f32]| LiveSources {
+            loaded: true,
+            senders: vec![sender("Bitwig", mods)],
+            controls: Vec::new(),
+        };
+        // Mod 1 is automated: it moves on every read.
+        let mut listening = Listening::start(at(&[0.0, 0.5, 0.5]));
+        assert!(listening.settling());
+        assert!(listening.hear(&at(&[0.1, 0.5, 0.5])).is_empty());
+        assert!(listening.hear(&at(&[0.2, 0.5, 0.5])).is_empty());
+        assert!(!listening.settling());
+        // Still only the automation: no candidate.
+        assert!(listening.hear(&at(&[0.4, 0.5, 0.5])).is_empty());
+        // The person moves Mod 3, then Mod 2 a little: both are candidates, farthest first.
+        let heard = listening.hear(&at(&[0.6, 0.55, 0.9]));
+        let slots: Vec<_> = heard
+            .iter()
+            .map(|(m, _)| match m {
+                Moved::Mod { slot, .. } => *slot,
+                Moved::Midi(_) => 99,
+            })
+            .collect();
+        assert_eq!(slots, vec![2, 1]);
+    }
+
+    #[test]
+    fn a_midi_control_that_sent_a_change_travelled_by_its_value() {
+        let at = |value: u8, count: u64| LiveSources {
+            loaded: true,
+            senders: Vec::new(),
+            controls: vec![MidiControlInfo {
+                value,
+                ..control("Pads", 7, count)
+            }],
+        };
+        let far = travelled(&at(0, 1), &at(127, 9));
+        assert!(matches!(&far[..], [(Moved::Midi(_), t)] if (*t - 1.0).abs() < 1e-6));
+        // The same value sent again still counts as moved.
+        let nudge = travelled(&at(64, 1), &at(64, 2));
+        assert!(matches!(&nudge[..], [(Moved::Midi(_), t)] if *t > 0.0));
+        assert!(travelled(&at(64, 2), &at(64, 2)).is_empty());
+        assert!(Moved::Midi(control("Pads", 7, 1)).same(&Moved::Midi(control("Pads", 7, 5))));
+        assert!(!Moved::Midi(control("Pads", 7, 1)).same(&Moved::Midi(control("Pads", 8, 1))));
     }
 
     #[test]

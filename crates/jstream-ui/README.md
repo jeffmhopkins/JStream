@@ -785,32 +785,46 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   kind marks `live` that is a number with both ends or a switch, for a source's settings
   and a filter's; the mixer puts one after each channel's and bus's mute button, and after the dB
   field of each send that exists. A
-  click opens the control menu; its Learn MIDI control reads `midi.last_controls` for a baseline, then every 150 ms for up to 15 s, and
-  binds the first input whose count of control changes grew with `binding.set_value`,
-  over the setting's whole range (a fader's over -60 to +6 dB), 50 ms smoothed, as
-  `learn_<hash of the target>`, so learning again replaces it. A bound button shows its
-  control (`CC 7`), and the menu's Remove control unbinds it; a learning one says "Move…" and stops on a
-  click, or once its form closes (its signals are read with `try_`, so a closed form ends
-  the loop). An engine that reads no MIDI controls says so in the problem bar.
-  Since ADR-0183 the button is the control button: a click opens one menu (for a learned
-  MIDI control, a Smoothing field first, which sends the binding again with its
-  `smoothing_ms`; then Learn MIDI
-  control, Make channel or Open channel, Follow channel…, Add to sequence ›, Set key…,
-  Remove control). Make channel
-  makes a channel named after the setting (`label`), in the selected scene, whose
-  `default` is where the setting is in its range (`current`, `fraction`), binds the
-  setting to it over the range (`follows`, the same `learn_` ID) in one batch, and opens
-  it in the Channels panel. Follow channel… opens `ChannelSearch`. Add to sequence › lists
-  the selected scene's sequences (the open one first) and New sequence: it makes the
-  channel if the setting follows none, adds its lane holding where the setting is
-  (`sequence::with_lane`), all in one batch, and opens the sequence. Set key… takes the
-  next key pressed (`KeyCapture`, a focused button whose keys never reach the hotkeys;
-  Escape or leaving it cancels) and binds it to `channel.switch` `toggle` on the channel,
-  made if need be, in the same batch. A sequence that already has the lane gets no
-  `timeline.set`; it only opens. A setting that follows a channel shows the
+  click on it, or a right-click on the setting's row, opens the control menu. The Shell and
+  every `Modal` hand a right-click to the row's own button (`row_context`: the nearest
+  ancestor with exactly one `button.learn` child, found by its `data-learn`, through
+  `ControlMenuAt`); a free-text field keeps the browser's menu (`keeps_own_menu`).
+  The menu: for a learned MIDI control or Mod, a Smoothing field first, which sends the
+  binding again with its `smoothing_ms`; Map control…, which opens the dialog below;
+  Learn, which opens `LearnPopover` in place; for a mapped setting "Mapped to" with what
+  drives it, Edit mapping…, Open channel when it follows one, and Remove mapping; and Add
+  to sequence ›, which lists the selected scene's sequences (the open one first) and New
+  sequence: it makes the channel if the setting follows none, adds its lane holding where
+  the setting is (`sequence::with_lane`), all in one batch, and opens the sequence. A
+  sequence that already has the lane gets no `timeline.set`; it only opens. A mapping is
+  one `binding.set_value` over the setting's whole range (a fader's over -60 to +6 dB),
+  50 ms smoothed, as `learn_<hash of the target>`, so mapping again replaces it. A bound
+  button shows its control (`CC 7`, `Mod 20`), and one that follows a channel shows the
   channel's name as a chip. Enter or Space opens the menu under the button (a click with
   no pointer, `detail` 0) with its first item focused; Escape or Tab closes it and gives
   the focus back to the button.
+- **What is arriving** (`live_sources.rs`, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
+  `live_sources()` reads `data.list`, each sender's `params` message (`data.get`) and
+  `midi.last_controls` every 150 ms for as long as its component lives, into
+  `LiveSources` (`loaded` once the first read is in). A sender's Mods are `params`'s
+  `values`, 32 of them kept within 0 to 1, with `names`. `Listening` is Learn: its first
+  two reads note what moves by itself, and after them `hear` answers what has moved
+  since, farthest first, without those. A MIDI input has moved when its count of control
+  changes grew; a Mod when it went at least 0.02. `fields_of` lists a message's leaves
+  for picking a field, texts cut to 40 characters with control characters removed.
+- **Map control** (`panels/map_control.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+  `MapControlHost`, mounted once in the Shell, shows the dialog for the
+  `MapControlRequest` in `MapControlDialog` (the setting's `ValueTarget`, range, label
+  and value). Tabs pick the source: Hotkey, JTunnel (each sender's Mod grid), MIDI (each
+  input's latest control, or one named by hand), Channel (`ChannelSearch`) and Other data
+  (a sender's keys, then a key's fields). The lists' structure is memoized apart from
+  their live values, so a row doesn't redraw under the pointer. `picked` gives a new
+  source the From, To, Smoothing and Curve already set. Nothing is sent until Use: one
+  `binding.set_value`, or for a hotkey `key_edits` in one batch (a channel whose default
+  is 1 with the Fade as its rise and fall, the binding following it from Off to On, and
+  the key bound to `channel.switch` `toggle`; a key that already switches a channel just
+  gets the setting following that channel). `LearnPopover` takes the one source heard
+  after a 900 ms pause with nothing new, or lists several to pick from.
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in

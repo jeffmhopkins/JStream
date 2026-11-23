@@ -2673,7 +2673,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .control-menu .menuitem.danger, .seq-panel .menuitem.danger, .chan-delete.menuitem.danger { background: transparent; border-color: transparent; color: var(--danger-text); font-weight: 400; }
 .control-menu .menuitem.danger:hover:not(:disabled), .seq-panel .menuitem.danger:hover:not(:disabled), .chan-delete.menuitem.danger:hover:not(:disabled) { background: var(--menu-hover); border-color: transparent; }
 
-/* The Map control dialog (UI-FEATURES VC-08): a source picker over a mapping's range,
+/* The Map control dialog (UI-FEATURES VC-03): a source picker over a mapping's range,
    smoothing and curve. */
 .modal.map-dialog { width: min(640px, calc(100vw - 32px)); }
 .map-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 12px 16px; overflow: hidden; }
@@ -2703,3 +2703,6 @@ button.map-key:hover { background: var(--hover); }
 .map-chosen { margin: 0; font-weight: 600; }
 .map-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.3fr); align-items: end; gap: 8px; }
 .map-curve { display: flex; flex-direction: column; gap: 4px; }
+.map-heard { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+button.map-key.on { border-color: var(--accent); background: var(--selected); color: var(--text); }
+.map-body .section-head { padding: 0; }
