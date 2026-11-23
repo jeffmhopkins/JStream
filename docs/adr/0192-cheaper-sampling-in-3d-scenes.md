@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0190"
+id = "ADR-0192"
 title = "Cheaper sampling in 3D scenes: fewer reads where they change little"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0190: Cheaper sampling in 3D scenes: fewer reads where they change little
+# ADR-0192: Cheaper sampling in 3D scenes: fewer reads where they change little
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

@@ -2406,7 +2406,7 @@ reflects it (`scene`-lit, its source's `reflections` on) draws its surface with 
 it is shaded once. After the view depth, `draw_surface` hands the pass those layers
 themselves when one model alone reflects the scene and drew them this frame at the
 buffer's size, since a merge would only copy them
-([ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)). Otherwise it clears the scene's three
+([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)). Otherwise it clears the scene's three
 `GpuKey::Surface` layers and merges each reflecting model the view depth holds into them
 (`Compositor::merge_model_surface`); a model whose layer drew no surface this frame is
 drawn into them again through the scene's camera with the scene's lights, sky and probe

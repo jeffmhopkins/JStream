@@ -873,7 +873,7 @@ material, with another image: `draw_model` samples it through a mip chain of the
 image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
 image changed), bound with the material's own repeating anisotropic sampler (16× for the
 base colour; the normal, surface, occlusion and emissive maps are read through a second
-sampler at 4×, binding 7, [ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)), and the
+sampler at 4×, binding 7, [ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)), and the
 material's uniform marks it a premultiplied linear picture (`card.y`), which the shader
 divides by its alpha before multiplying. The material bind groups that carry it are
 kept on the `GpuModel` while the chain's texture and the material stay the same, so a
@@ -931,7 +931,7 @@ pixel's size there, projects it into the light's view, and counts 12 disc sample
 rotated per pixel, whose stored `1 / w` isn't nearer the light than the fragment's by
 more than 0.2%; outside the map is lit. It reads the disc's middle and four points of
 its rim first, and where those five agree, away from a shadow's edge, they answer for
-the disc ([ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)). A shadowed light's light is scaled by that share
+the disc ([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)). A shadowed light's light is scaled by that share
 (`golden_model_a_shadow_map_shadows_a_scene_lit_model`, a cube's and a card's map).
 
 **Environment** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
@@ -955,7 +955,7 @@ colour does, `golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`),
 ring of 8 taps around the direction for a spread: the reflection at the square of the
 roughness. The diffuse light is one read (`sky_matte`) a level above the one a spread of
 1 reads, where a filtered texel spans about what that ring's nine reads did
-([ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)); a gradient has no reads to save. Where the fragment is wholly its probe's and the capture saw
+([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)); a gradient has no reads to save. Where the fragment is wholly its probe's and the capture saw
 something all along the ray (its alpha at least 0.999, `probe_covers`), the sky's
 reflection would be multiplied by nothing and is not read. `draw_model` and `light_card` read a sky picture of
 this compositor through a mip chain of its whole picture (`Panoramas`, built as a live
@@ -1505,7 +1505,7 @@ it out; `filter::testing` reads both lists.
   (0 to 2, default 1), `color` (default black) and `quality` (`low`, 8 samples a pixel,
   the default, or `high`, 16). Two draws. The first (`occlusion/sample.wgsl`) reads only
   the depth, and is drawn at half the picture's width and height, rounded up
-  ([ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)): each texel samples for one pixel of its block of two by two (`chosen`, one corner and
+  ([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)): each texel samples for one pixel of its block of two by two (`chosen`, one corner and
   the other on every other texel). It rebuilds that pixel's point `((px − c) D / f, D)` about the canvas
   centre, its normal from neighbours two pixels away (each side the one nearer in
   depth, so an edge doesn't bend it), and counts the hemisphere samples about the
