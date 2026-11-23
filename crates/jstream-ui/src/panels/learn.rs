@@ -102,6 +102,27 @@ pub fn moved(baseline: &[MidiControlInfo], now: &[MidiControlInfo]) -> Option<Mi
         .cloned()
 }
 
+/// How long an input follows its source over (`smoothing_ms`), for the kinds that read a
+/// control, live data or a channel; `None` for any other.
+pub fn smoothing_of(input: &MotionKind) -> Option<u32> {
+    match input {
+        MotionKind::Midi { smoothing_ms, .. }
+        | MotionKind::Data { smoothing_ms, .. }
+        | MotionKind::Channel { smoothing_ms, .. } => Some(*smoothing_ms),
+        _ => None,
+    }
+}
+
+/// Sets `input`'s smoothing to `ms`, for the kinds [`smoothing_of`] reads.
+pub fn set_smoothing(input: &mut MotionKind, ms: u32) {
+    match input {
+        MotionKind::Midi { smoothing_ms, .. }
+        | MotionKind::Data { smoothing_ms, .. }
+        | MotionKind::Channel { smoothing_ms, .. } => *smoothing_ms = ms,
+        _ => {}
+    }
+}
+
 /// The binding of `control` to `target` over `range`, named [`learn_id`].
 pub fn learned(control: &MidiControlInfo, target: &ValueTarget, range: (f64, f64)) -> ValueBinding {
     let end = |v: f64| Finite32::new(v as f32).unwrap_or(Finite32::ZERO);
@@ -602,6 +623,32 @@ pub fn Learn(
         let name = label.get_value();
         let linked = channel();
         let has = bound().is_some();
+        // A learned control (not a channel, which has its own Smooth) shows how long the
+        // setting takes to follow it, which can be set here.
+        let smoothing = (linked.is_none() && bound().as_ref().and_then(|b| smoothing_of(&b.input)).is_some()).then(|| {
+            let value = Signal::derive(move || bound().and_then(|b| smoothing_of(&b.input)).map(f64::from));
+            let send = move |v: f64| {
+                if let (Some(mut binding), Some(s)) = (bound(), session.0.get_value()) {
+                    set_smoothing(&mut binding.input, v.round().clamp(0.0, 10_000.0) as u32);
+                    studio.apply(&s, vec![Edit::BindingSetValue { binding }]);
+                    true
+                } else {
+                    false
+                }
+            };
+            // The field's own arrow keys step it, rather than moving through the menu.
+            let own_keys = |e: leptos::ev::KeyboardEvent| {
+                if matches!(e.key().as_str(), "ArrowUp" | "ArrowDown" | "Home" | "End") {
+                    e.stop_propagation();
+                }
+            };
+            view! {
+                <div class="control-menu-row" on:keydown=own_keys title="How long the setting takes to follow the control: longer is smoother, shorter is quicker">
+                    <span>"Smoothing"</span>
+                    <crate::panels::number::NumberField named=Signal::derive(|| "Smoothing".to_owned()) unit="ms" value=value step=10.0 decimals=0 min=0.0 max=10000.0 send=send />
+                </div>
+            }
+        });
         let node = NodeRef::<leptos::html::Div>::new();
         crate::menu::focus_first(node);
         Some(view! {
@@ -609,6 +656,7 @@ pub fn Learn(
             <div class="context-menu control-menu" role="menu" aria-label="Control" node_ref=node on:keydown=menu_keys
                 style:left=place(x, y).0 style:top=place(x, y).1>
                 <div class="ctx-head">{format!("Control “{name}”")}</div>
+                {smoothing}
                 <button type="button" class="menuitem" role="menuitem" on:click=move |_| { menu.set(None); learn(); }>
                     <span class="ctx-check"></span>
                     <span class="ctx-label">"Learn MIDI control"</span>

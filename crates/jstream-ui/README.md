@@ -788,7 +788,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   control (`CC 7`), and the menu's Remove control unbinds it; a learning one says "Move…" and stops on a
   click, or once its form closes (its signals are read with `try_`, so a closed form ends
   the loop). An engine that reads no MIDI controls says so in the problem bar.
-  Since ADR-0183 the button is the control button: a click opens one menu (Learn MIDI
+  Since ADR-0183 the button is the control button: a click opens one menu (for a learned
+  MIDI control, a Smoothing field first, which sends the binding again with its
+  `smoothing_ms`; then Learn MIDI
   control, Make channel or Open channel, Follow channel…, Add to sequence ›, Set key…,
   Remove control). Make channel
   makes a channel named after the setting (`label`), in the selected scene, whose
@@ -812,7 +814,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`Studio::channel`): its name, switch (`channel.switch`), a meter that also sets the value
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
-  0 to 1; "+ Channel" adds a `channel` input), its shaping, the value bindings that follow
+  0 to 1; "+ Channel" adds a `channel` input; each input that reads something shows its
+  `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
   `channel.set` of the whole channel. `live_values` reads `channel.values` every 100 ms

@@ -2493,6 +2493,7 @@ input[type="checkbox"].toggle:checked::after { left: 14px; background: #fff; }
 button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selected); border-color: transparent; color: var(--link); font-size: 12px; }
 .control-menu { width: 280px; }
 .control-menu.follow { padding: 6px; }
+.control-menu-row { display: grid; grid-template-columns: 1fr 110px; align-items: center; gap: 8px; min-height: 30px; padding: 2px 10px 4px 30px; color: var(--text-soft); }
 .chan-search { display: flex; flex-direction: column; gap: 4px; }
 .chan-search-list { max-height: 260px; overflow-y: auto; }
 .chan-search .menuitem { justify-content: space-between; padding: 0 10px; color: var(--text); }
@@ -2521,6 +2522,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .chan-row.link { cursor: pointer; }
 .chan-row.link:hover { background: var(--hover); }
 .chan-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chan-row-smooth { flex: 0 0 96px; }
 .chan-x { border: none; background: none; color: var(--dim); padding: 0 4px; }
 .chan-x:hover { color: var(--text); }
 .chan-key .hotkey-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 2px; }

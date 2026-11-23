@@ -460,10 +460,13 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   follows each value binding's control or data field with the modifiers' readers and
   smoothing, and once its reading first differs from where it started, turns its mapped
   value into its target's setter edit (`jstream_graph::value_edit`). A `jstream-values`
-  thread ticks it about 30 times a second while the collection holds a binding, and when
+  thread ticks it about 30 times a second while the collection holds a binding (60 while
+  a value is still moving, [ADR-0190](../../docs/adr/0190-moving-values-tick-at-frame-pace.md)), and when
   those edits change the engine redraws and re-routes audio through the shown graph, on
   top of the open gestures' values ([Live values](#live-values)). A binding whose input
-  or range is unchanged across a batch keeps its follower; a missing target drives
+  or range is unchanged across a batch keeps its follower, as does one (or a channel's
+  input) whose input changed only its `smoothing_ms` (`same_but_smoothing`), which takes
+  the new time and goes on driving; a missing target drives
   nothing. A binding's `amount` scales its value toward `from` by a channel's level.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
@@ -1441,7 +1444,8 @@ the render parameter channel, never through the collection:
   moved control wins over a gesture on the same setting; through them `shown` also
   carries filter settings, faders and sends, which the mixer and the render snapshot
   follow as they follow a stored change. The `jstream-values` thread rebuilds it when
-  those edits change, at most about 30 times a second.
+  those edits change, at most about 30 times a second, or 60 while a value is moving
+  (ADR-0190).
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
@@ -1703,7 +1707,8 @@ preset changed in one batch that one undo takes back.
   timeline's lane already started from, so scrubbing never jumps); each `jstream-values` tick moves
   every playing timeline's lanes to its position on the animation clock (`lanes_at`)
   before the channels tick, and an end sets each lane's last point. The values thread
-  ticks every 16.7 ms while a lane drives a channel. See *Channels* in
+  ticks every 16.7 ms while a lane drives a channel, and while a channel's value or a
+  binding's setting is still moving ([ADR-0190](../../docs/adr/0190-moving-values-tick-at-frame-pace.md)). See *Channels* in
   [Contents: motion](#contents-motion).
 - **Triggers and waits** (`sequences.rs`): `Sequences` keeps the timelines waiting on a
   `delay_ms`, which the values tick plays when due, credited to the engine, and the
