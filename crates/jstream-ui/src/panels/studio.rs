@@ -1377,9 +1377,26 @@ fn Presets(panel: Panel) -> impl IntoView {
                 .unwrap_or_default()
         })
     };
+    // Rename swaps the picker for a name field; Enter or leaving it renames, Escape
+    // doesn't. Delete… asks first, naming the preset it was chosen on, and deletes only
+    // that one. Either closes when another preset is picked, added or shown.
+    let renaming = RwSignal::new(false);
+    let deleting = RwSignal::new(None::<TransitionPresetId>);
+    let settle = move || {
+        renaming.set(false);
+        deleting.set(None);
+    };
+    Effect::new(move |before: Option<Option<TransitionPresetId>>| {
+        let now = shown.get();
+        if before.is_some_and(|before| before != now) {
+            settle();
+        }
+        now
+    });
     let pick = move |event: leptos::ev::Event| {
         let value = event_target_value(&event);
         if !value.is_empty() {
+            settle();
             picked.set(Some(TransitionPresetId::new(value)));
         }
     };
@@ -1394,13 +1411,10 @@ fn Presets(panel: Panel) -> impl IntoView {
         }) else {
             return;
         };
+        settle();
         picked.set(Some(preset_id));
         panel.run(move |session| async move { edit(&*session.control, create).await });
     };
-    // Rename swaps the picker for a name field; Enter or leaving it renames, Escape
-    // doesn't.
-    let renaming = RwSignal::new(false);
-    let deleting = RwSignal::new(false);
     let rename_to = move |name: String| {
         renaming.set(false);
         let Some(before) = shown_preset() else {
@@ -1434,11 +1448,12 @@ fn Presets(panel: Panel) -> impl IntoView {
         });
         let copy = preset.clone();
         let preset_id = preset.preset_id.clone();
+        let doomed = preset.preset_id.clone();
         menus.open(
             &event,
             vec![
                 Entry::item("Rename", move || {
-                    deleting.set(false);
+                    deleting.set(None);
                     renaming.set(true);
                 }),
                 Entry::item("Duplicate", move || {
@@ -1447,6 +1462,7 @@ fn Presets(panel: Panel) -> impl IntoView {
                     }) else {
                         return;
                     };
+                    settle();
                     picked.set(Some(new_id));
                     panel.run(move |session| async move { edit(&*session.control, create).await });
                 }),
@@ -1461,7 +1477,7 @@ fn Presets(panel: Panel) -> impl IntoView {
                 Entry::Sep,
                 Entry::item("Delete…", move || {
                     renaming.set(false);
-                    deleting.set(true);
+                    deleting.set(Some(doomed.clone()));
                 })
                 .danger()
                 .disabled_if(is_default),
@@ -1469,10 +1485,10 @@ fn Presets(panel: Panel) -> impl IntoView {
         );
     };
     let delete = move |_| {
-        deleting.set(false);
-        let Some(preset_id) = shown.get_untracked() else {
+        let Some(preset_id) = deleting.get_untracked() else {
             return;
         };
+        deleting.set(None);
         picked.set(None);
         panel.run(move |session| async move {
             edit(&*session.control, Edit::TransitionDelete { preset_id }).await
@@ -1539,16 +1555,21 @@ fn Presets(panel: Panel) -> impl IntoView {
                     "⋯"
                 </button>
             </div>
-            <Show when=move || deleting.get()>
+            <Show when=move || deleting.with(Option::is_some)>
                 <div class="confirm" role="alertdialog" aria-label="Delete preset">
                     <p>
-                        {move || format!(
-                            "Delete “{}”? Scenes that use it go back to the default.",
-                            shown_preset().map(|p| p.name).unwrap_or_default(),
-                        )}
+                        {move || {
+                            let name = deleting.get().and_then(|id| {
+                                panel.snapshot.with(|s| s.as_ref()?.preset(&id).map(|p| p.name.clone()))
+                            });
+                            format!(
+                                "Delete “{}”? Scenes that use it go back to the default.",
+                                name.unwrap_or_default(),
+                            )
+                        }}
                     </p>
                     <button type="button" class="danger" on:click=delete>"Delete"</button>
-                    <button type="button" class="secondary" on:click=move |_| deleting.set(false)>"Cancel"</button>
+                    <button type="button" class="secondary" on:click=move |_| deleting.set(None)>"Cancel"</button>
                 </div>
             </Show>
             {move || shown.get().map(|preset_id| view! {
