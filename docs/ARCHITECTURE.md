@@ -1777,7 +1777,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-core` reads it at startup and replaces it atomically after every change. A
   file it can't read is logged and read as the defaults (every switch on but
   screen-space reflections), a switch it leaves out takes its default, a cap it leaves
-  out is the largest face size, and steps it leaves out are 32.
+  out is the largest face size, and steps it leaves out are 16.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

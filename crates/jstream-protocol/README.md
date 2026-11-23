@@ -1742,13 +1742,13 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   `screen_space_reflections` off, no scene reflects what is on screen and its surfaces
   reflect their probes and environment only. `screen_space_steps` is how many steps a
   screen-space reflection's ray takes: 16, 32 or 64 (`SCREEN_SPACE_STEPS`, the default
-  32), and any other count is `invalid_argument` on `screen_space_steps`. All are on
+  16, ADR-0185), and any other count is `invalid_argument` on `screen_space_steps`. All are on
   until set but `screen_space_reflections`, which is off (`RenderFeatures::DEFAULT`,
   [ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)). An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
-  reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, and steps it leaves out as 32.
+  reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, and steps it leaves out as 16.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),

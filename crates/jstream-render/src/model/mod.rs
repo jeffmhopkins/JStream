@@ -1885,13 +1885,18 @@ impl ModelRuntime {
                 })
             };
             let attachments = match &beside {
-                Some((_, views)) => vec![
+                Some((_, views)) => [
                     cleared(view),
                     cleared(views[0]),
                     cleared(views[1]),
                     cleared(views[2]),
                 ],
-                None => vec![cleared(view)],
+                None => [cleared(view), None, None, None],
+            };
+            let attachments = if beside.is_some() {
+                &attachments[..]
+            } else {
+                &attachments[..1]
             };
             let (prepass, opaque, blended) = match beside {
                 Some(_) => (
@@ -1903,7 +1908,7 @@ impl ModelRuntime {
             };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("jstream-render-model"),
-                color_attachments: &attachments,
+                color_attachments: attachments,
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth,
                     depth_ops: Some(wgpu::Operations {

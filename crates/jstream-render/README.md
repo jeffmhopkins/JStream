@@ -1534,7 +1534,7 @@ it out; `filter::testing` reads both lists.
   decision 4, `depth/screen.rs`), which no chain lists: the engine puts it first in a
   reflective scene's chain (`SCREEN_REFLECTIONS_KIND`), so neither list has it
   (`screen_reflections_descriptor`). Its one setting is `steps` (16, 32 or 64,
-  `jstream_protocol::SCREEN_SPACE_STEPS`, default 32; another count takes the one
+  `jstream_protocol::SCREEN_SPACE_STEPS`, default 16; another count takes the one
   below). It reads `ViewDepth::surface` too (`DepthSurface`, which
   `video_filter_reads_surface(kind)` asks the engine for), the scene's surface buffer
   (see Design). One draw (`screen/screen.wgsl`, through

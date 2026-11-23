@@ -63,7 +63,7 @@ fn on() -> bool {
 }
 
 fn screen_space_steps() -> u32 {
-    SCREEN_SPACE_STEPS[1]
+    SCREEN_SPACE_STEPS[0]
 }
 
 fn max_probe() -> u32 {
@@ -78,7 +78,8 @@ impl Default for RenderFeatures {
 
 impl RenderFeatures {
     /// What the engine draws until `studio.set_rendering` changes it: every switch on but
-    /// `screen_space_reflections`, and the largest probe faces at the middle step count.
+    /// `screen_space_reflections`, and the largest probe faces at the fewest steps (low
+    /// quality, ADR-0185).
     pub const DEFAULT: Self = Self {
         screen_space_reflections: false,
         ..Self::ALL
@@ -93,7 +94,7 @@ impl RenderFeatures {
         reflection_probes: true,
         max_probe_resolution: 512,
         screen_space_reflections: true,
-        screen_space_steps: 32,
+        screen_space_steps: 16,
     };
 
     /// Whether a scene filter of `kind_id` is drawn: `false` only for a filter kind a
@@ -216,7 +217,7 @@ mod tests {
             }
         );
         assert!(read.reflection_probes && read.max_probe_resolution == 512);
-        assert!(!read.screen_space_reflections && read.screen_space_steps == 32);
+        assert!(!read.screen_space_reflections && read.screen_space_steps == 16);
         assert_eq!(RenderFeatures::default(), RenderFeatures::DEFAULT);
     }
 }

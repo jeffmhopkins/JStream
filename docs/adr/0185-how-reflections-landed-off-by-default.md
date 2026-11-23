@@ -33,12 +33,16 @@ ADR-0170's decisions stand, with these changes.
 **Screen-space reflections are off until turned on.** `screen_space_reflections` defaults
 to off (`RenderFeatures::DEFAULT`), and a file or server that leaves it out reads it as
 off. It is the one exception to ADR-0170's rule that a new switch reads as on. Every other
-switch keeps that rule.
+switch keeps that rule. Its quality, `screen_space_steps`, defaults to the fewest steps,
+16 (Low), likewise.
 
 **A model is shaded once for its surface.** In a scene whose chain reads a surface buffer,
-each model writes its surface into three layers of its own in the same draw as its
-layer. The buffer then merges them by their `1 / w`. A model whose layer drew no surface
-in the frame is drawn into the buffer again, so the result is the same.
+each `scene`-lit model whose `reflections` is on writes its surface into three layers of
+its own in the same draw as its layer. The buffer then merges them by their `1 / w`. A
+model whose layer drew no surface in the frame is drawn into the buffer again, so the
+result is the same. A model that doesn't reflect writes no surface at all: where it is
+in front of one that does, the view depth is nearer than the surface there, and the
+pass leaves the pixel as it is.
 
 **Where the delivery departs from ADR-0170's text:**
 
@@ -80,7 +84,8 @@ in the frame is drawn into the buffer again, so the result is the same.
 - A scene with `reflections` on looks as it did before until someone turns screen-space
   reflections on in Settings › 3D rendering. The setting's info and the scene dialog's
   tip both say so.
-- The pass costs one extra full-screen draw per model that is shown, the march itself,
-  and three canvas-sized half-float layers per model (about 48 MB at 1080p) while it
-  runs.
+- The pass costs one extra full-screen draw per reflecting model, the march itself, and
+  three canvas-sized half-float layers per reflecting model (about 48 MB at 1080p) while
+  it runs. Measured on the same integrated GPU after the single shading, it added about
+  10, 11 and 13 ms of GPU time a frame at Low, Medium and High; Low held 30 fps.
 - Lit cards reflect only their probe and the environment, never what is on screen.

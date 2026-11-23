@@ -26,9 +26,9 @@ const SHADER: Shader = Shader {
     blend: Blend::Replace,
 };
 
-/// The steps a ray takes without a `steps` setting: the medium of
+/// The steps a ray takes without a `steps` setting: the fewest of
 /// [`jstream_protocol::SCREEN_SPACE_STEPS`].
-const DEFAULT_STEPS: u32 = 32;
+const DEFAULT_STEPS: u32 = 16;
 
 /// The kind as the engine describes it to itself: no parameter a person sets but how
 /// many steps a ray takes, which the rendering switches choose.

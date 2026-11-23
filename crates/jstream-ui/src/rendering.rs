@@ -6,7 +6,7 @@
 //! capture at, at most (ADR-0170 decision 3), and since 0.172 the screen-space
 //! reflections' switch and the steps their rays take (decision 4). An engine older than
 //! the version that added one reports it as on (screen-space reflections as off,
-//! ADR-0185), at the largest size or the medium steps, and changing it does nothing
+//! ADR-0185), at the largest size or the fewest steps, and changing it does nothing
 //! there. An engine older than 0.147 reports no switches,
 //! and the page says it has none.
 //!

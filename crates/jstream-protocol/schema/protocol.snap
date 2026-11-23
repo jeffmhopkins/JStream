@@ -14859,11 +14859,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "screen_space_reflections": {
           "default": false,
-          "description": "Screen-space reflections (ADR-0170 decision 4, since 0.172), one extra pass over\neach scene whose `reflections` is on. Off, its surfaces reflect their probes and\nenvironment only. Off until turned on, since it costs a frame budget's worth on a\nmodest GPU.",
+          "description": "Screen-space reflections (ADR-0170 decision 4, since 0.172), one extra pass over\neach scene whose `reflections` is on. Off, its surfaces reflect their probes and\nenvironment only. Off until turned on (ADR-0185), since it can cost a modest GPU\nits frame rate.",
           "type": "boolean"
         },
         "screen_space_steps": {
-          "default": 32,
+          "default": 16,
           "description": "How many steps a screen-space reflection's ray takes through the view depth: one\nof [`SCREEN_SPACE_STEPS`] (since 0.172). More finds thinner things, at more cost.",
           "format": "uint32",
           "minimum": 0,

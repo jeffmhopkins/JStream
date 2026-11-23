@@ -6969,11 +6969,15 @@ fn draw_model(
         }
         _ => None,
     };
-    // A model in a scene whose chain reads a surface buffer draws its surface with its
-    // layer (ADR-0170 decision 4), so the buffer merges it rather than drawing it again.
+    // A model that reflects its scene, in a scene whose chain reads a surface buffer,
+    // draws its surface with its layer (ADR-0170 decision 4), so the buffer merges it
+    // rather than drawing it again. One that doesn't reflect writes no surface: where it
+    // is in front, the pass finds the view depth nearer than the surface and leaves it.
     let surface_keys = match owner {
         ChainOwner::Item(scene, item)
             if depth_key.is_some()
+                && lit
+                && shown.reflections
                 && shot
                     .chains
                     .get(&ChainOwner::Scene(scene.clone()))
@@ -8346,6 +8350,11 @@ fn draw_surface(
         live,
         false,
     ) {
+        // Only a model that reflects its scene has a surface: one that doesn't, in front,
+        // is nearer in the view depth, which the pass checks.
+        if !(drawn.shown.lighting == Lighting::Scene && drawn.shown.reflections) {
+            continue;
+        }
         // Its surface drawn with its layer this frame, merged; else drawn again here.
         let (scene, item) = drawn.item;
         let layers = model_surface_keys(scene, item).map(|key| cache.get(&key));

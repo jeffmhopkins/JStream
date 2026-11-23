@@ -28,7 +28,7 @@ fn steps_are_one_of_the_switchs_counts() {
             serde_json::from_value(json!({ "steps": value })).expect("settings");
         super::steps(&settings)
     };
-    assert_eq!(super::steps(&Settings::default()), 32);
+    assert_eq!(super::steps(&Settings::default()), 16);
     assert_eq!(at(json!(64)), 64);
     assert_eq!(at(json!(40)), 32, "between counts, the one below");
     assert_eq!(at(json!(1)), 16, "never below the fewest");
