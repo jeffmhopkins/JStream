@@ -79,7 +79,10 @@ and calls this crate.
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.
   The pipeline is made on the first draw, and the bake's on the first sky with nebulae
   or a band (`golden_sky_the_deep_sky_is_baked_once_per_seed`,
-  `golden_sky_a_bakes_faces_meet_without_a_seam`).
+  `golden_sky_a_bakes_faces_meet_without_a_seam`,
+  `golden_sky_bakes_are_kept_for_the_seeds_in_use`). A pixel looks for a star only
+  within six star widths of where its column can hold one, and works out a cell's share
+  of the sky only for a cell its hash doesn't already leave empty.
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
   draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
   nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
@@ -587,7 +590,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
-| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
+| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |

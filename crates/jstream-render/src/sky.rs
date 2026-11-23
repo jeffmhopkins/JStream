@@ -123,6 +123,14 @@ pub(crate) struct SkyRuntime {
     pub(crate) baked: u64,
 }
 
+#[cfg(test)]
+impl SkyRuntime {
+    /// How many seeds' bakes are kept now.
+    pub(crate) fn kept_bakes(&self) -> usize {
+        self.bakes.len()
+    }
+}
+
 /// A bake's face is this many texels square. A face spans a right angle, so a bake has
 /// about 510 texels a radian at a face's centre and up to twice that toward its edges,
 /// across noise whose finest octave is 5 to 7 texels wide: a 1080-line canvas at a 45
@@ -511,14 +519,10 @@ impl SkyRuntime {
         }
     }
 
-    /// The place in [`Self::bakes`] of `seed`'s bake, made now if no kept one is its:
-    /// the first, as the one drawn last. Bakes no sky has read for
-    /// [`BAKE_IDLE_DRAWS`] are let go, and so is the one read longest ago past
-    /// [`MAX_BAKES`].
+    /// Puts `seed`'s bake first in [`Self::bakes`], as the one drawn last, making it now
+    /// if no kept one is its. The one read longest ago past [`MAX_BAKES`] is let go.
     fn bake(&mut self, gpu: &Gpu, seed: u32) {
         let now = self.draws;
-        self.bakes
-            .retain(|bake| bake.seed == seed || now - bake.used <= BAKE_IDLE_DRAWS);
         let bake = match self.bakes.iter().position(|bake| bake.seed == seed) {
             Some(at) => self.bakes.remove(at),
             None => {
@@ -568,6 +572,11 @@ impl SkyRuntime {
         self.draws += 1;
         // Only a sky that shows nebulae or a band needs its seed's bake.
         let deep = sky.deep.nebula > 0.0 || sky.deep.galaxy > 0.0;
+        // Bakes no sky has read for a while are let go, whatever sky this one is.
+        let now = self.draws;
+        self.bakes.retain(|bake| {
+            (deep && bake.seed == sky.deep.seed) || now - bake.used < BAKE_IDLE_DRAWS
+        });
         if deep {
             self.bake(gpu, sky.deep.seed);
         }

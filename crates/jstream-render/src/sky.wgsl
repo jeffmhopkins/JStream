@@ -224,6 +224,14 @@ fn stars(
     let first = i32(floor(g));
     let count = min(i32(floor(g + streak)) - first, MAX_STREAK_CELLS);
     let sigma = max(pixel * 0.6, 1e-5);
+    // A star sits between 0.3 and 0.7 of the way across its column, so a pixel further
+    // than six of a star's widths outside that part gets under a hundred-millionth of
+    // any star's light: nothing, without looking for one.
+    let within = at.x / cell - col;
+    let reach = 6.0 * sigma / (cell * sin_t);
+    if within < 0.3 - reach || within > 0.7 + reach {
+        return vec3<f32>(0.0);
+    }
     let column = u32(i32(col) + 1000000) * 2654435761u;
     // A long streak spreads its star's light: dimmer the longer it is on screen.
     let spread = 1.0 / (1.0 + 0.03 * streak * cell * sin_t / max(pixel, 1e-6));
@@ -231,16 +239,26 @@ fn stars(
     for (var k = 0; k <= count; k++) {
         let row = first + k;
         let id = hash(column ^ hash(bitcast<u32>(row) - whole) ^ (layer * 0x9e3779b9u) ^ seed());
+        // A cell's share of the sky is at most 1, so most cells are empty whatever
+        // theirs is, and are passed over before it is worked out.
+        let dice = f32(id & 0xffffffu) / 16777216.0;
+        if dice >= chance * crowd {
+            continue;
+        }
         // The cell's share of the sky: sin^2 of its angle from the travel.
         let s = 1.0 / cosh((f32(row) + 0.5 + frac) * cell);
-        if f32(id & 0xffffffu) / 16777216.0 >= chance * crowd * s * s {
+        if dice >= chance * crowd * s * s {
             continue;
         }
         let jx = 0.3 + 0.4 * unit(id ^ 0x68e31da4u);
+        // Across the streak: the angle about the travel, at the pixel's distance from it.
+        let across = (within - jx) * cell * sin_t;
+        // Six widths to the side of a star, as above, there is nothing of it.
+        if abs(across) > 6.0 * sigma {
+            continue;
+        }
         let jy = unit(id ^ 0xb5297a4du);
         let star_g = f32(row) + jy;
-        // Across the streak: the angle about the travel, at the pixel's distance from it.
-        let across = (at.x / cell - (col + jx)) * cell * sin_t;
         // Along it: ahead of the star's head, behind its tail, or on it.
         var along = 0.0;
         var fade = 1.0;
