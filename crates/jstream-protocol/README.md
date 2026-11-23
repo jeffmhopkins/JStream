@@ -389,7 +389,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
-([ADR-0199](../../docs/adr/0199-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md));
+([ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md));
 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
@@ -1808,7 +1808,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   canvas's width and of its height: 0, the default, lets the engine choose, lowering it
   while the GPU is short of time
   ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md),
-  [ADR-0199](../../docs/adr/0199-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)), and 100, 85, 75, 67 or 50 always draws them at that (`MODEL_RESOLUTIONS`); any
+  [ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)), and 100, 85, 75, 67 or 50 always draws them at that (`MODEL_RESOLUTIONS`); any
   other value is `invalid_argument` on `model_resolution`. All are on
   until set but `screen_space_reflections`, which is off (`RenderFeatures::DEFAULT`,
   [ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)). An application setting, like

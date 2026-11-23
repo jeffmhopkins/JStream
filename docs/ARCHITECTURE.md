@@ -821,7 +821,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   on app-wide, caps the
   probes' face size, sets the screen-space steps, and since 0.173 says how many pixels
   3D models are drawn with or leaves that to the engine
-  ([ADR-0199](adr/0199-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
+  ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1371,7 +1371,7 @@ uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and draw
 per placement into a canvas-sized layer (or one with fewer pixels that stands for the
 canvas, while the program's GPU is short of time or the rendering switches name a size,
 [ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md),
-[ADR-0199](adr/0199-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)),
+[ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)),
 through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's

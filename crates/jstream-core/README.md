@@ -4638,7 +4638,7 @@ up to 80 seconds, each time a step up is undone within 15; and it decides nothin
 ticks after a change, while the frames in flight are the old size. A device that can't
 time its frames steps on the first signal alone. It steps down only while a model is
 drawn, since fewer pixels gain nothing without one, and each change logs one line
-([ADR-0199](../../docs/adr/0199-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
+([ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
 The rendering switches' `model_resolution` (`Shot::model_resolution`, read each tick)
 decides who chooses: 0 leaves it to the governor, and a size holds that size, from which
 the governor goes on when the choice is handed back. A drawer whose meter has no budget

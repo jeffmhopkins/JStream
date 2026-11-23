@@ -208,5 +208,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0195](0195-the-engine-runs-at-top-priority.md) | The engine runs at top priority: the highest GPU scheduling class and a high CPU priority class by default | accepted | agent |  |
 | [ADR-0197](0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md) | 3D models draw with fewer pixels while the GPU is short of time | accepted | agent |  |
 | [ADR-0198](0198-an-arrival-can-be-a-planet-with-its-sun.md) | An arrival can be several pictures pinned around one another, the last lighting the scene | accepted | agent |  |
-| [ADR-0199](0199-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md) | The size 3D models are drawn at is a rendering switch | accepted | agent |  |
+| [ADR-0200](0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md) | The size 3D models are drawn at is a rendering switch | accepted | agent |  |
 <!-- @generated end adr-index -->
