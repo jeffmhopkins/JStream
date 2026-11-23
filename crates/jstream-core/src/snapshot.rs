@@ -7357,7 +7357,7 @@ fn light_scene(
     if receives && !shadowed.is_empty() && chains.shadows_of(scene_id).is_none() {
         // The first model drawn draws the maps of every model that casts, so the
         // models drawn after it this frame are made ready for that first.
-        ready_casting_models(compositor, (&mut *cache, &mut *chains), shot, scene_id);
+        ready_casting_models(compositor, &mut *chains, shot, scene_id);
         let maps = draw_shadows(
             compositor,
             (&mut *cache, &mut *chains),
@@ -7377,14 +7377,17 @@ fn light_scene(
 
 /// Makes ready, for the shadow maps the first model drawn in scene `scene_id` draws
 /// this frame (ADR-0151 decision 3), every model the scene's pass shows: its upload
-/// ([`Chains::upload_model`]) and its layer, which [`depth_models`] reads its
-/// placement through. Without this a model drawn later in the frame, or not drawn
-/// before, casts no shadow in that frame: the first frame of a scene with two models
-/// would be lit as if only the first one drawn were there. An upload that fails or is
-/// still coming leaves its model out, as its own draw reports.
+/// ([`Chains::upload_model`]), which [`depth_models`] draws. Its pose doesn't need its
+/// layer ([`layer_pose`]), so a model whose layer is its effects' output, made only
+/// when its chain runs, casts too (#1674). Without this a model drawn later in the
+/// frame, or not drawn before, casts no shadow in that frame: the first frame of a scene
+/// with two models would be lit as if only the first one drawn were there. An upload
+/// that fails or is still coming leaves its model out, as its own draw reports. The
+/// upload is marked used this frame, which keeps nothing alive that wouldn't be: the
+/// model is in this frame's pass, so its own draw uses it too.
 fn ready_casting_models(
     compositor: &mut Compositor,
-    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    chains: &mut Chains,
     shot: &Shot,
     scene_id: &SceneId,
 ) {
@@ -7395,7 +7398,10 @@ fn ready_casting_models(
         if !layer.boxed.is_some_and(|boxed| boxed.model) {
             continue;
         }
-        let GpuKey::ItemBox(scene, item) = &layer.image else {
+        // A model's layer, or its effects' output over it: either is posed as the model.
+        let (GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item))) =
+            &layer.image
+        else {
             continue;
         };
         let Some(boxed) = shot
@@ -7414,16 +7420,8 @@ fn ready_casting_models(
         else {
             continue;
         };
-        if chains
-            .upload_model(compositor, source, &shown.model)
-            .is_err()
-        {
-            continue;
-        }
-        let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
-        if let Err(error) = cache.layer(compositor, &layer.image, width, height) {
-            tracing::debug!(%scene, %item, %error, "a model's layer isn't ready for the shadow maps");
-        }
+        // A failed upload is logged where the model's own draw reports it.
+        let _ = chains.upload_model(compositor, source, &shown.model);
     }
 }
 
@@ -7574,7 +7572,6 @@ fn draw_shadows(
     };
     // A card that only adds light blocks none (ADR-0179).
     items.retain(casts_shadow);
-    let bounds = caster_bounds(&items);
     // What the maps would be drawn of. A map kept from an earlier frame that was drawn
     // of the same things through the same light, and not written since, is left alone.
     let casters = casters_of(
@@ -7584,6 +7581,7 @@ fn draw_shadows(
         (at, canvas, camera),
         live,
     );
+    let bounds = caster_bounds(&items, &casters);
     let kept = chains
         .shadow_maps
         .remove(scene_id)
@@ -7907,15 +7905,21 @@ fn casts_shadow(item: &Item<'_>) -> bool {
         || !matches!(item.blend, BlendMode::Additive | BlendMode::Screen)
 }
 
-/// The sphere around what `items` place in the scene's space, as a centre and radius:
-/// each box's centre at its depth, out to its corners and as deep.
-fn caster_bounds(items: &[Item<'_>]) -> Option<([f64; 3], f64)> {
+/// The sphere around what `items` and the models of `casters` place in the scene's
+/// space, as a centre and radius: each box's centre at its depth, out to its corners and
+/// as deep. A casting model counts whether or not its layer is there yet (#1674).
+fn caster_bounds(items: &[Item<'_>], casters: &[Caster]) -> Option<([f64; 3], f64)> {
     let mut min = [f64::INFINITY; 3];
     let mut max = [f64::NEG_INFINITY; 3];
-    for item in items {
-        let (Placement::Geometry(g) | Placement::Layer(g)) = item.placement else {
-            continue;
-        };
+    let placed = items.iter().filter_map(|item| match item.placement {
+        Placement::Geometry(g) | Placement::Layer(g) => Some(g),
+        Placement::Legacy(_) => None,
+    });
+    let models = casters.iter().filter_map(|caster| match caster {
+        Caster::Model { geometry, .. } => Some(*geometry),
+        Caster::Card { .. } => None,
+    });
+    for g in placed.chain(models) {
         let reach = f64::from(g.size.width.get().hypot(g.size.height.get())) * 0.5;
         let centre = [g.center.x.get(), g.center.y.get(), g.depth_px.get()].map(f64::from);
         for axis in 0..3 {
@@ -8773,76 +8777,105 @@ fn layer_item<'a>(
     live: &LiveParams,
     camera: Option<SceneCamera>,
 ) -> Option<Item<'a>> {
-    {
-        if chains.failed(&layer.image) {
-            return None;
-        }
-        if let Some((start, track)) = &layer.moving {
-            let elapsed = transition::elapsed_ms(*start, at);
-            let by = layer
-                .motion
-                .offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
-            let sampled = moved_track(
-                shot.is_canvas_box(&layer.image),
-                &by,
-                track.sample(elapsed, size)?,
-            );
-            return Some(Item {
-                image: cache.get(&layer.image)?,
-                placement: track_placement(shot, &layer.image, sampled.geometry),
-                crop: sampled.crop,
-                opacity: sampled.opacity,
-                blend: sampled.blend,
-                visible: true,
-                camera,
-                depth_run: 0,
-                depth: None,
-            });
-        }
-        let (placement, crop) = live.apply(layer);
-        // Its motion moves it on top of its live values (ADR-0099).
-        let (item, modifiers) = &layer.motion.to;
-        let by = shot.motion_at(item, modifiers, at);
-        let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
-        // A model's own depth, in a 3D scene, when it is at least half opaque, as the
-        // view depth takes it (ADR-0107 decision 7).
-        let depth = match (&layer.boxed, &layer.image, camera) {
-            (
-                Some(boxed),
-                GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item)),
-                Some(_),
-            ) if boxed.model && opacity >= 0.5 => {
-                cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
-            }
-            _ => None,
-        };
-        let (placement, crop) = match &layer.boxed {
-            // A model's layer is in the canvas's pixels; it sorts by the model's pose.
-            Some(boxed) if boxed.model => match placement {
-                Placement::Geometry(geometry) => (Placement::Layer(geometry), Crop::NONE),
-                _ => return None,
-            },
-            Some(boxed) => {
-                let geometry = boxed.geometry_of(placement, crop)?;
-                (Placement::Geometry(boxed.around(&geometry)?), Crop::NONE)
-            }
-            None => (placement, crop),
-        };
-        // A 3D group's child is placed through its groups as they are now (ADR-0164).
-        let (placement, opacity) =
-            groups::place_placement(&layer.groups, (placement, opacity), shot, at, live)?;
-        Some(Item {
-            image: cache.get(&layer.image)?,
-            placement,
-            crop,
-            opacity,
-            blend: layer.blend,
-            visible: true,
-            camera,
-            depth_run: 0,
-            depth,
-        })
+    let posed = layer_pose(layer, (cache, chains), shot, (at, size), live, camera)?;
+    Some(Item {
+        image: cache.get(&layer.image)?,
+        placement: posed.placement,
+        crop: posed.crop,
+        opacity: posed.opacity,
+        blend: posed.blend,
+        visible: true,
+        camera,
+        depth_run: 0,
+        depth: posed.depth,
+    })
+}
+
+/// Where [`layer_item`] places `layer` at `at`, through `camera`, whether or not its
+/// layer image is there yet: the shadow maps a frame's first model draws read a model's
+/// pose through this, before a model with effects has its effects' output (#1674).
+struct LayerPose<'a> {
+    /// Where it is placed.
+    placement: Placement,
+    /// What of it is shown.
+    crop: Crop,
+    /// How opaque it is.
+    opacity: f32,
+    /// How it blends.
+    blend: BlendMode,
+    /// A model's own depth layer, as [`Item::depth`] carries it.
+    depth: Option<&'a jstream_render::Image>,
+}
+
+/// [`LayerPose`] of `layer`; `None` for a layer that draws nothing at `at`.
+fn layer_pose<'a>(
+    layer: &Layer,
+    (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
+    shot: &Shot,
+    (at, size): (MediaTime, [f32; 2]),
+    live: &LiveParams,
+    camera: Option<SceneCamera>,
+) -> Option<LayerPose<'a>> {
+    if chains.failed(&layer.image) {
+        return None;
     }
+    if let Some((start, track)) = &layer.moving {
+        let elapsed = transition::elapsed_ms(*start, at);
+        let by = layer
+            .motion
+            .offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
+        let sampled = moved_track(
+            shot.is_canvas_box(&layer.image),
+            &by,
+            track.sample(elapsed, size)?,
+        );
+        return Some(LayerPose {
+            placement: track_placement(shot, &layer.image, sampled.geometry),
+            crop: sampled.crop,
+            opacity: sampled.opacity,
+            blend: sampled.blend,
+            depth: None,
+        });
+    }
+    let (placement, crop) = live.apply(layer);
+    // Its motion moves it on top of its live values (ADR-0099).
+    let (item, modifiers) = &layer.motion.to;
+    let by = shot.motion_at(item, modifiers, at);
+    let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
+    // A model's own depth, in a 3D scene, when it is at least half opaque, as the
+    // view depth takes it (ADR-0107 decision 7).
+    let depth = match (&layer.boxed, &layer.image, camera) {
+        (
+            Some(boxed),
+            GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item)),
+            Some(_),
+        ) if boxed.model && opacity >= 0.5 => {
+            cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
+        }
+        _ => None,
+    };
+    let (placement, crop) = match &layer.boxed {
+        // A model's layer is in the canvas's pixels; it sorts by the model's pose.
+        Some(boxed) if boxed.model => match placement {
+            Placement::Geometry(geometry) => (Placement::Layer(geometry), Crop::NONE),
+            _ => return None,
+        },
+        Some(boxed) => {
+            let geometry = boxed.geometry_of(placement, crop)?;
+            (Placement::Geometry(boxed.around(&geometry)?), Crop::NONE)
+        }
+        None => (placement, crop),
+    };
+    // A 3D group's child is placed through its groups as they are now (ADR-0164).
+    let (placement, opacity) =
+        groups::place_placement(&layer.groups, (placement, opacity), shot, at, live)?;
+    Some(LayerPose {
+        placement,
+        crop,
+        opacity,
+        blend: layer.blend,
+        depth,
+    })
 }
 
 /// Another camera a scene's view depth is drawn through, as a shadow map or the mirrored
@@ -9065,8 +9098,10 @@ fn depth_models<'a>(
             continue;
         };
         // A model under half opaque leaves the depth to what is behind it, as a card
-        // does; one whose layer isn't drawn this frame has none.
-        let Some(item) = layer_item(layer, (cache, chains), shot, (at, size), live, Some(camera))
+        // does. Its pose doesn't wait for its layer: a model with effects has its
+        // effects' output only once its chain has run, after the first model of the
+        // frame drew the shadow maps (#1674).
+        let Some(item) = layer_pose(layer, (cache, chains), shot, (at, size), live, Some(camera))
         else {
             continue;
         };
