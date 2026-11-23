@@ -6773,8 +6773,9 @@ mod tests {
 
     /// ADR-0191: what a pass can't draw of a model in place keeps the layer. An item
     /// under full opacity or in another blend has its made-ready draw drawn into its
-    /// layer, which the pass places as before; an item with effects, and a canvas that
-    /// mixes encoded colour, never make one ready.
+    /// layer, which the pass places as before; an item with effects never makes one
+    /// ready. A canvas that mixes encoded colour carries a model with no see-through
+    /// material like any other.
     #[test]
     fn a_model_that_needs_its_layer_keeps_it() {
         let placed_model = || {
@@ -6834,7 +6835,7 @@ mod tests {
         );
         let (pixels, counts) =
             carried(&model_shot(&graph, "plane"), &[1], &[(8, 18)]).expect("an adapter");
-        assert_eq!(counts, (0, 0), "encoded colour is mixed from its layer");
+        assert_eq!(counts, (1, 0), "where encoded colour is mixed too");
         assert_eq!(pixels[0], WHITE);
     }
 

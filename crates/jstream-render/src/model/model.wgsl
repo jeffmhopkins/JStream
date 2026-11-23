@@ -59,6 +59,9 @@ struct Frame {
     // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
     cut: vec4<f32>,
     probe: Probe,
+    // x: 1 where the target holds premultiplied sRGB-encoded colour, which a model drawn
+    // in a pass that mixes it writes (ADR-0191 decision 1); 0 for linear light.
+    drawn_into: vec4<f32>,
 }
 
 // The reflection probe a surface reads (ADR-0170 decision 3), in the viewing frame.
@@ -677,8 +680,30 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
         out.reflected = reflected * occlusion;
         out.reflects = select(0.0, 1.0, frame.params.w > 0.5 && mode < 1.5);
     }
-    out.color = vec4<f32>(color * base.a, base.a);
+    out.color = to_target(vec4<f32>(color * base.a, base.a));
     return out;
+}
+
+// Premultiplied linear colour as the target holds it, as the compositor's own draws
+// write it (`composite.wgsl`'s `to_target`): unchanged in linear light, and encoded
+// straight and premultiplied again in the encoded space.
+fn to_target(c: vec4<f32>) -> vec4<f32> {
+    if frame.drawn_into.x < 0.5 {
+        return c;
+    }
+    if c.a > 0.0 {
+        return vec4<f32>(encoded_for_target(max(c.rgb / c.a, vec3<f32>(0.0))) * c.a, c.a);
+    }
+    return vec4<f32>(encoded_for_target(max(c.rgb, vec3<f32>(0.0))), 0.0);
+}
+
+// IEC 61966-2-1 encode, written as `composite.wgsl` writes it, so a model in a pass
+// and its layer composited encode alike: above 1 the curve continues, and 1 encodes
+// to exactly 1.
+fn encoded_for_target(c: vec3<f32>) -> vec3<f32> {
+    let low = c * 12.92;
+    let high = vec3<f32>(1.0) + 1.055 * (pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(1.0));
+    return select(high, low, c <= vec3<f32>(0.0031308));
 }
 
 @fragment

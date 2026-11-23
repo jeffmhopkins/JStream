@@ -2403,8 +2403,8 @@ layer; its depth layer is drawn as before. It draws the layer, as it always did,
 item with effects or a source with filters (a chain reads the layer), while its layer has
 fewer pixels than the canvas (ADR-0197: the smaller layer is the saving,
 `a_model_drawn_with_fewer_pixels_keeps_its_layer`), while a transition runs (its tracks
-place layers), when the compositor returns no draw (a canvas that mixes encoded colour, a
-camera with a depth of field), and for a model more than one pass showed in the frame
+place layers), when the compositor returns no draw (a camera with a depth of field, or a
+model with a see-through material on a canvas that mixes encoded colour), and for a model more than one pass showed in the frame
 before. Each pass that draws a scene's colour fills its items with `fill_shown`, which
 is `fill_items` and settles each model made ready (`DirectModels::place`): the first
 pass of the frame to show it puts the draw on its item (`Item::model`) when the item is

@@ -43,7 +43,8 @@ const SHADOW_BYTES: u64 = 64;
 const ENVIRONMENT_BYTES: u64 = 96;
 /// Bytes of the frame uniform: two `mat4x4`, a `mat3x3` (three padded columns), a
 /// `vec4` of parameters, a `vec4` of ambient light, the lights, the shadow maps' views,
-/// the environment and the floor's cutting plane.
+/// the environment, the floor's cutting plane, the reflection probe and a `vec4` on the
+/// target.
 const FRAME_BYTES: u64 = 64
     + 64
     + 48
@@ -53,7 +54,12 @@ const FRAME_BYTES: u64 = 64
     + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES
     + ENVIRONMENT_BYTES
     + 16
-    + PROBE_BYTES;
+    + PROBE_BYTES
+    + TARGET_BYTES;
+/// Bytes of the last `vec4` of the frame uniform, on the target: its first value is 1
+/// where the target holds sRGB-encoded colour (ADR-0191 decision 1), which only a draw
+/// recorded into a pass of a compositor that mixes it sets ([`ModelRuntime::record_prepared`]).
+const TARGET_BYTES: u64 = 16;
 /// Bytes of the reflection probe in the frame uniform: five `vec4`.
 const PROBE_BYTES: u64 = 80;
 /// The frame's textures: the shadow maps, then the environment's picture, then the
@@ -109,6 +115,19 @@ const KEPT_DEPTHS: usize = 2;
 #[derive(Clone)]
 pub struct GpuModel {
     inner: Arc<Uploaded>,
+}
+
+impl GpuModel {
+    /// Whether any of its primitives has a blended material, whose fragments are mixed
+    /// with what is behind them.
+    pub(crate) fn blends(&self) -> bool {
+        self.inner.primitives.iter().any(|primitive| {
+            self.inner
+                .materials
+                .get(primitive.material)
+                .is_some_and(|material| material.blended)
+        })
+    }
 }
 
 struct Uploaded {
@@ -2197,13 +2216,14 @@ impl ModelRuntime {
     /// as `load` says; its surface into the layers it was prepared with, cleared. The
     /// caller holds the submit lock, has checked the draw ([`PreparedModel::check`]) and
     /// has made the depth target ([`Self::ensure_depth`]); without one of its size
-    /// nothing is recorded.
+    /// nothing is recorded. `encoded` says the target holds sRGB-encoded colour
+    /// (ADR-0126 §3), which the model's fragments are then written as.
     pub(crate) fn record_prepared(
         &self,
         gpu: &Gpu,
         encoder: &mut wgpu::CommandEncoder,
         prepared: &PreparedModel,
-        (view, load): (&wgpu::TextureView, wgpu::LoadOp<wgpu::Color>),
+        (view, load, encoded): (&wgpu::TextureView, wgpu::LoadOp<wgpu::Color>, bool),
     ) {
         let prepared = &prepared.0;
         let model = &prepared.model.inner;
@@ -2221,6 +2241,14 @@ impl ModelRuntime {
             Some([views[0]?, views[1]?, views[2]?])
         });
         gpu.queue.write_buffer(&prepared.frame, 0, &prepared.bytes);
+        if encoded {
+            // The bytes say a linear target, as a layer is.
+            gpu.queue.write_buffer(
+                &prepared.frame,
+                FRAME_BYTES - TARGET_BYTES,
+                &f32_bytes(&[1.0, 0.0, 0.0, 0.0]),
+            );
+        }
         for (index, m) in model.materials.iter().enumerate() {
             let driven = prepared.driven.get(index).copied().flatten();
             write_material(gpu, m, driven, prepared.live_binds.as_deref(), index);
@@ -2274,7 +2302,7 @@ impl ModelRuntime {
             gpu,
             &mut encoder,
             prepared,
-            (view, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)),
+            (view, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), false),
         );
         gpu.submit_work(encoder.finish());
         target.mark_changed();
@@ -2730,6 +2758,12 @@ impl PreparedModel {
     /// The texels of its target it can cover, `None` when they may be anywhere.
     pub(crate) fn content(&self) -> Option<Region> {
         self.0.content
+    }
+
+    /// Whether it draws a blended primitive, whose fragments are mixed with what is
+    /// behind them.
+    pub(crate) fn blends(&self) -> bool {
+        !self.0.order.is_empty()
     }
 
     /// Whether it draws the same uploaded model as `other`: two such draws in one

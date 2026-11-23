@@ -5,7 +5,7 @@
 use jstream_media::FrameSize;
 use jstream_media::model::shapes::Shape;
 use jstream_media::model::{AlphaMode, Material, Model, ModelTexture, TextureColor, TextureRef};
-use jstream_protocol::{Canvas, Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3};
+use jstream_protocol::{Blending, Canvas, Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3};
 
 use super::{LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight};
 use crate::tests::open;
@@ -3101,7 +3101,8 @@ fn furthest(a: &Snapshot, b: &Snapshot) -> (u8, (u32, u32)) {
 /// ADR-0191: a model drawn in its scene's pass shows what its layer, composited at full
 /// opacity in the normal blend, would have: over a card under it, under a card over it,
 /// lit by the studio rig, with a see-through material, in a 3D scene whose later card
-/// its depth hides, and in a 2D scene.
+/// its depth hides, and in a 2D scene; in linear light and, but for the see-through
+/// material, where the compositor mixes encoded colour (ADR-0126).
 #[test]
 fn golden_model_drawn_in_the_pass_matches_its_layer() {
     let Some(mut opened) = open() else {
@@ -3148,122 +3149,140 @@ fn golden_model_drawn_in_the_pass_matches_its_layer() {
         items: &[],
     };
     let mut seen = 0;
-    for (model, lighting) in [
-        (&models[0], Lighting::Unlit),
-        (&models[1], Lighting::Studio),
-        (&models[2], Lighting::Studio),
-    ] {
-        for camera in [Some(framing), None] {
-            let draw = ModelDraw {
-                model,
-                geometry,
-                camera,
-                lighting,
-                lights: None,
-                shadows: &[],
-                environment: None,
-                floor: None,
-                texture: None,
-                reflection: None,
-                probe: None,
-                materials: &[],
-            };
-            let carried = camera.is_some().then_some(&depth);
-            if carried.is_some() {
-                compositor
-                    .render_view_depth(&empty, &depth)
-                    .expect("the depth clears");
-                compositor
-                    .draw_model_depth(&draw, &depth)
-                    .expect("the model's depth draws");
-            }
-            // A card under the model, the model, and a card over half of it that sits
-            // behind it in 3D, where its depth hides the card.
-            let under = Item {
-                camera,
-                ..crate::tests::item(
-                    &blue,
-                    Placement::Geometry(boxed(70.0, 50.0, 60.0)),
-                    Crop::NONE,
-                    1.0,
-                )
-            };
-            let mut behind = boxed(100.0, 50.0, 50.0);
-            behind.depth_px = finite(-20.0);
-            let over = Item {
-                camera,
-                ..crate::tests::item(&white, Placement::Geometry(behind), Crop::NONE, 0.5)
-            };
-            compositor
-                .draw_model(&draw, &layer)
-                .expect("the model draws");
-            let layered = render(
-                compositor,
-                &[
-                    under,
-                    Item {
-                        camera,
-                        depth: carried,
-                        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
-                    },
-                    over,
-                ],
-            );
-            let prepared = compositor
-                .prepare_model(&draw, (WIDTH, HEIGHT), None, None)
-                .expect("the model is made ready")
-                .expect("nothing needs a layer");
-            let direct = render(
-                compositor,
-                &[
-                    under,
-                    Item {
-                        camera,
-                        depth: carried,
-                        model: Some(&prepared),
-                        ..crate::tests::item(&white, Placement::Layer(geometry), Crop::NONE, 1.0)
-                    },
-                    over,
-                ],
-            );
-            let (far, at) = furthest(&layered, &direct);
-            assert!(
-                far <= 1,
-                "a model drawn in the pass differs from its layer by {far} at {at:?}"
-            );
-            // The model is there, and so are both cards.
-            assert_ne!(rgb(&direct, 80, 50), [0, 0, 255]);
-            assert_eq!(rgb(&direct, 45, 50), [0, 0, 255]);
-            seen += 1;
-
-            // Made ready again from the last one, and into a layer after all, it is
-            // what `draw_model` draws.
-            let again = compositor
-                .prepare_model(&draw, (WIDTH, HEIGHT), None, Some(prepared))
-                .expect("the model is made ready")
-                .expect("nothing needs a layer");
-            let own = compositor.layer(WIDTH, HEIGHT).expect("a layer");
-            compositor
-                .draw_prepared(&again, &own)
-                .expect("the prepared model draws into a layer");
-            assert_eq!(own.content(), layer.content());
-            let place = |image| {
-                [Item {
+    for blending in [Blending::Linear, Blending::Srgb] {
+        compositor.set_blending(blending);
+        for (model, lighting) in [
+            (&models[0], Lighting::Unlit),
+            (&models[1], Lighting::Studio),
+            (&models[2], Lighting::Studio),
+        ] {
+            for camera in [Some(framing), None] {
+                let draw = ModelDraw {
+                    model,
+                    geometry,
                     camera,
-                    ..crate::tests::item(image, Placement::Layer(geometry), Crop::NONE, 1.0)
-                }]
-            };
-            let (far, at) = furthest(
-                &render(compositor, &place(&layer)),
-                &render(compositor, &place(&own)),
-            );
-            assert!(
-                far == 0,
-                "a prepared model's layer differs by {far} at {at:?}"
-            );
+                    lighting,
+                    lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
+                    texture: None,
+                    reflection: None,
+                    probe: None,
+                    materials: &[],
+                };
+                let carried = camera.is_some().then_some(&depth);
+                if carried.is_some() {
+                    compositor
+                        .render_view_depth(&empty, &depth)
+                        .expect("the depth clears");
+                    compositor
+                        .draw_model_depth(&draw, &depth)
+                        .expect("the model's depth draws");
+                }
+                // A card under the model, the model, and a card over half of it that sits
+                // behind it in 3D, where its depth hides the card.
+                let under = Item {
+                    camera,
+                    ..crate::tests::item(
+                        &blue,
+                        Placement::Geometry(boxed(70.0, 50.0, 60.0)),
+                        Crop::NONE,
+                        1.0,
+                    )
+                };
+                let mut behind = boxed(100.0, 50.0, 50.0);
+                behind.depth_px = finite(-20.0);
+                let over = Item {
+                    camera,
+                    ..crate::tests::item(&white, Placement::Geometry(behind), Crop::NONE, 0.5)
+                };
+                compositor
+                    .draw_model(&draw, &layer)
+                    .expect("the model draws");
+                let layered = render(
+                    compositor,
+                    &[
+                        under,
+                        Item {
+                            camera,
+                            depth: carried,
+                            ..crate::tests::item(
+                                &layer,
+                                Placement::Layer(geometry),
+                                Crop::NONE,
+                                1.0,
+                            )
+                        },
+                        over,
+                    ],
+                );
+                let prepared = compositor
+                    .prepare_model(&draw, (WIDTH, HEIGHT), None, None)
+                    .expect("the model is made ready");
+                // A see-through material is mixed in linear light inside its layer,
+                // which a pass that mixes encoded colour can't do in place.
+                let Some(prepared) = prepared else {
+                    assert!(blending == Blending::Srgb && std::ptr::eq(model, &models[1]));
+                    continue;
+                };
+                let direct = render(
+                    compositor,
+                    &[
+                        under,
+                        Item {
+                            camera,
+                            depth: carried,
+                            model: Some(&prepared),
+                            ..crate::tests::item(
+                                &white,
+                                Placement::Layer(geometry),
+                                Crop::NONE,
+                                1.0,
+                            )
+                        },
+                        over,
+                    ],
+                );
+                let (far, at) = furthest(&layered, &direct);
+                assert!(
+                    far <= 1,
+                    "a model drawn in the pass differs from its layer by {far} at {at:?}"
+                );
+                // The model is there, and so are both cards.
+                assert_ne!(rgb(&direct, 80, 50), [0, 0, 255]);
+                assert_eq!(rgb(&direct, 45, 50), [0, 0, 255]);
+                seen += 1;
+
+                // Made ready again from the last one, and into a layer after all, it is
+                // what `draw_model` draws.
+                let again = compositor
+                    .prepare_model(&draw, (WIDTH, HEIGHT), None, Some(prepared))
+                    .expect("the model is made ready")
+                    .expect("nothing needs a layer");
+                let own = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+                compositor
+                    .draw_prepared(&again, &own)
+                    .expect("the prepared model draws into a layer");
+                assert_eq!(own.content(), layer.content());
+                let place = |image| {
+                    [Item {
+                        camera,
+                        ..crate::tests::item(image, Placement::Layer(geometry), Crop::NONE, 1.0)
+                    }]
+                };
+                let (far, at) = furthest(
+                    &render(compositor, &place(&layer)),
+                    &render(compositor, &place(&own)),
+                );
+                assert!(
+                    far == 0,
+                    "a prepared model's layer differs by {far} at {at:?}"
+                );
+            }
         }
     }
-    assert_eq!(seen, 6);
+    assert_eq!(seen, 10);
 }
 
 /// ADR-0191: an item can carry a model only where its layer would have been composited
@@ -3340,6 +3359,41 @@ fn a_model_in_the_pass_is_refused_where_it_needs_its_layer() {
         ..carried(&prepared)
     }];
     assert_eq!(count(&render(compositor, &hidden), [0, 0, 0]), 16_000);
+    // Where encoded colour is mixed (ADR-0126) a model with a blended primitive is not
+    // made ready, and one made ready before the space changed is refused.
+    let glass = Shape::Sphere
+        .model(Material {
+            base_color: [1.0, 0.6, 0.2, 0.5],
+            alpha_mode: AlphaMode::Blend,
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let glass = compositor.upload_model(&glass).expect("uploads");
+    let see_through = ModelDraw {
+        model: &glass,
+        ..draw
+    };
+    let made = compositor
+        .prepare_model(&see_through, (WIDTH, HEIGHT), None, None)
+        .expect("the model is made ready")
+        .expect("linear light mixes it in place");
+    compositor.set_blending(Blending::Srgb);
+    assert!(
+        compositor
+            .prepare_model(&see_through, (WIDTH, HEIGHT), None, None)
+            .expect("the draw is valid")
+            .is_none()
+    );
+    let items = [carried(&made)];
+    let scene = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::rgb(0.0, 0.0, 0.0),
+        items: &items,
+    };
+    assert!(matches!(
+        compositor.render(&scene, true),
+        Err(crate::RenderError::Invalid { what: "model", .. })
+    ));
 }
 
 /// ADR-0191 with ADR-0194 and ADR-0201: a layer whose scene carries a model's draw is

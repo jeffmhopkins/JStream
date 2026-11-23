@@ -916,8 +916,14 @@ is driven to, since those are written to the uploaded model's own buffers and an
 placement of the model may be drawn in between. It keeps no pose: the palette is the
 uploaded model's, the same for every draw of it, so the model must be posed the same
 when the pass draws it. It returns `None`, and the caller draws
-the layer, for a compositor that mixes encoded colour and for a camera with a depth of
-field, which blurs the layer. A pass records an item's `PreparedModel` between the
+the layer, for a camera with a depth of field, which blurs the layer, and, on a
+compositor that mixes encoded colour, for a model with a blended primitive. There a
+pass holds sRGB-encoded colour, and the model's fragments are written encoded
+(`model.wgsl`'s `to_target`, as `composite.wgsl`'s: the frame uniform's last `vec4`
+says so, set only when a pass records the draw), which for an opaque fragment is what
+its layer's texel, encoded and blended, would leave; a blended primitive's fragments
+mix with the model's own in linear light inside a layer, so such a model keeps it. A
+pass records an item's `PreparedModel` between the
 draws around it, into the pass's own encoder: it ends the pass it is in, writes the
 materials, records the model's passes (depth prepass, opaque, blended, and the surface
 beside it when it was prepared with one) loading the target, and opens the pass again

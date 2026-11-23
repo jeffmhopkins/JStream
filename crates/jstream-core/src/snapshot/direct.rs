@@ -5,7 +5,7 @@
 //! A model keeps its layer, drawn as ADR-0107 decision 6 says, while its item has
 //! effects or its source has filters, its scene's camera has depth of field, a transition
 //! is running, its layer has fewer pixels than the canvas (ADR-0197), or the compositor
-//! mixes encoded colour. Otherwise its draw is made ready
+//! mixes encoded colour and the model has a blended primitive. Otherwise its draw is made ready
 //! ([`jstream_render::Compositor::prepare_model`]) and each pass that shows it settles
 //! how ([`fill_shown`]): the first pass of the frame carries it on its item, when the
 //! item is fully opaque in the normal blend and no item before it in the pass draws the

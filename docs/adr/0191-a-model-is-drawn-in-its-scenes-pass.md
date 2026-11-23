@@ -59,11 +59,19 @@ nothing. A draw made ready is then recorded one of two ways:
   `draw_model` would have drawn.
 
 `prepare_model` returns nothing for a draw that needs its layer whatever places it: a
-compositor that mixes encoded colour
-([ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md)), whose blend of a
-layer is not the blend of the model's fragments, and a camera with depth of field
-([ADR-0165](0165-depth-of-field-on-models.md)), which blurs the model's layer by its
-depth.
+camera with depth of field ([ADR-0165](0165-depth-of-field-on-models.md)), which blurs
+the model's layer by its depth, and, on a compositor that mixes encoded colour
+([ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md)), a model with a
+blended primitive.
+
+A compositor that mixes encoded colour is what a new collection has, so it is the case
+that matters most. Its pass holds sRGB-encoded colour while its items draw, and a
+model's fragments are written into it encoded, as the pass's own draws are: an opaque
+fragment replaces what is behind it, so the encoded fragment is exactly what its
+layer's texel, encoded and blended, would have left. A blended primitive is different.
+Inside a layer its fragments mix with the model's own in linear light, and only the
+result is encoded; in the pass they would mix in encoded values. So a model with one
+keeps its layer there.
 
 **2. What a pass refuses.** An item that carries a draw must place a layer the size of
 the canvas, fully opaque, in the normal blend, and no item before it in the pass may
@@ -133,6 +141,9 @@ exactly as before.
   model a little more than it saves and a large one much less. The step that lowers
   the pixels was tuned with every model in a layer; it is worth measuring again with
   this in place.
+- Where encoded colour is mixed, a model with a see-through material keeps the cost of
+  its layer. Drawing such a model's blended primitives into a small layer of their own
+  would lift that.
 - Two paths draw a model, and decision 3 is what keeps them one picture. The render
   crate tests them against each other for lit, unlit, blended, camera and surface
   draws; a new feature of the model's draw has to hold in both.

@@ -1206,7 +1206,8 @@ impl Compositor {
     /// spans.
     ///
     /// `None` for a draw that needs a layer: one whose camera has depth of field
-    /// (ADR-0165), and any draw on a compositor that mixes encoded colour (ADR-0126).
+    /// (ADR-0165), and, on a compositor that mixes encoded colour (ADR-0126), one of a
+    /// model with a blended primitive, whose fragments a layer mixes in linear light.
     ///
     /// # Errors
     /// As for [`Self::draw_model`], apart from its target's.
@@ -1217,7 +1218,7 @@ impl Compositor {
         surface: Option<[&Image; 3]>,
         recycle: Option<crate::PreparedModel>,
     ) -> Result<Option<crate::PreparedModel>, RenderError> {
-        if self.blending == Blending::Srgb {
+        if self.blending == Blending::Srgb && draw.model.blends() {
             return Ok(None);
         }
         let canvas = jstream_protocol::Canvas { width, height };
@@ -2451,9 +2452,9 @@ impl Compositor {
                 "item {index} carries a model but isn't a layer placement at full opacity in the normal blend"
             )));
         }
-        if self.blending == Blending::Srgb {
+        if self.blending == Blending::Srgb && model.blends() {
             return Err(invalid(format!(
-                "item {index} carries a model, which a compositor mixing encoded colour draws as a layer"
+                "item {index} carries a model with a blended primitive, which a compositor mixing encoded colour draws as a layer"
             )));
         }
         if scene.items[..index]
@@ -3012,8 +3013,12 @@ impl Compositor {
                     self.record_draws(encoder, view, Some(start), &[], scene);
                     cleared = true;
                 }
-                self.models
-                    .record_prepared(&self.gpu, encoder, model, (view, wgpu::LoadOp::Load));
+                self.models.record_prepared(
+                    &self.gpu,
+                    encoder,
+                    model,
+                    (view, wgpu::LoadOp::Load, encoded),
+                );
             }
             let end = (first + 1..count)
                 .find(|&index| reads(&self.draws[index]))
