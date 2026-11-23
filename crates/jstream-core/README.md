@@ -329,7 +329,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
-  compositor and draws the frame sheets too (`frames.rs`, see *Frame sheets*). A keyframe scene draws its parent's items at their effective values
+  compositor, draws the frame sheets too (`frames.rs`, see *Frame sheets*) and draws each scene of a collection once when it opens, to compile what it draws with (*Snapshots*, Priming). A keyframe scene draws its parent's items at their effective values
   (`State::shown_items`), effects included where it overrides them
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), so it
   follows every edit to the parent; so does what the
@@ -3995,7 +3995,7 @@ a plan reaches after the thread skipped it (*Live sources*). A painter's frame s
 a leaf mutex its writers take, the plan under the collection lock and that thread alone;
 no draw takes it, and the render thread reads the slot with no lock at all. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
-collection lock is released. The engine's GPU context (`SharedGpu`, `runtime/gpu.rs`)
+collection lock is released, by priming too (*Snapshots*), which asks the GPU context whether it lends before it takes the collection lock to plan the scenes. The engine's GPU context (`SharedGpu`, `runtime/gpu.rs`)
 has locks of its own, never taken under the collection lock: it opens a device holding
 only its own, and tells the engine of a replaced context after releasing them, which
 then takes the collection lock to hand it to the browser engine. The preview thread takes its own state lock, and the
