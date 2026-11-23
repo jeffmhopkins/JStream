@@ -6819,7 +6819,7 @@ stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: the store bullet names notify_with, and the shell bullet says a toast with buttons stays 10 s and a button hides it; matches store.rs, app.rs and style.css." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/bindings.rs"]
-stamp = { hash = "b3:9a210ac86dc5ecb5", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
+stamp = { hash = "b3:2cfc99dd6aa1f04f", by = "agent:bindings", note = "bindings.rs change is a module doc link only (catalogue → Pick::ALL, for cargo doc -D warnings); re-read the Keys and MIDI triggers entry, still accurate." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
@@ -7068,7 +7068,7 @@ stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: screenshot.rs's entry now says the desktop app saves in Downloads with a toast naming the place and Open/Show in folder (host::save_screenshot, host::open_saved); matches screenshot.rs and host.rs." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/bindings.rs"]
-stamp = { hash = "b3:9a210ac86dc5ecb5", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
+stamp = { hash = "b3:2cfc99dd6aa1f04f", by = "agent:bindings", note = "bindings.rs change is a module doc link only (catalogue → Pick::ALL, for cargo doc -D warnings); re-read the Keys and MIDI triggers entry, still accurate." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
