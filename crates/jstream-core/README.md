@@ -687,7 +687,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   (`Compositor::gpu_unit`, by an id the meter gives the unit on its first timed frame),
   and the times that come back a frame or two later go into the unit's `gpu_frames` and
   `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
-  `gpu_timing` is on once any unit carries one. The preview hub's thread times none. The
+  `gpu_timing` is on once any unit carries one. The composite's `gpu_ms` includes the
+  frame's way out, which the draw names it around: the conversion to NV12 into the
+  encoders' target and the copy of a readback, each a submit of its own after the
+  composite's. Its `ms` doesn't: on the CPU those stay in the finish phase. The preview hub's thread times none. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
   source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
   reads all of them, the threads from the host's `ThreadCpu`

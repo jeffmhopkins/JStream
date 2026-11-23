@@ -1296,8 +1296,12 @@ buffer before it and one after it, each an empty compute pass writing a timestam
 submit's command buffers run in order, so the span is the GPU running that work, not the
 time it sat waiting for the drawing thread. `end_gpu_frame` resolves the frame's
 timestamps (at most 256 spans) and maps them, and `gpu_units` polls without waiting and
-hands back each unit's GPU time in each frame read since, a frame or two late. Texture
-writes, readbacks and the encoders' conversion carry no timestamps.
+hands back each unit's GPU time in each frame read since, a frame or two late. A
+frame's way out goes through `submit_work` too: a readback ring's copy, with its NV12
+conversion when it has one, and the conversion into an encode target
+(`Nv12Converter::submit`), so a drawer that names a unit around them times them
+(`a_readback_and_its_conversion_are_timed_in_the_unit_named`). Texture writes carry no
+timestamps.
 
 **GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
 bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU
