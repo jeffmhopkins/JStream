@@ -1596,7 +1596,7 @@ beside it ([Design › Studio mode](#design)).
   camera through its centre, or turns and tilts it, shown and committed as a move drag
   is. Camera mode starts an `Action::Orbit` from any mouse button, its kind
   (`camera::CameraDrag`: orbit, `look`, `pan`, dolly) from `CameraControls::drag`, which
-  binds the left button to the chosen drag, the right and middle to the other, and
+  binds the left button to the drag its tool bar button picks, the right and middle to the other, and
   Shift to the dolly; `camera::pan` slides camera and target along the view's right and
   down axes, scaled by the target's distance over the focal length so its plane follows
   the pointer. The wheel goes through `camera::wheel`: `zoom` scales `fov_deg` by

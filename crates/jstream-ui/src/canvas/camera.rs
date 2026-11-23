@@ -371,6 +371,7 @@ impl CameraControls {
         controls.left = match parts.next() {
             Some("look") => CameraDrag::Look,
             Some("pan") => CameraDrag::Pan,
+            Some("dolly") => CameraDrag::Dolly,
             _ => CameraDrag::Orbit,
         };
         controls.wheel = match parts.next() {
@@ -385,7 +386,8 @@ impl CameraControls {
         let left = match self.left {
             CameraDrag::Look => "look",
             CameraDrag::Pan => "pan",
-            CameraDrag::Orbit | CameraDrag::Dolly => "orbit",
+            CameraDrag::Dolly => "dolly",
+            CameraDrag::Orbit => "orbit",
         };
         let wheel = match self.wheel {
             CameraWheel::Zoom => "zoom",
@@ -873,6 +875,15 @@ mod tests {
             CameraControls::from_stored(Some(&looking.stored())),
             looking
         );
+        let dollying = CameraControls {
+            left: CameraDrag::Dolly,
+            ..defaults
+        };
+        assert_eq!(
+            CameraControls::from_stored(Some(&dollying.stored())),
+            dollying
+        );
+        assert_eq!(dollying.drag(2, false), Some(CameraDrag::Pan));
         assert_eq!(CameraControls::from_stored(Some("nonsense")), defaults);
         assert_eq!(CameraControls::from_stored(None), defaults);
     }

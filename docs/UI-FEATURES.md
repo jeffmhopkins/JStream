@@ -583,11 +583,12 @@ not remove them; they move into the prototype's look.
   undo step, on a keyframe scene as its overrides. Camera mode (K, the camera button)
   hands the mouse to the camera and selects or moves no item, opens no menu and no
   Properties: a left drag orbits, looks around (turns the camera where it stands, its
-  target moving) or moves (slides camera and target across the picture, the target's
-  plane following the pointer), as its Orbit, Look around and Move buttons pick; a
-  right or middle drag moves, or orbits when a left drag moves; Shift-drag dollies. The
-  wheel zooms (the camera's `fov_deg`, 1° to 170°) or dollies, as Wheel: zoom / dolly
-  picks, Shift+wheel doing the other; a wheel turn is live on output and committed as
+  target moving), moves (slides camera and target across the picture, the target's
+  plane following the pointer) or dollies, as its Orbit, Look around, Move and Dolly
+  buttons pick; a right or middle drag moves, or orbits when a left drag moves;
+  Shift-drag dollies. The wheel zooms (the camera's `fov_deg`, 1° to 170°) or dollies,
+  as the Wheel: zoom and Wheel: dolly buttons pick, Shift+wheel doing the other. Every
+  tool and choice is a button, with its key and modifier named in its tooltip; a wheel turn is live on output and committed as
   one undo step once the wheel rests for 350 ms. The choices are kept in the browser.
   "◆ Save view" makes a keyframe scene of the shown scene (of its parent, on a keyframe)
   with the camera shown as its own, in one undo step (`scene.create_variant` and

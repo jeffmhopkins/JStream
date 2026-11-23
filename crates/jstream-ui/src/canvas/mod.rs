@@ -2308,7 +2308,7 @@ pub fn Canvas() -> impl IntoView {
                         class="canvas-tool"
                         aria-label="Depth"
                         aria-pressed=move || pressed(!camera_mode.get() && item_pose.get() == Some(camera::Pose::Depth))
-                        title="Depth (D) · drag up pushes an item away from the camera, down brings it closer"
+                        title="Depth (D, or Ctrl-drag with Move) · drag up pushes an item away from the camera, down brings it closer"
                         on:click=move |_| {
                             camera_mode.set(false);
                             item_pose.set(Some(camera::Pose::Depth));
@@ -2345,37 +2345,35 @@ pub fn Canvas() -> impl IntoView {
                         </svg>
                     </button>
                     {move || camera_mode.get().then(|| {
-                        let drag_button = move |kind: camera::CameraDrag| view! {
+                        let drag_button = move |kind: camera::CameraDrag, title: &'static str| view! {
                             <button
                                 class="canvas-tool canvas-tool-text"
                                 aria-pressed=move || pressed(camera_controls.get().left == kind)
-                                title=move || format!("Left drag: {}", kind.label())
+                                title=title
                                 on:click=move |_| camera_controls.update(|c| c.left = kind)
                             >
                                 {kind.label()}
                             </button>
                         };
-                        view! {
-                            <span class="canvas-tool-gap" aria-hidden="true"></span>
-                            {drag_button(camera::CameraDrag::Orbit)}
-                            {drag_button(camera::CameraDrag::Look)}
-                            {drag_button(camera::CameraDrag::Pan)}
-                            <span class="canvas-tool-gap" aria-hidden="true"></span>
+                        let wheel_button = move |kind: camera::CameraWheel, label: &'static str, title: &'static str| view! {
                             <button
                                 class="canvas-tool canvas-tool-text"
-                                title="What the mouse wheel does (Shift+wheel does the other)"
-                                on:click=move |_| camera_controls.update(|c| {
-                                    c.wheel = match c.wheel {
-                                        camera::CameraWheel::Zoom => camera::CameraWheel::Dolly,
-                                        camera::CameraWheel::Dolly => camera::CameraWheel::Zoom,
-                                    };
-                                })
+                                aria-pressed=move || pressed(camera_controls.get().wheel == kind)
+                                title=title
+                                on:click=move |_| camera_controls.update(|c| c.wheel = kind)
                             >
-                                {move || match camera_controls.get().wheel {
-                                    camera::CameraWheel::Zoom => "Wheel: zoom",
-                                    camera::CameraWheel::Dolly => "Wheel: dolly",
-                                }}
+                                {label}
                             </button>
+                        };
+                        view! {
+                            <span class="canvas-tool-gap" aria-hidden="true"></span>
+                            {drag_button(camera::CameraDrag::Orbit, "Drag orbits the camera about what it looks at")}
+                            {drag_button(camera::CameraDrag::Look, "Drag turns the camera where it stands, as a head turns")}
+                            {drag_button(camera::CameraDrag::Pan, "Drag slides the camera across the picture (a right or middle drag does too)")}
+                            {drag_button(camera::CameraDrag::Dolly, "Drag up or down moves the camera toward or away from what it looks at (Shift-drag does too)")}
+                            <span class="canvas-tool-gap" aria-hidden="true"></span>
+                            {wheel_button(camera::CameraWheel::Zoom, "Wheel: zoom", "The wheel zooms by changing the field of view (Shift+wheel dollies)")}
+                            {wheel_button(camera::CameraWheel::Dolly, "Wheel: dolly", "The wheel moves the camera toward or away from what it looks at (Shift+wheel zooms)")}
                             <span class="canvas-tool-gap" aria-hidden="true"></span>
                             <button
                                 class="canvas-tool canvas-tool-text"
@@ -2423,7 +2421,7 @@ fn camera_title(controls: camera::CameraControls) -> String {
         camera::CameraWheel::Dolly => "dolly",
     };
     format!(
-        "Camera mode (K) · left drag: {} · right or middle drag: {} · Shift-drag: dolly · wheel: {} · Esc leaves",
+        "Camera mode (K) · the mouse moves the camera, not items · left drag: {} · right or middle drag: {} · Shift-drag: dolly · wheel: {} · Esc leaves",
         camera::CameraDrag::label(controls.left).to_lowercase(),
         controls.other().label().to_lowercase(),
         wheel
