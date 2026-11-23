@@ -32,6 +32,7 @@
 
 use crate::app::SessionContext;
 use crate::dialog::Modal;
+use crate::icons::Icon;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
     Action, Call, CallResult, Event, PluginClass, PluginDisabledReason, PluginGrant, PluginId,
@@ -700,72 +701,84 @@ fn InstallDialog(section: Section) -> impl IntoView {
         });
     };
     view! {
-        <Modal label="Install plugin" class="plugin-dialog" cancel=cancel>
+        <Modal label="Install plugin" class="plugin-dialog install-dialog" cancel=cancel>
             <div class="modal-header">
                 <div class="modal-titles">
                     <h2 class="modal-title">"Install plugin"</h2>
+                    <p class="modal-sub">"A WASM automation plugin, from a folder on the engine's machine"</p>
                 </div>
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| cancel()>"×"</button>
             </div>
             <div class="plugin-dialog-body">
-                <label class="field">
-                    <span>"Folder on the engine's machine"</span>
-                    <span class="path-row">
-                        <input
-                            type="text"
-                            class="mono"
-                            placeholder="/path/to/plugin"
-                            prop:value=move || path.get()
-                            on:input=move |ev| {
-                                path.set(event_target_value(&ev));
-                                suggest();
-                            }
-                        />
-                        {crate::browse::browse_button(
-                            crate::browse::BrowseKind::Folder,
-                            Vec::new(),
-                            "Choose the plugin folder".into(),
-                            || true,
-                            String::new,
-                            move || {
-                                let current = path.get();
-                                if current.trim().is_empty() {
-                                    String::new()
-                                } else {
-                                    current
+                <div class="prop-grid">
+                    <div class="prop-row">
+                        <label class="prop-label" for="plugin-folder">"Folder"</label>
+                        <div class="prop-control wide">
+                            <span class="path-row grow">
+                                <input
+                                    id="plugin-folder"
+                                    type="text"
+                                    class="mono"
+                                    spellcheck="false"
+                                    placeholder="/path/to/plugin"
+                                    prop:value=move || path.get()
+                                    on:input=move |ev| {
+                                        path.set(event_target_value(&ev));
+                                        suggest();
+                                    }
+                                />
+                                {crate::browse::browse_button(
+                                    crate::browse::BrowseKind::Folder,
+                                    Vec::new(),
+                                    "Choose the plugin folder".into(),
+                                    || true,
+                                    String::new,
+                                    move || {
+                                        let current = path.get();
+                                        if current.trim().is_empty() {
+                                            String::new()
+                                        } else {
+                                            current
+                                        }
+                                    },
+                                    move |picked| {
+                                        path.set(picked);
+                                        if !id_edited.get_untracked() {
+                                            let taken = section.plugins.with_untracked(|plugins| {
+                                                plugins
+                                                    .iter()
+                                                    .map(|p| p.plugin_id.clone())
+                                                    .collect::<Vec<_>>()
+                                            });
+                                            id.set(suggested_id(&path.get_untracked(), &taken));
+                                        }
+                                    },
+                                )}
+                            </span>
+                            <p class="help">"On the engine's machine, holding " <code>"plugin.wasm"</code> "."</p>
+                        </div>
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label" for="plugin-id">"ID"</label>
+                        <div class="prop-control wide">
+                            <input
+                                id="plugin-id"
+                                type="text"
+                                class="mono grow"
+                                spellcheck="false"
+                                prop:value=move || id.get()
+                                on:input=move |ev| {
+                                    id_edited.set(true);
+                                    id.set(event_target_value(&ev));
                                 }
-                            },
-                            move |picked| {
-                                path.set(picked);
-                                if !id_edited.get_untracked() {
-                                    let taken = section.plugins.with_untracked(|plugins| {
-                                        plugins
-                                            .iter()
-                                            .map(|p| p.plugin_id.clone())
-                                            .collect::<Vec<_>>()
-                                    });
-                                    id.set(suggested_id(&path.get_untracked(), &taken));
-                                }
-                            },
-                        )}
-                    </span>
-                </label>
-                <label class="field">
-                    <span>"ID"</span>
-                    <input
-                        type="text"
-                        class="mono"
-                        prop:value=move || id.get()
-                        on:input=move |ev| {
-                            id_edited.set(true);
-                            id.set(event_target_value(&ev));
-                        }
-                    />
-                </label>
-                <p class="plugin-note">
-                    "The folder holds " <code>"plugin.wasm"</code> " and may hold "
-                    <code>"manifest.json"</code> ". The plugin starts with read access only; "
-                    "you choose what else it may do next."
+                            />
+                            <p class="help">"Suggested from the folder's name."</p>
+                        </div>
+                    </div>
+                </div>
+                <p class="callout">
+                    <Icon name="info" size=16 />
+                    <span>"It starts with read access only; you choose what else it may do next."</span>
                 </p>
                 {move || problem.get().map(|e| view! { <p class="problem" role="alert">{e}</p> })}
             </div>
