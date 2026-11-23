@@ -193,5 +193,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0178](0178-value-bindings-drive-any-number.md) | Value bindings: a controller or live data drives any number | accepted | agent |  |
 | [ADR-0179](0179-cards-that-only-add-light-cast-no-shadow.md) | Cards that only add light cast no shadow | accepted | agent |  |
 | [ADR-0180](0180-a-move-within-a-3d-family-glides-through-its-chain.md) | A Move within a 3D scene's family glides item by item, its chain paused | accepted | agent |  |
+| [ADR-0182](0182-a-sky-follows-its-items-tilt-and-roll.md) | An environment light's sky follows its item's tilt and rotation as well as its turn | accepted | agent |  |
 | [ADR-0183](0183-virtual-control-channels.md) | Channels: named live values that controls set and anything follows | accepted | agent |  |
 <!-- @generated end adr-index -->

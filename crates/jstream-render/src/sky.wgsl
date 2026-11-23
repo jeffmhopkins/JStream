@@ -16,7 +16,8 @@ struct Sky {
     forward: vec4<f32>,
     // rgb: straight up, linear light times intensity; w: the backdrop's opacity.
     sky: vec4<f32>,
-    // rgb: at the horizon; w: the turn about the vertical, in radians.
+    // rgb: at the horizon; w: unused. The camera's axes above are already in the sky's
+    // own frame, its orientation undone (ADR-0182).
     horizon: vec4<f32>,
     // rgb: below the horizon; w: how the picture stores alpha, or -1 for none.
     ground: vec4<f32>,
@@ -64,15 +65,13 @@ fn vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 }
 
 // The sky's direction for the canvas pixel at `p`: its ray from the camera, in the
-// scene's space (x right, y down, z toward the viewer), spun by the turn.
+// sky's own frame (x right, y down, z toward the viewer at rest): the axes carry its turn,
+// tilt and roll.
 fn ray(p: vec2<f32>) -> vec3<f32> {
     let f = max(u.forward.w, 1e-3);
     let x = (p.x - u.right.w) / f;
     let y = (p.y - u.down.w) / f;
-    let d = normalize(u.right.xyz * x + u.down.xyz * y + u.forward.xyz);
-    let c = cos(u.horizon.w);
-    let s = sin(u.horizon.w);
-    return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
+    return normalize(u.right.xyz * x + u.down.xyz * y + u.forward.xyz);
 }
 
 // The gradient along `d`, as a model's environment light reads it (ADR-0151 decision 9).

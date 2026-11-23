@@ -64,7 +64,10 @@ and calls this crate.
   when one of them differs, so a camera that holds still pays for its sky once
   (`a_layer_that_holds_the_sky_is_not_drawn_again`). Each pixel looks along its ray from the
   camera (its axes, principal point and focal length, never its position) into the
-  gradient or the panorama spun by the turn. Over it go nebulae and a galaxy band
+  gradient or the panorama, oriented by the light's turn, tilt and roll: `Environment::sky_axes`
+  takes the camera's axes back through that rotation on the CPU, so the shaders, and a
+  scene-lit model's reads of the sky, need no turn of their own
+  ([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)). Over it go nebulae and a galaxy band
   (`DeepSky`: warped fractal value noise on the direction, baked once per seed into two
   cube maps of 1024² faces by `sky_deep.wgsl` and read along the direction,
   [ADR-0174](../../docs/adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md);
