@@ -6459,7 +6459,7 @@ stamp = { hash = "b3:67cb3de4e6103ee0", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#canvas"."body"]
-stamp = { hash = "b3:83876c0304e0b90f", by = "agent:claude", note = "Dolly joins the left-drag kinds a tool bar button picks (CameraControls stores it), wheel zoom and dolly are two pressed buttons; the bullet says the left button follows the picked button" }
+stamp = { hash = "b3:274606c6c9e067df", by = "agent:claude", note = "Depth now doubles or halves the distance per DEPTH_DRAG_PX with a MIN_ITEM_DISTANCE floor, Turn skips billboards, and camera mode and the item tool are left in a 2D scene; the 3D tools bullet says each" }
 
 ["CRATE-jstream-ui#canvas"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -6468,7 +6468,7 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:ff923b70ae781b73" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:4142d04c8f170dc8", by = "agent:claude", note = "Dolly joins the left-drag kinds a tool bar button picks (CameraControls stores it), wheel zoom and dolly are two pressed buttons; the bullet says the left button follows the picked button" }
+stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "Depth now doubles or halves the distance per DEPTH_DRAG_PX with a MIN_ITEM_DISTANCE floor, Turn skips billboards, and camera mode and the item tool are left in a 2D scene; the 3D tools bullet says each" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the 3D scenes and crop paragraphs: crop.rs changed only a test SceneInfo initialiser. The canvas still outlines and drags a group's item as one box; outlining a 3D group by its children (ADR-0164 §6) is a follow-up, so nothing here is wrong." }
@@ -6480,7 +6480,7 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): new 3D scenes bullet: Layout.camera from camera_of, outlines through project_seen, the hit test nearest by depth_of with later items winning ties, a move on the item's depth plane through on_plane with no snapping or handles, the marquee on screen bounds, Alt-drag orbit (0.3°/px, elevation capped at 85°) and Alt+Shift-drag dolly (exp 0.005·dy, at least 10 px) shown live through live.set and committed as one scene.set_camera, and the camera pill; checked against camera.rs and its tests, mod.rs, live.rs and model.rs's an_orbit_commits_the_scene_s_camera." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:1606eeddc10cd0f9", by = "agent:claude", note = "Dolly joins the left-drag kinds a tool bar button picks (CameraControls stores it), wheel zoom and dolly are two pressed buttons; the bullet says the left button follows the picked button" }
+stamp = { hash = "b3:48bcb1eca6231f42", by = "agent:claude", note = "Depth now doubles or halves the distance per DEPTH_DRAG_PX with a MIN_ITEM_DISTANCE floor, Turn skips billboards, and camera mode and the item tool are left in a 2D scene; the 3D tools bullet says each" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:bd67665d44fb3fda", by = "agent:builder-3d3", note = "3D scenes bullet gains: an item whose source has depth is outlined, labelled, hit and marquee-touched by its model's bounds via solid_outline, none while a corner is behind the camera; 2D keeps the box. Checked against camera.rs, mod.rs and model.rs. | merge: Merged main's #1593 (Moves through keyframes and camera orbit, protocol 0.138) and #1590 (one dialog shell, property grid). Main took 0.138, so per the waves runbook this PR's bump moves 0.135 -> 0.139 everywhere it named it (version.rs, versions paragraph, SourceSize/size_changed depth docs, ARCH, UI-FEATURES CV-15); re-read: main's text and this PR's depth/picking text sit side by side without overlap; protocol, core, render, ui, control and mcp tests pass after the merge. | kept from the merged side: Only mechanical changes reach this section: the UI's scene.switch constructors gain via: Vec::new() and patterns gain ..; re-read it and it still holds (canvas/model.rs)" }
@@ -6525,7 +6525,7 @@ stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:4142d04c8f170dc8", by = "agent:claude", note = "Re-read after the tool bar's Dolly and wheel buttons: still canvas-local state, nothing in the design section changes" }
+stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "Re-read after the Depth floor, billboard skip and leaving 3D tools in 2D: still canvas-local state, nothing here changes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers." }
@@ -6537,7 +6537,7 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): the Scene Properties paragraph gains the camera: the 3D camera check starting from SceneCamera::framing, position, target, FOV and roll fields, Nearest on top, scene.set_camera sent after validate, Own camera on a keyframe only while the parent has one, the has_3d_items note, Defaults keeping it, and Duplicate scene copying it (clipboard.rs). The Store bullet's camera_of (store.rs), the canvas files (camera.rs, live.rs, mod.rs, model.rs: see Canvas) and style.css's camera field classes hold. Checked against scene_properties.rs and its tests." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:1606eeddc10cd0f9", by = "agent:claude", note = "Re-read after the tool bar's Dolly and wheel buttons: still canvas-local state, nothing in the design section changes" }
+stamp = { hash = "b3:48bcb1eca6231f42", by = "agent:claude", note = "Re-read after the Depth floor, billboard skip and leaving 3D tools in 2D: still canvas-local state, nothing here changes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:bd67665d44fb3fda", by = "agent:builder-3d3", note = "Store bullet now names SourceDepths from source.sizes and source.size_changed beside Sizes; checked against store.rs. | merge: Merged main's #1593 (Moves through keyframes and camera orbit, protocol 0.138) and #1590 (one dialog shell, property grid). Main took 0.138, so per the waves runbook this PR's bump moves 0.135 -> 0.139 everywhere it named it (version.rs, versions paragraph, SourceSize/size_changed depth docs, ARCH, UI-FEATURES CV-15); re-read: main's text and this PR's depth/picking text sit side by side without overlap; protocol, core, render, ui, control and mcp tests pass after the merge. | kept from the merged side: Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via, and no panel shows camera_path beyond the generic preset settings form" }
@@ -6756,7 +6756,7 @@ stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: sc
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:4142d04c8f170dc8", by = "agent:claude", note = "Re-read: the tool bar buttons don't change the crate's purpose" }
+stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "Re-read: unchanged by the round-1 fixes" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers." }
@@ -6768,7 +6768,7 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): the Store bullet names Collection::camera_of (own camera, a keyframe's override or its parent's), checked against store.rs. canvas/camera.rs, live.rs, mod.rs and model.rs (3D canvas), clipboard.rs (Duplicate scene copies the camera) and scene_properties.rs (camera fields) are described under Canvas and Design; the module entries here still hold." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:1606eeddc10cd0f9", by = "agent:claude", note = "Re-read: the tool bar buttons don't change the crate's purpose" }
+stamp = { hash = "b3:48bcb1eca6231f42", by = "agent:claude", note = "Re-read: unchanged by the round-1 fixes" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:bd67665d44fb3fda", by = "agent:builder-3d3", note = "UI gains SourceDepths and model outlines/hits in 3D scenes; purpose still holds. | merge: Merged main's #1593 (Moves through keyframes and camera orbit, protocol 0.138) and #1590 (one dialog shell, property grid). Main took 0.138, so per the waves runbook this PR's bump moves 0.135 -> 0.139 everywhere it named it (version.rs, versions paragraph, SourceSize/size_changed depth docs, ARCH, UI-FEATURES CV-15); re-read: main's text and this PR's depth/picking text sit side by side without overlap; protocol, core, render, ui, control and mcp tests pass after the merge. | kept from the merged side: Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via" }
@@ -8385,7 +8385,7 @@ stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New sect
 stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-FEATURES#beyond"."body"]
-stamp = { hash = "b3:b4f02b9ee63d27f0", by = "agent:claude", note = "Re-read the 3D tools bullet after adding the Dolly and wheel buttons; it matches the tool bar" }
+stamp = { hash = "b3:6fd304344f110076", by = "agent:claude", note = "The 3D tools bullet now says Depth doubles or halves distance per 200 px with a 10 px floor and Turn leaves billboards alone; matches camera::pose" }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/agents.rs"]
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "agents.rs: only its doc comment and the toggle's <label for> changed; the Agents bullet's Ask before connecting holds." }
@@ -8409,7 +8409,7 @@ stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:3546004f22bc2a80", by = "agent:claude", note = "CV-11 notes the 3D tool bar additions; the 3D scenes and new 3D tools/camera mode bullets match canvas/mod.rs and camera.rs (bindings, wheel settle 350 ms, fov 1-170, Save view batch, Esc/V/K)" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:4142d04c8f170dc8", by = "agent:claude", note = "Camera mode text lists the Orbit, Look around, Move and Dolly buttons and the Wheel: zoom and Wheel: dolly buttons, and says each tool names its key or modifier in its tooltip (Depth names Ctrl-drag); matches mod.rs" }
+stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "CV-11 still lists the 3D tool bar additions (Depth, Turn, Camera mode, and in camera mode the drag, wheel and Save view buttons); the rest of the table is unchanged by this PR" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read this section's rows for the covered file: its only change is camera_anchor: None in test SceneInfo initialisers (protocol 0.125), so no feature it describes changed." }
@@ -8421,7 +8421,7 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): re-read the canvas rows against the 3D canvas (camera.rs, live.rs, mod.rs, model.rs, store.rs's camera_of): 2D behaviour is unchanged; the 3D canvas is described under Beyond the prototype, and KB-02 says what Alt does there." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:1606eeddc10cd0f9", by = "agent:claude", note = "Camera mode text lists the Orbit, Look around, Move and Dolly buttons and the Wheel: zoom and Wheel: dolly buttons, and says each tool names its key or modifier in its tooltip (Depth names Ctrl-drag); matches mod.rs" }
+stamp = { hash = "b3:48bcb1eca6231f42", by = "agent:claude", note = "CV-11 still lists the 3D tool bar additions (Depth, Turn, Camera mode, and in camera mode the drag, wheel and Save view buttons); the rest of the table is unchanged by this PR" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:bd67665d44fb3fda", by = "agent:builder-3d3", note = "CV-15 gains that in a 3D scene a model's item is outlined and hit by its bounds (depth from source.sizes, 0.128); matches camera.rs. | merge: Merged main's #1593 (Moves through keyframes and camera orbit, protocol 0.138) and #1590 (one dialog shell, property grid). Main took 0.138, so per the waves runbook this PR's bump moves 0.135 -> 0.139 everywhere it named it (version.rs, versions paragraph, SourceSize/size_changed depth docs, ARCH, UI-FEATURES CV-15); re-read: main's text and this PR's depth/picking text sit side by side without overlap; protocol, core, render, ui, control and mcp tests pass after the merge. | kept from the merged side: Only mechanical changes reach this section: the UI's scene.switch constructors gain via: Vec::new() and patterns gain ..; re-read it and it still holds (canvas/model.rs, store.rs)" }
@@ -8529,7 +8529,7 @@ stamp = { hash = "b3:b7f3b69e6dc89b0d", by = "agent:claude", note = "Reordered t
 stamp = { hash = "b3:55d82fbadddc32cb", by = "agent:claude", note = "KB-01 lists K, D, R and Esc leaving camera mode; KB-02 adds Ctrl-drag depth in 3D; checked against on_key and on_down" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:1606eeddc10cd0f9", by = "agent:claude", note = "Re-read: the keys are unchanged (K, D, R, V, Esc, Ctrl-drag, Shift-drag); they are now also named in the buttons' tooltips" }
+stamp = { hash = "b3:48bcb1eca6231f42", by = "agent:claude", note = "Re-read: K, D, R, V and Esc as KB-01 says; Esc leaves camera mode only in a 3D scene, and a 2D scene leaves it anyway" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }

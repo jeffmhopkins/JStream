@@ -263,6 +263,19 @@ pub fn Canvas() -> impl IntoView {
     Effect::new(move |_| store_camera_controls(camera_controls.get()));
     // What a drag on an item does in a 3D scene besides sliding it on its depth plane.
     let item_pose = RwSignal::new(None::<camera::Pose>);
+    // A 2D scene has neither: leave them when the canvas stops showing a 3D scene, so
+    // Escape and the move tool there work as ever.
+    Effect::new(move |_| {
+        let three_d = layout.with(|l| l.as_ref().is_some_and(|l| l.camera.is_some()));
+        if !three_d {
+            if camera_mode.get_untracked() {
+                camera_mode.set(false);
+            }
+            if item_pose.get_untracked().is_some() {
+                item_pose.set(None);
+            }
+        }
+    });
     // A wheel turn on the camera waiting to be committed: it commits once the wheel
     // rests.
     let wheeling = StoredValue::new_local(None::<Wheeling>);
@@ -1515,7 +1528,7 @@ pub fn Canvas() -> impl IntoView {
                 item_pose.set(Some(camera::Pose::Turn));
             }
             "Escape" if drag.with_value(Option::is_some) => end(false),
-            "Escape" if camera_mode.get_untracked() => camera_mode.set(false),
+            "Escape" if camera_mode.get_untracked() && in_3d() => camera_mode.set(false),
             "Escape" => {
                 crop_mode.set(false);
                 studio.select_item(None);

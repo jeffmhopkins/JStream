@@ -577,9 +577,9 @@ not remove them; they move into the prototype's look.
   view.
 - A 3D scene's tools, after Crop in the canvas tool bar (`canvas/camera.rs`). Depth (D),
   or Ctrl-drag with Move, moves the dragged items along the line from the camera to
-  them: up pushes them away, by their own distance per 200 screen pixels, so they stay
+  them: up pushes them away, down brings them closer, their distance doubling or halving per 200 screen pixels and never nearer than 10 px, so they stay
   under the pointer. Turn (R) turns them about their centre: sideways sets `turn_deg`,
-  up and down `tilt_deg`, kept within ±180°. Both are shown live and committed as one
+  up and down `tilt_deg`, kept within ±180°; a billboard, which faces the camera anyway, isn't turned. Both are shown live and committed as one
   undo step, on a keyframe scene as its overrides. Camera mode (K, the camera button)
   hands the mouse to the camera and selects or moves no item, opens no menu and no
   Properties: a left drag orbits, looks around (turns the camera where it stands, its

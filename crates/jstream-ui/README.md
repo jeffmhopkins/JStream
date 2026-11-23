@@ -1593,7 +1593,8 @@ beside it ([Design › Studio mode](#design)).
   field of view.
 - **3D tools and camera mode** (`camera.rs`). The Depth and Turn tools (and Ctrl-drag)
   start an `Action::Pose`: `camera::pose` moves each dragged box along the ray from the
-  camera through its centre, or turns and tilts it, shown and committed as a move drag
+  camera through its centre (its distance doubling or halving per `DEPTH_DRAG_PX`, never
+  nearer than `MIN_ITEM_DISTANCE`), or turns and tilts it (not a billboard), shown and committed as a move drag
   is. Camera mode starts an `Action::Orbit` from any mouse button, its kind
   (`camera::CameraDrag`: orbit, `look`, `pan`, dolly) from `CameraControls::drag`, which
   binds the left button to the drag its tool bar button picks, the right and middle to the other, and
@@ -1602,7 +1603,7 @@ beside it ([Design › Studio mode](#design)).
   the pointer. The wheel goes through `camera::wheel`: `zoom` scales `fov_deg` by
   `exp(0.001 × deltaY)` within 1° to 170°, or a dolly of `0.2 × deltaY`; a turn opens its
   own live gesture (`Wheeling`) and commits as an orbit's drop does once no wheel event
-  came for `WHEEL_SETTLE`, or at once when a drag starts. The bindings are kept in
+  came for `WHEEL_SETTLE`, or at once when a drag starts. Camera mode and the item tool are left when the canvas shows a 2D scene. The bindings are kept in
   `localStorage` (`CameraControls::stored`). Save view batches `scene.create_variant`
   and `scene.set_camera` for a new keyframe scene with the shown camera.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no

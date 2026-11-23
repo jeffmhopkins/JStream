@@ -509,18 +509,22 @@ pub enum Pose {
 
 /// Degrees an item turns or tilts per screen pixel of a Turn drag.
 pub const TURN_DEG_PER_PX: f32 = 0.5;
-/// Screen pixels of a Depth drag that move an item by its own distance from the camera.
+/// Screen pixels of a Depth drag that double, or halve, an item's distance from the camera.
 pub const DEPTH_DRAG_PX: f32 = 200.0;
+/// The nearest a Depth drag brings an item to the camera, in scene pixels.
+pub const MIN_ITEM_DISTANCE: f32 = 10.0;
 /// The least distance a Depth drag scales by, in scene pixels, so an item at the camera
 /// still moves.
 const MIN_DEPTH_SCALE: f32 = 50.0;
 
 /// `start` changed by a drag of `dx`, `dy` screen pixels as `pose` says. A Depth drag
 /// up pushes the item away along the camera's line of sight to it, down brings it
-/// closer, by its distance from the camera per [`DEPTH_DRAG_PX`], so it stays where it
-/// is on screen. A Turn drag right turns its right
+/// closer: its distance from the camera doubles per [`DEPTH_DRAG_PX`] up and halves per
+/// [`DEPTH_DRAG_PX`] down, no nearer than [`MIN_ITEM_DISTANCE`], so it stays where it is
+/// on screen and never passes the camera. A Turn drag right turns its right
 /// edge away (`turn_deg`), up tips its top edge away (`tilt_deg`), each kept within
-/// ±180°. `None` when the result isn't a valid placement.
+/// ±180°. `None` when the result isn't a valid placement, or for a Turn of a
+/// billboard, which faces the camera whatever its angles.
 pub fn pose(
     pose: Pose,
     start: ItemGeometry,
@@ -546,11 +550,19 @@ pub fn pose(
             } else {
                 (view.axes()[2], f64::from(MIN_DEPTH_SCALE))
             };
-            let along = f64::from(-dy / DEPTH_DRAG_PX) * length;
+            // Its distance doubles per DEPTH_DRAG_PX up and halves per DEPTH_DRAG_PX down,
+            // so it never reaches the camera, let alone passes behind it.
+            // No nearer than MIN_ITEM_DISTANCE, or than it started, so rounding never
+            // puts it at or behind the camera.
+            let floor = f64::from(MIN_ITEM_DISTANCE).min(length);
+            let along = (length * f64::from(-dy / DEPTH_DRAG_PX).exp2()).max(floor) - length;
             let [x, y, z] = [0, 1, 2].map(|i| (at[i] + ray[i] * along) as f32);
             moved.center = Vec2::new(x, y)?;
             moved.depth_px = Finite32::new(z)?;
         }
+        // A billboard faces the camera whatever its angles, so turning it would change
+        // nothing seen.
+        Pose::Turn if start.billboard => return None,
         Pose::Turn => {
             let wrap = |deg: f32| {
                 let d = deg.rem_euclid(360.0);
@@ -909,8 +921,16 @@ mod tests {
             (a.x - b.x).abs() < 0.05 && (a.y - b.y).abs() < 0.05,
             "{a:?} {b:?}"
         );
-        let closer = pose(Pose::Depth, g, &seen, 0.0, 50.0).expect("valid");
-        assert!(seen.depth_of(closer) < before);
+        let closer = pose(Pose::Depth, g, &seen, 0.0, DEPTH_DRAG_PX).expect("valid");
+        assert!((seen.depth_of(closer) / before - 0.5).abs() < 1e-3);
+        // However far down, it stays in front of the camera (#1633 round 1, B1).
+        let far_down = pose(Pose::Depth, g, &seen, 0.0, 5_000.0).expect("valid");
+        assert!(seen.depth_of(far_down) > 0.0);
+        let (c, d) = (at(g), at(far_down));
+        assert!(
+            (c.x - d.x).abs() < 0.05 && (c.y - d.y).abs() < 0.05,
+            "{c:?} {d:?}"
+        );
     }
 
     #[test]
@@ -921,6 +941,9 @@ mod tests {
         assert!((turned.turn_deg.get() - 20.0).abs() < 1e-4);
         assert!((turned.tilt_deg.get() - 10.0).abs() < 1e-4);
         assert_eq!(turned.center, g.center);
+        let mut facing = g;
+        facing.billboard = true;
+        assert_eq!(pose(Pose::Turn, facing, &seen, 40.0, -20.0), None);
         let round = pose(Pose::Turn, g, &seen, 400.0, 0.0).expect("valid");
         assert!(
             (round.turn_deg.get() + 160.0).abs() < 1e-3,
