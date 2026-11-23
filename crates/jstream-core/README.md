@@ -1886,7 +1886,8 @@ With arrival pictures
 ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
 planning puts the frames of the visible items of the light's `sky_pictures` scene in the
 shot (`Shot::sky_pictures`, by the light's source), one arrival each, or one of up to four
-pictures for an item showing a nested scene (`SkyPart`s: each with how much its item's
+pictures for an item showing a nested scene
+([ADR-0193](../../docs/adr/0193-an-arrival-can-be-a-planet-with-its-sun.md); `SkyPart`s: each with how much its item's
 width scales `sky_picture_deg`, `picture_scale`, and its turn and tilt from the first,
 which `part_direction` places), and the state keeps the arrival shown
 and where it is pinned (`Arrival`): none while the deep sky is gone at warp

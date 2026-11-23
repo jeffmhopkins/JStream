@@ -455,7 +455,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0187](../../docs/adr/0187-a-warp-can-travel-straight-ahead.md)). `sky_pictures`
   (a scene reference, or null) names a scene of pictures the backdrop arrives at (an item
   showing a nested scene is one arrival of up to four pictures, placed by their items'
-  turn and tilt from its first), each
+  turn and tilt from its first, [ADR-0193](../../docs/adr/0193-an-arrival-can-be-a-planet-with-its-sun.md)), each
   `sky_picture_deg` wide (1 to 120, default 30) times its item's width over the canvas's,
   and lighting the scene by
   `sky_picture_light` (0 to 8, default 1)

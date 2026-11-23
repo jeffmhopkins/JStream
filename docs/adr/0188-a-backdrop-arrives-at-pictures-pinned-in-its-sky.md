@@ -51,18 +51,12 @@ Settings saved before these read as their defaults: no pictures.
 
 **2. Which pictures.** Planning puts the frame of each visible item of the
 `sky_pictures` scene in the shot, bottom first, so it is uploaded though no item shows
-it. An item showing a light, a model, a probe or a capture is left out.
+it. An item showing a light, a model, a probe, a nested scene or a capture is left out.
 The item's place in that scene doesn't matter, but its width does: a picture is
 `sky_picture_deg` times its item's width over the canvas's wide (a legacy transform's
 horizontal scale), held to 1 to 120 degrees, so a scene sizes each picture, a nebula wide
 and a planet small, by sizing its item. An item spanning the canvas shows it at
 `sky_picture_deg`.
-
-An item showing a nested scene is one arrival of several pictures: the frames of up to
-four visible items of that scene, bottom first, each sized by its item's width as above.
-The first is the one pinned ahead (decision 4); each other is pinned by its item's turn
-(to the right) and tilt (up), in degrees, from the first, so a sun can sit behind a
-planet's shoulder where the ship turns to find it. A deeper nesting is left out.
 
 **3. One at a time, picked at random as a warp ends.** The render thread's per-scene sky
 state keeps the picture shown and where it is pinned. It shows one from the first frame.
@@ -77,15 +71,14 @@ degrees across and 6 up or down from it, by the same hash, so a warp aimed ahead
 with it in view, a little off centre. Its top is toward the sky's up, and it keeps its own
 shape.
 
-**5. How it is drawn.** The backdrop's pass reads each picture through the tangent plane
-at its centre, so it is a flat picture wherever it is. It covers the sky, the nebulae and the
+**5. How it is drawn.** The backdrop's pass reads it through the tangent plane at its
+centre, so it is a flat picture wherever it is. It covers the sky, the nebulae and the
 stars behind it where it is opaque, at the light's intensity, and fades as the deep sky
 does at warp, so it fades out going into warp and back in as the warp drops. It is in the
 backdrop only: what the sky lights or a model reflects doesn't show it.
 
 **6. How it lights.** While it shows, the scene gains one directional light shining from
-where the backdrop shows the arrival's last picture (its only one, or a nested scene's
-top one: a sun over its planet), in the average colour of its opaque pixels, at the
+where the backdrop shows it, in the average colour of its opaque pixels, at the
 environment light's intensity times its item's opacity times `sky_picture_light`, faded
 as the picture is. The colour is taken on the CPU once per frame version, from at most
 about 4096 of its pixels, for the picture shown only, from the frame after it is picked,
@@ -104,10 +97,7 @@ scene's own, in a reflection probe's capture too.
   - **State.** The pick is render-thread state, like the warp's travel: a snapshot or a
     new render context starts at its first pick, and two contexts pick on their own.
   - The picture is sampled with no mips, so a large picture shown small can shimmer.
-  - The light is one direction and one colour, not the picture's shape, and only an
-    arrival's last picture lights.
-  - The backdrop's pass binds four picture textures, a blank one where a slot is empty,
-    and an arrival shows at most four pictures.
+  - The light is one direction and one colour, not the picture's shape.
 - **Must now do:** `jstream-sources` parses the settings; `jstream-render`'s `SkyDraw`
   takes a `SkyPicture` and `sky.wgsl` draws it; `jstream-core` plans the candidates'
   frames, keeps the pick in `SkyState`, takes the colour and adds the light; tests cover

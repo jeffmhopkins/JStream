@@ -63,7 +63,7 @@ pub struct SkyDraw<'a> {
     pub pictures: [Option<SkyPicture<'a>>; MAX_SKY_PICTURES],
 }
 
-/// The most pictures one backdrop pins in its sky at once (ADR-0188).
+/// The most pictures one backdrop pins in its sky at once (ADR-0193).
 pub const MAX_SKY_PICTURES: usize = 4;
 
 /// A flat picture pinned in a backdrop's sky, infinitely far away (ADR-0188): a planet or
