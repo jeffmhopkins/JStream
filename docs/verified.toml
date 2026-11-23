@@ -7218,7 +7218,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "Re-read:
 stamp = { hash = "b3:b563d5871ad1dce2", by = "agent:claude", note = "Specs now pick the Filters tab and use recordCalls for the colour source's preview; no harness change." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
-stamp = { hash = "b3:682e578d6ef869ac", by = "agent:lane-d", note = "scene-cameras.spec.js no longer turns a Follow pointer check on (ADR-0120 made it a filter): it checks the Add Follow pointer… button and measures the Roll field instead of From the right; the tests list says so, the harness is unchanged." }
+stamp = { hash = "b3:30a05dca4c965c31", by = "agent:release-alpha8", note = "Only scene-cameras.spec.js changed, its readout regex now allowing #1633's field of view; the mock daemon, one-daemon-per-test fixtures and the harness this section describes are untouched." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:50da5e21dbd6910d", by = "agent:claude", note = "Specs now pick the Filters tab and use recordCalls for the colour source's preview; no harness change." }
@@ -7347,7 +7347,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "The Proj
 stamp = { hash = "b3:b563d5871ad1dce2", by = "agent:claude", note = "Updated properties, scene-filters and filters spec descriptions for the title/subtitle, the Settings | Filters segments with counts, and a colour source's own picture by source_id." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
-stamp = { hash = "b3:682e578d6ef869ac", by = "agent:lane-d", note = "scene-cameras.spec.js no longer turns a Follow pointer check on (ADR-0120 made it a filter): it checks the Add Follow pointer… button and measures the Roll field instead of From the right; the tests list says so, the harness is unchanged." }
+stamp = { hash = "b3:30a05dca4c965c31", by = "agent:release-alpha8", note = "scene-cameras.spec.js's Alt-drag readout check now also allows the field of view #1633 added to the camera readout (Camera x, y, z · 1500 px from target · 45°); the 3D scenes bullet says the drag shows the camera's readout without quoting its text, so it holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:50da5e21dbd6910d", by = "agent:claude", note = "Updated properties, scene-filters and filters spec descriptions for the title/subtitle, the Settings | Filters segments with counts, and a colour source's own picture by source_id." }
