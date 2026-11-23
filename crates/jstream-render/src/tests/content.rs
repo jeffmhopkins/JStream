@@ -4,14 +4,14 @@
 use std::sync::Arc;
 
 use jstream_media::FrameSize;
-use jstream_protocol::BlendMode;
+use jstream_protocol::{BlendMode, Blending};
 use serde_json::json;
 
-use super::{Opened, item, open, solid};
+use super::{Opened, item, near, open, solid};
 use crate::filter::testing::{filter, image, read};
 use crate::mips::Region;
 use crate::{
-    Color, Compositor, Crop, FilterClock, Image, LegacyTransform, Placement, Scene, Snapshot,
+    Color, Compositor, Crop, FilterClock, Image, Item, LegacyTransform, Placement, Scene, Snapshot,
     VideoFilter,
 };
 
@@ -512,4 +512,108 @@ fn a_bounded_filter_drawn_again_keeps_nothing_of_the_last_frame() {
         let (again, once) = (whole(&mut opened, &output), whole(&mut opened, &fresh));
         same(kind, &again, &once);
     }
+}
+
+/// The 32x32 scene that is `layer` alone, and the same with a transparent texel drawn
+/// over it so it is composited the long way: (straight from the layer, composited).
+fn alone_and_composited(
+    compositor: &mut Compositor,
+    layer: &Image,
+    background: Color,
+) -> (Snapshot, Snapshot) {
+    let nothing = solid(compositor, 1, 1, [0, 0, 0, 0]);
+    let items = [
+        item(layer, Placement::IDENTITY, Crop::NONE, 1.0),
+        item(&nothing, Placement::IDENTITY, Crop::NONE, 1.0),
+    ];
+    let mut draw = |items: &[Item<'_>], straight: bool| {
+        let scene = Scene {
+            canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+            background,
+            items,
+        };
+        let output = compositor.render(&scene, true).expect("render");
+        let pixels = output.pixels().expect("invariant: read back").clone();
+        assert_eq!(compositor.resolved_layer(), straight);
+        pixels
+    };
+    (draw(&items[..1], true), draw(&items, false))
+}
+
+/// A scene that is one finished layer over the whole canvas is resolved straight from
+/// the layer, to the pixels the composite of it gives, in both blending spaces and over
+/// each kind of background.
+#[test]
+fn a_scene_of_one_whole_layer_is_resolved_straight_from_it() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    for blending in [Blending::Srgb, Blending::Linear] {
+        compositor.set_blending(blending);
+        let layer = sparse(compositor);
+        for background in [
+            Color::TRANSPARENT,
+            Color::BLACK,
+            Color::rgb(0.2, 0.5, 0.9),
+            Color::from_rgba8([200, 40, 10, 128]),
+        ] {
+            let (straight, composited) = alone_and_composited(compositor, &layer, background);
+            for y in 0..32 {
+                for x in 0..32 {
+                    let expected = composited.pixel(x, y).expect("invariant: inside");
+                    near(&straight, x, y, expected, 1);
+                }
+            }
+            // The layer's content is there: its red square and its bar.
+            assert_eq!(straight.pixel(5, 6), Some([255, 0, 0, 255]));
+            assert_ne!(straight.pixel(21, 25), straight.pixel(0, 0));
+        }
+    }
+}
+
+/// Anything but one unfaded, unmoved, canvas-sized layer in `normal` is composited.
+#[test]
+fn a_layer_that_is_not_the_whole_scene_is_composited() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let layer = sparse(compositor);
+    let whole = item(&layer, Placement::IDENTITY, Crop::NONE, 1.0);
+    let mut screened = whole;
+    screened.blend = BlendMode::Screen;
+    let others = [
+        // Faded, moved, cropped, scaled and blended.
+        item(&layer, Placement::IDENTITY, Crop::NONE, 0.5),
+        item(&layer, at([1.0, 0.0], [1.0, 1.0], 0.0), Crop::NONE, 1.0),
+        item(
+            &layer,
+            Placement::IDENTITY,
+            Crop {
+                left: 1,
+                ..Crop::NONE
+            },
+            1.0,
+        ),
+        item(&layer, at([0.0, 0.0], [2.0, 2.0], 0.0), Crop::NONE, 1.0),
+        screened,
+    ];
+    for (case, other) in others.into_iter().enumerate() {
+        let scene = Scene {
+            canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+            background: Color::BLACK,
+            items: &[other],
+        };
+        compositor.render(&scene, false).expect("render");
+        assert!(!compositor.resolved_layer(), "case {case}");
+    }
+    // And a layer of another size than the canvas.
+    let scene = Scene {
+        canvas: FrameSize::new(16, 16).expect("invariant: non-zero"),
+        background: Color::BLACK,
+        items: &[whole],
+    };
+    compositor.render(&scene, false).expect("render");
+    assert!(!compositor.resolved_layer());
 }

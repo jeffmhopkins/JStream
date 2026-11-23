@@ -1427,7 +1427,9 @@ collection's, the target holds premultiplied sRGB-encoded colour while the items
 so every mode mixes as a browser does with the same blend states, and one decode pass
 after the last item turns it back into linear light. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
 resolve pass un-premultiplies into
-`Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
+`Rgba8UnormSrgb`, which a snapshot can read back. A frame that is one finished layer over
+the whole canvas (a scene's or an output's filter chain's result) is resolved straight
+from that layer in one pass, with no composite of it first. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
 first (D3D12 first on Windows); the software adapter is the fallback, so a machine with
 no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays

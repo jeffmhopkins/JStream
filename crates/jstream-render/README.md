@@ -535,6 +535,16 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    llvmpipe (#1449). The output usage is `RENDER_ATTACHMENT | COPY_SRC |
    TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
 
+   **One whole layer.** A scene whose only drawn item is a premultiplied linear image
+   of the canvas's size, laid over the whole canvas texel for texel at opacity 1 in
+   `normal` (what a scene's, a master's or an output's filter chain hands back), skips
+   step 3: one pass (`resolve.wgsl`'s `fs_layer`) reads the layer itself and writes the
+   sRGB target. Per texel it does what steps 3 and 4 would: lays the texel over the
+   background in the blending space (encoding first and decoding after in `srgb`),
+   then un-premultiplies. The FP16 target is not drawn, copied or decoded, which on a
+   1080p frame is a draw, a copy and two fullscreen passes fewer. The pixels match the
+   long way's within one step of 8 bits.
+
    **`render_image`** (a nested scene) stops after step 3. It composites into a new
    `Rgba16Float` texture (`RENDER_ATTACHMENT | TEXTURE_BINDING`) of the canvas size
    and returns it as an `Image` read as premultiplied, the same as an upload. So
