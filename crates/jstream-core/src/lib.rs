@@ -64,6 +64,7 @@ mod ptz;
 mod quality;
 mod reactive;
 mod rendering_file;
+mod resolution;
 mod runtime;
 mod sequences;
 mod session;

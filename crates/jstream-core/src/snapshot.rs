@@ -580,6 +580,24 @@ impl Boxed {
         })
     }
 
+    /// The size in pixels of the layer the item is drawn into: `layer`, or for a model
+    /// `percent` of its width and of its height, rounded up (ADR-0197). Such a layer
+    /// still stands for the whole canvas and is placed over it ([`Self::extent`]).
+    fn pixels(&self, percent: u32) -> [u32; 2] {
+        if !self.model || percent >= 100 {
+            return self.layer;
+        }
+        let percent = u64::from(percent.max(1));
+        self.layer
+            .map(|px| (u64::from(px) * percent).div_ceil(100).max(1) as u32)
+    }
+
+    /// The size the layer is placed at, which its pixels are sampled across
+    /// ([`jstream_render::Image::set_extent`]).
+    fn extent(&self) -> Option<FrameSize> {
+        FrameSize::new(self.layer[0], self.layer[1]).ok()
+    }
+
     /// The box `placement` puts an item cropped by `crop` in: its geometry, or a legacy
     /// transform's equivalent over the image's size. `None` when that isn't known or the
     /// placement draws nothing.
@@ -6700,9 +6718,13 @@ fn draw_box(
         return Ok(());
     };
     let key = GpuKey::ItemBox(scene_id.clone(), item_id.clone());
-    let [width, height] = boxed.boxed.layer;
+    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
     cache.layer(compositor, &key, width, height)?;
     if boxed.boxed.model {
+        // Its layer stands for the canvas, however many pixels it has (ADR-0197).
+        if let Some(extent) = boxed.boxed.extent() {
+            cache.set_extent(&key, extent);
+        }
         return draw_model(
             compositor,
             (cache, chains),
@@ -7010,8 +7032,11 @@ fn draw_model(
     let depth_key = match (owner, camera) {
         (ChainOwner::Item(scene, item), Some(_)) => {
             let key = GpuKey::ModelDepth(scene.clone(), item.clone());
-            let [width, height] = boxed.boxed.layer;
+            let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
             cache.depth_layer(compositor, &key, width, height)?;
+            if let Some(extent) = boxed.boxed.extent() {
+                cache.set_extent(&key, extent);
+            }
             Some(key)
         }
         _ => None,
@@ -7031,9 +7056,12 @@ fn draw_model(
                     .is_some_and(Chain::reads_surface) =>
         {
             let keys = model_surface_keys(scene, item);
-            let [width, height] = boxed.boxed.layer;
+            let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
             for key in &keys {
                 cache.layer(compositor, key, width, height)?;
+                if let Some(extent) = boxed.boxed.extent() {
+                    cache.set_extent(key, extent);
+                }
             }
             Some(keys)
         }
@@ -7278,7 +7306,7 @@ fn ready_casting_models(
         {
             continue;
         }
-        let [width, height] = boxed.boxed.layer;
+        let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
         if let Err(error) = cache.layer(compositor, &layer.image, width, height) {
             tracing::debug!(%scene, %item, %error, "a model's layer isn't ready for the shadow maps");
         }
@@ -8441,7 +8469,7 @@ pub(crate) fn claim_layers(
             ChainStep::Box(owner) => {
                 if let (ChainOwner::Item(scene, item), Some(boxed)) = (owner, shot.boxes.get(owner))
                 {
-                    let [width, height] = boxed.boxed.layer;
+                    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
                     // One that can't be made fails its item when the chains next draw.
                     let _ = cache.layer(
                         compositor,
@@ -8798,8 +8826,9 @@ fn draw_surface(
         if let (true, [Some(normal), Some(brdf), Some(reflected)]) = (
             chains.surfaced.contains(&(scene.clone(), item.clone())),
             layers,
-        ) && (normal.width(), normal.height()) == (targets[0].width(), targets[0].height())
-        {
+        ) {
+            // Whatever its size: one drawn with fewer pixels than the canvas is spread
+            // over the buffer (ADR-0197).
             compositor.merge_model_surface([normal, brdf, reflected], targets)?;
             continue;
         }

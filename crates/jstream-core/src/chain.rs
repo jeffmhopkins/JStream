@@ -991,6 +991,10 @@ pub(crate) struct Chains {
     /// The models drawn since the chains last began a frame: one no frame drew is let
     /// go when the next begins.
     models_used: BTreeSet<SourceId>,
+    /// How many pixels a 3D model's layer is drawn with, as a percentage of its
+    /// canvas's width and of its height (ADR-0197): 100 unless the program stage's
+    /// render thread lowered it to keep its frames in time.
+    pub(crate) model_percent: crate::resolution::Percent,
     /// The thread that uploads the models, for the program stage's render thread
     /// ([`Self::upload_models_aside`]). `None` uploads them where they are drawn.
     models_aside: Option<crate::model_uploads::ModelUploads>,

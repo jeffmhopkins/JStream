@@ -56,6 +56,9 @@ const GATHER: Shader = Shader {
     blend: Blend::Replace,
 };
 
+/// The largest blur radius, in canvas pixels: ADR-0108's cap.
+const MAX_BLUR_PX: f32 = 64.0;
+
 /// The kind name the pass runs under; it is no filter kind a chain can hold.
 pub(crate) const KIND: &str = "model_depth_of_field";
 
@@ -91,9 +94,16 @@ impl Pass for ModelFocus {
                 detail: "no view depth of the layer's size, or no focus".into(),
             });
         };
+        // The blur and its cap count in canvas pixels. A layer drawn with fewer pixels
+        // than the canvas it stands for (ADR-0197) blurs over as much of the picture.
+        let scale = match input.extent().0 {
+            0 => 1.0,
+            canvas => width as f32 / canvas as f32,
+        };
         let params = Uniforms::new()
             .f32(focus.distance / depth.focal_px)
-            .f32(focus.blur)
+            .f32(focus.blur * scale)
+            .f32(MAX_BLUR_PX * scale)
             .finish();
         let tiled = (width.div_ceil(TILE), height.div_ceil(TILE));
         let tiles = ctx.scratch(tiled.0, tiled.1)?;
