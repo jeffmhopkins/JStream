@@ -71,8 +71,9 @@ real UI shows the engine's real state instead.
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat and agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Channels and sequences](#automation) | 6 | 1 | 5 | 0 | 0 | 0 |
+| [Mappings](#mappings) | 2 | 0 | 2 | 0 | 0 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **150** | **131** | **10** | **0** | **5** | **4** |
+| **Total** | **152** | **131** | **12** | **0** | **5** | **4** |
 <!-- @generated end ui-summary -->
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
@@ -507,6 +508,20 @@ mockups.
 | SQ-02 | Lanes | One row per lane: points on the timeline's ruler, curves, a dashed start from where the channel is, live value, mute, remove, a play head. | 🟡 | Double-click adds a point (snapped to 0.1 s, Shift for free), a drag moves one (one undo step), a right-click sets the curve into it or deletes it; a click on the ruler plays from there. A point takes the focus: Enter, Space, the Menu key or Shift+F10 open its menu (arrow keys, Escape), and Delete removes it. An edit that changes nothing sends nothing. Not built yet: marquee, copy and paste, typed times and values, dragging the length, switch lanes, preview while scrubbing, and moving a point from the keyboard. |
 | SQ-03 | Triggers | What starts and stops a sequence, as sentences, with "+ Trigger". | 🟡 | Chips for `starts` and `stops`; "+ Trigger" opens an editor for a channel (rises or falls past a level, switches on or off), a scene going on or off program, a keyframe loading or leaving, or another sequence starting, ending or looping, each with Wait first. Keys and MIDI stay hotkeys and bindings. A sequence's key is set from its row in the Scenes panel ([SC-12](#scenes)). Not built yet: the triggers set from a keyframe's or scene's menu, and Learn MIDI trigger. |
 | SQ-04 | Events lane | Timed one-off events as chips on the lanes' ruler; double-click adds one. | ✅ | Above the lanes, the timeline's cues as chips (with a teal edge) reading "Show Title", "Keyframe Wide", "Lights on", "Play Outro". A double-click opens a small editor at that time: what happens (show, hide or toggle an item of the scene, load a keyframe or the scene's own values, put a scene on program, switch a channel on or off, play or stop another sequence, restart a source) and to which. A click on a chip edits it, a drag moves it (0.1 s snap, Shift for free), and the editor deletes it; each is one undo step. A cue the editor can't build again as it is (another action, an item of another scene, a play with a delay) reads as its action's type and is kept: a click opens it read-only, so it can be moved or deleted but not overwritten. An event whose item, keyframe or channel is gone keeps it, listed as "(missing)", until another is picked. An edit finds its event by time and action, so another client's change meanwhile can't redirect it: if the event changed, nothing is sent and the operator is told. From the keyboard, a chip opens its editor with Enter, Space, the Menu key or Shift+F10 (Escape closes it), and Delete removes it. |
+
+<a id="mappings"></a>
+## Mappings
+<!-- @section
+covers = ["crates/jstream-ui/src/panels/mappings.rs", "crates/jstream-ui/src/mapping_index.rs"]
+-->
+
+Not in the prototype: one place for everything that is mapped, after the mapping design
+for alpha.12 (sources, channels and targets, with mapping mode).
+
+| ID | Feature | Requirement | Status | Notes |
+|---|---|---|---|---|
+| MP-01 | Mappings tab | Every mapping grouped by source, with its live value and each target's amount, mode, smoothing, curve and bypass edited in place; search, on program now, source kind and find by moving a control; "+ Target…". | 🟡 | A dockable Mappings panel, by default in the bottom dock. Each channel lists what sets it under its name (inputs, keys, MIDI, sequences); a named Mod reads "Camera roll (Mod 20)". Amount is one-sided ("+15°"), centred ("±20°") or, for a value binding, which replaces the value, "0 → 6.5". Smoothing through a channel stays at 20 ms or more. Bypass works on item and camera motion. "+ Target…" arms the source for mapping mode. Not built yet: Offset or Override and Bypass on value bindings (they need the engine's mapping mode), "+ Mapping" (the Map control dialog), and the drag on parameters that mapping mode maps with. |
+| MP-02 | Sources tab | Each JTunnel sender's 32 Mods to name and arm, what the armed source drives, and the other sources. | 🟡 | Four columns by eight rows: number, name box, target count and live bar. Naming a Mod makes it a channel with the Mod as its only input, moving the Mod's direct mappings onto it in one undo step; renaming renames the channel. Enter and Tab go to the next name, Escape restores, pasted lines fill the following Mods, and names are capped at the 40 bytes a DAW shows. A cell, a MIDI control seen, a channel or a key that switches one arms it; `[` and `]` (and the arrow keys while no field has the focus) step the armed Mod, Escape disarms. Not built yet: "Move these mappings to another sender", audio levels as sources, and the app-wide armed bar. |
 
 <a id="keyboard"></a>
 ## Keyboard

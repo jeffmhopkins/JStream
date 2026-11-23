@@ -58,6 +58,9 @@ pub struct Collection {
     pub folders: Vec<FolderInfo>,
     /// The transition presets and which one is the default.
     pub transitions: TransitionsInfo,
+    /// The controller bindings, ordered by trigger (ADR-0122): which MIDI message runs
+    /// which action.
+    pub bindings: Vec<jstream_control::protocol::Binding>,
     /// The value bindings, ordered by ID (ADR-0178): which settings a controller drives.
     pub value_bindings: Vec<jstream_control::protocol::ValueBinding>,
     /// The channels, ordered by ID (ADR-0183): named live values that controls set and
@@ -83,6 +86,7 @@ impl Collection {
                 hotkeys,
                 folders,
                 transitions,
+                bindings,
                 value_bindings,
                 channels,
                 ..
@@ -127,6 +131,7 @@ impl Collection {
                     hotkeys,
                     folders,
                     transitions: *transitions,
+                    bindings,
                     value_bindings,
                     channels: *channels,
                 })

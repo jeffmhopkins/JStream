@@ -224,7 +224,7 @@ pub fn bind_edits(collection: &Collection, action: &Action, chord: &Chord) -> Ve
 
 /// Whether a key press belongs to what has the focus: a text field, a select or an
 /// editable element types it.
-fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
+pub(crate) fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
     use leptos::wasm_bindgen::JsCast;
     let Some(element) = event
         .target()
@@ -239,7 +239,7 @@ fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
 }
 
 /// Whether a dialog or a menu is open: it holds the keyboard, so no binding runs.
-fn overlay_open() -> bool {
+pub(crate) fn overlay_open() -> bool {
     leptos::prelude::document()
         .query_selector("[aria-modal='true'], [role='menu']")
         .ok()

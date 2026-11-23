@@ -30,6 +30,7 @@ pub mod hotkeys;
 pub mod icons;
 pub mod item_menu;
 pub mod jtunnel;
+pub mod mapping_index;
 pub mod menu;
 pub mod pairing;
 pub mod panels;
