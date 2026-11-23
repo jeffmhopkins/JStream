@@ -2085,6 +2085,9 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                         )
                         .and_then(|output| {
                             let started = Instant::now();
+                            // The frame's way out, its conversion for the encoders and
+                            // its copy for a readback, is timed with its composite.
+                            meter.gpu_unit_composite(&mut compositor);
                             if frame.readback {
                                 // Recorded now and collected once mapped, a tick or two on.
                                 if !readbacks.record(&compositor, frame, &output, at)? {
@@ -2111,6 +2114,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                                     .map(|()| converted = true),
                                 None => Ok(()),
                             };
+                            meter.gpu_unit_none(&mut compositor);
                             meter.phase_since(Phase::Finish, started);
                             submitted
                         });

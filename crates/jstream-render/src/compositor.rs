@@ -1462,6 +1462,12 @@ impl Compositor {
         &self.gpu.submit
     }
 
+    /// Submits `work` on [`Self::queue`], timed with the unit the drawer is timing, if
+    /// any (`Gpu::submit_work`). The caller holds [`Self::submit_lock`].
+    pub(crate) fn submit_work(&self, work: wgpu::CommandBuffer) -> wgpu::SubmissionIndex {
+        self.gpu.submit_work(work)
+    }
+
     /// The adapter the device was opened on.
     pub fn adapter(&self) -> &wgpu::Adapter {
         &self.gpu.adapter
