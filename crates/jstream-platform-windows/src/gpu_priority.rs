@@ -3,15 +3,18 @@
 //! Windows schedules every process's GPU work on an adapter by a per-process class, as
 //! it schedules CPU threads by a priority class. Every process starts in the normal
 //! class, so on a GPU that is busy a compositor's frame waits its turn behind the
-//! desktop's, a browser's and any other program's work. Opening the engine's device
-//! ([`WindowsGpu::open_device`](crate::WindowsGpu)) asks for the class above them, once
-//! for the process, through `D3DKMTSetProcessSchedulingPriorityClass`.
+//! desktop's, a browser's and any other program's work.
 //!
-//! The class asked for is `high`, the one below `realtime`, which Windows keeps for
-//! processes holding a privilege. The environment variable
-//! [`VARIABLE`] names another (`normal` leaves the process as it started), so a run can
-//! be compared with and without it. Where Windows refuses, the process stays in the
-//! class it had, and a line in the log says so: nothing fails.
+//! Whether the engine should ask for a higher class is a question for the bench
+//! (ADR-0117 §9), so it asks only when told to. The environment variable [`VARIABLE`]
+//! names the class: `high` or `above_normal`, which opening the engine's device
+//! ([`WindowsGpu::open_device`](crate::WindowsGpu)) then asks for, once for the process,
+//! through `D3DKMTSetProcessSchedulingPriorityClass`. Unset, empty or `normal`, the
+//! process is left in the class it started in and no call is made, so a run can be
+//! compared with and without it. A higher class also puts the engine ahead of the
+//! desktop compositor, which capture and the UI depend on; that is what the bench has
+//! to weigh. Where Windows refuses, the process stays in the class it had, and a line in
+//! the log says so: nothing fails.
 
 /// The environment variable that names the class to ask for.
 #[cfg(any(windows, test))]
@@ -21,25 +24,25 @@ pub(crate) const VARIABLE: &str = "JSTREAM_GPU_PRIORITY";
 #[cfg(any(windows, test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Class {
-    /// The class every process starts in: nothing is asked for.
+    /// The class every process starts in: nothing is asked for. The default.
     Normal,
     /// Ahead of normal processes by a little.
     AboveNormal,
-    /// Ahead of normal processes: the default.
+    /// Ahead of normal processes.
     High,
 }
 
 #[cfg(any(windows, test))]
 impl Class {
-    /// The class `value`, [`VARIABLE`]'s, names: `high` when it is unset or empty, and
+    /// The class `value`, [`VARIABLE`]'s, names: `normal` when it is unset or empty, and
     /// when it names none (the second field then says so, for the log).
     pub(crate) fn named(value: Option<&str>) -> (Self, bool) {
         match value.map(str::trim) {
-            None | Some("") => (Self::High, true),
+            None | Some("") => (Self::Normal, true),
             Some(name) if name.eq_ignore_ascii_case("high") => (Self::High, true),
             Some(name) if name.eq_ignore_ascii_case("above_normal") => (Self::AboveNormal, true),
             Some(name) if name.eq_ignore_ascii_case("normal") => (Self::Normal, true),
-            Some(_) => (Self::High, false),
+            Some(_) => (Self::Normal, false),
         }
     }
 
@@ -68,8 +71,9 @@ mod os {
 
     use super::{Class, VARIABLE};
 
-    /// Asks Windows for the engine process's GPU scheduling class, the first time it is
-    /// called in the process; later calls do nothing. Never fails: a refusal is logged.
+    /// Asks Windows for the GPU scheduling class [`VARIABLE`] names, the first time it is
+    /// called in the process; later calls do nothing, and neither does a first one with
+    /// no class named. Never fails: a refusal is logged.
     pub(crate) fn raise_once() {
         static ONCE: Once = Once::new();
         ONCE.call_once(|| {
@@ -79,7 +83,7 @@ mod os {
                 tracing::warn!(
                     variable = VARIABLE,
                     value = value.as_deref().unwrap_or_default(),
-                    "not a GPU scheduling class (high, above_normal or normal); asking for high"
+                    "not a GPU scheduling class (high, above_normal or normal); leaving it as it is"
                 );
             }
             let asked = match class {
@@ -112,9 +116,9 @@ mod tests {
     use super::Class;
 
     #[test]
-    fn the_class_is_high_unless_the_variable_names_another() {
-        assert_eq!(Class::named(None), (Class::High, true));
-        assert_eq!(Class::named(Some("")), (Class::High, true));
+    fn the_class_is_normal_unless_the_variable_names_another() {
+        assert_eq!(Class::named(None), (Class::Normal, true));
+        assert_eq!(Class::named(Some("")), (Class::Normal, true));
         assert_eq!(Class::named(Some(" HIGH ")), (Class::High, true));
         assert_eq!(
             Class::named(Some("above_normal")),
@@ -124,8 +128,8 @@ mod tests {
     }
 
     #[test]
-    fn a_value_that_names_no_class_asks_for_high_and_says_so() {
-        assert_eq!(Class::named(Some("realtime")), (Class::High, false));
+    fn a_value_that_names_no_class_asks_for_nothing_and_says_so() {
+        assert_eq!(Class::named(Some("realtime")), (Class::Normal, false));
     }
 
     #[test]

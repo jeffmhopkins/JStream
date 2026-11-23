@@ -29,8 +29,8 @@
 //!   with NV12 textures. It also creates a multithread-protected D3D11 device on the same
 //!   adapter, and two fences shared between D3D11 and D3D12: the context's fence and the
 //!   release fence. The `AdapterId` carries the adapter's LUID and PCI vendor ID. The
-//!   first open also asks Windows for the process's GPU scheduling class
-//!   (`gpu_priority.rs`).
+//!   first open also asks Windows for the GPU scheduling class `JSTREAM_GPU_PRIORITY`
+//!   names, if it names one (`gpu_priority.rs`).
 //! - **`encode_target`** allocates an NV12 texture with a shared NT handle on the D3D11
 //!   side, opens it on D3D12, and wraps it as a `wgpu::Texture` through wgpu-hal (in the
 //!   `COMMON` state, which wgpu calls `PRESENT`).
@@ -218,7 +218,7 @@ impl GpuInterop for WindowsGpu {
     /// display (so capture needs no copy across adapters), else the first hardware
     /// adapter. It must support NV12 textures.
     fn open_device(&self) -> Result<GpuContext, PlatformError> {
-        // Ahead of the other processes' work on a busy GPU (ADR-0117 §9).
+        // A higher GPU scheduling class, when the bench asks for one (ADR-0117 §9).
         crate::gpu_priority::raise_once();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::DX12,
