@@ -6475,28 +6475,30 @@ impl State {
             (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
                 let by_item = state.family_of(&from_scene) == state.family_of(&scene_id);
-                let from = match self.studio.running() {
-                    Some(running) => {
-                        let Self {
-                            graph,
-                            frames,
-                            frame_versions,
-                            live,
-                            ..
-                        } = self;
-                        let assets = live.filter_assets();
-                        let visuals = snapshot::on_screen(
-                            graph,
-                            running,
-                            now,
-                            &mut |id| match frames.get(id) {
-                                Some(frame) => Some(Look::frame(frame.clone(), None)),
-                                None => live.look(id, now, frame_versions),
-                            },
-                            &assets,
-                        );
-                        transition::From::OnScreen(visuals.into())
-                    }
+                // A transition that has ended, though no plan has let it go yet, left
+                // the program scene at rest: the switch starts from that scene.
+                let on_screen = self.studio.running().and_then(|running| {
+                    let Self {
+                        graph,
+                        frames,
+                        frame_versions,
+                        live,
+                        ..
+                    } = self;
+                    let assets = live.filter_assets();
+                    snapshot::still_on_screen(
+                        graph,
+                        running,
+                        now,
+                        &mut |id| match frames.get(id) {
+                            Some(frame) => Some(Look::frame(frame.clone(), None)),
+                            None => live.look(id, now, frame_versions),
+                        },
+                        &assets,
+                    )
+                });
+                let from = match on_screen {
+                    Some(visuals) => transition::From::OnScreen(visuals.into()),
                     None => transition::From::Scene(from_scene.clone()),
                 };
                 // What it moves from (ADR-0094 decision 7): the one camera of what is on
@@ -6655,9 +6657,9 @@ impl State {
 
     /// What is on screen at `now` with `program` on program, as a transition that
     /// starts then would start from it, and the one camera it was all seen through
-    /// (`Err` when there are several): the running transition's items, or the program
-    /// scene's, taken as a Move within its family holds them (`run` only gives the
-    /// probe its timing).
+    /// (`Err` when there are several): the running transition's items while it runs, or
+    /// the program scene's, taken as a Move within its family holds them (`run` only
+    /// gives the probe its timing).
     fn screen_now(
         &mut self,
         program: &SceneId,
@@ -6690,20 +6692,19 @@ impl State {
         } = self;
         // As it is drawn: with its live settings and its placed keyframes (ADR-0116).
         let graph: &Graph = shown.as_ref().unwrap_or(graph);
-        let running = studio.running().unwrap_or(&probe);
         let assets = live.filter_assets();
         // Not a plan of the program: what it looks at is not reached, so a source the
         // next plan shows again still restarts.
-        let visuals = snapshot::on_screen(
-            graph,
-            running,
-            now,
-            &mut |id| match frames.get(id) {
-                Some(frame) => Some(Look::frame(frame.clone(), None)),
-                None => live.look_quiet(id, now, frame_versions),
-            },
-            &assets,
-        );
+        let mut look = |id: &jstream_protocol::SourceId| match frames.get(id) {
+            Some(frame) => Some(Look::frame(frame.clone(), None)),
+            None => live.look_quiet(id, now, frame_versions),
+        };
+        // One that has ended, though no plan has let it go yet, left the program scene
+        // at rest.
+        let visuals = studio
+            .running()
+            .and_then(|running| snapshot::still_on_screen(graph, running, now, &mut look, &assets))
+            .unwrap_or_else(|| snapshot::on_screen(graph, &probe, now, &mut look, &assets));
         let shared = transition::shared_camera(&visuals);
         (transition::From::OnScreen(visuals.into()), shared)
     }
@@ -7459,7 +7460,7 @@ impl State {
                 self.channels.scene_live(program);
             }
         }
-        self.channels.tick(&self.graph, midi.as_deref(), data, now);
+        let settling = self.channels.tick(&self.graph, midi.as_deref(), data, now);
         let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
         if changed && self.refresh_shown() {
             self.redraw();
@@ -7504,12 +7505,16 @@ impl State {
             return None;
         }
         // ADR-0184 rule 7: about a frame at 60 fps while a lane plays, so a fade has no
-        // visible steps.
+        // visible steps; and ADR-0190: the same while a channel's value or a binding's
+        // setting is still moving (a control turned, its smoothing settling), so smoothed
+        // motion has none either.
         let timelines = &self.timelines;
         Some(
-            if self
-                .channels
-                .lanes_playing(|id| timelines.get(id).is_some())
+            if settling
+                || changed
+                || self
+                    .channels
+                    .lanes_playing(|id| timelines.get(id).is_some())
             {
                 std::time::Duration::from_micros(16_667)
             } else {

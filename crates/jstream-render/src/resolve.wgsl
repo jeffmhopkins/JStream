@@ -43,3 +43,59 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let c = textureSampleLevel(src, nearest, pos.xy / vec2<f32>(textureDimensions(src)), 0.0);
     return vec4<f32>(select(vec3<f32>(0.0), c.rgb / c.a, c.a > 0.0), c.a);
 }
+
+// The resolve of a working target the composite left sRGB-encoded (ADR-0126 §3): the
+// decode above and `fs` in one, with no linear copy of the target between them. `src`
+// holds premultiplied sRGB-encoded colour; the output takes straight linear RGB, which
+// its format encodes on store.
+@fragment
+fn fs_encoded(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let c = textureSampleLevel(src, nearest, pos.xy / vec2<f32>(textureDimensions(src)), 0.0);
+    return vec4<f32>(select(vec3<f32>(0.0), srgb_to_linear(c.rgb / c.a), c.a > 0.0), c.a);
+}
+
+// IEC 61966-2-1 encode, as the composite's: the curve continues above 1, and 1 encodes
+// to exactly 1.
+fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let low = c * 12.92;
+    let high = vec3<f32>(1.0) + 1.055 * (pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(1.0));
+    return select(high, low, c <= vec3<f32>(0.0031308));
+}
+
+// What `fs_layer` puts its layer over.
+struct Over {
+    // The background as the composite target holds it: premultiplied linear light, or
+    // premultiplied sRGB-encoded colour in the encoded space.
+    background: vec4<f32>,
+    // x: 1 in the encoded space (ADR-0126 §3), else 0.
+    encoded: vec4<f32>,
+}
+
+@group(1) @binding(0) var<uniform> over: Over;
+
+// A scene that is one premultiplied linear layer over the whole canvas, straight into
+// the sRGB output: the composite of that one item over the background, the decode of
+// the encoded space, and the resolve, in one pass with none of their targets. Each step
+// is the composite shader's, the blend state's or the passes' above, in their order.
+@fragment
+fn fs_layer(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    var c = textureLoad(src, vec2<i32>(pos.xy), 0);
+    let encoded = over.encoded.x > 0.5;
+    if encoded {
+        if c.a > 0.0 {
+            c = vec4<f32>(linear_to_srgb(max(c.rgb / c.a, vec3<f32>(0.0))) * c.a, c.a);
+        } else {
+            c = vec4<f32>(linear_to_srgb(max(c.rgb, vec3<f32>(0.0))), 0.0);
+        }
+    }
+    // Source-over, premultiplied.
+    var o = c + over.background * (1.0 - c.a);
+    if encoded {
+        if o.a > 0.0 {
+            o = vec4<f32>(srgb_to_linear(o.rgb / o.a) * o.a, o.a);
+        } else {
+            o = vec4<f32>(srgb_to_linear(o.rgb), 0.0);
+        }
+    }
+    return vec4<f32>(select(vec3<f32>(0.0), o.rgb / o.a, o.a > 0.0), o.a);
+}

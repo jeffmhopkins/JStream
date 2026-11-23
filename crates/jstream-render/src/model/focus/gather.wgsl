@@ -1,12 +1,16 @@
-// Pass 4: the blurred layer. The input is the model's layer, premultiplied linear; `aux`
-// holds each pixel's `1 / w` (red) and reach R (green). A spiral of TAPS taps over a disc
+// Pass 4: what spreads over each pixel, at half the layer's size (ADR-0193). Each texel
+// stands for a block of two by two pixels and gathers for one of them, `chosen`
+// (resolve.wgsl names the same one). The input is the model's layer, premultiplied
+// linear; `aux` holds each pixel's `1 / w` (red) and reach R (green), both at full size.
+// A spiral of TAPS taps over a disc
 // of radius R, turned per pixel, stands in for every pixel within R. A tap at distance d
 // spreads to this pixel when d is within its own radius r (a farther tap no farther than
 // this pixel's own radius, so a sharp near part keeps its edge), weighted by
 // R^2 / (TAPS r^2): its colour spread evenly over its disc. Taps narrower than the tap
-// spacing R / sqrt(TAPS) don't spread; this pixel's own colour stands for them, under
-// what spreads over it. Where taps land on a sharp nearer part, a farther pixel's sum is
-// scaled by the share of taps left, for the background that part hides.
+// spacing R / sqrt(TAPS) don't spread; the pixel's own colour stands for them, under
+// what spreads over it, which the resolve adds. Where taps land on a sharp nearer part, a
+// farther pixel's sum is scaled by the share of taps left, for the background that part
+// hides.
 
 const TAPS: u32 = 48u;
 const GOLDEN: f32 = 2.39996323;
@@ -22,14 +26,13 @@ fn turn(px: vec2<i32>) -> f32 {
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    let px = vec2<i32>(in.pos.xy);
-    let size = vec2<i32>(frame.in_size);
-    let own = finite(textureLoad(input_tex, px, 0));
+    let size = vec2<i32>(textureDimensions(input_tex));
+    let px = chosen(vec2<i32>(in.pos.xy), size);
     let here = textureLoad(aux_tex, px, 0);
     let inverse_w = here.r;
     let reach = here.g;
     if reach < 0.5 {
-        return own;
+        return vec4<f32>(0.0);
     }
     let r_own = coc(inverse_w);
     let spacing = max(reach / sqrt(f32(TAPS)), 0.5);
@@ -63,17 +66,13 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
             continue;
         }
         let colour = finite(textureLoad(input_tex, at, 0));
-        sum = sum + colour * (reach * reach / (f32(TAPS) * r * r));
+        sum = sum + colour * (wide(r) * reach * reach / (f32(TAPS) * r * r));
     }
     if inverse_w > 0.0 && r_own >= spacing && hidden > 0u && hidden < TAPS {
         sum = sum * (f32(TAPS) / f32(TAPS - hidden));
     }
-    var out = sum;
-    if r_own < spacing {
-        out = sum + own * (1.0 - min(sum.a, 1.0));
+    if sum.a > 1.0 {
+        sum = sum / sum.a;
     }
-    if out.a > 1.0 {
-        out = out / out.a;
-    }
-    return out;
+    return sum;
 }

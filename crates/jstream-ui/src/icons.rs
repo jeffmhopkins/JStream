@@ -78,6 +78,7 @@ pub fn path(name: &str) -> &'static str {
             "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M7 12h.01 M17 12h.01 M8.5 8h.01 M15.5 8h.01 M12 6.5h.01 M10 17h4"
         }
         // The panels' tool bars (UI-FEATURES SC-11, OB-10), drawn for JStream.
+        "headphones" => "M4 15v-3a8 8 0 0 1 16 0v3 M4 14h4v6H4z M16 14h4v6h-4z",
         "plus" => "M12 5v14 M5 12h14",
         // A sequence (ADR-0184): a lane rising through its points.
         "sequence" => "M3 18l5-7 4 3 5-8 4 4",
@@ -103,11 +104,20 @@ const NAMES: &[&str] = &[
     "image", "cube",
 ];
 
-/// The tool bars' icons, the info mark and the project dialogs' file, which aren't
+/// The tool bars' icons, the info mark, the project dialogs' file and the master card's
+/// headphones, which aren't
 /// offered as a scene's icon.
 #[cfg(test)]
 const TOOLS: &[&str] = &[
-    "plus", "trash", "gear", "sliders", "up", "down", "info", "file",
+    "plus",
+    "trash",
+    "gear",
+    "sliders",
+    "up",
+    "down",
+    "info",
+    "file",
+    "headphones",
 ];
 
 /// The icon of this name as a `'static` name, for a name read at run time (a scene's

@@ -750,7 +750,7 @@ fn palette_pair(pair: &str) -> Result<(String, String), String> {
         || name.chars().any(char::is_control)
     {
         return Err(format!(
-            "\u{201c}{pair}\u{201d}: a text is 1 to {} characters",
+            "\u{201c}{pair}\u{201d}: a text is 1 to {} bytes",
             jstream_protocol::MAX_DATA_STATE_LEN
         ));
     }

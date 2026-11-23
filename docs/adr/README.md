@@ -198,5 +198,17 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0183](0183-virtual-control-channels.md) | Channels: named live values that controls set and anything follows | accepted | agent |  |
 | [ADR-0184](0184-sequences-lanes-and-triggers.md) | Sequences: lanes on timelines, and what starts them | accepted | agent |  |
 | [ADR-0185](0185-how-reflections-landed-off-by-default.md) | How reflection probes and screen-space reflections landed, off by default | accepted | agent |  |
+| [ADR-0186](0186-the-sky-eases-out-of-warp-toward-rest.md) | A sky dropping out of warp eases out toward rest as it does toward a cruise | accepted | agent |  |
+| [ADR-0187](0187-a-warp-can-travel-straight-ahead.md) | A backdrop's warp can travel straight ahead of the scene, wherever its sky is turned | accepted | agent |  |
+| [ADR-0188](0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md) | A backdrop arrives at a picture pinned in its sky after each warp, which lights the scene | accepted | agent |  |
+| [ADR-0189](0189-screen-space-reflections-march-at-half-size.md) | Screen-space reflections march at half the picture's size | accepted | agent |  |
+| [ADR-0190](0190-moving-values-tick-at-frame-pace.md) | Values tick at a frame's pace while one is moving | accepted | agent |  |
+| [ADR-0192](0192-cheaper-sampling-in-3d-scenes.md) | Cheaper sampling in 3D scenes: fewer reads where they change little | accepted | agent |  |
+| [ADR-0193](0193-depth-of-field-on-models-gathers-at-half-size.md) | Depth of field on models gathers at half the layer's size | accepted | agent |  |
+| [ADR-0194](0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md) | A layer is drawn again only when what it draws has changed | accepted | agent |  |
+| [ADR-0195](0195-the-engine-runs-at-top-priority.md) | The engine runs at top priority: the highest GPU scheduling class and a high CPU priority class by default | accepted | agent |  |
+| [ADR-0197](0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md) | 3D models draw with fewer pixels while the GPU is short of time | accepted | agent |  |
+| [ADR-0198](0198-an-arrival-can-be-a-planet-with-its-sun.md) | An arrival can be several pictures pinned around one another, the last lighting the scene | accepted | agent |  |
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
+| [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
 <!-- @generated end adr-index -->

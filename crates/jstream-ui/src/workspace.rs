@@ -13,6 +13,7 @@ use crate::app::SessionContext;
 use crate::canvas::Canvas;
 use crate::canvas::monitor::ProgramMonitor;
 use crate::dock::{Dock, PanelId, Target, Zone};
+use crate::icons::Icon;
 use crate::panels::mixer::MixerFlip;
 use crate::panels::{
     AgentActivity, Filters, Inspector, Mixer, Outputs, Scenes, Side, Sources, StageLabel,
@@ -193,11 +194,20 @@ fn share(dock: RwSignal<Dock>) {
 }
 
 /// A panel whose engine side isn't there yet: its title and what it waits on.
-fn waiting(title: &'static str, note: &'static str) -> AnyView {
+fn waiting(
+    title: &'static str,
+    icon: &'static str,
+    empty: &'static str,
+    note: &'static str,
+) -> AnyView {
     view! {
         <section class="panel waiting-panel">
-            <h2>{title}</h2>
-            <p class="placeholder">{note}</p>
+            <h2 class="visually-hidden">{title}</h2>
+            <div class="empty-state">
+                <Icon name=icon size=18 />
+                <p class="empty-title">{empty}</p>
+                <p class="empty-note">{note}</p>
+            </div>
         </section>
     }
     .into_any()
@@ -216,7 +226,9 @@ fn panel_view(panel: PanelId) -> AnyView {
         PanelId::Filters => view! { <Filters /> }.into_any(),
         PanelId::Chat => waiting(
             "Live chat",
-            "Live chat shows a YouTube broadcast's chat once JStream can sign in to YouTube, \
+            "chat",
+            "No chat to show",
+            "A YouTube broadcast's chat shows here once JStream can sign in to YouTube, \
              which this build can't yet. Streaming with a stream key works without it.",
         ),
         PanelId::Stats => view! { <StreamStats /> }.into_any(),

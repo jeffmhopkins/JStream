@@ -36,9 +36,9 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `WasapiAudio` | `AudioIo` | `audio/` | endpoints, inputs, outputs, loopback and process loopback; event-driven, shared mode, one MMCSS "Pro Audio" thread per stream |
 | `WgcCapture` | `Capture` | `capture/` | Windows.Graphics.Capture of displays and windows, on the CPU path or the GPU path (`on_gpu`) |
 | `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback, and the H.264 decoder MFT for the engine's own streams ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)) |
-| `MfVideoDevices`, `MfMjpegDecoder` | `VideoDevices`, `CaptureDecoder` | `video_device/` | webcams and capture cards, paired with their microphones, their camera controls (`IAMVideoProcAmp` and `IAMCameraControl` on the media source), and MJPEG decoding |
+| `MfVideoDevices`, `MfMjpegDecoder` | `VideoDevices`, `CaptureDecoder` | `video_device/` | webcams and capture cards, paired with their microphones, their camera controls (`IAMVideoProcAmp` and `IAMCameraControl` on the media source), and MJPEG decoding; a raw frame is copied in one pass into memory the engine handed back |
 | `MfMediaDecoders` | `MediaDecoders` | `decode/` | local media files through the Source Reader |
-| `WindowsGpu` | `GpuInterop` | `gpu/` | the DX12 wgpu device on the media adapter, a D3D11 device beside it, shared NV12 encode targets and fences ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)) |
+| `WindowsGpu` | `GpuInterop` | `gpu/` | the DX12 wgpu device on the media adapter, a D3D11 device beside it, shared NV12 encode targets and fences ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)). The first open also asks Windows for the process's highest GPU scheduling class (`realtime`, else `high`) and the `high` CPU priority class, so the engine's work comes before other programs'; `JSTREAM_GPU_PRIORITY` and `JSTREAM_CPU_PRIORITY` lower either (`gpu_priority.rs`, [ADR-0195](../../docs/adr/0195-the-engine-runs-at-top-priority.md)) |
 | `WindowsVcam` | `VcamSink` | `vcam/` | the virtual camera's engine side, publishing to [`jstream-vcam-windows`](../jstream-vcam-windows/README.md) |
 | `register_vcam`, `unregister_vcam`, `vcam_registration` | | `vcam_register.rs` | the camera's opt-in registration from an administrators-only copy ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)) |
 | `WindowsCredentials` | `StreamKeyStore`, `OAuthTokenStore` | `credential.rs` | Windows Credential Manager ([R-SEC-001](../../docs/RULES.md#R-SEC-001)) |
@@ -55,7 +55,8 @@ media files decode through `MfMediaDecoders`), the virtual camera taking
 **Tests.** `lib.rs`'s rustdoc lists every test and what it checks. The helpers that don't call Windows (format choice, target IDs, AAC and video
 encoder configuration, the first-frame fallback, the H.264 decoder's configuration
 check and picture cropping, the GPU capture ring, credential names
-and limits, the virtual camera's format, the media-file conversions, the dialog filter)
+and limits, the virtual camera's format, the media-file conversions, the dialog filter, the GPU
+and CPU priority classes the variables name)
 run on every platform. The clock, the credential round trip and the Media Foundation
 probe run in CI's Windows job. Tests against real devices, the OS encoders, the GPU and
 a display are behind the `hw-tests` feature and `#[ignore]`d, because CI machines may
