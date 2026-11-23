@@ -2502,6 +2502,7 @@ fn a_second_compositor_on_the_device_makes_no_pipeline_again() {
             warp: 0.0,
             travel: 0.0,
             dropping: 0.0,
+            picture: None,
         };
         compositor.draw_sky(&sky, &layer).expect("the sky draws");
         let sky = render(

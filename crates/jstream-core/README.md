@@ -1788,7 +1788,7 @@ The engine keeps the keyframe each placed scene is switched to
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 
@@ -1879,6 +1879,25 @@ is above it, which zooms the deep sky back in), and how far its
 stars have travelled, advanced once a frame by the warp's mean rate times the media
 time since the last (a step back or of over a second jumps to the setting and moves
 nothing; a step of no time, a held clock, keeps the warp as it is).
+With its warp aimed ahead
+([ADR-0187](../../docs/adr/0187-a-warp-can-travel-straight-ahead.md)) it also keeps the
+rotation that lays the sky out around the scene's straight ahead, taken as a warp starts
+and adjusted while at warp to hold the travel within its limit (`warp_aim.rs` holds the
+rotations), and the sky
+it cross-fades from for half a second after a warp starts, which `draw_sky_of` draws,
+still, into a `GpuKey::SkyLeaving` layer that `sky_layers` puts under the `GpuKey::Sky`
+one (`a_warp_aimed_ahead_cross_fades_the_backdrop_to_straight_ahead`).
+With arrival pictures
+([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
+planning puts the frames of the visible items of the light's `sky_pictures` scene in the
+shot (`Shot::sky_pictures`, by the light's source), and the state keeps the picture shown
+and where it is pinned (`Arrival`): none while the deep sky is gone at warp
+(`deep_shown`), and another, at random, picked once as it starts to show again with the
+warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
+`draw_sky_of` passes it to the backdrop, the upload loop takes the shown picture's average
+colour once per version (`note_picture_mean`, kept in `Chains::picture_means` for the
+shown pictures only), and `light_scene` and a probe's capture add a directional light from
+it in that colour (`arrival_light`, `an_arrival_picture_shows_ahead_and_lights_the_scene`).
 Its stars, star brightness, nebula, galaxy band and colours are drawn as those
 modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
@@ -2313,7 +2332,8 @@ An environment light ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scene
 decision 9) isn't one of those lights: `scene_environment` takes the scene's first one,
 in stacking order, as the model's sky (`ModelDraw::environment`), at its intensity
 times its item's opacity and oriented by its item's turn, tilt and rotation
-([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), and a second one is logged once
+([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), after the
+layout a warp aimed ahead keeps in its backdrop's `SkyState` (ADR-0187), and a second one is logged once
 (`Chains::environments_warned`). Planning puts the frame of the source its `image`
 names in the shot when it places the light (`look_sky`), so it is uploaded though no
 item shows it, and the sky reads that upload; a source the pipeline captures isn't

@@ -3078,6 +3078,87 @@ source: crates/jstream-core/src/kinds.rs
           "equals": "environment"
         },
         "live": true
+      },
+      {
+        "id": "warp_aim",
+        "type": "enum",
+        "options": [
+          {
+            "value": "sky",
+            "label": "The sky's centre"
+          },
+          {
+            "value": "ahead",
+            "label": "Straight ahead"
+          }
+        ],
+        "default": "sky",
+        "label": "Warp aim",
+        "description": "Where the warp travels toward. The sky's centre turns with the item, so turning the item turns the stars and the travel together. Straight ahead travels along the scene's straight ahead (-z) as the warp starts from still, wherever the item has turned the sky: the backdrop cross-fades to a sky laid out around that direction, keeps it after the warp, and a turn of the item then turns the sky from there.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "warp_look_deg",
+        "type": "float",
+        "min": 0.0,
+        "max": 180.0,
+        "step": 1.0,
+        "unit": "deg",
+        "default": 10.0,
+        "label": "Warp look",
+        "description": "With the warp aimed straight ahead, how far turning the item can swing the direction of travel from straight ahead while at warp; past that it turns no further, and turning back moves it at once. Rolling about the travel is free.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "sky_pictures",
+        "type": "scene",
+        "default": null,
+        "label": "Arrival pictures",
+        "description": "A scene whose items are pictures the backdrop arrives at: a planet, a nebula, anything flat. It shows one of them at a time, pinned in the sky infinitely far away, and each warp picks another at random and places it near where the warp ends, so it is in view as the warp drops out. Each picture keeps its own shape; transparent parts show the sky.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "sky_picture_deg",
+        "type": "float",
+        "min": 1.0,
+        "max": 120.0,
+        "step": 1.0,
+        "unit": "deg",
+        "default": 30.0,
+        "label": "Arrival picture size",
+        "description": "How wide an arrival picture is across the sky.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "sky_picture_light",
+        "type": "float",
+        "min": 0.0,
+        "max": 8.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Arrival picture light",
+        "description": "How much the arrival picture in view lights the scene, as a light shining from it in its average colour, before the intensity; 0 lights nothing.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
       }
     ]
   },
