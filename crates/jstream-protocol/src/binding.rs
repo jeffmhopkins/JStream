@@ -10,6 +10,9 @@
 //! protocol action, so a controller can do nothing an agent can't (R-ARCH-001).
 
 use crate::command::Action;
+use crate::filter::FilterOwner;
+use crate::id::{BusId, FilterId, SourceId};
+use crate::motion::{MAX_MOTION_PARAM_LEN, MotionKind, check_motion_id};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -186,6 +189,161 @@ impl Binding {
     /// The bound action, or `None` when it is one this version doesn't know.
     pub fn action(&self) -> Option<Action> {
         serde_json::from_value(self.action.clone()).ok()
+    }
+}
+
+/// One MIDI input's latest control change, in `midi.last_controls` (since 0.168,
+/// ADR-0178).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MidiControlInfo {
+    /// The input, a MIDI port or a JTunnel sender by name, as a binding names it.
+    pub input: String,
+    /// Its channel, 1 to 16.
+    pub channel: u8,
+    /// Its controller number, 0 to 127.
+    pub controller: u8,
+    /// The controller's value now, 0 to 127.
+    pub value: u8,
+    /// How many control changes the input has sent since the engine started: a client
+    /// learning a controller waits for it to change.
+    pub count: u64,
+}
+
+/// How many value bindings a collection holds (ADR-0178). One more is
+/// `invalid_argument`.
+pub const MAX_VALUE_BINDINGS: usize = 256;
+
+/// The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in
+/// the collection that isn't an item's or a camera's, which their own motion modifiers
+/// drive. Serialized with an internal `type` tag.
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ValueTarget {
+    /// A `live` number or `bool` setting of a source, which every place that draws it
+    /// shows.
+    SourceSetting {
+        /// The source.
+        source_id: SourceId,
+        /// The setting, by its ID in the kind's descriptor.
+        param: String,
+    },
+    /// A `live` number or `bool` setting of a filter, on any chain: a source's, a
+    /// scene's, an item's effects, a keyframe's, the master stage's or an output's, video
+    /// or audio.
+    FilterSetting {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter.
+        filter_id: FilterId,
+        /// The setting, by its ID in the kind's descriptor.
+        param: String,
+    },
+    /// An audio source's fader, in dB.
+    SourceGain {
+        /// The source.
+        source_id: SourceId,
+    },
+    /// A bus's fader, in dB, the master's included.
+    BusGain {
+        /// The bus.
+        bus_id: BusId,
+    },
+    /// The gain of a source's send into a bus, in dB.
+    SendGain {
+        /// The source sending.
+        source_id: SourceId,
+        /// The bus it sends into.
+        bus_id: BusId,
+    },
+}
+
+impl ValueTarget {
+    /// The parameter it names, for a setting.
+    pub fn param(&self) -> Option<&str> {
+        match self {
+            ValueTarget::SourceSetting { param, .. } | ValueTarget::FilterSetting { param, .. } => {
+                Some(param)
+            }
+            ValueTarget::SourceGain { .. }
+            | ValueTarget::BusGain { .. }
+            | ValueTarget::SendGain { .. } => None,
+        }
+    }
+}
+
+impl fmt::Display for ValueTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ValueTarget::SourceSetting { source_id, param } => {
+                write!(f, "setting {param} of source {source_id}")
+            }
+            ValueTarget::FilterSetting {
+                filter_id, param, ..
+            } => write!(f, "setting {param} of filter {filter_id}"),
+            ValueTarget::SourceGain { source_id } => write!(f, "the fader of source {source_id}"),
+            ValueTarget::BusGain { bus_id } => write!(f, "the fader of bus {bus_id}"),
+            ValueTarget::SendGain { source_id, bus_id } => {
+                write!(f, "the send of source {source_id} into bus {bus_id}")
+            }
+        }
+    }
+}
+
+/// A value binding (ADR-0122 decision 1, ADR-0178, since 0.168): a MIDI controller or a
+/// field of a sender's live data, read as a `midi` or `data` motion modifier reads it
+/// (smoothed, bent and mapped onto `from..to`), driving one number anywhere in the
+/// collection. Its value replaces the stored one as it is drawn and heard, kept within
+/// the setting's range (rounded for a whole number, on at one half or more for a
+/// `bool`), from the moment the control first moves after the engine starts or the
+/// binding is set, so a collection opens as it was saved. Nothing is stored and no
+/// undo history fills.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ValueBinding {
+    /// Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII
+    /// letters, digits, `_` and `-`.
+    pub binding_id: String,
+    /// What it reads: a `midi` or `data` modifier's kind and parameters.
+    #[serde(flatten)]
+    pub input: MotionKind,
+    /// What it drives.
+    pub target: ValueTarget,
+}
+
+impl ValueBinding {
+    /// Why this is not a valid value binding, as the field and the reason, or `None` if
+    /// it is. Whether its target exists and takes a number is the collection's to check.
+    pub fn problem(&self) -> Option<(String, String)> {
+        if let Err(reason) = check_motion_id(&self.binding_id) {
+            return Some(("binding_id".into(), reason.into()));
+        }
+        if !matches!(
+            self.input,
+            MotionKind::Midi { .. } | MotionKind::Data { .. }
+        ) {
+            return Some((
+                "kind".into(),
+                "a value binding reads a `midi` control or a `data` field".into(),
+            ));
+        }
+        if let Some((field, reason)) = self.input.problem() {
+            return Some((field.into(), reason.into()));
+        }
+        if let Some(param) = self.target.param()
+            && (param.is_empty()
+                || param.len() > MAX_MOTION_PARAM_LEN
+                || !param
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+        {
+            return Some((
+                "target.param".into(),
+                "must be 1 to 64 bytes of ASCII letters, digits and `_`".into(),
+            ));
+        }
+        None
     }
 }
 

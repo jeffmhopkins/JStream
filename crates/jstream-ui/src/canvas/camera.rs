@@ -14,8 +14,8 @@
 
 use crate::canvas::transform::Point;
 use jstream_control::protocol::{
-    CameraView, Canvas, CanvasPoint, ContentRect, Finite32, ItemGeometry, SceneCamera, SceneId,
-    Size, SolidBounds, Vec2, Vec3,
+    CameraView, Canvas, CanvasPoint, ContentRect, Finite32, ItemGeometry, MAX_FOV_DEG, MIN_FOV_DEG,
+    SceneCamera, SceneId, Size, SolidBounds, Vec2, Vec3,
 };
 
 /// The camera an orbit or dolly shows until the collection has it, kept with the scene it
@@ -280,8 +280,303 @@ pub fn dolly(start: SceneCamera, dy: f32) -> SceneCamera {
     }
 }
 
-/// The camera's numbers rounded for a readout: its position, and its distance to the
-/// target.
+/// What a camera-mode drag does to the camera.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CameraDrag {
+    /// Turns the camera about its target ([`orbit`]).
+    Orbit,
+    /// Turns the camera where it stands, moving what it looks at ([`look`]).
+    Look,
+    /// Slides the camera and its target across the picture ([`pan`]).
+    Pan,
+    /// Moves the camera along its line of sight ([`dolly`]).
+    Dolly,
+}
+
+impl CameraDrag {
+    /// What the drag is called on its toolbar button.
+    pub fn label(self) -> &'static str {
+        match self {
+            CameraDrag::Orbit => "Orbit",
+            CameraDrag::Look => "Look around",
+            CameraDrag::Pan => "Move",
+            CameraDrag::Dolly => "Dolly",
+        }
+    }
+}
+
+/// What the mouse wheel does to the camera in camera mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CameraWheel {
+    /// Narrows or widens the field of view ([`zoom`]).
+    Zoom,
+    /// Moves the camera toward or away from its target ([`dolly`]).
+    Dolly,
+}
+
+/// Camera mode's mouse bindings, kept per browser: what a left drag does,
+/// and what the wheel does. A right or middle drag does [`Self::other`], Shift with a
+/// left drag dollies, and Shift with the wheel does what the wheel otherwise doesn't.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CameraControls {
+    /// What a left drag does.
+    pub left: CameraDrag,
+    /// What the wheel does.
+    pub wheel: CameraWheel,
+}
+
+impl Default for CameraControls {
+    fn default() -> Self {
+        CameraControls {
+            left: CameraDrag::Orbit,
+            wheel: CameraWheel::Zoom,
+        }
+    }
+}
+
+impl CameraControls {
+    /// What a right or middle drag does: moves the camera, or orbits it when a left drag
+    /// already moves it.
+    pub fn other(self) -> CameraDrag {
+        match self.left {
+            CameraDrag::Pan => CameraDrag::Orbit,
+            _ => CameraDrag::Pan,
+        }
+    }
+
+    /// What a drag with mouse `button` (0 left, 1 middle, 2 right) does, with Shift
+    /// held or not; `None` for another button.
+    pub fn drag(self, button: i16, shift: bool) -> Option<CameraDrag> {
+        match button {
+            0 if shift => Some(CameraDrag::Dolly),
+            0 => Some(self.left),
+            1 | 2 => Some(self.other()),
+            _ => None,
+        }
+    }
+
+    /// What the wheel does, with Shift held or not.
+    pub fn wheel(self, shift: bool) -> CameraWheel {
+        match (self.wheel, shift) {
+            (CameraWheel::Zoom, false) | (CameraWheel::Dolly, true) => CameraWheel::Zoom,
+            _ => CameraWheel::Dolly,
+        }
+    }
+
+    /// The bindings stored as `text` (see [`Self::stored`]), or the defaults for what is
+    /// absent or unreadable.
+    pub fn from_stored(text: Option<&str>) -> CameraControls {
+        let mut controls = CameraControls::default();
+        let mut parts = text.unwrap_or_default().split(',');
+        controls.left = match parts.next() {
+            Some("look") => CameraDrag::Look,
+            Some("pan") => CameraDrag::Pan,
+            Some("dolly") => CameraDrag::Dolly,
+            _ => CameraDrag::Orbit,
+        };
+        controls.wheel = match parts.next() {
+            Some("dolly") => CameraWheel::Dolly,
+            _ => CameraWheel::Zoom,
+        };
+        controls
+    }
+
+    /// The bindings as stored: what a left drag does, a comma, and what the wheel does.
+    pub fn stored(self) -> String {
+        let left = match self.left {
+            CameraDrag::Look => "look",
+            CameraDrag::Pan => "pan",
+            CameraDrag::Dolly => "dolly",
+            CameraDrag::Orbit => "orbit",
+        };
+        let wheel = match self.wheel {
+            CameraWheel::Zoom => "zoom",
+            CameraWheel::Dolly => "dolly",
+        };
+        format!("{left},{wheel}")
+    }
+}
+
+/// `start` moved by a camera-mode drag of `kind`: `screen` is the drag in screen pixels,
+/// which turns and dollies follow, and `canvas` the same drag in canvas pixels, which a
+/// pan follows so the target's plane stays under the pointer.
+pub fn drag(
+    kind: CameraDrag,
+    start: SceneCamera,
+    screen: (f32, f32),
+    canvas_delta: (f32, f32),
+    canvas: Canvas,
+) -> SceneCamera {
+    match kind {
+        CameraDrag::Orbit => orbit(start, screen.0, screen.1),
+        CameraDrag::Look => look(start, screen.0, screen.1),
+        CameraDrag::Pan => pan(start, canvas_delta.0, canvas_delta.1, canvas),
+        CameraDrag::Dolly => dolly(start, screen.1),
+    }
+}
+
+/// `start` turned where it stands by a drag of `dx`, `dy` screen pixels, as a head
+/// turns: right looks right, down looks down, never past [`MAX_ELEVATION_DEG`] (or no
+/// further than a typed camera already is). Its position, the distance to its target,
+/// field of view and roll stay; the target moves.
+pub fn look(start: SceneCamera, dx: f32, dy: f32) -> SceneCamera {
+    let target = get(start.target);
+    let position = get(start.position);
+    let ahead = [0, 1, 2].map(|i| target[i] - position[i]);
+    let distance = ahead.iter().map(|v| v * v).sum::<f32>().sqrt();
+    if distance <= 0.0 {
+        return start;
+    }
+    // Up is −y; the azimuth is measured about it from +z, toward +x.
+    let elevation = (-ahead[1]).atan2(ahead[0].hypot(ahead[2]));
+    let azimuth = ahead[0].atan2(ahead[2]);
+    let cap = MAX_ELEVATION_DEG.to_radians();
+    let (below, above) = (cap.max(-elevation), cap.max(elevation));
+    let elevation = (elevation - (dy * ORBIT_DEG_PER_PX).to_radians()).clamp(-below, above);
+    let azimuth = azimuth - (dx * ORBIT_DEG_PER_PX).to_radians();
+    let moved = [
+        position[0] + distance * elevation.cos() * azimuth.sin(),
+        position[1] - distance * elevation.sin(),
+        position[2] + distance * elevation.cos() * azimuth.cos(),
+    ];
+    match vec3(moved) {
+        Some(target) => SceneCamera { target, ..start },
+        None => start,
+    }
+}
+
+/// `start` and its target slid across the picture by a drag of `dx`, `dy` canvas
+/// pixels, so the scene at the target's distance follows the pointer, as a hand drags
+/// a map. Its direction, field of view and roll stay.
+pub fn pan(start: SceneCamera, dx: f32, dy: f32, canvas: Canvas) -> SceneCamera {
+    let Ok(view) = start.view(canvas) else {
+        return start;
+    };
+    let [right, down, _] = view.axes();
+    let scale = f64::from(start.target_distance()) / f64::from(view.focal_px());
+    let shift = [0, 1, 2]
+        .map(|i| -(right[i] * f64::from(dx) + down[i] * f64::from(dy)) * scale)
+        .map(|v| v as f32);
+    let position = get(start.position);
+    let target = get(start.target);
+    match (
+        vec3([0, 1, 2].map(|i| position[i] + shift[i])),
+        vec3([0, 1, 2].map(|i| target[i] + shift[i])),
+    ) {
+        (Some(position), Some(target)) => SceneCamera {
+            position,
+            target,
+            ..start
+        },
+        _ => start,
+    }
+}
+
+/// How much one wheel pixel scales the field of view: `exp(px × ZOOM_PER_WHEEL_PX)`.
+pub const ZOOM_PER_WHEEL_PX: f32 = 0.001;
+/// How many dolly-drag pixels one wheel pixel is worth.
+pub const DOLLY_PER_WHEEL_PX: f32 = 0.2;
+
+/// `start` zoomed by a wheel turn of `delta` pixels (the browser's `deltaY`): down, or
+/// back, widens the field of view, up narrows it, within the 1° to 170° a camera may
+/// have. Where it is and what it looks at stay.
+pub fn zoom(start: SceneCamera, delta: f32) -> SceneCamera {
+    let fov =
+        (start.fov_deg.get() * (delta * ZOOM_PER_WHEEL_PX).exp()).clamp(MIN_FOV_DEG, MAX_FOV_DEG);
+    SceneCamera {
+        fov_deg: finite(fov, start.fov_deg),
+        ..start
+    }
+}
+
+/// `start` changed by a wheel turn of `delta` pixels as `wheel` says.
+pub fn wheel(wheel: CameraWheel, start: SceneCamera, delta: f32) -> SceneCamera {
+    match wheel {
+        CameraWheel::Zoom => zoom(start, delta),
+        CameraWheel::Dolly => dolly(start, delta * DOLLY_PER_WHEEL_PX),
+    }
+}
+
+/// How an item drag in a 3D scene changes the item, besides sliding it on its depth
+/// plane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pose {
+    /// Moves it toward or away from the camera, along the line from the camera to it.
+    Depth,
+    /// Turns and tilts it about its centre.
+    Turn,
+}
+
+/// Degrees an item turns or tilts per screen pixel of a Turn drag.
+pub const TURN_DEG_PER_PX: f32 = 0.5;
+/// Screen pixels of a Depth drag that double, or halve, an item's distance from the camera.
+pub const DEPTH_DRAG_PX: f32 = 200.0;
+/// The nearest a Depth drag brings an item to the camera, in scene pixels.
+pub const MIN_ITEM_DISTANCE: f32 = 10.0;
+/// The least distance a Depth drag scales by, in scene pixels, so an item at the camera
+/// still moves.
+const MIN_DEPTH_SCALE: f32 = 50.0;
+
+/// `start` changed by a drag of `dx`, `dy` screen pixels as `pose` says. A Depth drag
+/// up pushes the item away along the camera's line of sight to it, down brings it
+/// closer: its distance from the camera doubles per [`DEPTH_DRAG_PX`] up and halves per
+/// [`DEPTH_DRAG_PX`] down, no nearer than [`MIN_ITEM_DISTANCE`], so it stays where it is
+/// on screen and never passes the camera. A Turn drag right turns its right
+/// edge away (`turn_deg`), up tips its top edge away (`tilt_deg`), each kept within
+/// ±180°. `None` when the result isn't a valid placement, or for a Turn of a
+/// billboard, which faces the camera whatever its angles.
+pub fn pose(
+    pose: Pose,
+    start: ItemGeometry,
+    view: &CameraView,
+    dx: f32,
+    dy: f32,
+) -> Option<ItemGeometry> {
+    let mut moved = start;
+    match pose {
+        Pose::Depth => {
+            // Along the ray from the camera through the item's centre, so it stays under
+            // the pointer as it goes.
+            let eye = view.position();
+            let at = [
+                f64::from(start.center.x.get()),
+                f64::from(start.center.y.get()),
+                f64::from(start.depth_px.get()),
+            ];
+            let ray = [0, 1, 2].map(|i| at[i] - eye[i]);
+            let length = ray.iter().map(|v| v * v).sum::<f64>().sqrt();
+            let (ray, length) = if length > f64::from(MIN_DEPTH_SCALE) {
+                (ray.map(|v| v / length), length)
+            } else {
+                (view.axes()[2], f64::from(MIN_DEPTH_SCALE))
+            };
+            // Its distance doubles per DEPTH_DRAG_PX up and halves per DEPTH_DRAG_PX down,
+            // so it never reaches the camera, let alone passes behind it.
+            // No nearer than MIN_ITEM_DISTANCE, or than it started, so rounding never
+            // puts it at or behind the camera.
+            let floor = f64::from(MIN_ITEM_DISTANCE).min(length);
+            let along = (length * f64::from(-dy / DEPTH_DRAG_PX).exp2()).max(floor) - length;
+            let [x, y, z] = [0, 1, 2].map(|i| (at[i] + ray[i] * along) as f32);
+            moved.center = Vec2::new(x, y)?;
+            moved.depth_px = Finite32::new(z)?;
+        }
+        // A billboard faces the camera whatever its angles, so turning it would change
+        // nothing seen.
+        Pose::Turn if start.billboard => return None,
+        Pose::Turn => {
+            let wrap = |deg: f32| {
+                let d = deg.rem_euclid(360.0);
+                if d > 180.0 { d - 360.0 } else { d }
+            };
+            moved.turn_deg = Finite32::new(wrap(start.turn_deg.get() + dx * TURN_DEG_PER_PX))?;
+            moved.tilt_deg = Finite32::new(wrap(start.tilt_deg.get() - dy * TURN_DEG_PER_PX))?;
+        }
+    }
+    Some(moved)
+}
+
+/// The camera's numbers rounded for a readout: its position, its distance to the
+/// target and its field of view.
 pub fn readout(camera: SceneCamera) -> String {
     let [x, y, z] = get(camera.position);
     let target = get(camera.target);
@@ -291,8 +586,12 @@ pub fn readout(camera: SceneCamera) -> String {
         .sum::<f32>()
         .sqrt();
     format!(
-        "Camera {:.0}, {:.0}, {:.0} · {:.0} px from target",
-        x, y, z, distance
+        "Camera {:.0}, {:.0}, {:.0} · {:.0} px from target · {:.0}°",
+        x,
+        y,
+        z,
+        distance,
+        camera.fov_deg.get()
     )
 }
 
@@ -510,6 +809,147 @@ mod tests {
         assert!((distance(back) / distance(start) - (0.5f32).exp()).abs() < 0.001);
         let close = dolly(start, -100_000.0);
         assert!((distance(close) - MIN_DOLLY_PX).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_look_turns_the_camera_where_it_stands() {
+        let start = SceneCamera::framing(CANVAS);
+        let turned = look(start, 300.0, 0.0);
+        assert_eq!(turned.position, start.position);
+        assert!((distance(turned) - distance(start)).abs() < 0.5);
+        // Right looks right: the target moves toward +x, the camera's right.
+        assert!(get(turned.target)[0] > get(start.target)[0]);
+        // Down looks down (+y), and stops short of straight down.
+        let down = look(start, 0.0, 10_000.0);
+        let (p, t) = (get(down.position), get(down.target));
+        let below = (t[1] - p[1])
+            .atan2((t[0] - p[0]).hypot(t[2] - p[2]))
+            .to_degrees();
+        assert!((below - MAX_ELEVATION_DEG).abs() < 0.01, "{below}");
+        assert!(down.view(CANVAS).is_ok());
+    }
+
+    #[test]
+    fn a_pan_keeps_the_target_plane_under_the_pointer() {
+        let start = SceneCamera::framing(CANVAS);
+        let seen = view(Some(start), CANVAS).expect("valid");
+        // A point of the target's plane, where the press was.
+        let grabbed = seen
+            .on_plane(CanvasPoint { x: 700.0, y: 400.0 }, 0.0)
+            .expect("meets");
+        let moved = pan(start, 120.0, -80.0, CANVAS);
+        assert_eq!(moved.fov_deg, start.fov_deg);
+        let after = view(Some(moved), CANVAS).expect("valid");
+        let Placed::At(at) = after.place(vec3([grabbed.0, grabbed.1, 0.0]).expect("finite")) else {
+            panic!("in front");
+        };
+        assert!(
+            (at.x - 820.0).abs() < 0.05 && (at.y - 320.0).abs() < 0.05,
+            "{at:?}"
+        );
+    }
+
+    #[test]
+    fn the_wheel_zooms_the_field_of_view_within_its_bounds() {
+        let start = SceneCamera::framing(CANVAS);
+        let narrower = zoom(start, -100.0);
+        assert!(narrower.fov_deg.get() < start.fov_deg.get());
+        assert_eq!(narrower.position, start.position);
+        assert!((zoom(start, 1e6).fov_deg.get() - MAX_FOV_DEG).abs() < 1e-3);
+        assert!((zoom(start, -1e6).fov_deg.get() - MIN_FOV_DEG).abs() < 1e-3);
+        let back = wheel(CameraWheel::Dolly, start, 100.0);
+        assert!(distance(back) > distance(start));
+        assert_eq!(back.fov_deg, start.fov_deg);
+    }
+
+    #[test]
+    fn camera_controls_bind_the_buttons_and_keep_their_choice() {
+        let defaults = CameraControls::default();
+        assert_eq!(defaults.drag(0, false), Some(CameraDrag::Orbit));
+        assert_eq!(defaults.drag(2, false), Some(CameraDrag::Pan));
+        assert_eq!(defaults.drag(1, false), Some(CameraDrag::Pan));
+        assert_eq!(defaults.drag(0, true), Some(CameraDrag::Dolly));
+        assert_eq!(defaults.drag(3, false), None);
+        assert_eq!(defaults.wheel(false), CameraWheel::Zoom);
+        assert_eq!(defaults.wheel(true), CameraWheel::Dolly);
+        let moving = CameraControls {
+            left: CameraDrag::Pan,
+            wheel: CameraWheel::Dolly,
+        };
+        // A left drag that moves leaves the other buttons to orbit.
+        assert_eq!(moving.drag(2, false), Some(CameraDrag::Orbit));
+        assert_eq!(CameraControls::from_stored(Some(&moving.stored())), moving);
+        let looking = CameraControls {
+            left: CameraDrag::Look,
+            ..defaults
+        };
+        assert_eq!(
+            CameraControls::from_stored(Some(&looking.stored())),
+            looking
+        );
+        let dollying = CameraControls {
+            left: CameraDrag::Dolly,
+            ..defaults
+        };
+        assert_eq!(
+            CameraControls::from_stored(Some(&dollying.stored())),
+            dollying
+        );
+        assert_eq!(dollying.drag(2, false), Some(CameraDrag::Pan));
+        assert_eq!(CameraControls::from_stored(Some("nonsense")), defaults);
+        assert_eq!(CameraControls::from_stored(None), defaults);
+    }
+
+    #[test]
+    fn a_depth_drag_moves_an_item_along_the_line_of_sight() {
+        let mut camera = SceneCamera::framing(CANVAS);
+        camera.position = vec3([400.0, 300.0, 1100.0]).expect("finite");
+        let seen = view(Some(camera), CANVAS).expect("valid");
+        let g = item(900.0, 500.0, 200.0, 200.0, -300.0);
+        let before = seen.depth_of(g);
+        let pushed = pose(Pose::Depth, g, &seen, 0.0, -DEPTH_DRAG_PX).expect("valid");
+        // Up by DEPTH_DRAG_PX doubles its distance, and it stays where it was on screen.
+        assert!((seen.depth_of(pushed) / before - 2.0).abs() < 1e-3);
+        let at = |g: ItemGeometry| match seen
+            .place(vec3([g.center.x.get(), g.center.y.get(), g.depth_px.get()]).expect("finite"))
+        {
+            Placed::At(at) => at,
+            _ => panic!("in front"),
+        };
+        let (a, b) = (at(g), at(pushed));
+        assert!(
+            (a.x - b.x).abs() < 0.05 && (a.y - b.y).abs() < 0.05,
+            "{a:?} {b:?}"
+        );
+        let closer = pose(Pose::Depth, g, &seen, 0.0, DEPTH_DRAG_PX).expect("valid");
+        assert!((seen.depth_of(closer) / before - 0.5).abs() < 1e-3);
+        // However far down, it stays in front of the camera (#1633 round 1, B1).
+        let far_down = pose(Pose::Depth, g, &seen, 0.0, 5_000.0).expect("valid");
+        assert!(seen.depth_of(far_down) > 0.0);
+        let (c, d) = (at(g), at(far_down));
+        assert!(
+            (c.x - d.x).abs() < 0.05 && (c.y - d.y).abs() < 0.05,
+            "{c:?} {d:?}"
+        );
+    }
+
+    #[test]
+    fn a_turn_drag_turns_and_tilts_within_half_a_turn() {
+        let seen = framing();
+        let g = item(960.0, 540.0, 200.0, 200.0, 0.0);
+        let turned = pose(Pose::Turn, g, &seen, 40.0, -20.0).expect("valid");
+        assert!((turned.turn_deg.get() - 20.0).abs() < 1e-4);
+        assert!((turned.tilt_deg.get() - 10.0).abs() < 1e-4);
+        assert_eq!(turned.center, g.center);
+        let mut facing = g;
+        facing.billboard = true;
+        assert_eq!(pose(Pose::Turn, facing, &seen, 40.0, -20.0), None);
+        let round = pose(Pose::Turn, g, &seen, 400.0, 0.0).expect("valid");
+        assert!(
+            (round.turn_deg.get() + 160.0).abs() < 1e-3,
+            "{}",
+            round.turn_deg.get()
+        );
     }
 
     /// #1054: an item passing beside the camera, partly behind it, is outlined, labelled

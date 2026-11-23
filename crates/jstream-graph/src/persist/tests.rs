@@ -83,10 +83,19 @@ const V15: &str = include_str!("fixtures/v15.json");
 /// 1 must.
 const V16: &str = include_str!("fixtures/v16.json");
 
-/// A collection file at schema version 17, the current one: version 16 with a motion
-/// modifier on `i4` that drives a material's glow on its source (ADR-0171). The same
-/// rule applies once version 18 exists.
+/// A collection file at schema version 17: version 16 with a motion modifier on `i4`
+/// that drives a material's glow on its source (ADR-0171). It must keep loading as
+/// version 1 must.
 const V17: &str = include_str!("fixtures/v17.json");
+
+/// A collection file at schema version 18: version 17 with scene `a`'s surfaces
+/// reflecting each other (ADR-0170 decision 2). It must keep loading as version 1 must.
+const V18: &str = include_str!("fixtures/v18.json");
+
+/// A collection file at schema version 19, the current one: version 18 with a value
+/// binding of a controller to the master's fader (ADR-0178). The same rule applies once
+/// version 20 exists.
+const V19: &str = include_str!("fixtures/v19.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -778,9 +787,101 @@ fn v17_graph() -> Graph {
     graph
 }
 
+/// [`v17_graph`] with scene `a`'s surfaces reflecting each other (ADR-0170 decision 2).
+fn v18_graph() -> Graph {
+    let mut graph = v17_graph();
+    let a = SceneId::new("a");
+    let mut options = graph
+        .state()
+        .scene(&a)
+        .map(|scene| scene.options().clone())
+        .unwrap_or_default();
+    options.reflections = true;
+    let applied = graph.apply(
+        &[Edit::SceneSetOptions {
+            scene_id: a,
+            options,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
+/// [`v18_graph`] with a controller bound to the master's fader (ADR-0178).
+fn v19_graph() -> Graph {
+    use jstream_protocol::{
+        Finite32, MotionCurve, MotionKind, MotionMidiControl, ValueBinding, ValueTarget,
+    };
+    let mut graph = v18_graph();
+    let applied = graph.apply(
+        &[Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "master_fader".into(),
+                input: MotionKind::Midi {
+                    control: MotionMidiControl::Cc,
+                    controller: Some(7),
+                    channel: Some(1),
+                    input: None,
+                    smoothing_ms: 50,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::new(-60.0).expect("finite"),
+                    to: Finite32::ZERO,
+                },
+                target: ValueTarget::BusGain {
+                    bus_id: BusId::master(),
+                },
+            },
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v17_graph().to_collection_json(), V17);
+    assert_eq!(v19_graph().to_collection_json(), V19);
+}
+
+#[test]
+fn the_v19_fixture_loads_exactly() {
+    let expected = v19_graph();
+    let loaded = load(V19);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(17)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+#[test]
+fn the_v18_fixture_loads_exactly() {
+    let expected = v18_graph();
+    let loaded = load(V18);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(16)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Versions before 18 have no scene reflections, so a scene's `reflections` there is
+/// refused.
+#[test]
+fn an_older_file_refuses_reflections() {
+    let mut value: Value = serde_json::from_str(V17).unwrap_or_default();
+    value["scenes"][0]["reflections"] = json!(true);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 17, .. })
+    ));
+}
+
+/// Version 19 adds value bindings (ADR-0178): one in a version 18 file is refused, as
+/// version 18 refused it.
+#[test]
+fn a_version_18_value_binding_is_refused() {
+    let mut value: Value = serde_json::from_str(V19).expect("the v19 fixture");
+    value["schema_version"] = json!(18);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 18, .. })
+    ));
 }
 
 #[test]
@@ -2428,6 +2529,7 @@ fn folders_labels_and_metadata_round_trip() {
                     background: Some("#0f111580".into()),
                     keep_warm: false,
                     share_space: false,
+                    reflections: false,
                 },
             },
             Edit::SourceSetMeta {

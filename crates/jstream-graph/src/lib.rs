@@ -29,6 +29,7 @@ mod target;
 mod timeline;
 mod touched;
 mod transition;
+mod value;
 
 pub use apply::Applied;
 pub use filter::Upgraded;
@@ -42,6 +43,7 @@ pub use motion::{
 };
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;
+pub use value::{ValueRange, value_edit};
 
 #[cfg(test)]
 mod tests;

@@ -49,6 +49,8 @@ pub(crate) struct Layouts<'a> {
     pub(crate) shader: &'a wgpu::ShaderModule,
     /// Whether the target holds sRGB-encoded colour: the shader's `ENCODED`.
     pub(crate) encoded: bool,
+    /// The pipelines made on the device already (`pipelines.rs`).
+    pub(crate) built: &'a crate::pipelines::Built,
 }
 
 /// The depth format of a scene pass with a model's depth (ADR-0107 decision 7): reversed,
@@ -178,6 +180,28 @@ pub(crate) fn depth_writer(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu
     )
 }
 
+/// The pipeline that adds a model's view depth, an item's image, to a scene's view depth
+/// (ADR-0143 decision 4): `fs_copy_depth`, keeping the larger value, as the cards'
+/// [`BlendPipelines::depth`] does.
+pub(crate) fn depth_copier(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu::RenderPipeline {
+    let largest = wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    };
+    pipeline(
+        device,
+        layouts,
+        "jstream-render-view-depth-copy",
+        "fs_copy_depth",
+        Some(wgpu::BlendState {
+            color: largest,
+            alpha: largest,
+        }),
+        None,
+    )
+}
+
 /// Whether `mode` is drawn by reading the backdrop.
 pub(crate) fn reads_backdrop(mode: BlendMode) -> bool {
     BACKDROP_MODES.iter().any(|(m, _)| *m == mode)
@@ -249,7 +273,7 @@ fn pipeline_with(
         bind_group_layouts: &groups,
         immediate_size: 0,
     });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+    let desc = wgpu::RenderPipelineDescriptor {
         label: Some(label),
         layout: Some(&layout),
         vertex: wgpu::VertexState {
@@ -286,7 +310,11 @@ fn pipeline_with(
         }),
         multiview_mask: None,
         cache: None,
-    })
+    };
+    // The layout follows from `blend`, which the descriptor holds.
+    layouts
+        .built
+        .render(device, crate::compositor::COMPOSITE_SOURCE, &(), &desc)
 }
 
 #[cfg(test)]

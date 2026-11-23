@@ -1925,6 +1925,104 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "fog_card",
+    "category": "source",
+    "name": "Fog card",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#c8ccd2",
+        "label": "Color",
+        "description": "The fog's color. Place the card in a 3D scene in front of what it should veil: a few cards at different depths read as fog with volume.",
+        "live": true
+      },
+      {
+        "id": "density",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.5,
+        "label": "Density",
+        "description": "How opaque the thickest fog is.",
+        "live": true
+      },
+      {
+        "id": "coverage",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.8,
+        "label": "Coverage",
+        "description": "How much of the card is fog: 0 is clear, 1 fog nearly everywhere.",
+        "live": true
+      },
+      {
+        "id": "scale",
+        "type": "float",
+        "min": 0.25,
+        "max": 4.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Scale",
+        "description": "The size of the clouds: above 1 is larger.",
+        "live": true
+      },
+      {
+        "id": "edge",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.7,
+        "label": "Edge fade",
+        "description": "How far in from the edges the fog thins out, breaking up into wisps so the card has no outline. 0 keeps fog up to the edges.",
+        "live": true
+      },
+      {
+        "id": "seed",
+        "type": "int",
+        "min": 0,
+        "max": 999999,
+        "step": 1,
+        "default": 1,
+        "label": "Seed",
+        "description": "Another number draws other clouds with the same look.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 4096,
+        "step": 1,
+        "unit": "px",
+        "default": 1024,
+        "label": "Width",
+        "description": "At most 4096. A card is soft and scales up smoothly.",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 4096,
+        "step": 1,
+        "unit": "px",
+        "default": 576,
+        "label": "Height",
+        "description": "At most 4096. A card is soft and scales up smoothly.",
+        "live": false
+      }
+    ]
+  },
+  {
     "kind_id": "follow_pointer",
     "category": "video_filter",
     "name": "Follow pointer",
@@ -2394,6 +2492,202 @@ source: crates/jstream-core/src/kinds.rs
         "alpha": true,
         "default": "#00000000",
         "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "hologram",
+    "category": "video_filter",
+    "name": "Hologram",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#5ad2ff",
+        "label": "Color",
+        "description": "The hologram's colour. The picture's brightness is kept.",
+        "live": true
+      },
+      {
+        "id": "tint",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.85,
+        "label": "Tint",
+        "description": "How far the picture turns to the colour: 0 keeps its own colours.",
+        "live": true
+      },
+      {
+        "id": "see_through",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "See-through",
+        "description": "How far the picture's dark parts turn see-through: 0 keeps them opaque.",
+        "live": true
+      },
+      {
+        "id": "brightness",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.3,
+        "label": "Brightness",
+        "description": "How bright the picture is drawn, a gain on its light: 1 keeps it.",
+        "live": true
+      },
+      {
+        "id": "lines",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.35,
+        "label": "Scanlines",
+        "description": "How dark the scanlines are: 0 draws none.",
+        "live": true
+      },
+      {
+        "id": "spacing",
+        "type": "float",
+        "min": 1.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 3.0,
+        "label": "Line spacing",
+        "description": "One scanline every this many pixels.",
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 30.0,
+        "label": "Roll speed",
+        "description": "How fast the lines roll; positive moves them down. 0 holds them still.",
+        "live": true
+      },
+      {
+        "id": "sweep",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.35,
+        "label": "Sweep",
+        "description": "How bright the band that sweeps down the picture is: 0 is none.",
+        "live": true
+      },
+      {
+        "id": "sweep_period",
+        "type": "float",
+        "min": 0.5,
+        "max": 60.0,
+        "unit": "s",
+        "default": 4.0,
+        "label": "Sweep period",
+        "description": "How long the band takes to sweep from top to bottom.",
+        "live": true
+      },
+      {
+        "id": "edge",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Edge glow",
+        "description": "How bright the glow along the edges is: 0 is none.",
+        "live": true
+      },
+      {
+        "id": "edge_width",
+        "type": "float",
+        "min": 1.0,
+        "max": 200.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Edge width",
+        "description": "How far in from the edges the glow reaches.",
+        "live": true
+      },
+      {
+        "id": "flicker",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.2,
+        "label": "Flicker",
+        "description": "How far the picture dims at random from moment to moment. 0 holds it steady.",
+        "live": true
+      },
+      {
+        "id": "glitch",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.15,
+        "label": "Glitch",
+        "description": "How often a band of the picture jumps sideways for a moment. 0 is never.",
+        "live": true
+      },
+      {
+        "id": "fringe",
+        "type": "float",
+        "min": 0.0,
+        "max": 16.0,
+        "unit": "px",
+        "default": 1.5,
+        "label": "Color fringe",
+        "description": "Red is read this far to the left and blue to the right. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "grain",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.1,
+        "label": "Grain",
+        "description": "Noise that changes every moment. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "reveal",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Reveal",
+        "description": "How much of the hologram is materialised: 0 shows nothing, 1 all of it. Between them a bright edge crosses it. Glide it with a Move between keyframes to project it in and out.",
+        "live": true
+      },
+      {
+        "id": "reveal_from",
+        "type": "enum",
+        "options": [
+          {
+            "value": "bottom",
+            "label": "Bottom"
+          },
+          {
+            "value": "top",
+            "label": "Top"
+          },
+          {
+            "value": "middle",
+            "label": "The middle out"
+          }
+        ],
+        "default": "bottom",
+        "label": "Reveal from",
+        "description": "Where the reveal starts.",
         "live": true
       }
     ]
@@ -3736,6 +4030,14 @@ source: crates/jstream-core/src/kinds.rs
         "live": true
       },
       {
+        "id": "reflections",
+        "type": "bool",
+        "default": true,
+        "label": "Reflects the scene",
+        "description": "Whether, lit by its scene, it reflects the rest of the scene where the scene's reflections are on and a reflection probe's box holds it; off, it reflects only the environment.",
+        "live": true
+      },
+      {
         "id": "animation",
         "type": "string",
         "multiline": false,
@@ -4008,6 +4310,97 @@ source: crates/jstream-core/src/kinds.rs
         "default": 0.5,
         "label": "Height",
         "group": "Area",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "reflection_probe",
+    "category": "source",
+    "name": "Reflection probe",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "width_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 2000.0,
+        "label": "Width",
+        "description": "The box's size along the scene's x axis. A surface inside the box reflects what the probe sees.",
+        "live": true
+      },
+      {
+        "id": "height_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 2000.0,
+        "label": "Height",
+        "description": "The box's size along the scene's y axis. A surface inside the box reflects what the probe sees.",
+        "live": true
+      },
+      {
+        "id": "depth_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 2000.0,
+        "label": "Depth",
+        "description": "The box's size along the scene's z axis. A surface inside the box reflects what the probe sees.",
+        "live": true
+      },
+      {
+        "id": "fade_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 100.0,
+        "label": "Edge fade",
+        "description": "How far inside the box's faces its reflection fades in, so a surface moving out of the box loses it gradually; 0 cuts at the faces.",
+        "live": true
+      },
+      {
+        "id": "resolution",
+        "type": "enum",
+        "options": [
+          {
+            "value": "128",
+            "label": "128 px"
+          },
+          {
+            "value": "256",
+            "label": "256 px"
+          },
+          {
+            "value": "512",
+            "label": "512 px"
+          }
+        ],
+        "default": "256",
+        "label": "Resolution",
+        "description": "How many pixels a side each of the six views the probe captures is. Larger is sharper and costs more; the app's 3D rendering settings cap it.",
+        "live": true
+      },
+      {
+        "id": "refresh_frames",
+        "type": "int",
+        "min": 0,
+        "max": 600,
+        "unit": "frames",
+        "default": 0,
+        "label": "Refresh every",
+        "description": "How often the probe captures its scene again, in frames; 0 captures once, when it is first drawn or a setting changes. Each capture draws the scene six times, so a probe that sees live video wants a rate, and a slow machine a long one.",
         "live": true
       }
     ]

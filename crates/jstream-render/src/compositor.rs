@@ -13,7 +13,7 @@ use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
-use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime};
+use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime, Panoramas};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
 use crate::wipe::Wipe;
@@ -121,6 +121,8 @@ pub struct Compositor {
     sampler: wgpu::Sampler,
     image_layout: wgpu::BindGroupLayout,
     blends: BlendPipelines,
+    /// Adds a model's view depth layer to a scene's view depth ([`crate::Item::depth`]).
+    depth_copier: wgpu::RenderPipeline,
     /// The same, drawing into an sRGB-encoded target (ADR-0126 §3).
     encoded_blends: BlendPipelines,
     /// The composite shader, which [`DepthPipelines`] are built from when first needed.
@@ -165,6 +167,9 @@ pub struct Compositor {
     model_focus: ModelFocusRun,
     /// The sky backdrop's pipeline (ADR-0167), built the first time one draws.
     sky: Option<crate::sky::SkyRuntime>,
+    /// The reflection probes' resampling pipeline (ADR-0170 decision 3), built the first
+    /// time a probe resamples.
+    probe: Option<crate::probe::ProbeRuntime>,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
     /// Times effect-pack passes once [`Self::time_passes`] asked, on a device that can
@@ -237,6 +242,27 @@ impl Errors {
             Some(detail) => Err(RenderError::Uncaptured { detail }),
             None => Ok(value),
         }
+    }
+}
+
+/// Uploads 3D models for the [`Compositor`] that made it
+/// ([`Compositor::model_uploader`]), on whichever thread calls it. Cheap to clone.
+#[derive(Clone)]
+pub struct ModelUploader {
+    kit: Arc<crate::model::UploadKit>,
+    own_errors: bool,
+}
+
+impl ModelUploader {
+    /// Uploads `model` as [`Compositor::upload_model`] does. It submits nothing: what it
+    /// wrote goes with the next submit on the compositor's queue, so the model can be
+    /// drawn as soon as this returns.
+    ///
+    /// # Errors
+    /// What [`Compositor::upload_model`] reports.
+    pub fn upload(&self, model: &jstream_media::model::Model) -> Result<GpuModel, RenderError> {
+        let errors = Errors::open(self.kit.device(), self.own_errors);
+        errors.close(self.kit.upload(model))
     }
 }
 
@@ -605,7 +631,10 @@ impl Compositor {
     /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
     /// its alpha, with its opacity and its sharp edge, is at least one half; the larger
     /// value wins, so draw order doesn't matter. A [`Placement::Layer`] (a model's
-    /// layer) writes nothing here: [`Self::draw_model_depth`] adds a model's own depth.
+    /// layer) that carries the model's depth ([`crate::Item::depth`]) writes that depth where
+    /// the model covers, as a scene's pass tests against it, so the model isn't drawn
+    /// again; one without writes nothing here, and [`Self::draw_model_depth`] adds its
+    /// model's depth.
     /// A scene with no camera has no depth, and leaves `target` all 0.
     ///
     /// It prepares the scene again (placement, vertices, mips) rather than reusing the
@@ -651,15 +680,31 @@ impl Compositor {
                 multiview_mask: None,
             });
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.set_pipeline(self.blends.depth());
             for draw in &self.draws {
                 let item = &scene.items[draw.index];
-                if item.camera.is_none() || matches!(item.placement, Placement::Layer(_)) {
+                if item.camera.is_none() {
                     continue;
                 }
-                let bind_group = match &draw.mips {
-                    Some(mips) => &mips.bind_group,
-                    None => item.image.bind_group(),
+                let bind_group = match (item.placement, item.depth) {
+                    // A model's layer with its depth: the depth it was drawn with, over
+                    // the layer's own triangles, as a scene's pass writes it.
+                    // Only at half opacity or more, as a card and a model drawn here
+                    // count (ADR-0143 decision 4): a model its group has faded further
+                    // adds no depth.
+                    (Placement::Layer(_), Some(depth))
+                        if depth.owner().is(&self.owner) && item.opacity >= 0.5 =>
+                    {
+                        pass.set_pipeline(&self.depth_copier);
+                        depth.bind_group()
+                    }
+                    (Placement::Layer(_), _) => continue,
+                    _ => {
+                        pass.set_pipeline(self.blends.depth());
+                        match &draw.mips {
+                            Some(mips) => &mips.bind_group,
+                            None => item.image.bind_group(),
+                        }
+                    }
                 };
                 pass.set_bind_group(0, bind_group, &[]);
                 pass.draw(
@@ -748,7 +793,17 @@ impl Compositor {
         model: &jstream_media::model::Model,
     ) -> Result<GpuModel, RenderError> {
         let errors = self.errors();
-        errors.close(self.models.upload(&self.gpu, &self.owner, model))
+        errors.close(self.models.upload_kit(&self.gpu, &self.owner).upload(model))
+    }
+
+    /// This compositor's model uploads, for another thread to make (ADR-0177): a model
+    /// it uploads is this compositor's to draw, as one from [`Self::upload_model`] is.
+    /// It keeps the device alive, not the compositor.
+    pub fn model_uploader(&self) -> ModelUploader {
+        ModelUploader {
+            kit: Arc::new(self.models.upload_kit(&self.gpu, &self.owner)),
+            own_errors: self.own_errors,
+        }
     }
 
     /// Poses a rigged model for its next draws (ADR-0151 decision 7): `palette` is its
@@ -772,43 +827,74 @@ impl Compositor {
     /// A live `texture` (ADR-0107 decision 5) is sampled through a mip chain of its
     /// whole picture, kept on its image and rebuilt here only when the image changed
     /// since, as a 3D item's is; a `reflection` is read as a scene's sky picture is.
+    /// The sky picture and the probe's capture it reflects are read through mip chains
+    /// of their own, made the same way, so a rough surface blurs them smoothly
+    /// (ADR-0170 decision 3).
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
         let errors = self.errors();
         let chain = draw
             .texture
             .and_then(|texture| texture.image)
             .filter(|image| image.owner().is(&self.owner))
-            .map(|image| {
-                let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
-                if chain.claim(image) {
-                    let lock = self.gpu.submit.clone();
-                    let submitting = lock.lock();
-                    let mut encoder =
-                        self.gpu
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("jstream-render-model-texture"),
-                            });
-                    chain.record(&mut encoder, &self.mip_pipelines, image);
-                    self.gpu.submit_work(encoder.finish());
-                    drop(submitting);
-                }
-                chain
-            });
+            .map(|image| self.built_chain(image, "jstream-render-model-texture"));
         let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
-        let drawn = self.draw_model_focused(draw, target, live);
+        // As the model reads them: nothing unlit, and a probe only lit by its scene.
+        let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
+        let sky = draw
+            .reflection
+            .or(draw.environment.and_then(|environment| environment.image))
+            .filter(|_| lit);
+        let probe = draw
+            .probe
+            .map(|probe| probe.image)
+            .filter(|_| draw.lighting == jstream_media::model::Lighting::Scene);
+        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
+        let panoramas = Panoramas {
+            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+        };
+        let drawn = self.draw_model_focused(draw, target, (live, panoramas));
         errors.close(drawn)
+    }
+
+    /// `image`'s mip chain of its whole picture, rebuilt first when the image changed
+    /// since its last build.
+    fn built_chain(&self, image: &Image, label: &'static str) -> Arc<Mips> {
+        let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
+        if chain.claim(image) {
+            let lock = self.gpu.submit.clone();
+            let submitting = lock.lock();
+            let mut encoder = self
+                .gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
+            chain.record(&mut encoder, &self.mip_pipelines, image);
+            self.gpu.submit_work(encoder.finish());
+            drop(submitting);
+        }
+        chain
+    }
+
+    /// The mip chain a blurred reflection reads of `image`, a sky picture or a probe's
+    /// capture this compositor made, with the image.
+    fn panorama_chain<'a>(&self, image: Option<&'a Image>) -> Option<(&'a Image, Arc<Mips>)> {
+        let image = image.filter(|image| image.owner().is(&self.owner))?;
+        Some((
+            image,
+            self.built_chain(image, "jstream-render-panorama-mips"),
+        ))
     }
 
     /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
     /// depth of field (ADR-0165), the model and its view depth are drawn into layers of
     /// their own first, and the model's focus passes blur them into `target`. `live` is
-    /// the live texture's mip chain, as [`Self::draw_model`] made it.
+    /// the live texture's mip chain and the panoramas' chains, as [`Self::draw_model`]
+    /// made them.
     fn draw_model_focused(
         &mut self,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+        live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
     ) -> Result<(), RenderError> {
         let canvas = jstream_protocol::Canvas {
             width: target.width(),
@@ -884,6 +970,10 @@ impl Compositor {
     /// pixel's ray from `sky.camera`, infinitely far away, with its stars, at
     /// `sky.opacity`. A scene then places the layer under its items.
     ///
+    /// A layer that still holds the same sky from an earlier call (the same values
+    /// through a camera looking the same way, and a picture that hasn't changed) is not
+    /// drawn again, so a still camera pays for its sky once.
+    ///
     /// # Errors
     /// [`RenderError::Invalid`] when `target` is not a layer this compositor made, or the
     /// camera can't be seen on it.
@@ -899,10 +989,44 @@ impl Compositor {
         errors.close(runtime.draw(&self.gpu, &self.owner, sky, target))
     }
 
+    /// Resamples a reflection probe's six `faces` into `target`, the panorama a surface
+    /// inside its box reads (ADR-0170 decision 3), replacing every texel: an
+    /// equirectangular panorama in the scene's axes, its centre along -z and up at its
+    /// top, premultiplied linear light with alpha where a face saw something. `target`
+    /// is a [`Self::layer`] four faces wide and two high.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when a face or `target` is not a layer this compositor
+    /// made, the faces aren't squares of one size, or `target` isn't four by two of them.
+    pub fn resample_probe(
+        &mut self,
+        faces: &[crate::ProbeFace<'_>; 6],
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let runtime = self
+            .probe
+            .get_or_insert_with(|| crate::probe::ProbeRuntime::new(&self.gpu));
+        errors.close(runtime.resample(&self.gpu, &self.owner, faces, target))
+    }
+
+    /// How many skies [`Self::draw_sky`] drew, not counting the calls a layer already
+    /// held the sky of.
+    #[cfg(test)]
+    pub(crate) fn sky_draws(&self) -> u64 {
+        self.sky.as_ref().map_or(0, |sky| sky.draws)
+    }
+
     /// How many deep skies [`Self::draw_sky`] has baked (ADR-0174).
     #[cfg(test)]
     pub(crate) fn sky_bakes(&self) -> u64 {
         self.sky.as_ref().map_or(0, |sky| sky.baked)
+    }
+
+    /// How many seeds' deep skies are kept now (ADR-0174 decision 3).
+    #[cfg(test)]
+    pub(crate) fn sky_bakes_kept(&self) -> usize {
+        self.sky.as_ref().map_or(0, |sky| sky.kept_bakes())
     }
 
     /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the
@@ -922,7 +1046,17 @@ impl Compositor {
                 detail: "a lit card's picture and its target differ in size".into(),
             }));
         }
-        errors.close(self.models.light_card(&self.gpu, &self.owner, card, target))
+        let sky = card.environment.and_then(|environment| environment.image);
+        let probe = card.probe.map(|probe| probe.image);
+        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
+        let panoramas = Panoramas {
+            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+        };
+        errors.close(
+            self.models
+                .light_card(&self.gpu, &self.owner, card, target, panoramas),
+        )
     }
 
     /// Refills `image`, an upload this compositor made, with new tightly packed
@@ -1114,8 +1248,18 @@ impl Compositor {
         // What each image drawn into can hold now (#1070, #1449): a filter can draw
         // anywhere in its output, unless what it reads is bounded and its kind says how
         // far past that it draws, and every draw is then cut to that.
+        // Each is marked changed first, as every write of an image's texels is: what
+        // remembers an image by its change count (a mip chain, [`Image::seen`]) must
+        // see a filter's output move on.
+        let marked = written
+            .iter()
+            .any(|(image, _)| image.texture() == output.texture());
         for (image, content) in written {
+            image.mark_changed();
             image.set_content(content);
+        }
+        if !marked {
+            output.mark_changed();
         }
         drop(submitting);
         if let (Some(timer), Some(timing)) = (&self.timer, timing) {
@@ -1276,6 +1420,17 @@ impl Compositor {
         self.gpu.description()
     }
 
+    /// How many render pipelines were made on this compositor's device, by any
+    /// compositor on it, not counting the ones a compositor found made already
+    /// (`pipelines.rs`). Each one made compiled its shaders; a draw that leaves the
+    /// count as it was waited for none.
+    pub fn pipelines_made(&self) -> u64 {
+        self.gpu
+            .built
+            .makes
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// A second compositor on this one's device and queue, as two `on_context` calls on
     /// one `GpuContext` would make. Tests use it to check that images do not cross over.
     #[cfg(test)]
@@ -1292,6 +1447,7 @@ impl Compositor {
             faults: Arc::clone(&self.gpu.faults),
             submit: self.gpu.submit.clone(),
             spans: Arc::clone(&self.gpu.spans),
+            built: Arc::clone(&self.gpu.built),
         });
         sibling.blending = self.blending;
         sibling
@@ -1319,11 +1475,7 @@ impl Compositor {
             ..Default::default()
         });
         let image_layout = image_layout(&gpu.device);
-        let composite_shader = shader(
-            &gpu.device,
-            "jstream-render-composite",
-            include_str!("composite.wgsl"),
-        );
+        let composite_shader = shader(&gpu.device, "jstream-render-composite", COMPOSITE_SOURCE);
         let resolve_layout = resolve_layout(&gpu.device);
         // The backdrop is bound as the resolve's input is: one unfiltered FP16 texture.
         let blends_for = |encoded| {
@@ -1334,12 +1486,23 @@ impl Compositor {
                     backdrop: &resolve_layout,
                     shader: &composite_shader,
                     encoded,
+                    built: &gpu.built,
                 },
                 None,
             )
         };
         let blends = blends_for(false);
         let encoded_blends = blends_for(true);
+        let depth_copier = blend::depth_copier(
+            &gpu.device,
+            &Layouts {
+                image: &image_layout,
+                backdrop: &resolve_layout,
+                shader: &composite_shader,
+                encoded: false,
+                built: &gpu.built,
+            },
+        );
         let composite_shader_kept = composite_shader.clone();
         let resolve_shader = shader(
             &gpu.device,
@@ -1381,6 +1544,7 @@ impl Compositor {
             sampler,
             image_layout,
             blends,
+            depth_copier,
             encoded_blends,
             composite_shader: composite_shader_kept,
             depth_pipelines: None,
@@ -1406,6 +1570,7 @@ impl Compositor {
             models,
             model_focus: ModelFocusRun::default(),
             sky: None,
+            probe: None,
             readback_wait: std::time::Duration::ZERO,
             timer: None,
             ingest: Mutex::new(None),
@@ -1785,8 +1950,33 @@ impl Compositor {
         }
     }
 
+    /// Makes what a 3D scene draws with and a 2D one never needs, which is otherwise made
+    /// at the first draw that needs it: the sky's pipeline, its bake's, and the scene
+    /// passes' depth pipelines. The models' are made with the compositor. Each is found if a
+    /// compositor on the device made it already (`pipelines.rs`), so a caller on a
+    /// thread of its own makes them for every compositor on its device ahead of the
+    /// first 3D frame, which would otherwise wait for their shaders to compile.
+    pub fn warm_3d(&mut self) {
+        self.sky
+            .get_or_insert_with(|| crate::sky::SkyRuntime::new(&self.gpu))
+            .warm(&self.gpu);
+        self.ensure_depth_pipelines();
+    }
+
     /// Makes the depth pipelines once, and a depth target of `width` by `height`.
     fn ensure_scene_depth(&mut self, width: u32, height: u32) {
+        self.ensure_depth_pipelines();
+        if self
+            .scene_depth
+            .as_ref()
+            .is_some_and(|depth| depth.size == (width, height))
+        {
+            return;
+        }
+        self.make_scene_depth(width, height);
+    }
+
+    fn ensure_depth_pipelines(&mut self) {
         if self.depth_pipelines.is_none() {
             let device = &self.gpu.device;
             let layouts = |encoded| Layouts {
@@ -1794,6 +1984,7 @@ impl Compositor {
                 backdrop: &self.resolve_layout,
                 shader: &self.composite_shader,
                 encoded,
+                built: &self.gpu.built,
             };
             let set = |compare| {
                 [false, true]
@@ -1805,13 +1996,9 @@ impl Compositor {
                 writer: blend::depth_writer(device, &layouts(false)),
             });
         }
-        if self
-            .scene_depth
-            .as_ref()
-            .is_some_and(|depth| depth.size == (width, height))
-        {
-            return;
-        }
+    }
+
+    fn make_scene_depth(&mut self, width: u32, height: u32) {
         let texture = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("jstream-render-scene-depth"),
             size: wgpu::Extent3d {
@@ -2366,6 +2553,9 @@ fn map_snapshot(
     buffer.unmap();
     snapshot
 }
+
+/// The composite shader's source, which the blend pipelines are made from.
+pub(crate) const COMPOSITE_SOURCE: &str = include_str!("composite.wgsl");
 
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {

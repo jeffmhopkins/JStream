@@ -58,8 +58,9 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`;
   `move_collection_file` (a host's default project moving, ADR-0163); `set_process_cpu`
-  and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel` and
-  `jtunnel_stats` (the JTunnel receiver, off until a host starts it; see *Contents:
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel`,
+  `stop_jtunnel` and `jtunnel_stats` (the JTunnel receiver, off until a host starts
+  it, and started again or stopped whenever the host's setting changes; see *Contents:
   live sources*); `live_data` (the JTunnel senders' state, ADR-0171); `set_thread_cpu`
   (`profile.get`'s threads, below); `set_thread_priority` (the OS scheduling class the
   program stage's render and mixer threads take as they start, on Windows their MMCSS
@@ -191,7 +192,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 - **The media clock** (`clock.rs`): `HeldClock` wraps the injected media clock so that
@@ -238,7 +239,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   receiver is off, the sender isn't accepted or nothing has arrived from it.
 - **JTunnel receiver** (`jtunnel/`, [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md),
   [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): off unless the host
-  calls `Engine::start_jtunnel` with a `JtunnelSetup`, the senders this machine accepts
+  calls `Engine::start_jtunnel` with a `JtunnelSetup` (again to replace the receiver
+  with another setup, and `Engine::stop_jtunnel` to turn it off, each emitting
+  `jtunnel.senders_changed`, so a host applies a changed setting with no restart), the
+  senders this machine accepts
   (`AcceptedSender`: a tunnel name of at most 31 bytes, with no white space at either
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
   taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
@@ -325,11 +329,12 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   one that isn't JSON counted, a new stream ID forgetting the old keys and a stopped
   receiver forgetting them all; and through the engine `data.list` empty before the
   receiver starts, then the sender's key listed and `data.get` reading it.
-- **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
+- **Snapshot** (`snapshot.rs`, its reflection probes' capture and lookup in
+  `snapshot/probes.rs`, see *Snapshots*): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
-  compositor and draws the frame sheets too (`frames.rs`, see *Frame sheets*). A keyframe scene draws its parent's items at their effective values
+  compositor, draws the frame sheets too (`frames.rs`, see *Frame sheets*) and draws each scene of a collection once when it opens, to compile what it draws with (*Snapshots*, Priming). A keyframe scene draws its parent's items at their effective values
   (`State::shown_items`), effects included where it overrides them
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), so it
   follows every edit to the parent; so does what the
@@ -384,7 +389,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -392,20 +397,36 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 
 - **Motion** (`motion.rs`,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
-  motion modifiers, turned into `jstream-anim`'s when the shot is planned.
+  motion modifiers, turned into `jstream-anim`'s when the shot is planned. A `width` or
+  `height` modifier stretches the item's box on one axis about its centre
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 7).
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
   modifier hearing the program mix, a bus or a source.
 - **MIDI-driven motion** (`reactive.rs`,
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): a `midi` modifier
   following a control change, pitch bend or channel pressure on its input's state, read
-  from atomics and smoothed by the same follower; a preview reads it unsmoothed.
+  from atomics and smoothed by the same follower; a scene or source preview reads it
+  unsmoothed. A scene camera's `midi` and `data` modifiers are recorded and smoothed the
+  same way, by scene family and modifier ID instead of item
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
+  While no render thread runs (no output), `video.snapshot` and the preview
+  hub follow the program's controls themselves before each picture, with one follower
+  on the engine's shared state stepped to the clock's time
+  ([ADR-0173](../../docs/adr/0173-pictures-with-no-output-follow-motion-controls.md)),
+  so a held clock's render smooths them as a stream would.
 - **Data-driven motion** (`reactive.rs`,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3): a
   `data` modifier following one field of a sender's live data, a number through its
   `range` or a text through its `states`, read from the engine's `LiveData` (which
   reaches the planner with the loaded assets) by a shared watch, and smoothed by the
-  same follower; it reads 0 while the field is absent.
+  same follower; it reads 0 while the field is absent. A shot planned after the
+  follower's tick (an edit mid-tick, or between a held clock's steps) takes the levels
+  followed so far, so an edit never shows an audio, MIDI or data modifier unsmoothed. One
+  with `color_from` paints instead (decision 5): the binding holds the field's `#rrggbb`
+  text or its palette pick as a colour, smoothed per channel, and `Bindings::tint` hands
+  it to the colour settings below, which take it in place of their own colour before the
+  other modifiers add, and never add it as a number.
 - **Driven effect settings** (`driven.rs`,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
   modifier adding to a number or colour setting of one of its item's effects each
@@ -416,10 +437,25 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   `source` modifier adding to a live setting of its item's own source as that item draws
   it, each frame: a light's colour, intensity, range, cone and softness as it lights the
   scene, and a model's colour, metallic and roughness, or by material its glow, as it
-  draws it. Nothing is stored.
+  draws it. Nothing is stored. A painting `data` modifier sets a light's colour, a
+  model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
+  `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
+- **Value bindings** (`value_bindings.rs`,
+  [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)): `ValueDriver`
+  follows each value binding's control or data field with the modifiers' readers and
+  smoothing, and once its reading first differs from where it started, turns its mapped
+  value into its target's setter edit (`jstream_graph::value_edit`). A `jstream-values`
+  thread ticks it about 30 times a second while the collection holds a binding, and when
+  those edits change the engine redraws and re-routes audio through the shown graph, on
+  top of the open gestures' values ([Live values](#live-values)). A binding whose input
+  or range is unchanged across a batch keeps its follower; a missing target drives
+  nothing.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
-  camera motion and follow camera, planned with the shot. A follow camera holds its
+  camera motion and follow camera, planned with the shot; camera motion reads its
+  `midi` and `data` levels from the shot's bindings, and its `pan` and `tilt` turn the
+  view about the camera as the live aim does
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)). A follow camera holds its
   zoom by default and only pans at the box's edges
   ([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md)).
 - **Live aim** (`aim.rs`,
@@ -675,7 +711,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
-  `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`, `tests/mcp.rs`,
+  `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
+  `src/tests/value_bindings.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -694,8 +731,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   downscale in `frames.rs`), nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, 3D groups drawn
   through `video.snapshot` (a sharing group's child sorting in front of a scene item a
-  flat group sits under, moving and fading with the group item, and a camera anchored to
-  the group riding with it, in `src/tests/groups3d.rs`), the render
+  flat group sits under, moving and fading with the group item, a camera anchored to
+  the group riding with it, its children staying in its space through a Move, and an
+  item shown with a Fade on a filtered 3D keyframe drawn through its camera, and an
+  effect setting changed after the first frame reaching a 3D card, in
+  `src/tests/groups3d.rs`), the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
   the same for a GPU capture of another size), a mix of another aspect ratio
@@ -750,9 +790,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   could take GPU frames, encoding the readback with every output staying up, an output
   surviving a lost device (its own, reopened on a new one; the context's, left at once) and failing at the third loss in a minute, and
   an output whose encoder takes GPU frames getting NV12 encode targets with no
-  readback, riding out 20 composite errors in a row with no fallback, and failing at
+  readback, getting no more of them while the GPU has not finished two earlier ticks'
+  and those ticks counted as dropped, riding out 20 composite errors in a row with no
+  fallback, and failing at
   once when the context's device is lost, on a software device that stands in for the
-  platform's (`src/tests/gpu_capture.rs`; the last three skip without
+  platform's (`src/tests/gpu_capture.rs`; the last four skip without
   `TEXTURE_FORMAT_NV12`), an effect-pack filter that runs too long on the GPU being
   quarantined with no device loss (the same file; it skips on a GPU without timestamp
   queries), a page's
@@ -810,7 +852,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   loopback JTunnel sender once its first frame arrives, one naming a sender not accepted
   and one with the receiver off unavailable with their reasons, `jtunnel.senders` off
   by default and then listing a sender that answered a fake mDNS responder, with
-  `jtunnel.senders_changed`, a sender's state read with `data.list` and `data.get`
+  `jtunnel.senders_changed`, a receiver started again with another sender accepted
+  (which subscribes to it at once), stopped and started again
+  (`a_jtunnel_setting_applies_live_with_no_restart`), a sender's state read with
+  `data.list` and `data.get`
   (ADR-0171), a CLAP filter on the master chain run on its
   own fake host by the program stage's thread, put on the host's block, and its host
   stopped when the filter is removed (`a_master_clap_filter_runs_on_a_host`), a media file's sound reaching
@@ -898,7 +943,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   are left out of the shot while a `scene` video mix showing the group or the new side
   still plans that scene in full, chain and boxes, and a child appearing or
   disappearing with the group item's timing, and a `data` motion modifier moving an
-  item while a sender's transport plays and back once it stops, ADR-0171; `snapshot.rs` draws such a child where its
+  item while a sender's transport plays and back once it stops, ADR-0171, a preview
+  with no output running smoothing a `midi` modifier over a held clock's steps,
+  ADR-0173, and the `shown` clock starting for an item in a scene with a chain and for
+  an item with effects; `snapshot.rs` draws such a child where its
   track is at the frame's time; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
@@ -920,7 +968,12 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   stays dropped once every source is built (#701)
   (`a_drawn_source_gets_a_scope_fed_from_its_mixer_input`); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
-  off closes its input and its meter and turning it on opens them again. The live
+  off closes its input and its meter and turning it on opens them again. Value bindings
+  (`src/tests/value_bindings.rs`, ADR-0178): a MIDI fader bound to the master drives the
+  gain the mixer is given, smoothed, only once it moves, while `state.get` keeps the
+  stored 0 dB and lists the binding, and clearing it gives the stored gain back; the
+  driver's own test (`value_bindings.rs`) waits for a control to move and follows it. A
+  `width` and `height` modifier stretching one side is `motion.rs`'s. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
   source built and rebuilt, drawn sharper when enlarged and left at its own size when a
   legacy scale of `1e35` overflows (`an_enlarged_text_item_draws_its_source_at_a_density`,
@@ -1107,7 +1160,10 @@ lock only to add the kinds it found (see *CLAP plugins* under Purpose).
 `jtunnel.senders` (0.114) and `profile.get`'s `network` read the JTunnel receiver
 outside it, taking only the audio sources' wanted-set mutex to clone the receiver.
 `data.list` and `data.get` (0.140, ADR-0171) read the live data outside it, taking only
-the live data's own lock.
+the live data's own lock. `midi.last_controls` (0.168, ADR-0178) is answered on the same
+path, before the queries the graph answers: it takes the collection lock only to reach
+the MIDI inputs, and reads each one's latest control change under `MidiInputs`' leaf
+lock.
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -1339,6 +1395,12 @@ the render parameter channel, never through the collection:
   publishing a snapshot) when the setting values change, when a gesture ends and after
   every applied batch, undo and redo. No collection read shows it. A batch that
   deletes a source drops the live settings addressed to it.
+- **Value bindings** ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
+  add their setter edits to `shown` the same way, after the gestures' settings, so a
+  moved control wins over a gesture on the same setting; through them `shown` also
+  carries filter settings, faders and sends, which the mixer and the render snapshot
+  follow as they follow a stored change. The `jstream-values` thread rebuilds it when
+  those edits change, at most about 30 times a second.
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
@@ -1433,7 +1495,9 @@ its start with its first frame decoded.
 The **3D rendering switches** (`studio.set_rendering`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decision 1) are an application setting too, answered before the collection lock
-(`Engine::rendering_call`): each switch the call names takes its value
+(`Engine::rendering_call`): a `max_probe_resolution` that isn't one of
+`PROBE_RESOLUTIONS` is `invalid_argument` and changes nothing; otherwise each switch the
+call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
 collection lock released, saves them in the file the host named with
@@ -1651,7 +1715,7 @@ The engine keeps the keyframe each placed scene is switched to
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 
@@ -1676,6 +1740,29 @@ before it draws ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-ble
 transition's track takes its endpoint's, and a pair whose ends differ switches halfway.
 A nested scene's items blend with its own layer, so a transition flattens a nested
 scene into its items only when it and they are all `normal`.
+
+**Priming.** When a collection is opened, and when the engine gets its backends, every
+scene of it is planned alone, as a frame sheet of that scene plans it (reaching no
+source), and queued to the snapshot thread (`SnapshotWorker::prime`), which draws each
+once, at most 256 pixels on its longer side, with no captures and no readback, and
+throws the picture away. A snapshot or a frame sheet queued behind scenes to prime is
+drawn before them, so a preview waits for no more than the scene being primed. The draw makes the pipelines the scene draws with, and every
+compositor on the engine's context shares them
+([jstream-render › Scope](../jstream-render/README.md#purpose)), so the program stage
+compiles no shader on its first frame of a scene it never showed: on Direct3D 12 a 3D
+scene's shaders take seconds, which was a stall at the output's start or at the switch.
+A scene with a camera also has what a 3D scene alone draws with made
+(`Compositor::warm_3d`), whether or not anything in it draws yet. A primed draw has
+images and filters of its own, dropped after it, so it leaves the snapshots' cache and
+GPU memory as they were. It runs only with a GPU context to share (`SharedGpu::lends`,
+and the snapshot thread skips the job when the context won't open, so nothing is drawn
+on a software device of its own);
+a scene that fails to draw is logged at `debug`. Not primed: a scene made or changed
+after the collection opened, which is compiled where it is first drawn (its preview,
+while it is edited); a source's filters while the source has no frame; and each
+compositor's own uploads and bakes (a still's texture, a sky seed's cube maps, a model's
+buffers), which the stage still makes when it first draws the scene, a model's on its
+`jstream-models` thread unless a warm scene already keeps it uploaded (below).
 
 **Nested scenes.** A `scene` source shows its scene composited at the canvas size,
 then placed like any image. The shot is scheduled inside out: each nested scene is
@@ -1709,6 +1796,9 @@ counts toward the same limit, and a deeper one draws flat.
 before each of its colour passes, through the camera that pass's items are seen
 through, into a canvas-sized `GpuKey::Sky` layer (`draw_sky`), which `under_sky` puts
 under its items, flat and seen through no camera, only in the cache frame that drew it.
+The compositor leaves the layer as it is when it still holds the sky asked for (the same
+values, a camera looking the same way), so a scene whose camera and sky hold still pays
+for its sky once, not once a frame.
 `Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
 streams at now, which moves toward the setting at its ramp's pace (dropping while it
 is above it, which zooms the deep sky back in), and how far its
@@ -1792,7 +1882,8 @@ with a `follow_pointer` effect draws through the framing camera so it can
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)): its pass, and a
 transition's ends, carry the family's `CameraMoves`, which `compose` applies to the
 camera as it draws (a follow camera's springs in that compositor's `Chains`, stepped
-once per frame time, then the camera's motion), with the zoom steps from the live
+once per frame time, then the camera's motion, whose `midi` and `data` modifiers read
+the shot's bindings, ADR-0176), with the zoom steps from the live
 values. Such a shot changes with time, so it redraws each frame. Each compositor keeps
 its own springs. The preview thread draws with the captures, so its follow camera
 follows the pointer apart from the render thread, from rest. The snapshot thread now
@@ -2013,9 +2104,14 @@ crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetri
 `floor_reflection` and `depth_bloom`) also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
 planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
-composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, then
-each model it shows at least half opaque, posed as its layer is, whether the pass places
-the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). `Chains::drew_depth`
+composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
+each model it shows at least half opaque, whether the pass places
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
+model's item carries its `GpuKey::ModelDepth` layer there (`Item::depth`), and
+`Compositor::render_view_depth` writes that layer into the view depth, so the model's
+geometry, drawn once into that layer with its colour, isn't drawn a second time for the
+scene's filters; a shadow map and a floor reflection, which see it through another
+camera, draw it posed as its layer is (`depth_models`). `Chains::drew_depth`
 keeps it with the camera's view and the scene's lights, as `scene_lights` gives them
 ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 1: the lights
 copied only when they change), and `run_one` hands it to the chain's
@@ -2052,7 +2148,17 @@ both and the floor to the filter in `ViewDepth::reflection`
 In a transition the scene is one picture
 (ADR-0065 §6): one track over the canvas that pairs with nothing, so Fade crossfades
 it, Move falls back to that, and a filtered nested scene is never flattened into its
-items.
+items. A Move by item within a 3D scene's family is the exception
+([ADR-0180](../../docs/adr/0180-a-move-within-a-3d-family-glides-through-its-chain.md)):
+it plans each side's items one by one (`Planner::moves_within_3d_family`,
+`Planner::end_of`), so the views glide, and the chain waits for it to end. A 3D
+scene's picture was drawn through its own camera, so its track is drawn flat, through
+no camera (`Visual::is_whole_scene`, `Transitioning::whole`): a Fade into or out of a
+filtered 3D scene, and an item shown or hidden there with a transition, which
+crossfades the scene, show it as it is (`a_3d_scene_with_a_chain_fades_as_a_flat_picture`,
+`an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera`). A model's layer that a
+track draws is drawn through that track's camera (`track_camera`), so a glide turns
+it with the rest.
 
 A `scene` source's own video chain (ADR-0065 §4) runs where it places its scene, after
 the scene's own (#1018). Its chain (`ChainOwner::Placed`, shown as `SourceRef::Placed`)
@@ -2168,7 +2274,9 @@ scene's maps (`draw_shadows`): for each of the first 2 such lights, a
 `GpuKey::ShadowMap` layer of 2048² holding the view depth of the scene's pass (found
 among the chains', the program's and the mixes' passes, `scene_pass`) seen from the
 light, its cards through `render_view_depth` and its models through `draw_view_depth`'s
-model loop, leaving out a model whose source doesn't cast (`casts_shadows`). A spot
+model loop, leaving out a model whose source doesn't cast (`casts_shadows`) and a card
+with the `additive` or `screen` blend, which only adds light (`casts_shadow`,
+[ADR-0179](../../docs/adr/0179-cards-that-only-add-light-cast-no-shadow.md)). A spot
 light looks from where it is along its aim, through its cone and a tenth more; a
 directional light from far back along its aim, at the sphere around what the pass places
 (`caster_bounds`), through a 30° view that holds it, which stands in for an orthographic
@@ -2176,7 +2284,75 @@ view. More than 2 such lights are logged once (`Chains::shadows_warned`). `Chain
 the maps for that run (`shadows_of`), and every receiving model of the scene draws with
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).
+Reflection probes ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decisions 2 and 3, `snapshot/probes.rs`): planning notes each item that places a
+`reflection_probe` source as it notes a light (`Shot::probes`), and the scenes whose
+`reflections` option is on (`Shot::reflective`, a keyframe scene's its parent's). Once
+the chains have run, so every item's layer holds this frame's picture, `draw_probes`
+captures one due probe of those scenes at a time while the `reflection_probes` switch is
+on, the one that has waited longest since it last tried (`Chains::probe_tries`: one
+never tried first, and a try counts whether or not it drew), so a probe due every frame
+starves no other (`a_probe_due_every_frame_starves_no_other`). A capture draws one face a
+frame (`Chains::probe_run`, which goes on while its probe is due with the same box, face
+size and refresh, and starts again otherwise), so a refresh costs a sixth of a capture
+each frame for six frames rather than all of it in one; each face is the scene's pass drawn from the probe's box's centre (its item's centre in the
+scene's space, `centre_of`) through six 90° cameras along ±x, ±y and ±z
+(`face_cameras`), into square `GpuKey::ProbeFace` layers at the probe's `resolution`
+capped by `max_probe_resolution` (`RenderFeatures::probe_face`). Each model it shows is
+drawn again through each face camera into its `GpuKey::ProbeModel`, lit by the scene's
+lights as that face sees them and its environment, unshadowed and with no probe, so a
+capture never reads itself, and with no depth layer, since a model's `Item::depth` is
+seen from the scene's camera rather than a face's; cards keep their lit layers, and the compositor sorts them
+again for each face. The faces are kept between the frames of a capture, and in the frame
+that draws the sixth `Compositor::resample_probe` turns the six into the probe's
+`GpuKey::ProbeMap`, which every frame keeps while the scene is drawn; until then surfaces
+read its previous capture. A probe is due
+when it has no capture, its box or face size changed, `refresh_frames` have passed
+since its last, or, set to capture once, `SETTLE_FRAMES` (60) after its first, when
+what it sees has loaded; `Chains::probes` keeps what each was captured with. A
+`scene`-lit model whose source has `reflections` on, and a lit card, then reads the
+smallest box holding its centre among the captured probes of its scene (`lookup`, as
+`ModelDraw::probe` and `CardDraw::probe`, projected through the box it was captured
+from), so a probe shows from the frame after its
+first capture finishes (`a_mirror_inside_a_probe_reflects_what_is_behind_the_camera`). With the
+switch or the scene's option off nothing captures or reads a probe, and a capture the
+cache let go captures again. The warm scenes' estimate counts a probe's capture in a
+warm scene whose `reflections` is on while the switch is (`probe_bytes`, its panorama and
+faces in half-float RGBA at its capped face size,
+`a_reflection_probe_counts_its_capture`).
+
+A shadow map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,
+for each scene, what its maps were last drawn of (`KeptShadows`): every card a view depth
+draws, by its picture's `jstream_render::Seen`, placement, crop and opacity, and every
+casting model `depth_models` lists, by its upload (`SeenModel`), where its item places
+it and its pose; and for each map the light's view it was drawn through and what its
+layer held after the draw. A map whose casters, light view and layer all match is left
+as it is, so a scene whose lights and casters hold still pays for its shadow maps once,
+not once a frame; a card showing a new frame, a moved item, a clip's next pose, a moved
+light or a layer the cache made again draws it
+(`a_shadow_map_is_drawn_again_only_when_what_casts_changes`). A card whose picture is a
+filter chain's output changes every time the filter runs, since the compositor counts each
+run as a change of that layer, so its map is drawn every frame, of the picture the filter
+drew the frame before, as it was before maps were kept: the maps are drawn before that
+card's chain runs (`a_filtered_cards_shadow_follows_its_picture`). `Chains::begin` drops
+what is kept for a scene whose shadows the last run didn't draw.
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
+The program stage's render thread doesn't make the upload itself
+([ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)): its `Chains`
+(`upload_models_aside`) asks the `jstream-models` thread for it (`model_uploads.rs`,
+over the compositor's `ModelUploader`) and takes it when a later frame begins, never
+waiting. Until then the item draws nothing, or the version it had, and both versions
+are held while the new one uploads
+(`a_model_uploaded_aside_draws_once_its_upload_is_back`). A refused upload fails its
+item as before and isn't asked for again until the model changes
+(`a_refused_upload_is_not_asked_for_again_until_the_model_changes`). The thread
+skips a model that a newer one of the same source already waits behind, and if it dies
+with uploads owed they are refused, not awaited
+(`a_superseded_job_is_skipped_and_a_dead_thread_refuses_what_it_owed`). The thread starts
+with the first model and ends with the `Chains`. Every other compositor (the snapshot
+thread's, a preview's) uploads where it draws. `Chains::keep_models` uploads the
+models the warm scenes show the same way and keeps them while they are kept, though no
+frame draws them (decision 5; `a_kept_model_stays_uploaded_though_no_frame_draws_it`).
 A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 7) is posed before it is drawn: `pose` writes its source's `ShownModel::pose`
 to the upload with `Compositor::pose_model`, before its layer, its reflection and its
@@ -2678,8 +2854,9 @@ to start, which is logged) deleted sources keep their grants. Width or height of
 or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
-snapshot. It owns the compositor, serves requests in order, and stops when the
-engine goes away. The compositor opens on the first snapshot, on the engine's GPU
+snapshot, or before it to prime a collection's scenes (*Priming* above). It owns the
+compositor, serves requests in order (a scene to prime after any request waiting), and stops when the
+engine goes away. The compositor opens on its first job, on the engine's GPU
 context when it has one, so it draws the browser pages painted there
 ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), and otherwise on a
 device of its own, hardware adapter first, with lavapipe or WARP as the fallback
@@ -2924,7 +3101,14 @@ is looked at again): a `restart_on_show` media file goes to its start and holds 
 first frame, which the sources' thread takes once decoded, so the switch to its scene
 shows that frame in its first plan and plays on with no seek. A preview that looks at
 a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
-composited unless it is monitored. The set is also published after `studio.set_warm`
+composited unless it is monitored. The 3D models the warm scenes' sources show are
+published beside the captures (`RenderHub::publish_warm_models`, a `WarmModels` map the
+plan replaces only when a model changed;
+[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md) decision 5):
+the render thread's draw uploads and keeps them (`Chains::keep_models`), so a switch
+to a warm scene uploads nothing
+(`a_warm_scenes_model_is_published_for_the_program_stage`). The limit's estimate
+doesn't count them. The set is also published after `studio.set_warm`
 changes the budget, and after each plan when an edit kept a scene warm or bound one.
 The GPU-memory limit (ADR-0150) is applied to what was planned on every update, since
 the sizes it reads change without a new plan (`WarmCaptures::trim`): each source a
@@ -3063,7 +3247,7 @@ What each stage contributes:
 | Render loop | ticks skipped to catch up with the media clock, published by the render thread | `render_ticks` |
 | Mixer input | overrun and late frames, each input while it records | `audio_frames` |
 | Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
-| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, one per such session, published by the render thread | `encode_frames` |
+| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, or because the GPU has not finished the conversions of two earlier ticks, one per such session, published by the render thread | `encode_frames` |
 | Video encode session | input drops (`dropped_queue_full` + `dropped_encoder_busy`) | `encode_frames` |
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
@@ -3892,9 +4076,11 @@ receiver's thread takes no engine lock, getting opens and closes over a channel 
 takes only its own senders list's leaf mutex, which `jtunnel.senders` also takes alone,
 and reports a change to the list over a one-slot channel that it never waits on; the
 `jstream-jtunnel-events` thread takes the collection lock to emit
-`jtunnel.senders_changed`); its senders'
+`jtunnel.senders_changed`, and `start_jtunnel` and `stop_jtunnel` take it alone, after
+setting the slot, to emit the same); its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
-lock held. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
+lock held; `midi.last_controls` takes that leaf lock under the collection lock to read
+the inputs' latest control changes. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
 receiver's thread takes it alone to put a state message and set the watches on its key,
 `data.list` and `data.get` take it alone, outside the collection lock, a `grid`
 source's painter takes it under its own drawing lock to read its keys (on the paint
@@ -3942,7 +4128,7 @@ lock is held, as its final `stats.tick` already requires. The master's meters ar
 atomics the mixer thread writes and the sampler reads, with no lock. The media clock's
 hold (`HeldClock`, ADR-0172) is a leaf mutex, with nothing taken under it: a reader
 holds it only for the moment it reads (the sources' thread under its queue lock), and
-`clock.hold`, `clock.step` and `clock.release` take it under the collection lock. The `jstream-sources`
+`clock.hold`, `clock.step` and `clock.release` take it under the collection lock. The control side's follower of the program (`Shared::hearing`, ADR-0173) is a leaf mutex that `video.snapshot` and the preview source take under the collection lock, reading only atomics under it. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
 each live source for a frame it already has, apart from one catch-up paint of a painter
@@ -3950,7 +4136,7 @@ a plan reaches after the thread skipped it (*Live sources*). A painter's frame s
 a leaf mutex its writers take, the plan under the collection lock and that thread alone;
 no draw takes it, and the render thread reads the slot with no lock at all. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
-collection lock is released. The engine's GPU context (`SharedGpu`, `runtime/gpu.rs`)
+collection lock is released, by priming too (*Snapshots*), which asks the GPU context whether it lends before it takes the collection lock to plan the scenes. The engine's GPU context (`SharedGpu`, `runtime/gpu.rs`)
 has locks of its own, never taken under the collection lock: it opens a device holding
 only its own, and tells the engine of a replaced context after releasing them, which
 then takes the collection lock to hand it to the browser engine. The preview thread takes its own state lock, and the
@@ -3963,7 +4149,11 @@ with no lock at all, as are the live values on the parameter channel. `video.sna
 reads both under the collection lock and the snapshot thread only receives them. The
 `jstream-live` thread takes the collection lock only to send due `live.changed` events,
 release committed values and fire due timeline cues (each runs as its action's call
-would under that lock, [Timelines](#timelines)), and sleeps without it. The WASM plugins' registry lock
+would under that lock, [Timelines](#timelines)), and sleeps without it. The
+`jstream-values` thread does the same: it takes the collection lock for each tick, reads
+the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
+binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
+takes the live data's lock briefly, last, to find or make its watch, as a plan does. The WASM plugins' registry lock
 and the host's lock are taken with no other engine lock held, and released before a
 plugin loads, before an event is emitted and before a subscription closes; under the
 registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
@@ -4026,7 +4216,8 @@ or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its 
 the host's error) and an `info` with how many effects it found. A `tempo.*` value the
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
 `warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
-answers; only its event is missing).
+answers; only its event is missing). A `jstream-values` thread that can't start is a
+`warn`; the value bindings then wait for the next batch to start it.
 
 <a id="audit-log"></a>
 ## Audit log
@@ -4240,7 +4431,7 @@ and `window` source that has no stored frame showing its capture. With no scene 
 draws the primary display's capture scaled to fill the canvas, fitted to the frame. A
 capture whose mailbox is empty repeats its last frame. Before the tick's mixes are
 drawn, the loop's `reactive::Follower` measures what the shot's audio motion
-modifiers hear and advances their envelopes once (ADR-0100).
+modifiers hear and advances their envelopes once (ADR-0100). `RenderHub::following` says whether a render thread adopts snapshots, so follows them; while none does, the control side's pictures follow the program themselves (ADR-0173).
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
 platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,
@@ -4255,6 +4446,18 @@ read or dropped. When frames still hold every target (the encoder has fallen beh
 the tick's frame is dropped for that mix's GPU sessions and counted in
 `encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
+Nothing else would hold these composites back: an encoder lets go of a target once its
+copy is queued, and a full session queue drops a frame already drawn. So the draw
+counts each tick's conversions out, and back in when wgpu reports their submit done
+(`EncodeFlights`, on the draw's poll each tick), and while the GPU has not finished
+those of two earlier ticks (`FRAMES_IN_FLIGHT`,
+[ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §1) the tick converts
+nothing: the frame is dropped for the GPU sessions and counted in `encode_frames`, and
+a mix nothing else reads skips its composite, as a mix whose ring has no free target
+does. A GPU slower than the frame rate then encodes at the rate it can draw, a frame
+or two behind, where before every tick queued behind the last and each frame reached
+the encoder later than the one before
+(`a_gpu_that_is_behind_is_handed_no_more_encode_targets`).
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back, as do JPEG and PNG preview streams'
 picture queues (*Preview streams*), and virtual cameras the program; a mix with a
@@ -4514,14 +4717,16 @@ render thread sends under the collection lock and announces the sources it chang
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
 the render thread. It also joins `jstream-device-losses`, which hands each lost device
 the render thread sends to the engine (the lost-device paragraph above). The render loop counts each tick it composites into the render hub
-(`stats.tick`'s `program_frames`), and publishes capture drops and the frames an encode ring drops
-(`encode_frames`), and a tick that falls a
+(`stats.tick`'s `program_frames`), and publishes capture drops and the frames an encode ring
+or a GPU that is behind drops (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
 too; a tick that fails part-way is discarded), which allocates nothing in a steady
 frame and publishes one snapshot of its totals about once a second, the meter's only
 allocation, handing the totals it replaces to the collector (*Profile* in
-[Purpose](#purpose)). None of those threads lock the collection: the render thread reads the
+[Purpose](#purpose)). The render thread uploads no 3D model: its draw's `Chains` asks the
+`jstream-models` thread for each (`Chains::upload_models_aside`, see *Snapshots*;
+[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
 values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a

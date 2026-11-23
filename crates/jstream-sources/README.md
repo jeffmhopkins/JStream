@@ -65,12 +65,18 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `model()` (default `None`) is a `ShownModel` for a source that is a 3D model: the
   `Model` the engine draws in 3D where an item places it, with its `Lighting`
   ([ADR-0107](../../docs/adr/0107-3d-models.md)), whether it casts and receives
-  shadows, and the sources its `texture` (with `texture_material`) and `reflection`
+  shadows, whether it reflects its scene through the scene's reflection probes
+  (`reflections`, ADR-0170 decision 2), and the sources its `texture` (with `texture_material`) and `reflection`
   name (decision 5). Only the `model` kind has one.
   `light()` (default `None`) is a `ShownLight` for the `light` kind: its `LightType`,
   colour, intensity, range, cone and softness, and whether it casts shadows and how
   softly, which the engine places where an item
   places the source ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
+  `probe()` (default `None`) is a `ShownProbe` for the `reflection_probe` kind: its
+  box's size, edge fade, face resolution and refresh, which the engine centres where an
+  item places the source
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 3).
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
   (`true`, the default, for a webcam and every other source). Its frames come from the
@@ -221,7 +227,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   without a lock or an allocation. It also keeps each controller's, the bend's and the
   pressure's latest value on any channel (`controller_any`, `bend_any`, `pressure_any`),
   which a `midi` motion modifier with no channel follows
-  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)). A reader skips a log slot a push is writing. CC 120
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)), and its latest control
+  change with how many it has had (`last_control`), which `MidiInputs::last_controls` lists
+  per named input for learning a value binding
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)). A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
   `drawn(name)` is the state a source's `input` setting draws. An input thread pushes
@@ -253,6 +262,22 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   kinds': at most 7680 a side and 7680 × 4320 pixels in all, either way round, which
   `create` checks before drawing, naming the side to shrink. A backdrop is soft and
   scales up with no visible loss.
+- `fog_card`: a generated card of fog, `width` by `height` pixels (at most 4096 a
+  side): the `color` everywhere, straight, and the fog in its alpha. It is the cheap
+  stand-in for `volumetric_fog`, which marches every pixel through the scene each
+  frame: a card costs what a still picture does. Placed as an item in a 3D scene in
+  front of what it should veil, it is a plane at a depth, so it shifts against what is
+  behind it as the camera moves, and a few at different depths read as fog with volume.
+  The clouds are the backdrop's seeded gradient noise, domain-warped, on a grid 4 pixels
+  coarse and interpolated. A pixel is fog where the noise passes a threshold that
+  `coverage` (0 to 1) lowers and nearness to the edge raises: over the outer `edge`
+  (0 to 1) of the way from the centre to a rounded outline through the middle of each
+  side, the threshold climbs to above anything the noise reaches. So toward the edges
+  only the densest clouds remain and then none, the fog ends in wisps, and the card
+  never shows as a rectangle (`edge` 0 keeps fog up to the edges). `density` (0 to 1)
+  is the alpha of the thickest fog, `scale` the clouds' size, and `seed` picks other
+  clouds; the alpha is dithered to 8 bits and clear stays exactly clear. Every setting
+  but the size is live, and an update draws the frame again on the sources thread.
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
   alpha), `width` by `height` pixels. The colour is live; a size change needs a new
   source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
@@ -378,7 +403,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   or `scene`, lit by the `light` sources of its 3D scene), and `casts_shadows` and
   `receives_shadows` (both default on,
   [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3; settings
-  saved without them read as on) are live, and so are `animation` (a clip by its name,
+  saved without them read as on) are live, and so is `reflections` (default on: lit by
+  its scene, it reflects the rest of a scene whose `reflections` option is on through
+  that scene's reflection probes,
+  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 2; settings saved without it read as on), and so are `animation` (a clip by its name,
   empty for none; a name the file lacks is refused with the names it has),
   `animation_speed` (0 to 8, default 1) and `animation_loop` (default on; off holds the
   last frame), ADR-0151 decision 7, which settings saved without them read as none, 1
@@ -417,6 +446,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   without them read as no backdrop, nothing added and still). Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that
   places it gives a position, an aim and a strength (`jstream-core`'s README).
+- `reflection_probe`
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 3): `ProbeKind`, an invisible box in a 3D scene whose surfaces reflect what
+  it sees. `width_px`, `height_px` and `depth_px` (1 to 100,000, default 2000) size the
+  box along the scene's axes, `fade_px` (0 to 100,000, default 100) is how far inside
+  its faces a surface takes all of its reflection, `resolution` (`128`, `256` or `512`,
+  default `256`) is each of its six faces' size in pixels a side, and `refresh_frames`
+  (0 to 600, `MAX_REFRESH_FRAMES`, default 0) captures again every that many frames, 0
+  once. All are live. Its frame is one transparent pixel, and `Source::probe` hands the
+  engine its settings, which the item that places it gives a centre (`jstream-core`'s
+  README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -856,7 +896,7 @@ by the test, node transforms and mirroring, materials and textures, refused exte
 URLs and overflowing accessors, attributes of another length and VEC3 tangents, a fanning hierarchy with full or empty primitives, an accessor or unindexed primitive past the caps, the texture cap before decoding, one read for a file many buffers name or spell differently, and the cap on all buffers together with a `.glb`'s chunk, and file URIs that would leave the model's folder) and the `model` kind (`model/tests.rs`: shapes, live
 looks, the stand-in's size, buffers read beside a file and not outside its root), the
 `light` kind (`light/tests.rs`: its defaults, every setting changed live, bad values
-refused), reading an audio target from settings and taking a YouTube video
+refused), the `reflection_probe` kind (`probe/tests.rs`: the same), reading an audio target from settings and taking a YouTube video
 ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
 symbolic link inside the root that leads outside it (Windows, both when the path is
@@ -877,7 +917,7 @@ alignment, padding, outline, live updates, font assets and limits, drawing at a
 density (twice the pixels for the same extent, kept across an update, clamped to
 `MAX_DENSITY`, lowered to a 4K canvas's pixels, halved to fit the limits, and a short
 line filling the canvas drawn at the 13x it is shown at, a bundled face picked live, letter spacing widening a line, and a shadow growing the frame but not the background), plus golden PNGs in `tests/data/text`, one of
-them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, that a look changes live while a new size restarts it, and that the size is capped at 7680 a side and 7680 × 4320 pixels, a larger one refused naming the side to shrink (#1025). `tests/shape.rs` draws a
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, that a look changes live while a new size restarts it, and that the size is capped at 7680 a side and 7680 × 4320 pixels, a larger one refused naming the side to shrink (#1025). `tests/fog_card.rs` checks the fog card's descriptor (all but the size live), that a card is its one colour with the fog in its alpha, never above `density`, and the same for the same settings, that its outermost pixels are clear, that there is less fog near the edges than in the middle and where it ends is ragged, that `coverage` and `scale` set how much fog there is and how large its clouds are, that a look changes live while a new size restarts it, and that a setting out of range is refused by name. `tests/shape.rs` draws a
 rectangle at its exact size, a pill whose corners are clear and whose edge is
 antialiased, a circle that is symmetric, linear gradients that run their angle without
 banding and mix in linear light, a radial one, and a border inside the edge, and

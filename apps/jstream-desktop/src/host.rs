@@ -238,6 +238,12 @@ impl Host {
             .map(|(urls, fingerprint)| (urls.as_slice(), fingerprint.as_str()))
     }
 
+    /// A weak handle on the engine, for a setting the app applies while it runs (the
+    /// JTunnel receiver): it never keeps the engine past [`Host::stop`].
+    pub fn engine(&self) -> std::sync::Weak<Engine> {
+        self.engine.as_ref().map(Arc::downgrade).unwrap_or_default()
+    }
+
     /// The MCP endpoint, `http://127.0.0.1:<port>/mcp`, with `--mcp`.
     pub fn mcp_url(&self) -> Option<&str> {
         self.mcp_url.as_deref()

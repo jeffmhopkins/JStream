@@ -16,6 +16,7 @@
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
+use crate::panels::learn::{Learn, LearnOwner, param_range};
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
     AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
@@ -230,6 +231,11 @@ pub fn Form(
     errors: RwSignal<HashMap<String, String>>,
     /// Takes each checked change.
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
+    /// What owns the settings, for a learn button beside each live number and switch
+    /// (ADR-0178); none for a form whose changes aren't stored yet, such as a new
+    /// source's.
+    #[prop(optional)]
+    learn: Option<LearnOwner>,
 ) -> impl IntoView {
     // One `capture.targets` answer for every capture field of this form.
     provide_context(CaptureListing::for_kind(&kind));
@@ -247,9 +253,10 @@ pub fn Form(
                         move || settings.with(|s| is_visible(&param, &kind, s))
                     };
                     let source_id = source_id.clone();
+                    let learn = learn.clone();
                     view! {
                         <Show when=visible>
-                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit />
+                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn.clone() />
                         </Show>
                     }
                 })
@@ -283,9 +290,13 @@ fn Field(
     settings: Signal<Settings>,
     errors: RwSignal<HashMap<String, String>>,
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
+    learn: Option<LearnOwner>,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let id = param.id.clone();
+    let learn = learn.zip(param_range(&param)).map(|(owner, range)| {
+        view! { <Learn target=owner.target(&param.id) range=range /> }
+    });
     let value = {
         let param = param.clone();
         move || settings.with(|s| value_of(&param, s).clone())
@@ -337,6 +348,7 @@ fn Field(
                 disabled=is_default on:click=reset>
                 <Icon name="reset" size=13 />
             </button>
+            {learn}
             {param.warning.clone().map(|w| view! { <p class="field-warning">{w}</p> })}
             {move || error().map(|e| view! { <p class="problem">{e}</p> })}
         </div>

@@ -61,7 +61,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
   `send.remove`, `hotkey.set`, `hotkey.set_labels`,
-  `hotkey.clear`, `binding.set`, `binding.clear`, `transition.create`, `transition.update`, `transition.delete`,
+  `hotkey.clear`, `binding.set`, `binding.clear`, `binding.set_value`, `binding.clear_value`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
@@ -75,7 +75,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
-  `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`),
+  `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
+  cap since 0.165, with `PROBE_RESOLUTIONS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -125,7 +126,9 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)):
   `Trigger`, a MIDI note, control change or program change, on one channel or any, from
   one input or any (`Trigger::problem`, shared by every implementation), and `Binding`,
-  a trigger and its action as reads report it. See [Controller bindings](#bindings).
+  a trigger and its action as reads report it; since 0.168 a `ValueBinding`, a control
+  or live-data field driving a `ValueTarget` (ADR-0178), and `MidiControlInfo`, an
+  input's latest control change. See [Controller bindings](#bindings).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -164,7 +167,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `midi.last_controls` (since 0.168, with `MidiControlInfo` in `binding.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -206,7 +209,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
 - **Motion** (`motion.rs`, since 0.81,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
   `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
-  `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
+  `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (32 since 0.167, 8 before) and
   `MAX_MOTION_ID_LEN` (64), `check_motion`, the list check every implementation
   shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
   ([Motion](#motion)). Since 0.86 `MotionKind::Audio`, with its `MotionMeasure`
@@ -222,13 +225,16 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionKind::Data` follows one field of a JTunnel sender's live data, within
   `MAX_DATA_KEY_LEN` (63), `MAX_DATA_FIELD_LEN` (255), `MAX_DATA_STATES` (32) and
   `MAX_DATA_STATE_LEN` (100)
-  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3),
+  and since 0.164 sets a colour from its field with `MotionColorFrom` (decision 5).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
-  the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
+  the target's x, y and z, `fov`, `roll`, `focus` and `blur`, and since 0.167 `pan` and
+  `tilt`, and `autofocus`, on at one half or more) and `check_camera_motion`,
   which checks a camera's list as `check_motion` checks an item's and refuses an
-  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
+  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); since 0.167
+  it takes `midi` and `data` ones ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
   `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms`, since 0.91 `safe_margin_pct`
   up to `MAX_FOLLOW_MARGIN_PCT` and, since 0.124, `hold_zoom`, each with its default) with `CameraFollow::check`, and
@@ -367,7 +373,28 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.163 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.168 because a value binding (`binding.set_value` and
+`binding.clear_value`, listed in `state.get`'s `value_bindings`) has a MIDI control or a
+live-data field drive a live setting of any source or filter, a fader or a send,
+`midi.last_controls` reports each input's latest control change for a client that
+learns one, and `MotionProperty` gains `width` and `height`
+([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md));
+0.167 because a scene camera's motion takes `midi` and `data`
+modifiers, so a controller or a DAW's live data drives its position, aim, roll and field
+of view, `CameraProperty` gains `pan` and `tilt`, which turn the view about the
+camera, and `autofocus`, `SceneCamera` gains `autofocus`, which focuses on what is at the
+frame's centre, and `MAX_MOTION_MODIFIERS` is 32, for items and cameras alike
+([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md));
+0.165 because a scene's surfaces can reflect each other through
+reflection probes: `SceneOptions`' `reflections`, and `RenderFeatures`'
+`reflection_probes` and `max_probe_resolution` (with `PROBE_RESOLUTIONS`)
+([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decisions 2 and 3);
+0.164 because a `data` motion modifier can set a colour setting
+from its field: `MotionKind::Data`'s `color_from` (`MotionColorFrom`: a `#rrggbb` text, or
+a pick from its `palette`)
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 5);
+0.163 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
 0.160 because a motion modifier can follow a DAW's live data:
 `MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
@@ -1439,7 +1466,7 @@ scene names its family's camera.
 ## Controller bindings
 <!-- @section
 covers = ["crates/jstream-protocol/src/binding.rs"]
-depends_on = ["docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
+depends_on = ["docs/adr/0122-controller-input-midi-and-one-binding-system.md", "docs/adr/0178-value-bindings-drive-any-number.md"]
 -->
 
 Controller bindings (0.96) are collection state beside the hotkeys
@@ -1471,6 +1498,31 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   `removed_bindings`, and `delete.plan` in `bindings`, ordered by trigger.
 - Reads report a binding as a `Binding {trigger, action}` whose `action` is plain JSON,
   as `HotkeyBinding`'s is. `Binding::action` parses it.
+
+Value bindings (0.168, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
+are the other half of ADR-0122's binding system: a MIDI control or a live-data field
+driving one number, listed in `state.get`'s `value_bindings` by ID.
+- **`ValueBinding {binding_id, <kind and its fields>, target}`** reads what a `midi` or
+  `data` motion modifier reads, with the same fields flattened (`kind`, `control`,
+  `controller`, `channel`, `input`, `key`, `field`, `range`, `states`, `smoothing_ms`,
+  `curve`, `from`, `to`). `ValueBinding::problem` refuses another `kind`, a malformed
+  `binding_id` (a modifier ID's rules) or a malformed `target.param`, and anything a
+  modifier's own check refuses, as `binding.<field>`.
+- **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
+  `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
+  {source_id}`, `bus_gain {bus_id}` and `send_gain {source_id, bus_id}`.
+- **`binding.set_value {binding}`** sets a binding by ID, whole, a new one (inverse
+  `binding.clear_value`) or in place of one (inverse `binding.set_value` with the old).
+  The collection refuses, at `binding.target` or `binding.target.param`, a setting its
+  kind doesn't mark `live` or that isn't an `int`, `float` or `bool`, a `scene` source's
+  fader and a send that doesn't exist; `not_found` for a missing source, filter or bus;
+  and `invalid_argument` at `binding` for a 257th ([`MAX_VALUE_BINDINGS`]).
+- **`binding.clear_value {binding_id}`** removes one, or is `not_found` (entity
+  `binding`).
+- A value binding is **not** removed with what it names: it stays, driving nothing.
+- **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
+  count}` for each MIDI input that has sent a control change, for a client that learns
+  one: the control whose `count` grows is the one moved.
 
 <a id="organisation"></a>
 ## Folders, labels and scene options
@@ -1505,9 +1557,14 @@ program, ranked after the Preview scene within the warm budget
 `share_space` (default `false`), which on a group placed in a 3D scene draws its children
 in that scene's space through the group item's pose instead of as one card
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), kept and ignored
-on any other scene. `scene.set_options` replaces them all the
+on any other scene, and since 0.165 `reflections` (default `false`), which lets the
+scene's `scene`-lit models and lit cards reflect each other through its
+`reflection_probe` items, each by its own roughness and metalness
+([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decision 2). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
-parent and is refused, and `keep_warm`, which its parent decides and is refused, and `state.get` reports them flattened beside the scene's other
+parent and is refused, and `keep_warm` and `reflections`, which its parent decides and
+are refused, and `state.get` reports them flattened beside the scene's other
 fields, each omitted while it has its default. A scene's **camera**
 (`scene.set_camera {scene_id, camera?}`, since 0.70,
 [ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
@@ -1516,7 +1573,13 @@ fields, each omitted while it has its default. A scene's **camera**
 (default `true`, not written while true), and since 0.77 a depth of field: `focus_px`,
 the distance along the view of the plane in focus (absent, everything is in focus), and
 `blur_px`, the blur radius of a point infinitely far behind it, 0 to 64 (default 0, not
-written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). A camera
+written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), its
+aperture: 0 keeps everything sharp. Since 0.167 `autofocus` (default `false`, not
+written while false) focuses a camera with a depth of field on the nearest item its
+viewing axis meets each frame, gliding there and holding while nothing is met, with
+`focus_px` the distance it starts from
+([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)
+decision 5). A camera
 omitted removes it. The edit refuses a field of view out of range
 (`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
 position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance
@@ -1658,17 +1721,22 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   order and the first that would pass the limit is left cold with every one after it;
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
-  floor_reflections?}` (0.147,
+  floor_reflections?, reflection_probes?, max_probe_resolution?}` (0.147, the last two
+  since 0.165,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
   draws its effect in no scene, whatever a light (`shadows`) or a scene filter
   (`ambient_occlusion`, `volumetric_fog`, `floor_reflection`) asks for; on again, each
-  scene gets what it asks for. All are on until set. An application setting, like
+  scene gets what it asks for. `reflection_probes` off, no `reflection_probe` captures
+  and every surface reflects its environment as without one. `max_probe_resolution`
+  caps the face size a probe captures at: 128, 256 or 512 (`PROBE_RESOLUTIONS`, the
+  default 512), and any other size is `invalid_argument` on `max_probe_resolution`. All
+  are on until set. An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
-  reads as on.
+  reads as on, and a cap it leaves out as 512.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1727,7 +1795,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
   parses as empty), every controller binding (`bindings`, ordered by trigger; omitted
-  when there are none, so missing, also from a pre-0.96 server, parses as empty), the
+  when there are none, so missing, also from a pre-0.96 server, parses as empty), every
+  value binding (`value_bindings`, ordered by ID; omitted when there are none, so
+  missing, also from a pre-0.168 server, parses as empty), the
   master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
@@ -1783,7 +1853,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
-  sets.
+  sets, and since 0.165 the probe switch and face-size cap.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
@@ -1818,6 +1888,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   address). Listing a sender trusts it with nothing. `on` false and no senders while
   the receiver is off, the default. Runtime state, so no `rev`. A plugin can't read it
   (the person's LAN addresses).
+- `midi.last_controls` (0.168,
+  [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 6): each
+  MIDI input that has sent a control change, ordered by name, as `MidiControlInfo
+  {input, channel, controller, value, count}`, its latest one with the value it holds
+  now and how many it has sent since the engine started. A client learning a control for
+  a value binding reads it once, then until a `count` grows. Runtime state, so no `rev`.
+  A plugin can't read it.
 - `data.list` and `data.get {input, key}` (0.140,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
   live data, each JTunnel sender's newest state message per key (a DAW's transport,
@@ -2410,7 +2487,8 @@ After `welcome`, the server pushes every event to every client.
   `kind.list` again, and one that misses it sees the change on its next read.
 - `jtunnel.senders_changed {}` (0.114, ADR-0123 §3) says the senders `jtunnel.senders`
   lists changed: one answered for the first time, said goodbye, or went unheard for
-  35 s. A sender answering again sends nothing. Runtime state, so no `rev`: a client
+  35 s, or the host turned receiving on, off or started it again with other senders.
+  A sender answering again sends nothing. Runtime state, so no `rev`: a client
   that shows them reads `jtunnel.senders` again.
 
 <a id="youtube"></a>
@@ -2491,7 +2569,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
-  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), creating, deleting and retargeting outputs, their encoders and stream
+  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` and `studio.set_rendering` (application settings), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2860,13 +2938,13 @@ covers = ["crates/jstream-protocol/src/motion.rs"]
 
 Since 0.81 an item carries continuous motion
 ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md), `motion.rs`):
-`ItemInfo.motion`, an ordered list of at most 8 `MotionModifier`s that the engine
+`ItemInfo.motion`, an ordered list of at most 32 (8 before 0.167) `MotionModifier`s that the engine
 evaluates as each frame is drawn. A modifier never writes the item's values: `state.get`
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
-`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`, or since
-0.145 `source` with its `source`), its
+`opacity`, the four `crop_*` edges and since 0.168 `width` and `height`, or since 0.109
+`effect` with its `effect`, or since 0.145 `source` with its `source`), its
 `kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
@@ -2905,8 +2983,9 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   the first frame an item is drawn lands on the value), bent by `curve` as an audio
   modifier's is, and mapped onto `from` (default 0) to `to` (default 1), each within
   ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
-  preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
-  camera's motion refuses it.
+  preview reads the control as it is, unsmoothed. Its `clock` is ignored. A scene
+  camera's motion takes it since 0.167, smoothed by scene family and ID
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
 - **`data`** (since 0.160,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3)
   follows one field of a JTunnel sender's live data the same way: `field` (a dotted path
@@ -2918,10 +2997,19 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   to 100 bytes, each to a value within 0 to 1) or 0; and a missing sender, key or field,
   or one that went stale, reads 0. That is smoothed, bent and mapped onto `from..to` as a
   `midi` modifier's is, with the same defaults. A preview reads the field as it is,
-  unsmoothed. Its `clock` is ignored, and a scene camera's motion refuses it.
+  unsmoothed. Its `clock` is ignored. A scene camera's motion takes it since 0.167
+  (ADR-0176).
+  Since 0.164 (decision 5), on a colour setting (`property` `effect` or `source`; any
+  other property refuses it, `motion.N.color_from`) it can set the colour rather than
+  add to it: `color_from` `field` takes a `#rrggbb` (or `#rrggbbaa`, alpha ignored) text
+  from the field, and `palette` picks one from `palette` by the field's text (1 to 32
+  entries, texts of 1 to 100 bytes, each `#rrggbb`; a `palette` without `color_from`
+  `palette` is refused). While the field gives a colour it replaces the setting's own,
+  before the other modifiers on it add to theirs, blended in sRGB over `smoothing_ms`;
+  otherwise, and on a setting that isn't a colour, it changes nothing.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
-  and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
+  as `width` and `height` do one side of the box after `scale` (ADR-0178), and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
 - **Effect settings** (since 0.109,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): `property`
   `effect` drives a number setting of one of the item's own effects instead, which
@@ -2962,7 +3050,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
   field `motion` removes. An empty override list stops the item's motion in that
   keyframe. A list that breaks the rules above is `invalid_argument` naming the field
-  (one over 8 suggests a group around the item, whose motion moves its children),
+  (one over 32 suggests a group around the item, whose motion moves its children),
   and `check_motion` is the check every implementation shares. Plugins need the `edit`
   class for it. It isn't a live value yet (ADR-0099 decision 3 plans that, so a slider
   previews as it drags): each change is one undo step. `depth` is a property beyond

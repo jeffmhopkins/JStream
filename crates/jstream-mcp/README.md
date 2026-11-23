@@ -100,7 +100,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -211,7 +211,8 @@ animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters
 (`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
-and the `vignette`'s blends, shapes and three looks, #1226), the `border` kind's
+and the `vignette`'s blends, shapes and three looks, #1226), the `hologram` effect (a
+picture turned into a projection, on an `additive` card in a 3D scene), the `border` kind's
 settings, its three looks, its 9-slice image frame (#1294) and the order to stack it with a shadow or glow (#1227),
 layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
@@ -237,7 +238,9 @@ panorama `image`, and a `warp` that ramps itself over `warp_ramp_s`
 that shares the set's space (`share_space`), and a camera riding with it
 (`scene.set_camera_anchor`, ignored under a follow camera,
 [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), a camera that moves on its
-own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
+own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera, or a `midi` or `data`
+modifier that moves, turns or zooms it, and `autofocus` on what is at the frame's centre,
+[ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)) or follows the
 pointer over a screen capture (a `follow_pointer` filter on the capture item, which
 keeps the pointer inside a safe margin and gives a 2D scene a camera, with
 `scene.set_camera_follow` as a shortcut, its zoom stepped live by `scene.zoom_camera`,
@@ -261,8 +264,13 @@ modifier for an item a performer poses live from a fader, knob, wheel or pedal, 
 `from`..`to` range and `smoothing_ms`, 0 to jump, and a moving part of a model as a model
 of its own, [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md); a `data`
 modifier for an item that follows a sender's live data, a number through its `range` or
-a text through its `states`, found with `data.list` and `data.get`,
-[ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), a timed
+a text through its `states`, found with `data.list` and `data.get`, which on a colour
+setting can set the colour from a `#rrggbb` field or a `palette` (`color_from`),
+[ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md); and for a number with
+no motion list, a filter's or a source's setting, a fader or a send, a value binding
+(`binding.set_value`), which replaces the value once its control moves, with `width` and
+`height` modifiers to stretch an item,
+[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
 ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), one label on an

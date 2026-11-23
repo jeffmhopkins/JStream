@@ -372,7 +372,8 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
       ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). The platform's
       state drops with the last clone. `GpuContext::watch` keeps one value for the
       device that every clone shares, made by the first caller: `jstream-render`'s
-      device-loss watch, since wgpu keeps one lost callback per device.
+      device-loss watch, since wgpu keeps one lost callback per device, and beside it
+      the render pipelines its compositors made on the device, which they share.
     - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
       allocation), so the engine can tell whether a texture is on the context a
       compositor runs on. wgpu's own `Device` equality is per instance and can't.

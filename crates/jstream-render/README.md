@@ -43,7 +43,8 @@ and calls this crate.
   `Item.depth_run` (`0` but for a stinger's items).
 - A **3D model** ([ADR-0107](../../docs/adr/0107-3d-models.md)) is not an item of its
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
-  version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
+  version (or its `ModelUploader` does, on another thread,
+  [ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)), and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
   scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
   and their shadow maps, ADR-0151, maybe another source's picture as its texture and
@@ -57,7 +58,11 @@ and calls this crate.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
   `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
   `Environment`, the camera, the stars, the deep sky, the warp and travel, and an opacity) into a canvas-sized layer, every
-  texel written by one triangle (`sky.wgsl`). Each pixel looks along its ray from the
+  texel written by one triangle (`sky.wgsl`). A layer that still holds the sky asked for is
+  left as it is: the compositor remembers, for the last 4 layers it drew a sky into, the
+  shader's values, the layer's change count after the draw and the picture's, and draws only
+  when one of them differs, so a camera that holds still pays for its sky once
+  (`a_layer_that_holds_the_sky_is_not_drawn_again`). Each pixel looks along its ray from the
   camera (its axes, principal point and focal length, never its position) into the
   gradient or the panorama spun by the turn. Over it go nebulae and a galaxy band
   (`DeepSky`: warped fractal value noise on the direction, baked once per seed into two
@@ -77,9 +82,29 @@ and calls this crate.
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.
-  The pipeline is made on the first draw, and the bake's on the first sky with nebulae
-  or a band (`golden_sky_the_deep_sky_is_baked_once_per_seed`,
-  `golden_sky_a_bakes_faces_meet_without_a_seam`).
+  Its two pipelines (the frame's and the bright stars' table's) are made on the first
+  draw, and the bake's on the first sky with nebulae or a band, unless `warm_3d` made
+  them first (`golden_sky_the_deep_sky_is_baked_once_per_seed`,
+  `golden_sky_a_bakes_faces_meet_without_a_seam`,
+  `golden_sky_bakes_are_kept_for_the_seeds_in_use`). A pixel looks for a star only
+  within six star widths of where its column can hold one. Which cells of the bright
+  layer hold a star depends on the column and row alone, so a sky with stars first
+  writes that as a table (`fs_stars`, a pass of 281 by 64 `R32Uint` texels: a column
+  across, 32 rows to a texel, a bit a row), and a pixel reads two or three texels and
+  visits only the cells with a star, where a streak at warp would have it hash up to
+  65 cells. The faint layer's streaks are at most 6 cells, and its chance varies with
+  the band a pixel is in, so it still looks at each cell.
+- A **reflection probe's capture**
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 3): `Compositor::resample_probe(faces, target)` turns six square faces
+  (`ProbeFace`: a layer and the right, down and forward axes of the 90° camera it was
+  drawn through, in the scene's space) into one equirectangular panorama four faces wide
+  and two high, every texel written by one triangle (`probe.wgsl`): each texel's
+  direction, laid out as the model shader's `panorama` reads one (its centre along -z,
+  up at its top), picks the face it is most ahead of and reads it there bilinear,
+  clamped, keeping premultiplied linear light and its alpha, so where no face saw
+  anything stays transparent. A face of another size, or a target that isn't four by
+  two of them, is refused. The pipeline is made on the first resample.
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
   draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
   nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
@@ -87,7 +112,11 @@ and calls this crate.
   (`composite.wgsl`), which discards where the sampled alpha times opacity times the
   sharp edge coverage is under one half; the pipeline blends with `Max`, so the
   nearest card wins in any order and depth of field doesn't blur it. A
-  `Placement::Layer` writes nothing; `draw_model_depth(draw, target)` adds a model's
+  `Placement::Layer` that carries its model's depth layer (`Item::depth`) writes that
+  layer's `1 / w` where the model covers (`fs_copy_depth`, over the layer's own
+  triangles and with `Max` too), so a model already drawn with its depth isn't drawn
+  again; one without writes nothing, and so does one under half opacity (a model its
+  group has faded), as a card that faded adds no depth. `draw_model_depth(draw, target)` adds a model's
   own per-fragment `1 / w` the same way (`model.wgsl`'s `fs_depth`: both faces, masked
   and blended materials under half alpha discarded), and nothing without a camera. A
   scene with no camera leaves the target all 0. Depth-aware filters read it
@@ -194,7 +223,25 @@ and calls this crate.
   and builds every compositor it needs on it (`Compositor::on_context`: the program
   stage's, the preview's, the snapshot thread's), and they share one device-loss watch
   (`GpuContext::watch`), so each sees the loss whichever was opened last;
-  `context_lost` asks the same watch without a compositor. `Compositor::open` is the other
+  `context_lost` asks the same watch without a compositor. They share the render
+  pipelines made on the device too (`pipelines.rs`, kept in the context beside the
+  watch): making a pipeline compiles its shaders for the backend, for seconds in all on
+  Direct3D 12 for a 3D scene, so a compositor asks first for one made already and
+  compiles only what no compositor on the device has. A pipeline is found by everything
+  it was made from: its descriptor's fields, its shader's source, and what its caller
+  says its bind group layouts are (each compositor makes its own layouts, and wgpu
+  treats two with the same entries as one). One that another thread is making is waited
+  for, not made twice. So an output's second start compiles nothing, a scene the
+  preview or a snapshot drew is compiled for the program stage, and a caller may
+  compile ahead of time on a thread of its own: by drawing what will be drawn on any
+  compositor of the context, and with `Compositor::warm_3d` for what a 3D scene alone
+  draws with (the sky's two pipelines, its bake's and the scene passes' depth pipelines,
+  otherwise made at the first draw that needs them). This covers the blend, depth,
+  model, sky, sky bake and filter pipelines; the mip, resolve, wipe, probe resampling,
+  NV12 and ingest ones are still each compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
+  edited over and over keeps only the versions a compositor still holds, 4 a filter). `Compositor::pipelines_made` counts the
+  ones made on the device, so a draw that leaves it as it was waited for no compile.
+  `Compositor::open` is the other
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
   a hardware adapter first by default (`OpenOptions::hardware`), with the software
   adapter as the fallback, so ARCH principle 7's "runs with a software adapter" still
@@ -399,11 +446,17 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    measured a mean error of 17 against 2.7 for a 512² one; it is now 2.7 too. Each `Image` counts its changes (its clones share
    the count and the chains, as they share the texture), and a chain is
    rebuilt when the count moved since its last build: `rewrite_rgba8` marks an upload,
-   `render_into` the layer it drew into, and `ResourceCache::import` an import it hands
+   `render_into` the layer it drew into, a filter every layer it drew into (its output,
+   which is one layer for as long as its chain lives, included, so a filter's new
+   settings over an unchanged input reach a 3D card), and
+   `ResourceCache::import` an import it hands
    a new frame (one whose hold or info, its presentation time included, differs from
    the last one's, since a platform may reuse a hold for every frame it writes into a
    texture), not the same frame shown again. `Image::mark_changed` marks an import the
-   caller keeps outside the cache, whose texture the platform rewrites. So a source
+   caller keeps outside the cache, whose texture the platform rewrites. `Image::seen`
+   gives a caller that count with which image it is (`Seen`), and `GpuModel::seen` which
+   upload a model is (`SeenModel`), neither keeping it alive, to tell later whether what
+   it drew from has changed (the engine keeps its shadow maps by them). So a source
    drawn in 3D by several items or calls (two mixes, a nested scene) is rebuilt once per
    change, and not at all while it is unchanged. A 3D item samples its chain, which is
    always premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp`
@@ -494,9 +547,15 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    A layer drawn over a transparent background also keeps what its scene could have
    drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current
-   change count only, so any later write forgets them. `apply_filter_into` sets its
-   output's, which it does not count: a bounded filter's reach past its input's, or
-   unknown ([Filters](#filters)). A scene placing the layer as a 2D item
+   change count only, so any later write forgets them. `apply_filter_into` counts its
+   write of each layer it drew into, then sets that layer's bounds: for its output, a
+   bounded filter's reach past its input's, or unknown ([Filters](#filters)).
+   `draw_model` sets its layer's too: the box, on the layer, of the eight corners of
+   the model's bounds (`drawn_box`, a texel of margin), and `draw_model_depth` adds
+   that box to what its target held. So a small model's layer, its depth and its
+   effects cost the model's box, not the canvas. A rigged model, whose pose can leave
+   its bounds, and a model whose bounds reach behind the viewer have no box and are
+   drawn whole (`a_models_layer_is_bounded_by_its_models_box`). A scene placing the layer as a 2D item
    in `normal`, `additive` or `screen`, at a size that needs no chain, draws only the
    part of its quad whose UVs are inside those bounds (`Shape::trim_to`, the same
    affine map cut down). Outside them every bilinear tap reads only transparent
@@ -577,6 +636,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Resource | Lifetime |
 |---|---|
 | Device, queue, pipelines, sampler, layouts | Compositor |
+| The blend, depth, model, sky, sky bake and filter pipelines, once made | Every compositor on the device holds its own clone; the device's shared pipelines keep one too (`pipelines.rs`, in the `GpuContext`, or with the compositor for a device of its own), up to 1024, so a later compositor makes none of them again ([Scope](#purpose)) |
 | FP16 target, sRGB target, resolve bind group | Recreated when the canvas size changes |
 | Vertex buffer | Grown when the scene needs more vertices, never shrunk; `queue.write_buffer` otherwise |
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
@@ -585,9 +645,10 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
-| Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
-| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
-| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
+| Model pipelines (depth prepass, opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
+| Sky pipelines (the frame's and the bright stars' table's), sampler, 1x1 stand-in picture, and the star table (281 by 64 `R32Uint`) with its 1x1 stand-in | Compositor, made on its first `draw_sky` or by `warm_3d`; a uniform and one or two bind groups per sky drawn (none for a call whose layer already holds the sky); the table rewritten by each draw of a sky with stars |
+| Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
+| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
@@ -753,8 +814,20 @@ and for the model-to-clip matrix built from it: only that product is `f32`, so a
 camera doesn't jitter. Depth is reversed `Depth32Float`, cleared to 0 with `Greater`:
 with perspective, clip `z` is `NEAR_W`, so `z / w = NEAR_W / w` and the GPU's own
 `z ≤ w` clip is ADR-0050's near plane; without (a 2D scene with no `perspective_px`) it
-is linear in the model's depth. Opaque and masked primitives draw first with depth
-writes, then blended ones far to near by their centres, testing without writing. There
+is linear in the model's depth. Opaque and masked primitives draw twice in the one pass.
+First a depth prepass (`fs_prepass`, which discards what `fs` discards: below the floor
+cut, a back face of a single-sided material, a masked texel under its cutoff) writes
+depth and no colour. Then their shading draws with an `Equal` test and no depth writes,
+so a pixel that several surfaces cover is shaded once, at the nearest, and not once a
+surface: the shading is by far the dearer part (up to five textures, eight lights, the
+shadow taps and the sky), and a model seen from inside, such as a room or a cockpit, has
+several surfaces behind most pixels. The clip position is `@invariant`, so both draws
+place a fragment at the same depth. The shading draws the primitives last to first:
+where two lie in one plane both pass the equal test and the later draw replaces the
+earlier, so that order shows the first of them, as before (inside one primitive the
+triangles still draw in index order, so of two of its own in one plane the later shows)
+(`golden_model_opaque_primitives_show_the_nearest_in_any_order_and_the_first_in_a_plane`).
+Blended primitives follow, far to near by their centres, testing without writing. There
 is no cull: a mirrored map (`Solid::mirrored`) swaps which face is the front, so the
 shader discards back faces itself unless the material is double-sided. A back face of a
 double-sided material turns its normal and tangent over together, so a normal map tilts
@@ -764,7 +837,16 @@ face needs it turned over though that cross product isn't, and the raw flag is f
 either alone and true with both. A material with no normal map keeps the interpolated
 normal as it is.
 `upload_model` refuses a primitive whose vertex or index buffer would pass the
-adapter's `max_buffer_size` (wgpu panics there rather than failing). A vertex is 88
+adapter's `max_buffer_size` (wgpu panics there rather than failing).
+`Compositor::model_uploader` gives a `ModelUploader`, which makes the same upload on
+whichever thread calls it
+([ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)): it holds
+clones of the device's handles and of the model pipelines' layouts (`UploadKit`), and
+submits nothing, so what it wrote goes with the queue's next submit, before any draw of
+the model. Each texture level is written from the model's own bytes in bands of at most
+4 MiB (`TEXTURE_BAND_BYTES`), since wgpu holds the queue's lock while a write is copied
+in: a thread that submits meanwhile waits for one band
+(`golden_model_one_uploaded_on_another_thread_draws_the_same`). A vertex is 88
 bytes: position, normal, tangent, UV and colour as `f32`s, then four joints as `u16`s
 and four weights.
 
@@ -818,7 +900,9 @@ decision 4). `ModelDraw::materials` holds `MaterialDrive`s, each adding to every
 material or to the file's materials of one name: to the base colour, lightened in sRGB;
 to metallic and roughness, each within 0 and 1; and by name to the glow's colour, scaled
 by its own brightness, and its strength, a multiplier 1 at rest within 0 and
-`MAX_EMISSIVE_STRENGTH` (64). The draw writes each changed material's uniform before it
+`MAX_EMISSIVE_STRENGTH` (64). A drive can also set the base colour (`set_color`) or the
+glow's colour at its own brightness (`set_emissive`) before the others add, the last
+one that sets winning (ADR-0171 decision 5). The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
 the same model draws it as it is. A material with a live texture binds a uniform of its
 own, which is driven the same way
@@ -854,14 +938,35 @@ direction back to the scene's space), and the picture is bound beside the maps (
 the studio gradient for the ambient and reflected terms: `sky` turns the direction into
 the scene's space and spins it by the turn, then reads the gradient (horizon to sky by
 the square root of the height up, horizon to ground over a quarter of the way down) or
-the panorama (`panorama`: its centre ahead along -z, up at its top, read bilinear at
-level 0 and decoded by the filters' `to_premul_linear` from `filter/colour.wgsl`, which
-the model shader is built with, so a page painted as premultiplied sRGB code values reads
-as an upload of the same colour does,
-`golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a ring of 8
-taps around the direction for a spread: the reflection at the square of the roughness,
-the diffuse light at 1. An ambient light scales it; with none it lights the model on its
+the panorama (`panorama`: its centre ahead along -z, up at its top, decoded by the
+filters' `to_premul_linear` from `filter/colour.wgsl`, which the model shader is built
+with, so a page painted as premultiplied sRGB code values reads as an upload of the same
+colour does, `golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a
+ring of 8 taps around the direction for a spread: the reflection at the square of the
+roughness, the diffuse light at 1. `draw_model` and `light_card` read a sky picture of
+this compositor through a mip chain of its whole picture (`Panoramas`, built as a live
+texture's is and rebuilt only when the picture changed, premultiplied linear, so the
+uniform's mode then says so), and a spread reads the level whose texels are about as
+wide as the ring's taps are apart (`blur_level`: `log2` of the panorama's width times
+`sin(atan(spread)) / 8`), each read kept half a texel of that level inside the top and
+bottom rows (`panorama_uv`). A bright point then spreads into a soft glow rather than
+one sharp copy per tap (`golden_model_a_rough_surface_blurs_a_starry_sky_smoothly`). An ambient light scales it; with none it lights the model on its
 own (`golden_model_an_environment_lights_a_model_from_its_sky`).
+A reflection probe's capture (`ModelDraw::probe` and `CardDraw::probe`, a
+`ProbeLookup`: the panorama `resample_probe` drew, the box's centre and half size in the
+scene's space and its edge fade, ADR-0170 decisions 3 and 5) is read only with `lights`,
+a camera, `Lighting::Scene` and a panorama of this compositor; anything else draws as
+without one. It is packed after the floor cut (`probe_values`: the centre in the viewing
+frame, the scene's axes there with the half sizes, the fade and how the picture stores
+alpha) and bound at binding 5 (a stand-in without, never read). `probed` replaces the
+environment's reflected light for a fragment inside the box: its reflected direction is
+corrected to the box (`probe_dir`, where the ray from the fragment leaves the box, seen
+from the centre, so nearby walls line up), read with the sky's ring of taps at the same
+spread, from a mip chain of the capture as the sky's is (`probe_light`), and where the capture saw nothing (its alpha) the environment
+shows through. The box's weight rises from 0 at a face to 1 `fade` inside
+(`probe_weight`) and mixes with the environment, which alone lights anything outside;
+the diffuse light still comes from the environment, and the capture is not scaled by
+the ambient light (`golden_model_a_probe_replaces_the_environment_inside_its_box`).
 
 **Lit cards** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 10). `Compositor::light_card` shades a flat picture by a scene's lights
@@ -998,9 +1103,15 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
   kept for the compositor's life, keyed by the shader's label and source (up to four
   sources per label, so a reloaded pack's old and new filters don't evict each other).
+  It is taken from the device's shared pipelines when a compositor on it built the same
+  one ([Scope](#purpose)), so only its shader module is made again.
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
-  `RenderError`, not a panic: error scopes for both catch the build, and the refusal is
-  cached so it isn't recompiled every frame. An external filter's uniform bytes that
+  `RenderError`, not a panic: error scopes for both catch the module and the build, and
+  the refusal is cached, in the compositor and with the shared pipelines, so it isn't
+  recompiled every frame or by the next compositor. A backend's internal error (its
+  compiler out of memory, say) is cached in the compositor alone, so the next
+  compositor tries the shader again. When a compositor drops a filter's old source to
+  keep a newer one, the shared pipelines let go of it too. An external filter's uniform bytes that
   aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
@@ -1172,6 +1283,27 @@ premultiplied linear light on the way out.
   draw for the step, so two machines draw the same frame at the same time. All
   default to off but the lines. Coverage is kept. The UI offers it with presets
   (Monitor, CRT, Film grain).
+- `hologram`: any picture (a camera, a screen capture, a page) as a projected hologram,
+  for a card floating in a 3D scene or a flat overlay. The picture's luminance takes
+  `color` (default `#5ad2ff`) by `tint` (0..1, default 0.85), keeping its luminance;
+  `see_through` (0..1, default 0.5) fades its dark parts out by their straight luminance,
+  and `brightness` (0..4, default 1.3) is a gain on its light. Over it: dark scanlines
+  (`lines` 0..1, default 0.35, every `spacing` px, rolling at `speed` px/s, default 30,
+  as `scanlines` rolls them), a band that sweeps down every `sweep_period` s (`sweep`),
+  a glow `edge_width` px in from the edges (`edge`), `grain`, a red and blue `fringe`
+  (px), a `flicker` (a low shimmer every step of 30 a second and, on about one step in
+  sixteen, a deeper dip) and a `glitch` (on up to 30% of the steps of 12 a second, a
+  band of rows shifts sideways). `reveal` (0..1, default 1) materialises it from
+  `reveal_from` (`bottom`, `top` or `middle`): rows past the edge are empty, the rows
+  just behind it are drawn at random, re-picked each step so the band sparkles while a
+  reveal holds part-way, and a bright line marks it, fading out
+  at either end so a finished reveal shows none. A Move between a keyframe at `reveal`
+  0 and one at 1 (ADR-0127) projects it in and out. Every time-driven value is worked
+  out on the CPU in `f64` from the clock, so two machines draw the same frame at the
+  same time. Coverage is kept (a glitch band shifts it with the picture), and the light
+  it adds stays inside it. One draw of the
+  input's size, at most four texture reads a pixel. The UI offers it with presets
+  (Transmission, Steady, Broken signal, Amber).
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
   (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
   default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`
@@ -1509,7 +1641,9 @@ opaque at half the white, and fog at alpha 0 changes nothing. End to end over `r
 the framing camera: the nearest of three cards wins whatever their order, with a card
 a focal length back seen half as far from the middle; a card at 0.4 opacity or hidden
 writes no depth and one at 0.6 does; a scene with no camera writes nothing; and a
-cube's own front face, through `draw_model_depth`, is nearer than the card behind it.
+cube's own front face, through `draw_model_depth`, is nearer than the card behind it,
+and the same when its layer carries that depth and the cube isn't drawn there
+(`golden_view_depth_takes_the_depth_a_models_layer_carries`).
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1
@@ -1628,6 +1762,7 @@ tests check:
 - that an upload's chain is rebuilt after `rewrite_rgba8`;
 - that a layer's is rebuilt after `render_into` draws into it and not on a second draw
   while it is unchanged, and built once for two items and two calls;
+- that `apply_filter_into` marks the layer it draws into changed each time;
 - that a cached import drawn by two calls in a frame is rebuilt once per new frame;
 - that an import's is rebuilt for a new frame from the cache, one under the same hold
   with a later time included, but not for the same frame again;

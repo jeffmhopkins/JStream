@@ -1780,6 +1780,7 @@ mod property {
                     },
                     keep_warm: false,
                     share_space: rng.below(2) == 0,
+                    reflections: rng.below(2) == 0,
                 },
             },
             65 => Edit::SourceSetMeta {
@@ -4224,6 +4225,7 @@ mod cameras;
 mod filters;
 mod keyframes;
 mod timelines;
+mod values;
 
 fn tone_create(id: &str) -> Edit {
     Edit::SourceCreate {

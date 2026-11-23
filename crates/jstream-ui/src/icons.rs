@@ -72,6 +72,10 @@ pub fn path(name: &str) -> &'static str {
         "funnel" => "M4 5h16l-6 7v6l-4 2v-8z",
         "close" => "M6 6l12 12 M18 6L6 18",
         "reset" => "M4 12a8 8 0 1 0 2.3-5.6 M4 4v5h5",
+        // A MIDI socket: controller learn (ADR-0178).
+        "midi" => {
+            "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M7 12h.01 M17 12h.01 M8.5 8h.01 M15.5 8h.01 M12 6.5h.01 M10 17h4"
+        }
         // The panels' tool bars (UI-FEATURES SC-11, OB-10), drawn for JStream.
         "plus" => "M12 5v14 M5 12h14",
         "trash" => "M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6",

@@ -256,6 +256,24 @@ fn fs_write_depth(in: VsOut) -> DepthOut {
     return out;
 }
 
+// A model's view depth into a scene's view depth (ADR-0143 decision 4): the item's image
+// is the model's view depth, as `fs_write_depth` reads it, and its red is written where
+// the model covers the texel. The pipeline keeps the larger value, as `fs_depth`'s does.
+@fragment
+fn fs_copy_depth(in: VsOut) -> @location(0) vec4<f32> {
+    let size = textureDimensions(tex);
+    let at = clamp(
+        vec2<i32>(in.uv * vec2<f32>(size)),
+        vec2<i32>(0),
+        vec2<i32>(size) - vec2<i32>(1),
+    );
+    let inverse_w = textureLoad(tex, at, 0).r;
+    if inverse_w <= 0.0 {
+        discard;
+    }
+    return vec4<f32>(inverse_w, 0.0, 0.0, 1.0);
+}
+
 // The modes that read the backdrop. It is bound only to their pipelines.
 @group(1) @binding(0) var backdrop: texture_2d<f32>;
 

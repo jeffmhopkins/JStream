@@ -108,7 +108,8 @@ adds, which makes soft glows and veils brighter.
    webcam, an audio input (your microphone), a media file, an image, a 3D model (a glTF
    or GLB file, or a built-in shape such as a cube), a browser page,
    text (it starts bold with a soft shadow), a colour, a backdrop (a painted studio
-   backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
+   backdrop, generated), a fog card (a wisp of fog to place in a 3D scene), a shape
+   (a plate, pill or circle, with an optional gradient),
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or choose **Existing** and pick a source to reuse it); its properties open, so you can choose the
@@ -123,6 +124,11 @@ adds, which makes soft glows and veils brighter.
 3. Drag the source on the canvas to move it, and its handles to resize it. To crop it,
    hold Alt on a handle, or press C for crop mode (V leaves it). The **Inspector** holds
    the exact numbers, and the **Arrange** panel aligns and fits what you select.
+   In a 3D scene (one with a camera) a drag slides an item on its depth plane; the
+   tool bar's **Depth** (D) pushes it away or brings it closer, and **Turn** (R) turns
+   and tilts it. Press K, or the camera button, for camera mode: a left drag orbits
+   (or looks around, or moves, as its buttons pick), a right drag moves, the wheel zooms,
+   and **◆ Save view** keeps the shot as a new keyframe scene. Esc leaves it.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red
@@ -163,14 +169,14 @@ depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md#heade
 JStream streams to any service that takes RTMP or RTMPS (YouTube, Twitch and most
 others) with the server address and stream key the service gives you.
 
-1. In **Outputs**, press **+ Add output**, choose **Stream (RTMP)**, paste the
+1. In **Outputs**, press **+ Add output**, keep **Stream** picked, paste the
    **server URL** without the key (for example YouTube's `rtmps://` address), paste the
    **Stream key**, and press **Add**. The key is kept in Windows Credential Manager,
-   never in JStream's files, and shows only masked. Treat it like a password: never
+   never in JStream's files, and shows only as **Saved**. Treat it like a password: never
    paste it into a chat or an issue.
 2. Each output is one row in **Outputs**, with its state and a Start button. To change
    it later, double-click the row (or choose **Settings…** in its **⋯** menu); nothing
-   changes until you press **OK** or **Apply**.
+   changes until you press **Save**.
 3. Press **Go Live** at the top right. It starts every stream output whose key is set;
    **End stream** stops them. Each row shows its state, and the stream reconnects by
    itself if the connection drops.
@@ -178,8 +184,8 @@ others) with the server address and stream key the service gives you.
 An output sends H.264 at the engine's default rate unless you pick otherwise. To change
 the codec or bit rate, or to send a vertical picture (1080 × 1920 for Shorts or TikTok),
 make an encoder or a video mix in **Encoders & mixes…**, under the output rows, and pick
-it in the output's settings, under **Encoder** or **Video**. From there, **Edit encoder…**,
-**New…** and **Edit mix…** open the same dialog on the one you need. A running output
+it in the output's settings, under **Encoder** or **Video**. From there, **Edit…** beside
+either and **New…** beside the encoder open the same dialog on the one you need. A running output
 takes the new choice when it next starts. **Start all**, above the rows, starts every
 output that can start, recordings and the virtual camera too; **Stop all** beside it
 stops everything that runs.
@@ -198,7 +204,7 @@ create the broadcast in YouTube Studio and stream to it with its key.
 depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#outputs"]
 -->
 
-In **Outputs**, press **+ Add output** and add a **Recording (MP4)** with the file path
+In **Outputs**, press **+ Add output**, pick **Record** and give it the file path
 to write. In the desktop app, **Browse…** beside that field opens a save dialog; a
 browser page keeps the path as text. Then press **Record** at the top. **Stop
 recording** finishes the file. A recording runs on its own, whether or not you are live.

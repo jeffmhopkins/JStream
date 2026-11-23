@@ -17,7 +17,7 @@ use jstream_protocol::{
     check_motion,
 };
 
-/// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 8
+/// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 32
 /// modifiers, unique well-formed IDs, every parameter in range. The field is `motion`,
 /// or `motion.<n>.<param>` for one modifier's.
 pub(crate) fn check(motion: &[MotionModifier], at: usize) -> Result<(), ProtocolError> {
@@ -125,6 +125,8 @@ fn property(p: MotionProperty) -> Option<Property> {
         MotionProperty::CropTop => Property::CropTop,
         MotionProperty::CropRight => Property::CropRight,
         MotionProperty::CropBottom => Property::CropBottom,
+        MotionProperty::Width => Property::Width,
+        MotionProperty::Height => Property::Height,
         _ => return None,
     })
 }
@@ -354,6 +356,8 @@ mod tests {
                 curve: MotionCurve::EaseIn,
                 from: f(100_000.0),
                 to: f(-100_000.0),
+                color_from: None,
+                palette: std::collections::BTreeMap::new(),
             },
         ];
         // More kinds than a list may hold, so they are checked as two lists.

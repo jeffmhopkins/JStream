@@ -454,6 +454,8 @@ pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera 
         depth_sort: to.depth_sort,
         focus_px,
         blur_px,
+        // The engine focuses an autofocus camera as it draws it (ADR-0176 decision 5).
+        autofocus: to.autofocus,
     };
     if camera.validate().is_ok() {
         camera
@@ -581,6 +583,8 @@ pub fn move_camera(
         depth_sort: to.depth_sort,
         focus_px,
         blur_px: finite(blur_px.clamp(0.0, MAX_BLUR_PX)),
+        // The engine focuses an autofocus camera as it draws it (ADR-0176 decision 5).
+        autofocus: to.autofocus,
     };
     if camera.validate().is_ok() {
         camera
@@ -1114,6 +1118,7 @@ mod tests {
             depth_sort: true,
             focus_px: None,
             blur_px: Finite32::ZERO,
+            autofocus: false,
         };
         let from = camera(0.0, 40.0, 350.0);
         let to = camera(100.0, 60.0, 10.0);
@@ -1149,6 +1154,7 @@ mod tests {
             depth_sort: true,
             focus_px: focus.and_then(Finite32::new),
             blur_px: Finite32::new(blur).expect("finite"),
+            autofocus: false,
         };
         let pulled = super::lerp_camera(&camera(Some(400.0), 4.0), &camera(Some(800.0), 8.0), 0.25);
         assert_eq!(pulled.focus_px.map(Finite32::get), Some(500.0));

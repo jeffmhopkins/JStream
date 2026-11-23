@@ -1349,6 +1349,64 @@ fn the_shown_clock_starts_when_the_item_is_first_drawn() {
     assert!((x - 200.0).abs() < 0.01, "{x}");
 }
 
+/// An item of a scene with a video chain, which a chain phase's pass draws, is drawn
+/// too: its `shown` clock runs.
+#[test]
+fn the_shown_clock_runs_in_a_scene_with_a_chain() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            drift_x("a1", None, 100.0, jstream_protocol::MotionClock::Shown),
+            sharpen(
+                jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+                "look",
+            ),
+        ],
+    );
+    switch(&control, "a", None);
+    assert!(
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .shown()
+            .contains_key(&ItemId::new("a1")),
+        "a1 is drawn"
+    );
+}
+
+#[test]
+fn the_shown_clock_runs_for_an_item_with_effects() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            drift_x("a1", None, 100.0, jstream_protocol::MotionClock::Shown),
+            sharpen(
+                jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("a1"),
+                },
+                "look",
+            ),
+        ],
+    );
+    switch(&control, "a", None);
+    assert!(
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .shown()
+            .contains_key(&ItemId::new("a1")),
+        "a1 is drawn"
+    );
+}
+
 // Audio-reactive motion modifiers (ADR-0100): an item's opacity follows the program
 // mix's level through the render thread's follower.
 
@@ -1477,6 +1535,8 @@ fn a_data_modifier_poses_an_item_from_live_data() {
                     curve: jstream_protocol::MotionCurve::Linear,
                     from: f(0.0),
                     to: f(100.0),
+                    color_from: None,
+                    palette: std::collections::BTreeMap::new(),
                 },
                 clock: jstream_protocol::MotionClock::Engine,
                 enabled: true,
@@ -1582,6 +1642,79 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
     );
     follower.follow(shot.audio(), secs(2.0));
     assert!((x(secs(2.0)) - rest).abs() < 0.5, "settled at the bottom");
+}
+
+/// ADR-0173: with no output running, the pictures the control side draws (a preview, a
+/// `video.snapshot`) follow the program's motion controls themselves, so a held clock's
+/// steps smooth a MIDI modifier as an output's ticks would.
+#[test]
+fn a_preview_with_no_output_smooths_a_midi_modifier_on_the_clock() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    apply(
+        &control,
+        vec![Edit::ItemSetMotion {
+            item_id: ItemId::new("a1"),
+            scene_id: None,
+            motion: vec![jstream_protocol::MotionModifier {
+                modifier_id: "fader".into(),
+                property: jstream_protocol::MotionProperty::X,
+                effect: None,
+                source: None,
+                kind: jstream_protocol::MotionKind::Midi {
+                    control: jstream_protocol::MotionMidiControl::Cc,
+                    controller: Some(7),
+                    channel: Some(1),
+                    input: None,
+                    smoothing_ms: 100,
+                    curve: jstream_protocol::MotionCurve::Linear,
+                    from: f(0.0),
+                    to: f(127.0),
+                },
+                clock: jstream_protocol::MotionClock::Engine,
+                enabled: true,
+            }],
+        }],
+    );
+    let act = |action| {
+        block_on(control.call(jstream_protocol::Call::Action { action })).expect("clock action");
+    };
+    act(jstream_protocol::Action::ClockHold);
+    let a1 = ItemId::new("a1");
+    let level = || {
+        let current = engine.preview_current();
+        current
+            .program
+            .shot()
+            .audio()
+            .level(&a1, "fader")
+            .expect("bound")
+    };
+    assert!(
+        level().abs() < 1e-6,
+        "the first picture lands on the control, at rest"
+    );
+
+    let midi = engine.midi_inputs();
+    midi.push(
+        "Faders",
+        0,
+        &jstream_midi::Message::parse(&[0xB0, 7, 127]).expect("a CC"),
+    );
+    assert!(
+        level().abs() < 1e-6,
+        "a picture at the same instant moves nothing"
+    );
+    act(jstream_protocol::Action::ClockStep { ms: 50 });
+    let stepped = level();
+    assert!(
+        stepped > 0.2 && stepped < 0.6,
+        "one 50 ms step of 100 ms smoothing goes part way, not to the top: {stepped}"
+    );
+    act(jstream_protocol::Action::ClockStep { ms: 1_000 });
+    assert!(level() > 0.99, "settled at the top");
 }
 
 /// An item whose effects run over the canvas (ADR-0106) moves inside its layer, which
@@ -2560,4 +2693,69 @@ fn the_camera_passes_through_a_stop_and_an_orbit_keeps_its_distance() {
         (half.position.z.get() - want.position.z.get()).abs() < 0.5,
         "{half:?}"
     );
+}
+
+/// ADR-0171 decision 5: a `data` modifier with a palette sets an effect's colour from
+/// its field's text while the text is listed, preview and program alike, and the
+/// effect's own colour shows otherwise.
+#[test]
+fn a_data_modifier_sets_an_effect_colour_from_a_palette() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let tint = Edit::ItemSetMotion {
+        item_id: ItemId::new("a1"),
+        scene_id: None,
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "clip".into(),
+            property: jstream_protocol::MotionProperty::Effect,
+            effect: Some(jstream_protocol::MotionEffect {
+                filter_id: jstream_protocol::FilterId::new("halo"),
+                param: "color".into(),
+            }),
+            source: None,
+            kind: jstream_protocol::MotionKind::Data {
+                input: None,
+                key: "track/1".into(),
+                field: "state".into(),
+                range: [f(0.0), f(1.0)],
+                states: std::collections::BTreeMap::new(),
+                smoothing_ms: 0,
+                curve: jstream_protocol::MotionCurve::Linear,
+                from: f(0.0),
+                to: f(1.0),
+                color_from: Some(jstream_protocol::MotionColorFrom::Palette),
+                palette: [("recording".to_owned(), "#ff2000".to_owned())]
+                    .into_iter()
+                    .collect(),
+            },
+            clock: jstream_protocol::MotionClock::Engine,
+            enabled: true,
+        }],
+    };
+    apply(&control, vec![halo(), tint]);
+    let color = |at: f64| drawn_effects(&engine, secs(at))[0].0.get("color").cloned();
+    let own = color(1.0);
+    assert_ne!(
+        own,
+        Some(json!("#ff2000")),
+        "nothing sent yet: its own colour"
+    );
+    let data = engine.live_data();
+    data.put("DAW", "track/1", br#"{"state": "recording"}"#, 0)
+        .expect("taken");
+    assert_eq!(color(1.0), Some(json!("#ff2000")), "recording: red");
+    let shot = engine.render_hub().load();
+    let mut follower = crate::reactive::Follower::default();
+    follower.follow(shot.shot().audio(), secs(1.0));
+    assert_eq!(
+        color(1.0),
+        Some(json!("#ff2000")),
+        "followed, it lands at once"
+    );
+    data.put("DAW", "track/1", br#"{"state": "stopped"}"#, 10)
+        .expect("taken");
+    follower.follow(shot.shot().audio(), secs(1.1));
+    assert_eq!(color(1.1), own, "not listed: its own colour again");
 }

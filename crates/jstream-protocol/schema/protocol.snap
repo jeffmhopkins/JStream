@@ -539,6 +539,22 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "max_probe_resolution": {
+              "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "reflection_probes": {
+              "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "shadows": {
               "description": "Whether lights set to cast shadows draw them, or left out to keep it.",
               "type": [
@@ -3072,6 +3088,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
           "properties": {
+            "color_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MotionColorFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+            },
             "curve": {
               "$ref": "#/$defs/MotionCurve",
               "default": "linear",
@@ -3101,6 +3128,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "kind": {
               "const": "data",
               "type": "string"
+            },
+            "palette": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+              "type": "object"
             },
             "range": {
               "default": [
@@ -3203,7 +3237,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "CameraProperty": {
-      "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+      "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64. `pan` and `tilt` turn the view about the camera's position after\nthe position and target have moved, the view held within 89° of level.",
       "oneOf": [
         {
           "const": "position_x",
@@ -3253,6 +3287,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "blur",
           "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+          "type": "string"
+        },
+        {
+          "const": "pan",
+          "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.167, ADR-0176): its target swings about its position.",
+          "type": "string"
+        },
+        {
+          "const": "tilt",
+          "description": "The view turned up, in degrees (since 0.167, ADR-0176): its target swings about\nits position, held within 89° of level.",
+          "type": "string"
+        },
+        {
+          "const": "autofocus",
+          "description": "Whether the camera autofocuses (since 0.167, ADR-0176 decision 5): added to 1\nwhen the camera's `autofocus` is on and 0 when off, and on while the sum is at\nleast one half. A `midi` modifier from 0 to 1 turns it on with a button or a\nfader past its middle; from 0 to -1 turns it off.",
           "type": "string"
         }
       ]
@@ -5708,7 +5757,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm`, which its parent decides. `invalid` for a background\nthat isn't a colour, or a background or `keep_warm` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
           "properties": {
             "background": {
               "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -5723,6 +5772,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "keep_warm": {
               "description": "Whether the studio keeps it warm while it is off program (ADR-0117 §7, since\n0.116): its sources keep running, so showing it starts nothing. A kept-warm scene\nranks after the Preview scene and before the scenes shown most recently, within\nthe warm budget (`studio.set_warm`). A keyframe scene is shown through its parent,\nso `scene.set_options` refuses it there. Omitted for `false`, the default.",
+              "type": "boolean"
+            },
+            "reflections": {
+              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
               "type": "boolean"
             },
             "scene_id": {
@@ -5833,7 +5886,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "motion": {
               "default": [],
-              "description": "The new list, at most 8. Empty removes every modifier.",
+              "description": "The new list, at most 32. Empty removes every modifier.",
               "items": {
                 "$ref": "#/$defs/CameraMotionModifier"
               },
@@ -6130,6 +6183,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "trigger"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets a value binding (since 0.168, ADR-0178): a MIDI control or a live-data field\ndriving one number, a new one or the whole of one with the same `binding_id` in\nits place. Setting it is an undoable edit, but what it drives is never stored, so\nmoving its control never adds to an undo history. Rejected with\n`invalid_argument` at `binding.<field>` for what [`ValueBinding::problem`]\nrefuses, at `binding.target.param` for a setting its kind doesn't mark `live` or\nthat isn't a number or `bool`, at `binding.target` for a `scene` source's fader or\na send that doesn't exist,\nand at `binding` for a 257th binding ([`MAX_VALUE_BINDINGS`](crate::MAX_VALUE_BINDINGS));\nwith `not_found` for a source, filter or bus it names that doesn't exist.\nDeleting that object later leaves the binding in place, driving nothing, as a\ntimeline's cue is left. Inverse: `binding.clear_value`, or `binding.set_value`\nwith the binding it replaced.",
+          "properties": {
+            "binding": {
+              "$ref": "#/$defs/ValueBinding",
+              "description": "The binding."
+            },
+            "type": {
+              "const": "binding.set_value",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "binding"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes a value binding: the number it drove shows its stored value again.\nRejected with `not_found` (entity `binding`) for an ID no value binding has.\nInverse: `binding.set_value` with the binding.",
+          "properties": {
+            "binding_id": {
+              "description": "The binding's ID.",
+              "type": "string"
+            },
+            "type": {
+              "const": "binding.clear_value",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "binding_id"
           ],
           "type": "object"
         },
@@ -7836,7 +7925,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The JTunnel senders `jtunnel.senders` lists changed (0.114, ADR-0123 §3): one was\nheard for the first time, said goodbye, or went unheard for 35 s. Runtime state,\nso no `rev`. A client that shows them reads `jtunnel.senders` again.",
+          "description": "The JTunnel senders `jtunnel.senders` lists changed (0.114, ADR-0123 §3): one was\nheard for the first time, said goodbye, or went unheard for 35 s, or the host\nturned receiving on, off or started it again with other senders. Runtime state,\nso no `rev`. A client that shows them reads `jtunnel.senders` again.",
           "properties": {
             "type": {
               "const": "jtunnel.senders_changed",
@@ -9165,6 +9254,50 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "MidiControlInfo": {
+      "description": "One MIDI input's latest control change, in `midi.last_controls` (since 0.168,\nADR-0178).",
+      "properties": {
+        "channel": {
+          "description": "Its channel, 1 to 16.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "controller": {
+          "description": "Its controller number, 0 to 127.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "count": {
+          "description": "How many control changes the input has sent since the engine started: a client\nlearning a controller waits for it to change.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input": {
+          "description": "The input, a MIDI port or a JTunnel sender by name, as a binding names it.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The controller's value now, 0 to 127.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input",
+        "channel",
+        "controller",
+        "value",
+        "count"
+      ],
+      "type": "object"
+    },
     "MixInput": {
       "description": "What a mix shows. Serialized with an internal `type` tag.",
       "oneOf": [
@@ -9318,6 +9451,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "triggered",
           "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+          "type": "string"
+        }
+      ]
+    },
+    "MotionColorFrom": {
+      "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+      "oneOf": [
+        {
+          "const": "field",
+          "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+          "type": "string"
+        },
+        {
+          "const": "palette",
+          "description": "The field's text picks a colour from `palette`.",
           "type": "string"
         }
       ]
@@ -9686,6 +9834,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
           "properties": {
+            "color_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MotionColorFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+            },
             "curve": {
               "$ref": "#/$defs/MotionCurve",
               "default": "linear",
@@ -9715,6 +9874,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "kind": {
               "const": "data",
               "type": "string"
+            },
+            "palette": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+              "type": "object"
             },
             "range": {
               "default": [
@@ -9899,6 +10065,16 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "crop_bottom",
           "description": "Source pixels cut from the bottom edge: added, never below 0.",
+          "type": "string"
+        },
+        {
+          "const": "width",
+          "description": "The box's width alone about its centre, since 0.168 (ADR-0178): multiplied by\n`1 + value`, after `scale`.",
+          "type": "string"
+        },
+        {
+          "const": "height",
+          "description": "The box's height alone about its centre, since 0.168: as `width`.",
           "type": "string"
         },
         {
@@ -12762,6 +12938,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Each MIDI input's latest control change (since 0.168, ADR-0178), by input name:\nwhat a client that learns a controller for a value binding watches. Runtime\nstate, so no `rev`; an input that has sent no control change is left out.",
+          "properties": {
+            "type": {
+              "const": "midi.last_controls",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom\n`scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether\none is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its\nhome, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.",
           "properties": {
             "scene_id": {
@@ -13305,6 +13494,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type": {
               "const": "state.get",
               "type": "string"
+            },
+            "value_bindings": {
+              "description": "Every value binding (ADR-0178), ordered by ID. Omitted when there are none,\nand missing (from a server older than 0.168) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/ValueBinding"
+              },
+              "type": "array"
             },
             "video_mixes": {
               "default": [],
@@ -13986,6 +14182,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `midi.last_controls` (0.168).",
+          "properties": {
+            "controls": {
+              "description": "Each input's latest control change, ordered by input name.",
+              "items": {
+                "$ref": "#/$defs/MidiControlInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "midi.last_controls",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "controls"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `data.list` (0.140).",
           "properties": {
             "inputs": {
@@ -14612,6 +14829,18 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "The `floor_reflection` filter (ADR-0151 decision 4), which draws its scene a\nsecond time. Off, it passes its input through and the scene isn't redrawn.",
           "type": "boolean"
         },
+        "max_probe_resolution": {
+          "default": 512,
+          "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.165). A probe set larger captures at this.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reflection_probes": {
+          "default": true,
+          "description": "Reflection probes (ADR-0170 decision 3, since 0.165), which draw their scene six\ntimes a capture. Off, no probe captures and every surface reflects its\nenvironment as without one.",
+          "type": "boolean"
+        },
         "shadows": {
           "default": true,
           "description": "Shadow maps (ADR-0151 decision 3). Off, no light casts a shadow, whatever its\n`shadows` setting.",
@@ -14715,6 +14944,10 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SceneCamera": {
       "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
       "properties": {
+        "autofocus": {
+          "description": "Whether the focus follows whatever is at the centre of the frame (since 0.167,\nADR-0176 decision 5): with a depth of field, each frame the engine measures the\nnearest item the viewing axis meets and glides `focus_px` there, holding the last\ndistance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it\nfocuses. Default `false`, which isn't written.",
+          "type": "boolean"
+        },
         "blur_px": {
           "$ref": "#/$defs/Finite32",
           "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
@@ -14885,6 +15118,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             "$ref": "#/$defs/PtzShot"
           },
           "type": "array"
+        },
+        "reflections": {
+          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+          "type": "boolean"
         },
         "role": {
           "$ref": "#/$defs/SceneRole",
@@ -16123,6 +16360,536 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "ValueBinding": {
+      "description": "A value binding (ADR-0122 decision 1, ADR-0178, since 0.168): a MIDI controller or a\nfield of a sender's live data, read as a `midi` or `data` motion modifier reads it\n(smoothed, bent and mapped onto `from..to`), driving one number anywhere in the\ncollection. Its value replaces the stored one as it is drawn and heard, kept within\nthe setting's range (rounded for a whole number, on at one half or more for a\n`bool`), from the moment the control first moves after the engine starts or the\nbinding is set, so a collection opens as it was saved. Nothing is stored and no\nundo history fills.",
+      "oneOf": [
+        {
+          "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+          "properties": {
+            "amplitude": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The largest value it reaches, `0..=100000`."
+            },
+            "frequency_hz": {
+              "$ref": "#/$defs/Finite32",
+              "description": "About how many turns of direction a second, `0..=60` and not 0."
+            },
+            "kind": {
+              "const": "wiggle",
+              "type": "string"
+            },
+            "octaves": {
+              "default": 1,
+              "description": "How many octaves, `1..=4`. Default 1.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seed": {
+              "default": 0,
+              "description": "Picks the noise. Default 0.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "amplitude",
+            "frequency_hz"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A periodic wave within `-amplitude..=amplitude`.",
+          "properties": {
+            "amplitude": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The largest value it reaches, `0..=100000`."
+            },
+            "kind": {
+              "const": "oscillate",
+              "type": "string"
+            },
+            "period_ms": {
+              "description": "One period, in milliseconds, `1..=3600000`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "phase": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+            },
+            "shape": {
+              "$ref": "#/$defs/MotionShape",
+              "default": "sine",
+              "description": "Its waveform. Default `sine`."
+            }
+          },
+          "required": [
+            "kind",
+            "amplitude",
+            "period_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+          "properties": {
+            "kind": {
+              "const": "drift",
+              "type": "string"
+            },
+            "rate_per_s": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Units per second, within `-100000..=100000`."
+            },
+            "wrap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+            }
+          },
+          "required": [
+            "kind",
+            "rate_per_s"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+          "properties": {
+            "attack_ms": {
+              "default": 10,
+              "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "audio": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+            },
+            "audio_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+            },
+            "ceiling_db": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the envelope is bent. Default `linear`."
+            },
+            "floor_db": {
+              "$ref": "#/$defs/Finite32",
+              "default": -60.0,
+              "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+            },
+            "high_hz": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+            },
+            "kind": {
+              "const": "audio",
+              "type": "string"
+            },
+            "low_hz": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+            },
+            "measure": {
+              "$ref": "#/$defs/MotionMeasure",
+              "default": "level",
+              "description": "What it measures. Default `level`."
+            },
+            "release_ms": {
+              "default": 250,
+              "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "control": {
+              "$ref": "#/$defs/MotionMidiControl",
+              "default": "cc",
+              "description": "What it follows. Default `cc`."
+            },
+            "controller": {
+              "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+            },
+            "input": {
+              "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+          "properties": {
+            "color_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MotionColorFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "field": {
+              "default": "",
+              "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+              "type": "string"
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+            },
+            "input": {
+              "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "key": {
+              "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "data",
+              "type": "string"
+            },
+            "palette": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+              "type": "object"
+            },
+            "range": {
+              "default": [
+                0.0,
+                1.0
+              ],
+              "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+              "items": {
+                "$ref": "#/$defs/Finite32"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "states": {
+              "additionalProperties": {
+                "$ref": "#/$defs/Finite32"
+              },
+              "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+              "type": "object"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+          "properties": {
+            "amplitude": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Its size at the start, `0..=100000`."
+            },
+            "decay_per_s": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+            },
+            "duration_ms": {
+              "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "frequency_hz": {
+              "$ref": "#/$defs/Finite32",
+              "description": "How many times a second it swings, `0..=60` and not 0."
+            },
+            "kind": {
+              "const": "impulse",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "amplitude",
+            "frequency_hz",
+            "duration_ms"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "binding_id": {
+          "description": "Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII\nletters, digits, `_` and `-`.",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/ValueTarget",
+          "description": "What it drives."
+        }
+      },
+      "required": [
+        "binding_id",
+        "target"
+      ],
+      "type": "object"
+    },
+    "ValueTarget": {
+      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive. Serialized with an internal `type` tag.",
+      "oneOf": [
+        {
+          "description": "A `live` number or `bool` setting of a source, which every place that draws it\nshows.",
+          "properties": {
+            "param": {
+              "description": "The setting, by its ID in the kind's descriptor.",
+              "type": "string"
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source_setting",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "param"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A `live` number or `bool` setting of a filter, on any chain: a source's, a\nscene's, an item's effects, a keyframe's, the master stage's or an output's, video\nor audio.",
+          "properties": {
+            "filter_id": {
+              "$ref": "#/$defs/FilterId",
+              "description": "The filter."
+            },
+            "owner": {
+              "$ref": "#/$defs/FilterOwner",
+              "description": "What owns the filter."
+            },
+            "param": {
+              "description": "The setting, by its ID in the kind's descriptor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "filter_setting",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "filter_id",
+            "param"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An audio source's fader, in dB.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source_gain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A bus's fader, in dB, the master's included.",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus."
+            },
+            "type": {
+              "const": "bus_gain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The gain of a source's send into a bus, in dB.",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus it sends into."
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source sending."
+            },
+            "type": {
+              "const": "send_gain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "bus_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Vec2": {
       "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
       "properties": {
@@ -16851,5 +17618,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.163"
+  "title": "JStream protocol 0.168"
 }

@@ -10,7 +10,8 @@
 //!   `setJtunnel` on `__JSTREAM_DESKTOP__` (`bootstrap.rs`), a Tauri command that no
 //!   engine client (an agent, a plugin or a paired device) can reach. Per machine, never
 //!   in the collection, so opening a collection never turns it on. A missing or
-//!   unreadable file means off. It takes effect when the app next starts.
+//!   unreadable file means off. It takes effect at once: saving it starts, restarts or
+//!   stops the receiver ([`apply`]), with no restart of the app.
 //! - **On**, the app starts the engine's JTunnel receiver (`Engine::start_jtunnel`)
 //!   with the accepted senders, after the platform's backends, whose media clock stamps
 //!   the arrivals. With none accepted it still runs, so it can find senders on the LAN
@@ -21,6 +22,7 @@
 use jstream_core::{AcceptedSender, Engine, JtunnelSetup};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Weak;
 
 /// The setting's file in the data folder.
 pub const JTUNNEL_FILE: &str = "jtunnel.json";
@@ -129,15 +131,26 @@ pub fn write(file: &Path, setting: &Setting) -> Result<(), String> {
     std::fs::rename(&temporary, file).map_err(|err| err.to_string())
 }
 
-/// Starts the engine's JTunnel receiver as `file` says, if it says to. A setting the
-/// engine refuses, or a socket that can't be bound, is logged, and the app runs without
-/// it. Returns whether the receiver started.
+/// Starts the engine's JTunnel receiver as `file` says, if it says to: [`apply`] at
+/// launch. Returns whether the receiver started.
 pub fn start(engine: &Engine, file: &Path) -> bool {
-    let setting = read(file);
+    apply(engine, &read(file))
+}
+
+/// Makes the engine receive as `setting` says, now: a new receiver with its senders
+/// when it is on (replacing the one running, so a sender accepted, removed or with
+/// "Use this sender's state" changed takes effect at once), none when it is off. A
+/// setting the engine refuses, or a socket that can't be bound, is logged, and
+/// receiving stays off. Returns whether a receiver runs.
+pub fn apply(engine: &Engine, setting: &Setting) -> bool {
     let setup = match setting.setup() {
         Ok(Some(setup)) => setup,
-        Ok(None) => return false,
+        Ok(None) => {
+            engine.stop_jtunnel();
+            return false;
+        }
         Err(error) => {
+            engine.stop_jtunnel();
             tracing::error!(%error, "the JTunnel setting names a sender JStream refuses; receiving stays off");
             return false;
         }
@@ -153,24 +166,28 @@ pub fn start(engine: &Engine, file: &Path) -> bool {
             true
         }
         Err(error) => {
+            engine.stop_jtunnel();
             tracing::error!(%error, "could not start receiving from JTunnel senders");
             false
         }
     }
 }
 
-/// `set_jtunnel`: saves the setting from the app's own window. Answers `null` when it
-/// was saved, or why not, for the page to show.
+/// `set_jtunnel`: saves the setting from the app's own window and [`apply`]s it at
+/// once. Answers `null` when it was saved, or why not, for the page to show.
 #[cfg(webview)]
 #[tauri::command]
 pub(crate) fn set_jtunnel(file: tauri::State<'_, File>, setting: Setting) -> Option<String> {
-    match write(&file.0, &setting) {
+    match write(&file.path, &setting) {
         Ok(()) => {
             tracing::info!(
                 on = setting.on,
                 senders = setting.accepted.len(),
-                "JTunnel setting saved; it applies when the app restarts"
+                "JTunnel setting saved"
             );
+            if let Some(engine) = file.engine.upgrade() {
+                apply(&engine, &setting);
+            }
             None
         }
         Err(error) => {
@@ -180,8 +197,14 @@ pub(crate) fn set_jtunnel(file: tauri::State<'_, File>, setting: Setting) -> Opt
     }
 }
 
-/// The setting's file, the state `set_jtunnel` writes.
-pub struct File(pub PathBuf);
+/// The setting's file, the state `set_jtunnel` writes, and the engine it applies to. A
+/// weak handle, so the host still lets the engine go last when the app exits.
+pub struct File {
+    /// The setting's file.
+    pub path: PathBuf,
+    /// The engine, while it runs.
+    pub engine: Weak<Engine>,
+}
 
 #[cfg(test)]
 mod tests {

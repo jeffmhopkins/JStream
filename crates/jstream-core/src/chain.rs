@@ -718,6 +718,9 @@ pub(crate) struct Chains {
     /// The models drawn since the chains last began a frame: one no frame drew is let
     /// go when the next begins.
     models_used: BTreeSet<SourceId>,
+    /// The thread that uploads the models, for the program stage's render thread
+    /// ([`Self::upload_models_aside`]). `None` uploads them where they are drawn.
+    models_aside: Option<crate::model_uploads::ModelUploads>,
     /// The lights of the scene a model is drawn in this frame (ADR-0143 decision 3),
     /// kept to reuse its allocation.
     pub(crate) lights: Vec<jstream_render::SceneLight>,
@@ -739,11 +742,28 @@ pub(crate) struct Chains {
     /// run that drew them: drawn once a run, by the first `scene`-lit model there that
     /// receives shadows.
     shadows: BTreeMap<jstream_protocol::SceneId, (u64, Vec<crate::snapshot::DrawnShadow>)>,
+    /// What each scene's shadow maps were last drawn of, to leave a map that still
+    /// holds its shadows as it is.
+    pub(crate) shadow_maps: BTreeMap<jstream_protocol::SceneId, crate::snapshot::KeptShadows>,
+    /// How many shadow maps were drawn, for tests.
+    #[cfg(test)]
+    pub(crate) shadow_draws: std::cell::Cell<u64>,
     /// The shadowed lights of the scene a model is drawn in this frame, by index into
     /// [`Self::lights`] with their softness, kept to reuse its allocation.
     pub(crate) shadowed: Vec<(usize, f32)>,
     /// The scenes whose shadowed lights past the limit have been logged.
     pub(crate) shadows_warned: BTreeSet<jstream_protocol::SceneId>,
+    /// Each reflection probe this compositor has captured (ADR-0170 decision 3), by
+    /// scene and item: what it was captured with and when, to tell when it is due.
+    pub(crate) probes: BTreeMap<
+        (jstream_protocol::SceneId, jstream_protocol::ItemId),
+        crate::snapshot::ProbeState,
+    >,
+    /// The frame each reflection probe last tried to capture in, whether or not it drew,
+    /// so the one capture a frame goes to the probe that has waited longest.
+    pub(crate) probe_tries: BTreeMap<(jstream_protocol::SceneId, jstream_protocol::ItemId), u64>,
+    /// The reflection probe capture under way, which draws one face a frame.
+    pub(crate) probe_run: Option<crate::snapshot::ProbeRun>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -784,6 +804,14 @@ impl Chains {
             }
             keep
         });
+        // So are the shadow maps kept for a scene whose shadows the last run didn't
+        // draw: a scene that is gone, or shown no more.
+        let shadows = &self.shadows;
+        self.shadow_maps.retain(|scene, _| {
+            shadows
+                .get(scene)
+                .is_some_and(|(drawn, _)| Some(*drawn) == last)
+        });
         self.ran = Some(frame);
         #[cfg(test)]
         {
@@ -794,6 +822,16 @@ impl Chains {
         self.drawn.clear();
         let used = std::mem::take(&mut self.models_used);
         self.models.retain(|source, _| used.contains(source));
+        if let Some(aside) = &mut self.models_aside {
+            // The uploads that came back, for the models the last frame still drew.
+            let models = &mut self.models;
+            aside.finished(
+                |source| used.contains(source),
+                |source, version, model| {
+                    models.insert(source, (version, model));
+                },
+            );
+        }
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
             let keep = chains.contains_key(source) || stages.contains_key(source);
@@ -1147,8 +1185,29 @@ impl Chains {
         }
     }
 
+    /// Has the models `compositor` draws uploaded by a thread of their own from now on
+    /// (ADR-0177): for the program stage's render thread, which must not stop for an
+    /// upload.
+    pub(crate) fn upload_models_aside(&mut self, compositor: &Compositor) {
+        let uploader = compositor.model_uploader();
+        self.models_aside = Some(crate::model_uploads::ModelUploads::new(move |model| {
+            uploader.upload(model)
+        }));
+    }
+
+    /// Whether a model's upload was asked of the thread and isn't back, for tests.
+    #[cfg(test)]
+    pub(crate) fn models_coming(&self) -> bool {
+        self.models_aside
+            .as_ref()
+            .is_some_and(crate::model_uploads::ModelUploads::busy)
+    }
+
     /// Uploads the model `source` shows, unless the upload kept for it is of the same
-    /// version (ADR-0107): drawing it again then allocates nothing.
+    /// version (ADR-0107): drawing it again then allocates nothing. With a thread for
+    /// the uploads ([`Self::upload_models_aside`]) it only asks for the upload, which a
+    /// later frame's [`Self::begin`] takes: [`Self::model`] is the version before
+    /// until then, or none.
     ///
     /// # Errors
     /// What the compositor reports for the upload.
@@ -1156,7 +1215,7 @@ impl Chains {
         &mut self,
         compositor: &Compositor,
         source: &SourceId,
-        model: &jstream_media::model::Model,
+        model: &std::sync::Arc<jstream_media::model::Model>,
     ) -> Result<(), RenderError> {
         self.models_used.insert(source.clone());
         if self
@@ -1166,12 +1225,37 @@ impl Chains {
         {
             return Ok(());
         }
+        if let Some(aside) = &mut self.models_aside {
+            match aside.ask(source, model) {
+                Ok(crate::model_uploads::Asked::Coming) => return Ok(()),
+                Ok(crate::model_uploads::Asked::Here) => {}
+                Err(error) => {
+                    // A refused version is not drawn as the one before it.
+                    self.models.remove(source);
+                    return Err(error);
+                }
+            }
+        }
         // The old upload goes first, so two versions are never held at once.
         self.models.remove(source);
         let uploaded = compositor.upload_model(model)?;
         self.models
             .insert(source.clone(), (model.version(), uploaded));
         Ok(())
+    }
+
+    /// Keeps `models`, which the warm scenes' sources show, uploaded though no frame
+    /// draws them (ADR-0177 decision 5): each is uploaded as a drawn one is
+    /// ([`Self::upload_model`]) and not let go of when the next frame begins. One whose
+    /// upload is refused is left for the draw that shows it to report.
+    pub(crate) fn keep_models(
+        &mut self,
+        compositor: &Compositor,
+        models: &BTreeMap<SourceId, std::sync::Arc<jstream_media::model::Model>>,
+    ) {
+        for (source, model) in models {
+            let _refused = self.upload_model(compositor, source, model);
+        }
     }
 
     /// The upload kept for the model `source` shows.
@@ -2970,6 +3054,136 @@ mod tests {
         );
     }
 
+    /// ADR-0177 decisions 1 and 2: with a thread for the uploads, a draw asks for a
+    /// model's upload and doesn't make it. The item draws nothing until the upload is
+    /// back, and a model that changed is drawn as it was until the new one is.
+    #[test]
+    fn a_model_uploaded_aside_draws_once_its_upload_is_back() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        chains.upload_models_aside(&compositor);
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        let live = LiveParams::default();
+        let middle = [(16, 18)];
+        // Draws `shot` until its middle is `want`, each draw a frame of its own.
+        fn draw_until(
+            compositor: &mut Compositor,
+            (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+            shot: &Shot,
+            want: [u8; 4],
+        ) {
+            let live = LiveParams::default();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            loop {
+                let drawn = draw_points(
+                    compositor,
+                    (&mut *cache, &mut *chains),
+                    (shot, &live),
+                    &[(16, 18)],
+                );
+                if drawn[0] == want {
+                    return;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "never drew {want:?}: {:?}",
+                    drawn[0]
+                );
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }
+
+        let white = model_shot(&graph, "plane");
+        let first = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&white, &live),
+            &middle,
+        );
+        assert_eq!(first[0], BLACK, "nothing is drawn in the frame that asks");
+        assert!(chains.models_coming(), "the thread was asked");
+        draw_until(&mut compositor, (&mut cache, &mut chains), &white, WHITE);
+        assert!(!chains.models_coming());
+
+        // The same plane in blue is another model, so another version.
+        let blue = model_shot_with(&graph, "plane", |shown| {
+            let model = &shown.model;
+            let materials = model
+                .materials()
+                .iter()
+                .map(|m| jstream_media::model::Material {
+                    base_color: [0.0, 0.0, 1.0, 1.0],
+                    ..m.clone()
+                })
+                .collect();
+            let model = jstream_media::model::Model::new(
+                model.primitives().to_vec(),
+                materials,
+                model.textures().to_vec(),
+            )
+            .expect("a model");
+            jstream_sources::ShownModel {
+                model: std::sync::Arc::new(model),
+                ..shown
+            }
+        });
+        let changed = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&blue, &live),
+            &middle,
+        );
+        assert_eq!(changed[0], WHITE, "the version before is drawn meanwhile");
+        assert!(chains.models_coming());
+        draw_until(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &blue,
+            [0, 0, 255, 255],
+        );
+    }
+
+    /// ADR-0177 decision 5: a model a warm scene's source shows is uploaded and kept
+    /// though no frame draws it, and let go of once it is no longer kept.
+    #[test]
+    fn a_kept_model_stays_uploaded_though_no_frame_draws_it() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let live = LiveParams::default();
+        let plain = shot(&graph(&[]));
+        let cube = SourceId::new("cube");
+        let model = jstream_media::model::shapes::Shape::Cube
+            .model(jstream_media::model::Material::default())
+            .expect("a cube");
+        let kept: std::collections::BTreeMap<_, _> =
+            [(cube.clone(), std::sync::Arc::new(model))].into();
+        for _ in 0..3 {
+            chains.keep_models(&compositor, &kept);
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&plain, &live),
+                &[(2, 2)],
+            );
+            let held = chains.model(&cube).expect("the kept model is uploaded");
+            assert_eq!(held.version(), kept[&cube].version());
+        }
+        for _ in 0..2 {
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&plain, &live),
+                &[(2, 2)],
+            );
+        }
+        assert!(chains.model(&cube).is_none(), "let go of once not kept");
+    }
+
     /// A model item draws its model where its box is, posed by its geometry and moved by
     /// its motion (ADR-0107 decision 6), with or without effects over its layer.
     #[test]
@@ -3408,6 +3622,254 @@ mod tests {
             &[(32, 18)],
         );
         Some(pixels[0])
+    }
+
+    /// ADR-0170 decisions 2 and 3: a mirror plane in a scene whose `reflections` is on,
+    /// inside a reflection probe's box, reflects a red card behind the camera, which the
+    /// camera can't see but the probe does, from the frame after the probe first
+    /// captures. With the scene's reflections off, or the switch off, it doesn't.
+    #[test]
+    fn a_mirror_inside_a_probe_reflects_what_is_behind_the_camera() {
+        use jstream_sources::SourceKind as _;
+        let mut graph = placed(&[
+            ("cam", (32.0, 18.0), (32.0, 36.0), 0.0),
+            ("logo", (32.0, 18.0), (4.0, 4.0), 0.0),
+        ]);
+        let mut behind = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(400.0, 400.0).expect("positive"),
+        )
+        .expect("valid");
+        behind.fit_mode = jstream_protocol::FitMode::Stretch;
+        behind.depth_px = jstream_protocol::Finite32::new(200.0).expect("finite");
+        let camera = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        });
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(camera),
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("back"),
+                    name: "back".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("back"),
+                    source_id: SourceId::new("back"),
+                    transform: None,
+                    geometry: Some(behind),
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let reflective = |on: bool| Edit::SceneSetOptions {
+            scene_id: SceneId::new("main"),
+            options: jstream_protocol::SceneOptions {
+                reflections: on,
+                ..jstream_protocol::SceneOptions::default()
+            },
+        };
+        apply(&mut graph, vec![reflective(true)]);
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        settings.insert(String::from("metallic"), serde_json::json!(1.0));
+        settings.insert(String::from("roughness"), serde_json::json!(0.0));
+        let model = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(model.model());
+        let probe = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_probe(Some(jstream_sources::ShownProbe {
+                size_px: [10_000.0; 3],
+                fade_px: 0.0,
+                resolution: 128,
+                refresh_frames: 0,
+            }));
+        let red = Frame::new(4, 4, &[255, 0, 0, 255].repeat(16), 4).expect("invariant: 4x4 RGBA8");
+        let centre = |graph: &Graph, features: jstream_protocol::RenderFeatures| {
+            let assets = FilterAssets::default().with_features(features);
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::frame(
+                        match id.as_str() {
+                            "cam" => stand_in.clone(),
+                            "back" => red.clone(),
+                            _ => probe.clone(),
+                        },
+                        None,
+                    ))
+                },
+                &assets,
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            let live = LiveParams::default();
+            // The first six frames each draw a face and the sixth resamples them; the
+            // seventh reads the capture.
+            let mut frames = (0..7).map(|_| {
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &live),
+                    &[(32, 18)],
+                )[0]
+            });
+            let first = frames.next()?;
+            Some((first, frames.last()?))
+        };
+        let all = jstream_protocol::RenderFeatures::ALL;
+        let Some((before, mirrored)) = centre(&graph, all) else {
+            return;
+        };
+        assert!(
+            mirrored[0] > mirrored[1] + 60 && mirrored[0] > mirrored[2] + 60,
+            "the mirror shows the red card: {mirrored:?} (before the capture {before:?})"
+        );
+        assert!(
+            before[0] < mirrored[0],
+            "nothing before the first capture: {before:?}"
+        );
+        let off = jstream_protocol::RenderFeatures {
+            reflection_probes: false,
+            ..all
+        };
+        let (_, switched) = centre(&graph, off).expect("an adapter");
+        assert_eq!(switched, before, "the switch off reflects the environment");
+        apply(&mut graph, vec![reflective(false)]);
+        let (_, plain) = centre(&graph, all).expect("an adapter");
+        assert_eq!(
+            plain, before,
+            "a scene without reflections reflects the environment"
+        );
+    }
+
+    /// ADR-0170 decision 3: the one capture under way goes to the due probe that has
+    /// waited longest, so a probe due every frame, first in its scene, can't keep the
+    /// probe after it from ever capturing.
+    #[test]
+    fn a_probe_due_every_frame_starves_no_other() {
+        let mut graph = placed(&[
+            ("logo", (32.0, 18.0), (4.0, 4.0), 0.0),
+            ("cam", (20.0, 18.0), (4.0, 4.0), 0.0),
+        ]);
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+                Edit::SceneSetOptions {
+                    scene_id: SceneId::new("main"),
+                    options: jstream_protocol::SceneOptions {
+                        reflections: true,
+                        ..jstream_protocol::SceneOptions::default()
+                    },
+                },
+            ],
+        );
+        let probe = |refresh_frames: u32| {
+            Frame::new(1, 1, &[0; 4], 3)
+                .expect("invariant: 1x1 RGBA8")
+                .with_probe(Some(jstream_sources::ShownProbe {
+                    size_px: [1_000.0; 3],
+                    fade_px: 0.0,
+                    resolution: 128,
+                    refresh_frames,
+                }))
+        };
+        // `logo` is first in stacking order and due every frame.
+        let (every, once) = (probe(1), probe(0));
+        let assets = FilterAssets::default();
+        let shot = snapshot::plan_with(
+            &graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    if id.as_str() == "logo" {
+                        every.clone()
+                    } else {
+                        once.clone()
+                    },
+                    None,
+                ))
+            },
+            &assets,
+        )
+        .shot;
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else {
+            return;
+        };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let live = LiveParams::default();
+        let mut captured = Vec::new();
+        for _ in 0..18 {
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &live),
+                &[(32, 18)],
+            );
+            captured.push(
+                chains
+                    .probes
+                    .keys()
+                    .map(|(_, item)| item.as_str().to_owned())
+                    .collect::<Vec<_>>(),
+            );
+        }
+        // A capture draws a face a frame, so the first takes frames 0 to 5.
+        assert!(
+            captured[..5].iter().all(Vec::is_empty),
+            "nothing is captured before the sixth face: {captured:?}"
+        );
+        assert_eq!(
+            captured[5],
+            ["logo"],
+            "the first capture is of the first probe"
+        );
+        assert_eq!(
+            captured[11],
+            ["cam", "logo"],
+            "the second goes to the one that hasn't tried"
+        );
+        assert_eq!(captured[17], ["cam", "logo"], "both stay captured");
     }
 
     /// ADR-0151 decision 9: an environment light lights a `scene`-lit model with its sky
@@ -4558,13 +5020,10 @@ mod tests {
         assert_eq!(maps(false), Some(Vec::new()), "no shadows, no map");
     }
 
-    /// ADR-0151 decision 3: a card between a directional light that casts shadows and a
-    /// `scene`-lit wall shadows the wall, through the shadow map the first model that
-    /// receives them draws; without shadows, or for a wall that receives none, the wall
-    /// is lit there.
-    #[test]
-    fn a_card_shadows_a_scene_lit_wall() {
-        use jstream_sources::SourceKind as _;
+    /// A 3D scene for shadows: `cam`, a wall behind the canvas plane that a model source
+    /// shows; `logo`, a lamp in front of it turned 30 degrees to one side; and `card`, a
+    /// small card on the canvas plane between them, moved `nudge` px across.
+    fn shadow_wall(nudge: f32) -> Graph {
         let mut graph = placed(&[("cam", (32.0, 18.0), (96.0, 72.0), 0.0)]);
         let main = SceneId::new("main");
         let geometry = |(x, y): (f32, f32), size: f32, depth: f32, turn: f32| {
@@ -4606,12 +5065,12 @@ mod tests {
                     item_id: ItemId::new("card"),
                     source_id: SourceId::new("card"),
                     transform: None,
-                    geometry: Some(geometry((32.0, 18.0), 12.0, 0.0, 0.0)),
+                    geometry: Some(geometry((32.0 + nudge, 18.0), 12.0, 0.0, 0.0)),
                     opacity: None,
                     blend: None,
                 },
                 Edit::SceneSetCamera {
-                    scene_id: main.clone(),
+                    scene_id: main,
                     camera: Some(jstream_protocol::SceneCamera::framing(
                         jstream_protocol::Canvas {
                             width: CANVAS.0,
@@ -4621,7 +5080,12 @@ mod tests {
                 },
             ],
         );
-        let light = |shadows| jstream_sources::ShownLight {
+        graph
+    }
+
+    /// The directional light [`shadow_wall`]'s lamp shows, casting shadows or not.
+    fn shadow_wall_light(shadows: bool) -> jstream_sources::ShownLight {
+        jstream_sources::ShownLight {
             kind: jstream_sources::LightType::Directional,
             color: [1.0; 3],
             intensity: 2.0,
@@ -4631,54 +5095,80 @@ mod tests {
             shadows,
             shadow_softness: 0.0,
             environment: None,
-        };
+        }
+    }
+
+    /// The model [`shadow_wall`]'s wall shows: a white plane lit by its scene, which
+    /// `receives` shadows or doesn't.
+    fn shadow_wall_model(receives: bool) -> Option<jstream_sources::ShownModel> {
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        settings.insert(String::from("roughness"), serde_json::json!(1.0));
+        settings.insert(
+            String::from("receives_shadows"),
+            serde_json::json!(receives),
+        );
+        kind.create(&settings, &jstream_sources::Context::default())
+            .expect("a model")
+            .model()
+    }
+
+    /// `graph`, a [`shadow_wall`], planned: its wall showing `model`, its lamp `light`,
+    /// and its card the frame `card`.
+    fn shadow_wall_shot(
+        graph: &Graph,
+        model: Option<jstream_sources::ShownModel>,
+        light: jstream_sources::ShownLight,
+        card: &Frame,
+    ) -> Shot {
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(model);
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(light));
+        snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    match id.as_str() {
+                        "cam" => stand_in.clone(),
+                        "logo" => lamp.clone(),
+                        _ => card.clone(),
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot
+    }
+
+    /// ADR-0151 decision 3: a card between a directional light that casts shadows and a
+    /// `scene`-lit wall shadows the wall, through the shadow map the first model that
+    /// receives them draws; without shadows, or for a wall that receives none, the wall
+    /// is lit there.
+    #[test]
+    fn a_card_shadows_a_scene_lit_wall() {
+        let mut graph = shadow_wall(0.0);
         // The card's shadow falls 17 px to one side of it on the wall, which is behind
         // the canvas plane, so the camera sees it nearer the centre: about 10 px out
         // from the card's edge.
         let sides = [(22, 18), (42, 18)];
-        let shot = |light: jstream_sources::ShownLight, receives: bool| {
-            let kind = jstream_sources::ModelKind::new();
-            let mut settings: jstream_protocol::Settings = kind
-                .descriptor()
-                .params
-                .iter()
-                .map(|p| (p.id.clone(), p.default.clone()))
-                .collect();
-            settings.insert(String::from("shape"), serde_json::json!("plane"));
-            settings.insert(String::from("lighting"), serde_json::json!("scene"));
-            settings.insert(String::from("color"), serde_json::json!("#ffffff"));
-            settings.insert(String::from("roughness"), serde_json::json!(1.0));
-            settings.insert(
-                String::from("receives_shadows"),
-                serde_json::json!(receives),
-            );
-            let source = kind
-                .create(&settings, &jstream_sources::Context::default())
-                .expect("a model");
-            let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
-                .expect("invariant: 16x9 RGBA8")
-                .with_model(source.model());
-            let lamp = Frame::new(1, 1, &[0; 4], 3)
-                .expect("invariant: 1x1 RGBA8")
-                .with_light(Some(light));
+        let shot = |graph: &Graph, light: jstream_sources::ShownLight, receives: bool| {
             let card = Frame::new(1, 1, &[255; 4], 4).expect("invariant: 1x1 RGBA8");
-            let shot = snapshot::plan_with(
-                &graph,
-                Some(&main),
-                None,
-                &mut |id| {
-                    Some(Look::frame(
-                        match id.as_str() {
-                            "cam" => stand_in.clone(),
-                            "logo" => lamp.clone(),
-                            _ => card.clone(),
-                        },
-                        None,
-                    ))
-                },
-                &FilterAssets::default(),
-            )
-            .shot;
+            let shot = shadow_wall_shot(graph, shadow_wall_model(receives), light, &card);
             let _gpu = crate::tests::one_gpu_test_at_a_time();
             let mut compositor = gpu()?;
             let mut cache = ResourceCache::new();
@@ -4690,12 +5180,13 @@ mod tests {
                 &sides,
             ))
         };
+        let light = shadow_wall_light;
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
-        let Some(lit) = shot(light(false), true) else {
+        let Some(lit) = shot(&graph, light(false), true) else {
             return;
         };
-        let shadowed = shot(light(true), true).expect("an adapter");
-        let unreceived = shot(light(true), false).expect("an adapter");
+        let shadowed = shot(&graph, light(true), true).expect("an adapter");
+        let unreceived = shot(&graph, light(true), false).expect("an adapter");
         assert!(
             lit.iter().all(|&p| luma(p) > 150),
             "the wall is lit: {lit:?}"
@@ -4713,6 +5204,211 @@ mod tests {
             (1, 1),
             "one side is shadowed: {shadowed:?} against {lit:?}"
         );
+        // ADR-0179: a card that only adds light casts no shadow.
+        for blend in [
+            jstream_protocol::BlendMode::Additive,
+            jstream_protocol::BlendMode::Screen,
+        ] {
+            apply(
+                &mut graph,
+                vec![Edit::ItemSetBlend {
+                    item_id: ItemId::new("card"),
+                    blend,
+                }],
+            );
+            let light_only = shot(&graph, light(true), true).expect("an adapter");
+            assert!(
+                (0..2).all(|side| luma(light_only[side]).abs_diff(luma(lit[side])) <= 6),
+                "a {blend:?} card casts no shadow: {light_only:?} against {lit:?}"
+            );
+        }
+    }
+
+    /// A shadow map is drawn once while nothing that casts into it changes: frames of
+    /// the same scene leave it as it is and show the same shadow; a card that shows a
+    /// new picture, or moves, draws it again.
+    #[test]
+    fn a_shadow_map_is_drawn_again_only_when_what_casts_changes() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let sides = [(22, 18), (42, 18)];
+        let model = shadow_wall_model(true);
+        let card = |generation| Frame::new(1, 1, &[255; 4], generation).expect("1x1 RGBA8");
+        let mut frame = |graph: &Graph, card: &Frame, chains: &mut Chains| {
+            let shot = shadow_wall_shot(graph, model.clone(), shadow_wall_light(true), card);
+            let pixels = draw_points(
+                &mut compositor,
+                (&mut cache, &mut *chains),
+                (&shot, &LiveParams::default()),
+                &sides,
+            );
+            (pixels, chains.shadow_draws.get())
+        };
+        let still = shadow_wall(0.0);
+        let (first, draws) = frame(&still, &card(4), &mut chains);
+        assert_eq!(draws, 1, "the map is drawn");
+        let (again, draws) = frame(&still, &card(4), &mut chains);
+        assert_eq!(draws, 1, "nothing changed: the map is kept");
+        assert_eq!(again, first, "and shows the same shadow");
+        let (_, draws) = frame(&still, &card(5), &mut chains);
+        assert_eq!(draws, 2, "the card shows a new picture");
+        let (_, draws) = frame(&still, &card(5), &mut chains);
+        assert_eq!(draws, 2, "which is then kept");
+        let (moved, draws) = frame(&shadow_wall(20.0), &card(5), &mut chains);
+        assert_eq!(draws, 3, "the card moved");
+        assert_ne!(moved, first, "and its shadow with it");
+    }
+
+    /// A scene primed on the snapshot thread leaves the program stage nothing to compile
+    /// (`SnapshotWorker::prime`): a compositor opened on the same context afterwards, as
+    /// an output start opens one, draws the scene, its model, shadow map and filter,
+    /// and makes no pipeline. What a 3D scene alone draws with is made too, whether or
+    /// not the scene shows it yet.
+    #[test]
+    fn a_primed_scene_leaves_the_stage_no_pipeline_to_make() {
+        use crate::runtime::SharedGpu;
+        use jstream_platform::{AdapterId, GpuContext, GpuFrame, GpuInterop, PlatformError};
+
+        /// Lends the context it was made with.
+        struct Lent(GpuContext);
+        impl GpuInterop for Lent {
+            fn open_device(&self) -> Result<GpuContext, PlatformError> {
+                Ok(self.0.clone())
+            }
+            fn encode_target(
+                &self,
+                _: &GpuContext,
+                _: FrameSize,
+            ) -> Result<GpuFrame, PlatformError> {
+                Err(PlatformError::Unsupported {
+                    what: "encode targets".into(),
+                })
+            }
+        }
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(opened) = gpu() else { return };
+        let context = GpuContext::new(
+            opened.adapter().clone(),
+            opened.device().clone(),
+            opened.queue().clone(),
+            AdapterId {
+                luid: None,
+                vendor: 0,
+            },
+            None,
+        );
+        drop(opened);
+        let mut graph = shadow_wall(0.0);
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("card"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: [("multiply".to_owned(), serde_json::json!("#ffffff"))]
+                    .into_iter()
+                    .collect(),
+                enabled: None,
+                index: None,
+            }],
+        );
+        let card = Frame::new(1, 1, &[255; 4], 4).expect("1x1 RGBA8");
+        let shot = || {
+            shadow_wall_shot(
+                &graph,
+                shadow_wall_model(true),
+                shadow_wall_light(true),
+                &card,
+            )
+        };
+        let shared = Arc::new(SharedGpu::default());
+        shared.set_interop(Arc::new(Lent(context.clone())));
+        let worker = snapshot::SnapshotWorker::new(Arc::clone(&shared));
+        worker.prime(shot(), MediaTime::zero(Timebase::MILLIS));
+        // Dropping the worker joins its thread once the scene is drawn.
+        drop(worker);
+
+        let mut stage = Compositor::on_context(&context);
+        let made = stage.pipelines_made();
+        assert!(made > 0, "priming made the scene's pipelines");
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        for _ in 0..2 {
+            draw_points(
+                &mut stage,
+                (&mut cache, &mut chains),
+                (&shot(), &LiveParams::default()),
+                &[(22, 18)],
+            );
+        }
+        stage.warm_3d();
+        assert_eq!(stage.pipelines_made(), made, "the stage made none");
+    }
+
+    /// A card whose picture comes out of a filter chain casts the shadow of what the
+    /// filter drew this frame: the chain's output layer is one image for as long as it
+    /// lives, and each run of the filter counts as a change of it, so the kept map is
+    /// drawn again. Here the card's shadow comes once the filter has drawn it, and goes
+    /// once its picture has turned transparent.
+    #[test]
+    fn a_filtered_cards_shadow_follows_its_picture() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let sides = [(22, 18), (42, 18)];
+        let mut graph = shadow_wall(0.0);
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("card"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: [("multiply".to_owned(), serde_json::json!("#ffffff"))]
+                    .into_iter()
+                    .collect(),
+                enabled: None,
+                index: None,
+            }],
+        );
+        let model = shadow_wall_model(true);
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let mut frame = |card: &Frame, chains: &mut Chains| {
+            let shot = shadow_wall_shot(&graph, model.clone(), shadow_wall_light(true), card);
+            let pixels = draw_points(
+                &mut compositor,
+                (&mut cache, &mut *chains),
+                (&shot, &LiveParams::default()),
+                &sides,
+            );
+            (pixels, chains.shadow_draws.get())
+        };
+        let solid = Frame::new(1, 1, &[255; 4], 4).expect("1x1 RGBA8");
+        let clear = Frame::new(1, 1, &[0; 4], 5).expect("1x1 RGBA8");
+        let darkest = |pixels: &[[u8; 4]]| pixels.iter().map(|&p| luma(p)).min().unwrap_or(0);
+        // The maps are drawn before the card's chain runs, so they show the picture
+        // the filter drew the frame before: nothing yet in the first frame.
+        let (unshadowed, draws) = frame(&solid, &mut chains);
+        assert_eq!(draws, 1);
+        let (shadowed, draws) = frame(&solid, &mut chains);
+        assert_eq!(draws, 2, "the filter has drawn the card since");
+        assert!(
+            darkest(&shadowed) + 100 < darkest(&unshadowed),
+            "the card casts a shadow: {shadowed:?} after {unshadowed:?}"
+        );
+        frame(&clear, &mut chains);
+        let (lit, draws) = frame(&clear, &mut chains);
+        assert_eq!(draws, 4, "the filter drew a new picture");
+        assert_eq!(lit, unshadowed, "a card that shows nothing casts none");
     }
 
     /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition

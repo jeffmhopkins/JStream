@@ -191,6 +191,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action, labels }]   chord → protocol action request
 ├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
+├── value_bindings [{ binding_id, kind, …, target }]   a control or data field → a setting, fader or send (ADR-0178)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -230,8 +231,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
   turn, depth and per-item perspective, drawn in stacking order with no depth buffer (only a 3D model writes depth, below).
   A scene with a `camera` (`SceneCamera`: position, target, field of view, roll,
-  `depth_sort`, and a depth of field's `focus_px` and `blur_px`,
-  [ADR-0108](adr/0108-camera-depth-of-field.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
+  `depth_sort`, a depth of field's `focus_px` and `blur_px`,
+  [ADR-0108](adr/0108-camera-depth-of-field.md), and `autofocus`, which glides the focus
+  to what is at the frame's centre,
+  [ADR-0176](adr/0176-controllers-and-live-data-drive-scene-cameras.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
   canvas extended toward the viewer is one space, each item's geometry is its pose
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
@@ -239,7 +242,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   overrides it, and a keyframe of a 2D scene may have a camera of its own, which a Move
   into it reaches from the framing camera
   ([ADR-0128](adr/0128-moves-between-2d-and-3d-glide.md)). `motion` is the item's
-  ordered list of at most 8 motion modifiers
+  ordered list of at most 32 motion modifiers
   ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)), which the engine
   evaluates per frame on top of the stored values and never writes back. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
@@ -309,7 +312,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   names also removes
   that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
   the bindings it will remove, and a binding is never a delete blocker
-  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). A value
+  binding is the exception: it stays when its target goes and drives nothing until an
+  object with that ID is back ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders; it is one of the scene's options, set with
   `scene.set_options` ([ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4).
@@ -493,17 +498,17 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
-  and hotkey bindings (protocol 0.25) and controller bindings (protocol 0.96,
-  schema version 9), as the organisation bullet above describes.
+  and hotkey bindings (protocol 0.25), controller bindings (protocol 0.96,
+  schema version 9) and value bindings (protocol 0.168, schema version 19), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions for built-in kinds (a source or
   preset saved at another version is refused on load; a source or filter of an effect
   pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
   `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
-  `hotkeys`, `bindings` and `transitions`. The collection file saves everything built so far,
+  `hotkeys`, `bindings`, `value_bindings` and `transitions`. The collection file saves everything built so far,
   encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
-  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller bindings and
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -529,6 +534,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
 | Render | Composites every mix on each base-rate tick, then the monitored scenes preview streams show; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. A monitored scene not begun within the tick's period is skipped and counted, so the program never waits for one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
 | Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8, or NV12 for a mix only NV12 encoders take, and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
+| Models (`jstream-models`, one per program stage while it draws 3D models) | Uploads each model the render thread asks for, on its compositor's device, and hands the upload back; it submits nothing ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)) | The render thread sends and takes on channels and never waits for it. A texture level is written in bands of at most 4 MiB, so the queue's lock is held for one band at a time. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Preview (one per engine, while any preview stream is open) | For a stream of the program or of a scene, holds the program stage (opening it with no output) and hands it the stream's H.264 encoder, or a JPEG or PNG stream's picture queue, which the render thread feeds with the program, or the scene as a monitored scene, at the stream's size; a sender thread per such stream forwards its packets, or encodes and sends its pictures ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a source, a draft, or any stream of an engine without backends) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -711,7 +717,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)),
   and since 0.160 a `data` modifier follows one field of a sender's live data, a number
   through a range or a text through a table of states
-  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
+  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3), which since
+  0.164 can set a colour setting from the field, a `#rrggbb` text or a pick from a
+  palette (decision 5). Since 0.168 `width` and `height` stretch one axis of an item's box.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -757,6 +765,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   for a controller `Trigger` (a MIDI note, controller or program change), with the
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
+  `binding.set_value` and `binding.clear_value` (protocol 0.168,
+  [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
+  a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
+  setting, a fader or a send, drawn and heard without being stored; `midi.last_controls`
+  reports each input's latest control change, for learning one.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
@@ -769,9 +782,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `scene.set_camera` gives a scene a camera, making it a 3D scene, or removes it; it is
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
   protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
-  ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
+  ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77), and since 0.167 its
+  `autofocus` glides the focus to what is at the frame's centre.
   `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
-  which a camera can't hear), and
+  which a camera can't hear; `midi` and `data` since 0.167,
+  [ADR-0176](adr/0176-controllers-and-live-data-drive-scene-cameras.md)), and
   a `follow_pointer` filter on a display or window capture item a camera that glides
   after the pointer over it, keeping it inside a safe margin, and supplying the framing
   camera to a 2D scene ([ADR-0120](adr/0120-follow-pointer-is-a-filter.md), protocol
@@ -788,6 +803,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   focused and lit as an item of the scene, so the group item's live values, motion and
   keyframes move them all. `scene.set_camera_anchor` names such a group item for the
   family's camera to ride with: its position and target are then in the group's space.
+- **Reflections** ([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md),
+  protocol 0.165): a scene with `reflections` in its `scene.set_options` has its lit
+  models and cards reflect the scene around them, through the `reflection_probe` source
+  kind's boxes; `studio.set_rendering` turns probes off app-wide and caps their face size.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1139,7 +1158,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1168,7 +1187,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.08 MB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.45 MB
   of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
   `hotkey` and `binding` each carry every action's, because `hotkey.set` and
@@ -1240,9 +1259,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   countdown and grouping recipes, fitting boxes to text, a custom shader or shader
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
-  `midi` one to follow a controller, a `data` one to follow a sender's live data)
+  `midi` one to follow a controller, a `data` one to follow a sender's live data, and a
+  value binding, `binding.set_value`, for a filter's or source's setting, a fader or a send)
   and one-shot jolts that
-  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), the hologram effect, borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live
   texture or a reflection, a camera
   that sways or follows the pointer, and
@@ -1320,22 +1340,33 @@ depth as its layer is drawn ([ADR-0165](adr/0165-depth-of-field-on-models.md)): 
 and view depth are drawn first, then five fullscreen passes gather each pixel's
 neighbours whose circle of confusion reaches it, so a soft near part spreads over a
 sharp far one and the silhouette softens outward.
-A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
+A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version, for the
+program stage by a thread of its own, which also keeps the warm scenes' models
+uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
 lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
 spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
 `f64`; a spot or directional light may cast shadows, up to 2 a scene, each through a
-2048² map of the scene's view depth drawn from the light once a frame and sampled with a
-soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
+2048² map of the scene's view depth drawn from the light, again only when the light or
+what casts into it has changed, and sampled with a soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md), a card that only
+adds light casting none, [ADR-0179](adr/0179-cards-that-only-add-light-cast-no-shadow.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
 studio gradient). A model's `texture` names another source whose picture, after its
 own filters, replaces its base colour, sampled through a mip chain of the whole picture
 kept on that image and rebuilt only when it changes; its `reflection` names a source read
 as a panorama in place of the studio gradient or the scene's sky. Each is planned like a
 placed source though no item shows it, and the model's layer is drawn after the chains
-and scenes they read. The layer is then placed flat
+and scenes they read. In a scene with `reflections` on
+([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md)), a lit model or
+card inside a reflection probe's box reads the probe's panorama, box-projected, in place
+of the environment where the probe saw something: six 90° faces of the scene drawn
+from the box's centre after the chains, one face a frame of one probe at a time, so a
+refresh never spikes a frame, resampled into an
+equirectangular panorama that the next frame reads. A rough surface reads the sky's
+panorama and a probe's through mip chains of them, at the level its blur spans, so a
+bright point blurs into a soft glow. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
@@ -1345,13 +1376,16 @@ with nebulae and a galaxy band baked once per seed into cube maps
 and procedural stars laid out about the direction of travel,
 which at warp streak away from it as the render thread's per-scene travel advances, and
 its layer is placed under every item, through no camera, so it sorts with nothing and
-has no view depth. Its
+has no view depth. The pass is skipped while the layer still holds the sky asked for, so a
+still camera pays for it once. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)
-gets the scene's view depth: one more draw of its cards, and of its models' own
-triangles, into a half-float canvas layer holding `1 / w` of the nearest thing, the
-larger value winning, drawn only for such a filter.
+gets the scene's view depth: one more draw of its cards, and each model's depth layer
+copied in (the one its layer carries, so a model's triangles aren't drawn again; none
+for a model under half opacity), into
+a half-float canvas layer holding `1 / w` of the nearest thing, the larger value
+winning, drawn only for such a filter.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
@@ -1372,7 +1406,8 @@ and is placed in its parent: `render_image` makes a new one, and `render_into` r
 a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
-group of a few small items doesn't shade the whole canvas twice. A blur, a mask, a shadow or a glow over
+group of a few small items doesn't shade the whole canvas twice. A model's layer is
+bounded the same way, by the box of its model's bounds on the canvas. A blur, a mask, a shadow or a glow over
 such a layer, as an item's effects, shades only that box grown by how far it reaches, and
 keeps the box for what reads it next. A layer or filter target drawn again is made
 transparent over that box rather than cleared whole (#1449). The caller walks the
@@ -1454,7 +1489,13 @@ first again. The platform's context is the engine's one context, lent to every
 compositor and to the browser engine
 ([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
 opens a new one for the next holder that asks and hands it to the browser engine, while
-the stage that saw the loss stays on its own device until it stops. The preview's and
+the stage that saw the loss stays on its own device until it stops. The compositors
+on one context share the render pipelines made on it, so a shader is compiled once per
+device, not at every output start, and the engine has every scene of a collection drawn
+once on the snapshot thread when the collection opens, so a scene's first frame on air
+waits for no compile
+([jstream-render › Scope](../crates/jstream-render/README.md#purpose),
+[jstream-core › Snapshots](../crates/jstream-core/README.md#snapshots)). The preview's and
 the snapshot thread's compositors on it collect their own errors in wgpu error scopes,
 so an error one of them raises fails only its own call, not the stage's next frame
 (#1268). Encoders on the CPU
@@ -1664,7 +1705,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   with a migration that refuses them in an older file. Version 16 (ADR-0164) adds a
   group's `share_space` and a scene's `camera_anchor`, refused the same way. Version 17
   (ADR-0171) adds motion modifiers that drive a setting of their item's source
-  (`property` `source` with its `source` target), refused the same way. `jstream-core`
+  (`property` `source` with its `source` target), refused the same way. Version 18
+  (ADR-0170) adds a scene's `reflections`, refused the same way, and version 19
+  (ADR-0178) the `value_bindings` and motion modifiers on `width` and `height`, refused
+  the same way; a value binding loads without its target being looked up. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to
@@ -1718,10 +1762,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   one past the most, is logged and read as the default.
 - **3D rendering switches:** `rendering.json` (version 1) in the data directory, which
   costly 3D effects the engine draws (`studio.set_rendering`,
-  [ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md) decision 1), one
-  boolean each. The desktop app and the daemon name it (`Engine::with_rendering_file`);
+  [ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md) decisions 1 and
+  3), one boolean each and the probes' face-size cap. The desktop app and the daemon name it (`Engine::with_rendering_file`);
   `jstream-core` reads it at startup and replaces it atomically after every change. A
-  file it can't read is logged and read as all on, and a switch it leaves out is on.
+  file it can't read is logged and read as all on, a switch it leaves out is on, and a
+  cap it leaves out is the largest face size.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file
@@ -1748,9 +1793,12 @@ signed with the same certificate if releases are signed
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)). The hosts look for the helper there
 (`CefConfig::beside_exe`). It also holds `jstream-plugin-host.exe`, the out-of-process
 CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), which the engine
-starts from beside its own exe.
+starts from beside its own exe. Beside the exes are Microsoft's DirectX Shader Compiler DLLs,
+`dxcompiler.dll` and `dxil.dll`, which wgpu's DX12 backend loads to compile shaders faster
+than FXC when an output starts; without them it uses FXC
+([ADR-0175](adr/0175-ship-the-directx-shader-compiler.md)).
 Release builds link the C runtime statically and need only OS components (WebView2, Media
-Foundation, Direct3D 12).
+Foundation, Direct3D 12) beyond what the zip holds.
 
 - **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
   `portable` marker file is present. Every host finds it through `jstream-platform`'s
@@ -1777,11 +1825,17 @@ Foundation, Direct3D 12).
   `locales`, the renamed bootstrap and DLL, CEF's `CREDITS.html` (its licences, FFmpeg's
   LGPL text among them) and a `CEF-VERSION.txt` naming the CEF and Chromium build, from
   `archive.json`. `--no-browser` builds the zip without browser sources (no CMake or
-  Ninja needed). `.cargo/config.toml` links the C runtime statically for every MSVC
+  Ninja needed). `--dxc-dir` names an unzipped DXC release (v1.8.2502): `dist` checks
+  each DLL for the zip's architecture and each of its three licence files against a pinned
+  BLAKE3 hash before it builds, copies the DLLs beside the exes (refusing one that imports
+  the Visual C++ runtime) and the licences, with a `DXC-VERSION.txt`, into a `dxc` folder,
+  and adds a paragraph to `README.txt`. `--no-dxc` builds the zip without DXC, and `dist`
+  refuses to run with neither. `.cargo/config.toml` links the C runtime statically for every MSVC
   build. A `RUSTFLAGS` variable replaces the config's flags, so `dist` adds `crt-static`
   back to it. The zip is written by `dist` itself, deflated, with fixed timestamps, so
   the same files make the same zip. The `dist` job in `after-review.yml` builds it with
-  the release UI its `dist-ui` job builds, names it after the commit tested
+  the release UI its `dist-ui` job builds and the DXC release it downloads and checks
+  against its SHA-256, names it after the commit tested
   (`--revision`), and uploads it as an artifact, as is, on `main` and on a PR once
   review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The helper's
   package also has the Linux helper's executable, so `dist` builds the DLL alone

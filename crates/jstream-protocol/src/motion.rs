@@ -34,7 +34,9 @@
 //! A `data` modifier ([ADR-0171](../../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
 //! decision 3, since 0.160) follows one field of a JTunnel sender's live data the same
 //! way: a number through its `range`, `true` and `false` as 1 and 0, and a text through
-//! its `states` table, so a DAW's transport, clips and meters pose an item.
+//! its `states` table, so a DAW's transport, clips and meters pose an item. Since 0.164,
+//! on a colour setting it can set the colour instead of lightening it: `color_from`
+//! `field` takes a `#rrggbb` text from the field, and `palette` picks one by its text.
 
 use crate::binding::MAX_INPUT_NAME_LEN;
 use crate::finite::Finite32;
@@ -43,8 +45,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The most motion modifiers one item holds.
-pub const MAX_MOTION_MODIFIERS: usize = 8;
+/// The most motion modifiers one item, or one scene camera, holds: 32 since 0.167
+/// (ADR-0176 decision 6), 8 before, so a controller can be bound to every property.
+pub const MAX_MOTION_MODIFIERS: usize = 32;
 
 /// The longest motion modifier ID, in bytes.
 pub const MAX_MOTION_ID_LEN: usize = 64;
@@ -81,6 +84,11 @@ pub enum MotionProperty {
     CropRight,
     /// Source pixels cut from the bottom edge: added, never below 0.
     CropBottom,
+    /// The box's width alone about its centre, since 0.168 (ADR-0178): multiplied by
+    /// `1 + value`, after `scale`.
+    Width,
+    /// The box's height alone about its centre, since 0.168: as `width`.
+    Height,
     /// A number or colour setting of one of the item's own effects, which the
     /// modifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,
     /// kept within the range the effect's kind gives it and rounded for a whole-number
@@ -103,7 +111,7 @@ pub enum MotionProperty {
 
 impl MotionProperty {
     /// Every property, in the order above.
-    pub const ALL: [MotionProperty; 12] = [
+    pub const ALL: [MotionProperty; 14] = [
         MotionProperty::X,
         MotionProperty::Y,
         MotionProperty::Scale,
@@ -116,6 +124,8 @@ impl MotionProperty {
         MotionProperty::CropTop,
         MotionProperty::CropRight,
         MotionProperty::CropBottom,
+        MotionProperty::Width,
+        MotionProperty::Height,
     ];
 }
 
@@ -211,6 +221,23 @@ pub enum MotionMidiControl {
     /// A control this version of the protocol doesn't know, from a newer server. Never
     /// sent; the engine refuses it in an edit with `invalid_argument` and draws a stored
     /// one as still.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+/// How a `data` modifier on a colour setting sets the colour, rather than lightening it
+/// (since 0.164, ADR-0171 decision 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MotionColorFrom {
+    /// The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.
+    Field,
+    /// The field's text picks a colour from `palette`.
+    Palette,
+    /// A way this version of the protocol doesn't know, from a newer server. Never
+    /// sent; the engine refuses it in an edit with `invalid_argument`.
     #[serde(other)]
     #[schemars(skip)]
     Unknown,
@@ -382,6 +409,18 @@ pub enum MotionKind {
         /// Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1.
         #[serde(default = "default_to")]
         to: Finite32,
+        /// Since 0.164, only with `property` `effect` or `source`: on a colour setting,
+        /// set the colour from the field instead of adding to it. While the field gives
+        /// a colour it replaces the setting's own, before other modifiers add to it,
+        /// blended over `smoothing_ms`; otherwise the setting's own colour shows. On a
+        /// setting that isn't a colour it adds nothing. Omitted to add the value.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        color_from: Option<MotionColorFrom>,
+        /// With `color_from` `palette`: a `#rrggbb` colour by the field's text,
+        /// `{"recording": "#ff2020", "playing": "#20ff40"}`. At most 32 entries, each
+        /// text 1 to 100 bytes; a text not listed sets nothing. Default none.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        palette: BTreeMap<String, String>,
     },
     /// A one-shot decaying shake, since 0.84 (#1107):
     /// `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from
@@ -588,7 +627,7 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
     if motion.len() > MAX_MOTION_MODIFIERS {
         return Err(problem(
             "motion".into(),
-            "an item holds at most 8 motion modifiers; put the rest on a group around it, \
+            "an item holds at most 32 motion modifiers; put the rest on a group around it, \
              whose motion moves its children too",
         ));
     }
@@ -619,6 +658,19 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
         }
         if let Some((param, reason)) = m.kind.problem() {
             return Err(problem(field(param), reason));
+        }
+        if matches!(
+            m.kind,
+            MotionKind::Data {
+                color_from: Some(_),
+                ..
+            }
+        ) && !matches!(m.property, MotionProperty::Effect | MotionProperty::Source)
+        {
+            return Err(problem(
+                field("color_from"),
+                "sets a colour setting: it needs property effect or source",
+            ));
         }
     }
     Ok(())
@@ -689,7 +741,7 @@ fn source_problem(
 
 impl MotionKind {
     /// The first parameter out of range, by wire name, with what it must be.
-    fn problem(&self) -> Option<(&'static str, &'static str)> {
+    pub(crate) fn problem(&self) -> Option<(&'static str, &'static str)> {
         let magnitude = |v: Finite32| (0.0..=MAX_MAGNITUDE).contains(&v.get());
         let frequency = |v: Finite32| v.get() > 0.0 && v.get() <= MAX_FREQUENCY_HZ;
         match *self {
@@ -741,6 +793,8 @@ impl MotionKind {
                 curve,
                 from,
                 to,
+                color_from,
+                ref palette,
             } => data_problem(
                 input.as_deref(),
                 key,
@@ -749,7 +803,8 @@ impl MotionKind {
                 states,
                 (smoothing_ms, curve),
                 (from, to),
-            ),
+            )
+            .or_else(|| color_problem(color_from, palette)),
             MotionKind::Wiggle {
                 amplitude,
                 frequency_hz,
@@ -988,6 +1043,49 @@ fn data_problem(
     }
 }
 
+/// What is wrong with a `data` modifier's colour from its field, whatever its property.
+fn color_problem(
+    color_from: Option<MotionColorFrom>,
+    palette: &BTreeMap<String, String>,
+) -> Option<(&'static str, &'static str)> {
+    let is_color = |s: &str| {
+        s.strip_prefix('#')
+            .is_some_and(|hex| hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+    };
+    match color_from {
+        Some(MotionColorFrom::Unknown) => {
+            return Some((
+                "color_from",
+                "is not one this version of the protocol knows",
+            ));
+        }
+        Some(MotionColorFrom::Palette) if palette.is_empty() => {
+            return Some(("palette", "must hold at least one entry"));
+        }
+        Some(MotionColorFrom::Palette) => {}
+        _ if !palette.is_empty() => {
+            return Some(("palette", "is read only with color_from palette"));
+        }
+        _ => {}
+    }
+    if palette.len() > MAX_DATA_STATES {
+        return Some(("palette", "must hold at most 32 entries"));
+    }
+    if palette
+        .keys()
+        .any(|t| t.is_empty() || t.len() > MAX_DATA_STATE_LEN || t.chars().any(char::is_control))
+    {
+        return Some((
+            "palette",
+            "each text must be 1 to 100 bytes, with no control characters",
+        ));
+    }
+    if palette.values().any(|c| !is_color(c)) {
+        return Some(("palette", "each colour must be #rrggbb"));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1017,9 +1115,15 @@ mod tests {
     fn a_valid_list_passes_and_each_problem_names_its_field() {
         assert_eq!(field_of(&[wiggle("a", 3.0), wiggle("b", 0.0)]), None);
         assert_eq!(field_of(&[]), None);
-        let nine: Vec<_> = (0..9).map(|n| wiggle(&format!("m{n}"), 1.0)).collect();
-        assert_eq!(field_of(&nine).as_deref(), Some("motion"));
-        let full = check_motion(&nine).expect_err("nine is one too many");
+        let most: Vec<_> = (0..MAX_MOTION_MODIFIERS)
+            .map(|n| wiggle(&format!("m{n}"), 1.0))
+            .collect();
+        assert_eq!(field_of(&most), None, "32 since 0.167 (ADR-0176)");
+        let over: Vec<_> = (0..=MAX_MOTION_MODIFIERS)
+            .map(|n| wiggle(&format!("m{n}"), 1.0))
+            .collect();
+        assert_eq!(field_of(&over).as_deref(), Some("motion"));
+        let full = check_motion(&over).expect_err("one too many");
         assert!(
             full.reason.contains("on a group around it"),
             "the refusal says where the rest can go (#1189): {}",
@@ -1476,6 +1580,93 @@ mod tests {
 
     /// ADR-0171 decision 3: a `data` modifier parses with its defaults and checks each
     /// parameter.
+    /// ADR-0171 decision 5: a data modifier sets a colour setting from its field, as a
+    /// `#rrggbb` text or through a palette, and only on an effect's or a source's
+    /// setting.
+    #[test]
+    fn a_data_modifier_sets_a_colour_from_its_field_or_a_palette() {
+        let parse = |json: serde_json::Value| -> MotionModifier {
+            serde_json::from_value(json).expect("parses")
+        };
+        let tint = |extra: serde_json::Value| {
+            let mut json = serde_json::json!({
+                "modifier_id": "tint", "property": "source", "kind": "data",
+                "source": {"param": "color"}, "key": "track/1", "field": "color"
+            });
+            for (k, v) in extra.as_object().expect("object") {
+                json[k] = v.clone();
+            }
+            parse(json)
+        };
+        let named = tint(serde_json::json!({ "color_from": "field" }));
+        assert!(matches!(
+            named.kind,
+            MotionKind::Data {
+                color_from: Some(MotionColorFrom::Field),
+                ..
+            }
+        ));
+        assert_eq!(check_motion(std::slice::from_ref(&named)), Ok(()));
+        let picked = tint(serde_json::json!({
+            "field": "slots.0.state", "color_from": "palette",
+            "palette": { "recording": "#ff2020", "playing": "#20FF40" }
+        }));
+        assert_eq!(check_motion(std::slice::from_ref(&picked)), Ok(()));
+        let wire = serde_json::to_value(&picked).expect("serializes");
+        assert_eq!(wire["color_from"], "palette");
+        assert_eq!(wire["palette"]["recording"], "#ff2020");
+        assert!(
+            serde_json::to_value(tint(serde_json::json!({})))
+                .expect("serializes")
+                .get("color_from")
+                .is_none(),
+            "omitted when it adds"
+        );
+
+        let many: serde_json::Map<String, serde_json::Value> = (0..33)
+            .map(|n| (format!("s{n}"), serde_json::json!("#000000")))
+            .collect();
+        let cases = [
+            (
+                serde_json::json!({ "color_from": "spectrum" }),
+                "color_from",
+            ),
+            (serde_json::json!({ "color_from": "palette" }), "palette"),
+            (
+                serde_json::json!({ "palette": { "on": "#ffffff" } }),
+                "palette",
+            ),
+            (
+                serde_json::json!({ "color_from": "palette", "palette": many }),
+                "palette",
+            ),
+            (
+                serde_json::json!({ "color_from": "palette", "palette": { "": "#ffffff" } }),
+                "palette",
+            ),
+            (
+                serde_json::json!({ "color_from": "palette", "palette": { "on": "red" } }),
+                "palette",
+            ),
+            (
+                serde_json::json!({ "color_from": "palette", "palette": { "on": "#ffffff80" } }),
+                "palette",
+            ),
+        ];
+        for (extra, param) in cases {
+            assert_eq!(
+                field_of(&[tint(extra.clone())]),
+                Some(format!("motion.0.{param}")),
+                "{extra}"
+            );
+        }
+        // On a property that isn't a setting there is no colour to set.
+        let mut moved = named.clone();
+        moved.property = MotionProperty::X;
+        moved.source = None;
+        assert_eq!(field_of(&[moved]), Some("motion.0.color_from".to_owned()));
+    }
+
     #[test]
     fn a_data_modifier_takes_defaults_and_checks_each_parameter() {
         let parse = |json: serde_json::Value| -> MotionModifier {
@@ -1498,6 +1689,8 @@ mod tests {
                 curve: MotionCurve::Linear,
                 from: Finite32::new(-1.0).expect("finite"),
                 to: Finite32::ZERO,
+                color_from: None,
+                palette: BTreeMap::new(),
             }
         );
         assert_eq!(check_motion(std::slice::from_ref(&lamp)), Ok(()));

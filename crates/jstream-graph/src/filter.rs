@@ -235,6 +235,15 @@ fn restore(owner: &FilterOwner, chain: FilterChain, filter: &Filter, index: Opti
 
 /// `owner`'s chains, or `not_found` for a source, output, scene or item that doesn't
 /// exist.
+/// The chains `owner` names, as `filter.set_settings` finds them: `not_found` for an
+/// owner that doesn't exist.
+pub(crate) fn owner_chains<'a>(
+    state: &'a State,
+    owner: &FilterOwner,
+) -> Result<&'a Chains, ProtocolError> {
+    chains(state, owner)
+}
+
 fn chains<'a>(state: &'a State, owner: &FilterOwner) -> Result<&'a Chains, ProtocolError> {
     match owner {
         FilterOwner::Source { source_id } => state

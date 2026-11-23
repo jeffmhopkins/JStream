@@ -84,6 +84,24 @@ pub fn presets(kind_id: &str) -> Vec<Preset> {
                 json!({"strength": 0.0, "grain": 0.3, "flicker": 0.1}),
             ),
         ],
+        "hologram" => vec![
+            preset("Transmission", json!({})),
+            preset(
+                "Steady",
+                json!({"flicker": 0.05, "glitch": 0.0, "grain": 0.05, "see_through": 0.3}),
+            ),
+            preset(
+                "Broken signal",
+                json!({
+                    "flicker": 0.6, "glitch": 0.8, "grain": 0.3, "fringe": 4.0,
+                    "lines": 0.5
+                }),
+            ),
+            preset(
+                "Amber",
+                json!({"color": "#ffb040", "tint": 0.9, "edge": 0.3}),
+            ),
+        ],
         _ => Vec::new(),
     }
 }
@@ -138,13 +156,15 @@ mod tests {
     }
 
     #[test]
-    fn the_vignette_and_the_border_have_their_looks_and_other_kinds_none() {
+    fn the_vignette_the_border_and_the_hologram_have_their_looks_and_other_kinds_none() {
         let names: Vec<_> = presets("vignette").iter().map(|p| p.name).collect();
         assert_eq!(names, ["Subtle", "Cinematic", "Spotlight"]);
         let names: Vec<_> = presets("border").iter().map(|p| p.name).collect();
         assert_eq!(names, ["Card", "Neon", "Broadcast frame"]);
         let names: Vec<_> = presets("scanlines").iter().map(|p| p.name).collect();
         assert_eq!(names, ["Monitor", "CRT", "Film grain"]);
+        let names: Vec<_> = presets("hologram").iter().map(|p| p.name).collect();
+        assert_eq!(names, ["Transmission", "Steady", "Broken signal", "Amber"]);
         assert!(presets("blur").is_empty());
     }
 

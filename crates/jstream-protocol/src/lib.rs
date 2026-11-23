@@ -61,7 +61,10 @@ pub use audio::{
     MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
     gain_db_problem,
 };
-pub use binding::{Binding, MAX_INPUT_NAME_LEN, Trigger};
+pub use binding::{
+    Binding, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo, Trigger, ValueBinding,
+    ValueTarget,
+};
 pub use camera_aim::{
     CameraAim, CameraAimInfo, MAX_AIM_PAN_DEG, MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, camera_aim_check,
     camera_aim_scene,
@@ -125,9 +128,10 @@ pub use mix::{
 };
 pub use motion::{
     MAX_DATA_FIELD_LEN, MAX_DATA_KEY_LEN, MAX_DATA_STATE_LEN, MAX_DATA_STATES, MAX_MOTION_ID_LEN,
-    MAX_MOTION_MATERIAL_LEN, MAX_MOTION_MODIFIERS, MAX_MOTION_PARAM_LEN, MotionClock, MotionCurve,
-    MotionEffect, MotionKind, MotionMeasure, MotionMidiControl, MotionModifier, MotionProblem,
-    MotionProperty, MotionSetting, MotionShape, check_motion, check_motion_id,
+    MAX_MOTION_MATERIAL_LEN, MAX_MOTION_MODIFIERS, MAX_MOTION_PARAM_LEN, MotionClock,
+    MotionColorFrom, MotionCurve, MotionEffect, MotionKind, MotionMeasure, MotionMidiControl,
+    MotionModifier, MotionProblem, MotionProperty, MotionSetting, MotionShape, check_motion,
+    check_motion_id,
 };
 pub use organise::{
     FolderInfo, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline, MAX_ICON_LEN, SceneMeta,
@@ -173,7 +177,7 @@ pub use query::{
     DeviceInfo, FontInfo, ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo,
     SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
-pub use rendering::{RenderFeatures, RenderFeaturesChange};
+pub use rendering::{PROBE_RESOLUTIONS, RenderFeatures, RenderFeaturesChange};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use timeline::{

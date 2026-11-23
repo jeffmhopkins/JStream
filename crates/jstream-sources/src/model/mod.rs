@@ -175,6 +175,17 @@ impl ModelKind {
                 )),
                 live(described(
                     param(
+                        "reflections",
+                        "Reflects the scene",
+                        ParamType::Bool,
+                        json!(true),
+                    ),
+                    "Whether, lit by its scene, it reflects the rest of the scene where \
+                     the scene's reflections are on and a reflection probe's box holds \
+                     it; off, it reflects only the environment.",
+                )),
+                live(described(
+                    param(
                         "animation",
                         "Animation",
                         ParamType::String {
@@ -254,6 +265,8 @@ struct Look {
     double_sided: bool,
     casts_shadows: bool,
     receives_shadows: bool,
+    /// Whether it reflects the rest of its scene (ADR-0170 decision 2).
+    reflections: bool,
     /// The source whose picture is the base-colour texture (ADR-0107 decision 5).
     texture: Option<SourceId>,
     /// The file's material it replaces, or every material's for `None`.
@@ -309,6 +322,8 @@ impl Look {
                 .ok_or_else(|| bad(id, "must be true or false")),
         };
         let (casts_shadows, receives_shadows) = (flag("casts_shadows")?, flag("receives_shadows")?);
+        // Settings saved before scene reflections had none: on.
+        let reflections = flag("reflections")?;
         let texture_material = match settings.get("texture_material") {
             None => None,
             Some(value) => {
@@ -340,6 +355,7 @@ impl Look {
             double_sided,
             casts_shadows,
             receives_shadows,
+            reflections,
             texture: named_source(settings, "texture")?,
             texture_material,
             reflection: named_source(settings, "reflection")?,
@@ -369,6 +385,7 @@ impl Look {
             lighting: self.lighting,
             casts_shadows: self.casts_shadows,
             receives_shadows: self.receives_shadows,
+            reflections: self.reflections,
             pose,
             texture: self.texture.clone(),
             texture_material: self.texture_material.clone(),

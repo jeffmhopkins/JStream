@@ -15,6 +15,7 @@ use wgpu::util::DeviceExt;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
 use crate::image::{Image, LAYER_FORMAT, Owner};
+use crate::mips::{Mips, Region};
 use crate::scene::Color;
 
 /// The depth format: reversed, so `f32`'s precision near 0 is spent far away.
@@ -46,11 +47,51 @@ const FRAME_BYTES: u64 = 64
     + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES
     + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES
     + ENVIRONMENT_BYTES
-    + 16;
-/// The frame's textures: the shadow maps, then the environment's picture.
-const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 1;
+    + 16
+    + PROBE_BYTES;
+/// Bytes of the reflection probe in the frame uniform: five `vec4`.
+const PROBE_BYTES: u64 = 80;
+/// The frame's textures: the shadow maps, then the environment's picture, then the
+/// reflection probe's (ADR-0170 decision 3).
+const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 2;
+/// Where the sky uniform ([`environment_values`], [`reflection_values`]) holds how its
+/// picture is encoded.
+const SKY_MODE: usize = 11;
+/// Where the probe uniform ([`probe_values`]) holds how its capture is encoded.
+const PROBE_MODE: usize = 17;
+/// The slot of [`FRAME_TEXTURES`] the reflection probe's picture is bound in.
+const PROBE_SLOT: usize = MAX_SHADOW_MAPS + 1;
+
+/// The mip chains a draw's blurred reflections read (ADR-0170 decision 3): of the sky
+/// picture it reflects and of its reflection probe's capture, each with the image it
+/// was built from. A rough surface reads the level whose texels are about as wide as
+/// its blur's taps are apart, so a bright point spreads into a soft patch rather than
+/// one sharp copy per tap. A draw without a chain reads the picture itself, unblurred
+/// between its taps.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Panoramas<'a> {
+    /// The sky picture's chain: the model's `reflection`, else its environment's
+    /// picture.
+    pub sky: Option<(&'a Image, &'a Mips)>,
+    /// The probe's capture's chain.
+    pub probe: Option<(&'a Image, &'a Mips)>,
+}
+
+impl<'a> Panoramas<'a> {
+    /// `chain`'s whole view when it was built from `image`.
+    fn of(
+        chain: Option<(&'a Image, &'a Mips)>,
+        image: &Image,
+    ) -> Option<&'a (wgpu::Texture, wgpu::TextureView)> {
+        chain
+            .filter(|(built, _)| built.texture() == image.texture())
+            .map(|(_, mips)| &mips.whole)
+    }
+}
 /// Bytes of a material's uniform: five `vec4`.
 const MATERIAL_BYTES: u64 = 80;
+/// The most bytes of a texture level one queue write copies ([`upload_texture`]).
+const TEXTURE_BAND_BYTES: usize = 4 << 20;
 
 pub use jstream_media::model::Lighting;
 
@@ -136,6 +177,12 @@ pub struct MaterialDrive<'a> {
     /// Added to the glow's strength, a multiplier that is 1 at rest, kept within 0 and
     /// [`MAX_EMISSIVE_STRENGTH`].
     pub emissive_strength: f32,
+    /// Replaces the base colour, straight sRGB 0 to 1, before `color` adds to it (its
+    /// alpha stays). The last drive that sets one wins.
+    pub set_color: Option<[f32; 3]>,
+    /// Replaces the glow's colour, straight sRGB 0 to 1, at its own brightness, before
+    /// `emissive` adds to it.
+    pub set_emissive: Option<[f32; 3]>,
 }
 
 /// The most a [`MaterialDrive`] multiplies a material's glow by.
@@ -162,17 +209,29 @@ fn driven_values(
         add.roughness += d.roughness;
         add.emissive += d.emissive;
         add.emissive_strength += d.emissive_strength;
+        add.set_color = d.set_color.or(add.set_color);
+        add.set_emissive = d.set_emissive.or(add.set_emissive);
     }
     if add == MaterialDrive::default() {
         return None;
     }
     let mut out = *values;
-    // Base colour, linear: lightened in sRGB, as a colour setting is.
+    // Base colour, linear: set, then lightened in sRGB, as a colour setting is.
+    if let Some(color) = add.set_color {
+        for (v, c) in out[0..3].iter_mut().zip(color) {
+            *v = srgb_to_linear(c.clamp(0.0, 1.0));
+        }
+    }
     for v in &mut out[0..3] {
         *v = srgb_to_linear((linear_to_srgb(*v) + add.color).clamp(0.0, 1.0));
     }
-    // Emission may exceed 1: lightened at its own brightness, then scaled.
+    // Emission may exceed 1: set and lightened at its own brightness, then scaled.
     let peak = out[4..7].iter().copied().fold(0.0f32, f32::max).max(1.0);
+    if let Some(color) = add.set_emissive {
+        for (v, c) in out[4..7].iter_mut().zip(color) {
+            *v = srgb_to_linear(c.clamp(0.0, 1.0)) * peak;
+        }
+    }
     for v in &mut out[4..7] {
         let lifted = srgb_to_linear((linear_to_srgb(*v / peak) + add.emissive).clamp(0.0, 1.0));
         *v = lifted * peak * (1.0 + add.emissive_strength).clamp(0.0, MAX_EMISSIVE_STRENGTH);
@@ -208,7 +267,80 @@ fn material_bytes(values: &[f32; MATERIAL_VALUES]) -> [u8; MATERIAL_VALUES * 4] 
     out
 }
 
+/// The texels of a `size` target that a model with `bounds` can cover when drawn through
+/// `clip` (a model-to-clip matrix, column-major), with a texel of margin, clipped: the
+/// box of its bounds' eight corners. `None` when a corner is at or behind the viewer,
+/// where the box has no end, or isn't finite. Empty for a model off the target.
+fn drawn_box(clip: &[[f32; 4]; 4], bounds: SolidBounds, size: (u32, u32)) -> Option<Region> {
+    let (width, height) = (f64::from(size.0), f64::from(size.1));
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for corner in 0..8 {
+        let pick = |bit: usize, axis: usize| {
+            f64::from(if corner & (1 << bit) == 0 {
+                bounds.min[axis]
+            } else {
+                bounds.max[axis]
+            })
+        };
+        let at = [pick(0, 0), pick(1, 1), pick(2, 2), 1.0];
+        let row = |r: usize| (0..4).map(|c| f64::from(clip[c][r]) * at[c]).sum::<f64>();
+        let (x, y, w) = (row(0), row(1), row(3));
+        if !(w > 1e-6 && x.is_finite() && y.is_finite()) {
+            return None;
+        }
+        let (px, py) = ((x / w * 0.5 + 0.5) * width, (0.5 - y / w * 0.5) * height);
+        x0 = x0.min(px);
+        y0 = y0.min(py);
+        x1 = x1.max(px);
+        y1 = y1.max(py);
+    }
+    let low = |v: f64, side: f64| (v.floor() - 1.0).clamp(0.0, side) as u32;
+    let high = |v: f64, side: f64| (v.ceil() + 1.0).clamp(0.0, side) as u32;
+    let (x0, y0) = (low(x0, width), low(y0, height));
+    let (x1, y1) = (high(x1, width), high(y1, height));
+    Some(Region {
+        x: x0,
+        y: y0,
+        width: x1.saturating_sub(x0),
+        height: y1.saturating_sub(y0),
+    })
+}
+
+/// The smallest region holding `a` and `b`; an empty one adds nothing.
+fn union(a: Region, b: Region) -> Region {
+    if a.width == 0 || a.height == 0 {
+        return b;
+    }
+    if b.width == 0 || b.height == 0 {
+        return a;
+    }
+    let (x, y) = (a.x.min(b.x), a.y.min(b.y));
+    Region {
+        x,
+        y,
+        width: (a.x + a.width).max(b.x + b.width) - x,
+        height: (a.y + a.height).max(b.y + b.height) - y,
+    }
+}
+
+/// Which uploaded model a [`GpuModel`] was ([`GpuModel::seen`]). It doesn't keep the
+/// model's buffers alive, and it never matches another upload, even one made where a
+/// dropped one was.
+#[derive(Clone, Debug)]
+pub struct SeenModel(std::sync::Weak<Uploaded>);
+
+impl PartialEq for SeenModel {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
 impl GpuModel {
+    /// Which upload this is, to tell later whether a model is still the same one.
+    pub fn seen(&self) -> SeenModel {
+        SeenModel(Arc::downgrade(&self.inner))
+    }
+
     /// The version of the model it was uploaded from
     /// ([`jstream_media::model::Model::version`]).
     pub fn version(&self) -> u64 {
@@ -274,6 +406,26 @@ pub struct ModelDraw<'a> {
     /// environment, or for a model lit by its scene that scene's sky, for its
     /// reflections and ambient light. An unlit model ignores it.
     pub reflection: Option<&'a Image>,
+    /// The reflection probe the model reads (ADR-0170 decision 3): inside its box the
+    /// model reflects the probe's capture in place of the environment. Only a model lit
+    /// by its scene reads one; `None` for none.
+    pub probe: Option<ProbeLookup<'a>>,
+}
+
+/// A reflection probe's capture, as a surface reads it (ADR-0170 decision 3).
+#[derive(Clone, Copy, Debug)]
+pub struct ProbeLookup<'a> {
+    /// The capture: an equirectangular panorama of the scene around `centre`, in the
+    /// scene's axes, its centre along -z and up at its top, premultiplied with alpha
+    /// where something was seen, as [`crate::Compositor::resample_probe`] draws it.
+    pub image: &'a Image,
+    /// The box's centre, in the scene's space, where the capture was taken.
+    pub centre: [f32; 3],
+    /// Half the box's size along the scene's x, y and z axes, in scene pixels.
+    pub half: [f32; 3],
+    /// How far inside its faces a surface fades from the environment to the probe, in
+    /// scene pixels.
+    pub fade: f32,
 }
 
 /// A source's picture on a model's surfaces (ADR-0107 decision 5).
@@ -317,6 +469,8 @@ pub struct CardDraw<'a> {
     pub shadows: &'a [ShadowMap<'a>],
     /// The scene's environment light.
     pub environment: Option<Environment<'a>>,
+    /// The reflection probe it reads (ADR-0170 decision 3), as a model does.
+    pub probe: Option<ProbeLookup<'a>>,
 }
 
 /// The sky around a 3D scene (ADR-0151 decision 9), from its first environment light.
@@ -407,6 +561,9 @@ pub(crate) struct ModelRuntime {
     /// draw that had any, and their textures, so a steady frame makes no bind group
     /// (ADR-0151 decisions 3 and 9).
     shadow_bind: Option<([Option<wgpu::Texture>; FRAME_TEXTURES], wgpu::BindGroup)>,
+    /// The opaque primitives' depth, drawn before their shading.
+    prepass: wgpu::RenderPipeline,
+    /// Their shading, where the prepass left their depth.
     opaque: wgpu::RenderPipeline,
     blended: wgpu::RenderPipeline,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
@@ -465,6 +622,7 @@ impl ModelRuntime {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                texture_entry(5),
             ],
         });
         let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -506,17 +664,15 @@ impl ModelRuntime {
                 count: None,
             }],
         });
-        let rest_pose = pose_bind(gpu, &pose_layout, &[IDENTITY_MAT4]).1;
+        let rest_pose = pose_bind(&gpu.device, &pose_layout, &[IDENTITY_MAT4]).1;
+        // The filters' colour helpers, so a picture decodes as every pass decodes it.
+        const SOURCE: &str = concat!(
+            include_str!("../filter/colour.wgsl"),
+            include_str!("model.wgsl")
+        );
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
-            // The filters' colour helpers, so a picture decodes as every pass decodes it.
-            source: wgpu::ShaderSource::Wgsl(
-                concat!(
-                    include_str!("../filter/colour.wgsl"),
-                    include_str!("model.wgsl")
-                )
-                .into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream-render-model"),
@@ -527,12 +683,20 @@ impl ModelRuntime {
             ],
             immediate_size: 0,
         });
-        let pipeline = |blended: bool| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(if blended {
-                    "jstream-render-model-blended"
-                } else {
-                    "jstream-render-model-opaque"
+        // The opaque primitives draw twice: their depth first (`fs_prepass`), then their
+        // shading where it is equal, which writes no depth; blended ones test it.
+        #[derive(Clone, Copy, PartialEq)]
+        enum Kind {
+            Prepass,
+            Opaque,
+            Blended,
+        }
+        let pipeline = |kind: Kind| {
+            let desc = wgpu::RenderPipelineDescriptor {
+                label: Some(match kind {
+                    Kind::Prepass => "jstream-render-model-prepass",
+                    Kind::Opaque => "jstream-render-model-opaque",
+                    Kind::Blended => "jstream-render-model-blended",
                 }),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
@@ -564,34 +728,51 @@ impl ModelRuntime {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(!blended),
-                    depth_compare: Some(wgpu::CompareFunction::Greater),
+                    depth_write_enabled: Some(kind == Kind::Prepass),
+                    depth_compare: Some(if kind == Kind::Opaque {
+                        wgpu::CompareFunction::Equal
+                    } else {
+                        wgpu::CompareFunction::Greater
+                    }),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some("fs"),
+                    entry_point: Some(if kind == Kind::Prepass {
+                        "fs_prepass"
+                    } else {
+                        "fs"
+                    }),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    // The prepass draws in the colour pass, so it has its target, and
+                    // writes none of it.
                     targets: &[Some(wgpu::ColorTargetState {
                         format: LAYER_FORMAT,
-                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
+                        blend: (kind != Kind::Prepass)
+                            .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: if kind == Kind::Prepass {
+                            wgpu::ColorWrites::empty()
+                        } else {
+                            wgpu::ColorWrites::ALL
+                        },
                     })],
                 }),
                 multiview_mask: None,
                 cache: None,
-            })
+            };
+            gpu.built.render(device, SOURCE, &(), &desc)
         };
-        let opaque = pipeline(false);
-        let blended = pipeline(true);
+        let prepass = pipeline(Kind::Prepass);
+        let opaque = pipeline(Kind::Opaque);
+        let blended = pipeline(Kind::Blended);
         let largest = wgpu::BlendComponent {
             src_factor: wgpu::BlendFactor::One,
             dst_factor: wgpu::BlendFactor::One,
             operation: wgpu::BlendOperation::Max,
         };
-        let depth_only = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let depth_only = wgpu::RenderPipelineDescriptor {
             label: Some("jstream-render-model-view-depth"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
@@ -636,7 +817,8 @@ impl ModelRuntime {
             }),
             multiview_mask: None,
             cache: None,
-        });
+        };
+        let depth_only = gpu.built.render(device, SOURCE, &(), &depth_only);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-model-sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -686,7 +868,7 @@ impl ModelRuntime {
             device,
             &frame_layout,
             (&frame, &sampler),
-            [&white, &white, &white],
+            [&white, &white, &white, &white],
         );
         Self {
             material_layout,
@@ -694,6 +876,7 @@ impl ModelRuntime {
             pose_layout,
             rest_pose,
             shadow_bind: None,
+            prepass,
             opaque,
             blended,
             depth_only,
@@ -709,21 +892,57 @@ impl ModelRuntime {
         }
     }
 
+    /// What an upload of a model `owner`'s compositor draws takes of it.
+    pub(crate) fn upload_kit(&self, gpu: &Gpu, owner: &Owner) -> UploadKit {
+        UploadKit {
+            device: gpu.device.clone(),
+            queue: gpu.queue.clone(),
+            max_texture_dimension_2d: gpu.max_texture_dimension_2d,
+            max_buffer_size: gpu.max_buffer_size,
+            owner: owner.clone(),
+            material_layout: self.material_layout.clone(),
+            pose_layout: self.pose_layout.clone(),
+            sampler: self.sampler.clone(),
+            white: self.white.clone(),
+            flat_normal: self.flat_normal.clone(),
+        }
+    }
+}
+
+/// What uploading a model takes of the compositor that draws it: its device's handles
+/// and the model pipelines' layouts, sampler and stand-in textures. It holds clones, so
+/// an upload can run on another thread than the compositor's
+/// ([`crate::ModelUploader`]). It writes buffers and textures and submits nothing, so
+/// what it wrote goes with the queue's next submit, before any draw of the model.
+pub(crate) struct UploadKit {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    max_texture_dimension_2d: u32,
+    max_buffer_size: u64,
+    owner: Owner,
+    material_layout: wgpu::BindGroupLayout,
+    pose_layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    white: wgpu::TextureView,
+    flat_normal: wgpu::TextureView,
+}
+
+impl UploadKit {
+    /// The device it uploads to.
+    pub(crate) fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
     /// Uploads `model`: its vertex and index buffers, its textures with their mips, and a
     /// bind group per material.
-    pub(crate) fn upload(
-        &self,
-        gpu: &Gpu,
-        owner: &Owner,
-        model: &Model,
-    ) -> Result<GpuModel, RenderError> {
-        let device = &gpu.device;
+    pub(crate) fn upload(&self, model: &Model) -> Result<GpuModel, RenderError> {
+        let device = &self.device;
         // Every primitive is one vertex and one index buffer, which wgpu panics on, rather
         // than refuses, past the device's limit: check before uploading anything.
         for p in model.primitives() {
             let vertex_bytes = p.vertices.len() as u64 * VERTEX_STRIDE;
             let index_bytes = p.indices.len() as u64 * 4;
-            if vertex_bytes.max(index_bytes) > gpu.max_buffer_size {
+            if vertex_bytes.max(index_bytes) > self.max_buffer_size {
                 return Err(RenderError::Invalid {
                     what: "model",
                     detail: format!(
@@ -731,14 +950,14 @@ impl ModelRuntime {
                         p.vertices.len(),
                         p.indices.len(),
                         vertex_bytes.max(index_bytes),
-                        gpu.max_buffer_size
+                        self.max_buffer_size
                     ),
                 });
             }
         }
         let mut textures = Vec::with_capacity(model.textures().len());
         for texture in model.textures() {
-            textures.push(upload_texture(gpu, texture)?);
+            textures.push(upload_texture(self, texture)?);
         }
         let view =
             |texture: Option<TextureRef>, fallback: &wgpu::TextureView| -> wgpu::TextureView {
@@ -880,7 +1099,7 @@ impl ModelRuntime {
         let bounds = model.bounds();
         Ok(GpuModel {
             inner: Arc::new(Uploaded {
-                owner: owner.clone(),
+                owner: self.owner.clone(),
                 version: model.version(),
                 bounds: SolidBounds {
                     min: bounds.min,
@@ -889,14 +1108,16 @@ impl ModelRuntime {
                 primitives,
                 materials,
                 pose: (!rest.is_empty()).then(|| {
-                    let (buffer, bind) = pose_bind(gpu, &self.pose_layout, &rest);
+                    let (buffer, bind) = pose_bind(device, &self.pose_layout, &rest);
                     (buffer, bind, rest.len())
                 }),
                 live: Mutex::new(None),
             }),
         })
     }
+}
 
+impl ModelRuntime {
     /// Writes `palette` as `model`'s pose for its next draws (ADR-0151 decision 7). A
     /// model without a rig, or a palette of another length, is left as it is.
     pub(crate) fn pose(gpu: &Gpu, model: &GpuModel, palette: &[rig::Mat4]) {
@@ -914,33 +1135,41 @@ impl ModelRuntime {
 
     /// The frame bind group for a draw with shadow maps `maps`: the plain one with none,
     /// else the one kept for the same maps, made again when they change.
+    /// A slot of `chains` binds that mip chain in place of its map.
     fn frame_bind_for(
         &mut self,
         gpu: &Gpu,
         maps: [Option<&Image>; FRAME_TEXTURES],
+        chains: [Option<&(wgpu::Texture, wgpu::TextureView)>; FRAME_TEXTURES],
     ) -> wgpu::BindGroup {
         if maps.iter().all(Option::is_none) {
             return self.frame_bind.clone();
         }
-        let textures = maps.map(|map| map.map(|image| image.texture().clone()));
+        let textures: [Option<wgpu::Texture>; FRAME_TEXTURES] =
+            std::array::from_fn(|n| match chains[n] {
+                Some((texture, _)) => Some(texture.clone()),
+                None => maps[n].map(|image| image.texture().clone()),
+            });
         if let Some((kept, bind)) = &self.shadow_bind
             && *kept == textures
         {
             return bind.clone();
         }
-        let views = maps.map(|map| {
-            map.map(|image| {
-                image
-                    .texture()
-                    .create_view(&wgpu::TextureViewDescriptor::default())
-            })
-        });
+        let views: [Option<wgpu::TextureView>; FRAME_TEXTURES] =
+            std::array::from_fn(|n| match chains[n] {
+                Some((_, view)) => Some(view.clone()),
+                None => maps[n].map(|image| {
+                    image
+                        .texture()
+                        .create_view(&wgpu::TextureViewDescriptor::default())
+                }),
+            });
         let view = |n: usize| views[n].as_ref().unwrap_or(&self.white);
         let bind = frame_bind_group(
             &gpu.device,
             &self.frame_layout,
             (&self.frame, &self.sampler),
-            [view(0), view(1), view(2)],
+            [view(0), view(1), view(2), view(3)],
         );
         self.shadow_bind = Some((textures, bind.clone()));
         bind
@@ -949,16 +1178,16 @@ impl ModelRuntime {
     /// Draws `draw` into `target`, replacing what it held: transparent wherever the
     /// model isn't.
     /// `live` is `draw.texture`'s mip chain, its texture and its whole view, when its
-    /// picture is drawing.
+    /// picture is drawing, and `panoramas` the chains its blurred reflections read.
     pub(crate) fn draw(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+        (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
     ) -> Result<(), RenderError> {
-        self.draw_as(gpu, owner, draw, target, live, false)
+        self.draw_as(gpu, owner, draw, target, (live, panoramas), false)
     }
 
     /// The material bind groups `draw` binds with its live texture `live` (the clear
@@ -1036,12 +1265,14 @@ impl ModelRuntime {
     /// Lights `card.image`, a card's picture flat in its box layer, into `target`, a
     /// layer of the same size (ADR-0151 decision 10): each texel shaded where it sits
     /// in the scene, as a flat glTF quad there would be, and laid back where it was.
+    /// `panoramas` are the chains its blurred reflections read.
     pub(crate) fn light_card(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
         card: &CardDraw<'_>,
         target: &Image,
+        panoramas: Panoramas<'_>,
     ) -> Result<(), RenderError> {
         if !card.image.owner().is(owner) {
             return Err(RenderError::Invalid {
@@ -1165,8 +1396,9 @@ impl ModelRuntime {
             materials: &[],
             texture: None,
             reflection: None,
+            probe: card.probe,
         };
-        self.draw_as(gpu, owner, &draw, target, None, true)
+        self.draw_as(gpu, owner, &draw, target, (None, panoramas), true)
     }
 
     /// The quad a card is lit on: a unit square in its own plane, facing the viewer,
@@ -1233,7 +1465,7 @@ impl ModelRuntime {
         owner: &Owner,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+        (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
         in_texture: bool,
     ) -> Result<(), RenderError> {
         let model = &draw.model.inner;
@@ -1314,7 +1546,7 @@ impl ModelRuntime {
             .reflection
             .filter(|image| image.owner().is(owner) && draw.lighting != Lighting::Unlit);
         // The scene's sky, for a model lit by its scene (ADR-0151 decision 9).
-        let sky = match (
+        let mut sky = match (
             reflection,
             draw.environment,
             lights.as_ref(),
@@ -1331,6 +1563,31 @@ impl ModelRuntime {
             }
             _ => None,
         };
+        // The reflection probe a model lit by its scene reads (ADR-0170 decision 3).
+        let mut probe = match (draw.probe, lights.as_ref(), camera.as_ref()) {
+            (Some(probe), Some(_), Some(view))
+                if probe.image.owner().is(owner) && draw.lighting == Lighting::Scene =>
+            {
+                maps[PROBE_SLOT] = Some(probe.image);
+                Some(probe_values(&probe, view))
+            }
+            _ => None,
+        };
+        // A picture read through its mip chain reads premultiplied linear light.
+        let mut chains = [None; FRAME_TEXTURES];
+        for (slot, chain) in [
+            (MAX_SHADOW_MAPS, panoramas.sky),
+            (PROBE_SLOT, panoramas.probe),
+        ] {
+            chains[slot] = maps[slot].and_then(|image| Panoramas::of(chain, image));
+        }
+        let premultiplied = crate::image::Alpha::Premultiplied.shader_mode();
+        if let (Some(values), Some(_)) = (sky.as_mut(), chains[MAX_SHADOW_MAPS]) {
+            values[SKY_MODE] = premultiplied;
+        }
+        if let (Some(values), Some(_)) = (probe.as_mut(), chains[PROBE_SLOT]) {
+            values[PROBE_MODE] = premultiplied;
+        }
         let frame = frame_bytes(
             (&solid, mirrored),
             &clip,
@@ -1340,9 +1597,10 @@ impl ModelRuntime {
                 &views[..count],
                 sky.as_ref(),
                 floor_cut(draw.floor, camera.as_ref()),
+                probe.as_ref(),
             ),
         );
-        let frame_bind = self.frame_bind_for(gpu, maps);
+        let frame_bind = self.frame_bind_for(gpu, maps, chains);
         let live_binds = draw
             .texture
             .map(|texture| self.live_binds(gpu, model, texture.material, live));
@@ -1441,11 +1699,22 @@ impl ModelRuntime {
                 pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..p.index_count, 0, 0..1);
             };
+            // Depth first, then shading only where it is the nearest: a pixel several
+            // surfaces cover is shaded once, not once a surface.
+            let opaque =
+                |p: &&GpuPrimitive| !model.materials.get(p.material).is_some_and(|m| m.blended);
+            pass.set_pipeline(&self.prepass);
+            for p in model.primitives.iter().filter(opaque) {
+                draw_one(&mut pass, p);
+            }
+            // Last to first: where two primitives lie in one plane both pass the equal
+            // test and the later draw replaces the earlier, so this order shows the
+            // first of them, as one pass that kept the first nearest fragment did.
+            // Inside one primitive its triangles still draw in index order, so of two
+            // of its own triangles in one plane the later now shows.
             pass.set_pipeline(&self.opaque);
-            for p in &model.primitives {
-                if !model.materials.get(p.material).is_some_and(|m| m.blended) {
-                    draw_one(&mut pass, p);
-                }
+            for p in model.primitives.iter().rev().filter(opaque) {
+                draw_one(&mut pass, p);
             }
             if !self.order.is_empty() {
                 pass.set_pipeline(&self.blended);
@@ -1456,6 +1725,12 @@ impl ModelRuntime {
         }
         gpu.submit_work(encoder.finish());
         target.mark_changed();
+        // Outside the model's box on the target the layer is transparent: what places
+        // or filters it draws only over the rest (#1070).
+        let content = (!in_texture && model.pose.is_none())
+            .then(|| drawn_box(&clip, model.bounds, (width, height)))
+            .flatten();
+        target.set_content(content);
         drop(submitting);
         Ok(())
     }
@@ -1501,7 +1776,7 @@ impl ModelRuntime {
             &clip,
             Lighting::Unlit,
             None,
-            (&[], None, floor_cut(draw.floor, Some(&camera))),
+            (&[], None, floor_cut(draw.floor, Some(&camera)), None),
         );
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
@@ -1546,7 +1821,17 @@ impl ModelRuntime {
             }
         }
         gpu.submit_work(encoder.finish());
+        // The target holds what it held and the model's box more.
+        let prior = target.content();
         target.mark_changed();
+        let content = match (prior, model.pose.is_none()) {
+            (Some(prior), true) => {
+                drawn_box(&clip, model.bounds, (target.width(), target.height()))
+                    .map(|drawn| union(prior, drawn))
+            }
+            _ => None,
+        };
+        target.set_content(content);
         drop(submitting);
         Ok(())
     }
@@ -1693,7 +1978,7 @@ impl SceneLighting {
 }
 
 /// The frame bind group over `frame`, the two shadow maps' views, the environment
-/// picture's and `sampler`.
+/// picture's, `sampler` and the reflection probe's picture's.
 fn frame_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
@@ -1723,6 +2008,10 @@ fn frame_bind_group(
             wgpu::BindGroupEntry {
                 binding: 4,
                 resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::TextureView(textures[3]),
             },
         ],
     })
@@ -1871,12 +2160,21 @@ fn reflection_values(
     ]
 }
 
+/// The frame uniform's values after the lights: the shadow maps' matrices, the
+/// environment, the floor cut and the reflection probe.
+type FrameTail<'a> = (
+    &'a [[f32; 16]],
+    Option<&'a [f32; 24]>,
+    [f32; 4],
+    Option<&'a [f32; 20]>,
+);
+
 fn frame_bytes(
     (solid, mirrored): (&Solid, bool),
     clip: &[[f32; 4]; 4],
     lighting: Lighting,
     lights: Option<&SceneLighting>,
-    (shadows, environment, cut): (&[[f32; 16]], Option<&[f32; 24]>, [f32; 4]),
+    (shadows, environment, cut, probe): FrameTail<'_>,
 ) -> Vec<u8> {
     let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
@@ -1919,8 +2217,9 @@ fn frame_bytes(
     }
     // The environment follows the shadow maps; none leaves the studio gradient.
     values.extend(environment.copied().unwrap_or([0.0; 24]));
-    // The floor's cutting plane follows the environment.
+    // The floor's cutting plane follows the environment, and the probe follows it.
     values.extend(cut);
+    values.extend(probe.copied().unwrap_or([0.0; 20]));
     values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)
 }
@@ -1936,6 +2235,52 @@ fn sees_front(solid: &Solid) -> bool {
         None => [0.0, 0.0, 1.0],
     };
     n[0] * to_viewer[0] + n[1] * to_viewer[1] + n[2] * to_viewer[2] > 0.0
+}
+
+/// `probe` in the shader's terms (`model.wgsl`'s `Probe`) as `view` sees it: its box's
+/// centre in the viewing frame and the scene's axes there, each with the box's half size
+/// along it, then its fade and how its picture stores alpha.
+fn probe_values(probe: &ProbeLookup<'_>, view: &jstream_protocol::CameraView) -> [f32; 20] {
+    let [right, down, forward] = view.axes();
+    let focal = f64::from(view.focal_px());
+    let position = view.position();
+    // The viewing frame's origin: on the camera's axis, its focal length ahead.
+    let origin = [0, 1, 2].map(|i| position[i] + forward[i] * focal);
+    let off = [0, 1, 2].map(|i| f64::from(probe.centre[i]) - origin[i]);
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let centre = [dot(off, right), dot(off, down), -dot(off, forward)];
+    let finite = |value: f32| {
+        if value.is_finite() {
+            value.max(0.0)
+        } else {
+            0.0
+        }
+    };
+    let axis = |i: usize| [right[i] as f32, down[i] as f32, -forward[i] as f32];
+    let [x, y, z] = [axis(0), axis(1), axis(2)];
+    let [hx, hy, hz] = probe.half.map(finite);
+    [
+        centre[0] as f32,
+        centre[1] as f32,
+        centre[2] as f32,
+        1.0,
+        x[0],
+        x[1],
+        x[2],
+        hx,
+        y[0],
+        y[1],
+        y[2],
+        hy,
+        z[0],
+        z[1],
+        z[2],
+        hz,
+        finite(probe.fade),
+        probe.image.alpha().shader_mode(),
+        0.0,
+        0.0,
+    ]
 }
 
 /// How far past its floor (ADR-0151 decision 4) a viewing-frame point `s` is, as the
@@ -1964,7 +2309,7 @@ const IDENTITY_MAT4: rig::Mat4 = [
 
 /// A palette's storage buffer, holding `palette`, and its bind group.
 fn pose_bind(
-    gpu: &Gpu,
+    device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     palette: &[rig::Mat4],
 ) -> (wgpu::Buffer, wgpu::BindGroup) {
@@ -1973,14 +2318,12 @@ fn pose_bind(
         .flatten()
         .flat_map(|v| v.to_le_bytes())
         .collect();
-    let buffer = gpu
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("jstream-render-model-pose"),
-            contents: &bytes,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
-    let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("jstream-render-model-pose"),
+        contents: &bytes,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    });
+    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("jstream-render-model-pose"),
         layout,
         entries: &[wgpu::BindGroupEntry {
@@ -1991,8 +2334,11 @@ fn pose_bind(
     (buffer, bind)
 }
 
-fn upload_texture(gpu: &Gpu, texture: &ModelTexture) -> Result<wgpu::TextureView, RenderError> {
-    let limit = gpu.max_texture_dimension_2d;
+fn upload_texture(
+    kit: &UploadKit,
+    texture: &ModelTexture,
+) -> Result<wgpu::TextureView, RenderError> {
+    let limit = kit.max_texture_dimension_2d;
     if texture.width() > limit || texture.height() > limit {
         return Err(RenderError::TooLarge {
             what: "image",
@@ -2005,26 +2351,56 @@ fn upload_texture(gpu: &Gpu, texture: &ModelTexture) -> Result<wgpu::TextureView
         TextureColor::Srgb => wgpu::TextureFormat::Rgba8UnormSrgb,
         TextureColor::Linear => wgpu::TextureFormat::Rgba8Unorm,
     };
-    let data: Vec<u8> = texture.levels().iter().flatten().copied().collect();
-    let uploaded = gpu.device.create_texture_with_data(
-        &gpu.queue,
-        &wgpu::TextureDescriptor {
-            label: Some("jstream-render-model-texture"),
-            size: wgpu::Extent3d {
-                width: texture.width(),
-                height: texture.height(),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: texture.levels().len() as u32,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
+    let uploaded = kit.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("jstream-render-model-texture"),
+        size: wgpu::Extent3d {
+            width: texture.width(),
+            height: texture.height(),
+            depth_or_array_layers: 1,
         },
-        wgpu::util::TextureDataOrder::LayerMajor,
-        &data,
-    );
+        mip_level_count: texture.levels().len() as u32,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    // Each level is written from where it is, a band of rows at a time: the queue is
+    // locked for one band's copy, not a level's, so a thread that submits meanwhile
+    // waits for little (ADR-0177).
+    for (level, texels) in texture.levels().iter().enumerate() {
+        let width = (texture.width() >> level).max(1);
+        let height = (texture.height() >> level).max(1);
+        let row = width as usize * 4;
+        let band = (TEXTURE_BAND_BYTES / row).max(1);
+        for (at, rows) in texels.chunks(row * band).enumerate() {
+            let rows_here = (rows.len() / row) as u32;
+            kit.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &uploaded,
+                    mip_level: level as u32,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: (at * band) as u32,
+                        z: 0,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                rows,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(width * 4),
+                    rows_per_image: Some(rows_here),
+                },
+                wgpu::Extent3d {
+                    width,
+                    height: rows_here,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        debug_assert_eq!(texels.len(), row * height as usize);
+    }
     Ok(uploaded.create_view(&wgpu::TextureViewDescriptor::default()))
 }
 

@@ -52,7 +52,9 @@ covers = ["crates/jstream-ui/style.css"]
 - **Danger** (`.danger.secondary`): a secondary button with red text, for an action that
   deletes. **Danger confirm** (`.danger`): solid red, only on the button that confirms a
   delete.
-- **Ghost and link**: no fill, for light actions such as "Clear" or "+ Add filter".
+- **Ghost and link**: no fill, for light actions such as "Clear" or "+ Add filter". In a
+  dialog, `button.link` is link-coloured text beside a field ("Edit…", "New…"), shown
+  only when it can act rather than drawn disabled.
 - **Small** (`button.sm`): 24 px tall with 12 px text, for a row of actions inside a
   panel (the Arrange panel's Fit, Match, Rotate and Crop rows, Set key). Its label can be
   short when a heading above says the rest ("Width" under Match); its tooltip and
@@ -190,6 +192,10 @@ The property grid, as OBS's Properties lay a source's settings out:
   slider fills the row with a 64 px number after it.
 - A setting's reset (↺) sits in a 20 px column of its own and shows only once the value
   differs from its default, so the right edges line up.
+- A setting a controller can drive (live, a number with both ends or a switch) has a
+  learn button (`button.learn`, the MIDI icon) after its reset, in a third column that
+  takes only its width: `--muted` and borderless at rest, `--accent` with a border when
+  bound (with its control's short name, `CC 7`) or while it is learning.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for

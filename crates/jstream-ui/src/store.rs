@@ -58,6 +58,8 @@ pub struct Collection {
     pub folders: Vec<FolderInfo>,
     /// The transition presets and which one is the default.
     pub transitions: TransitionsInfo,
+    /// The value bindings, ordered by ID (ADR-0178): which settings a controller drives.
+    pub value_bindings: Vec<jstream_control::protocol::ValueBinding>,
 }
 
 impl Collection {
@@ -78,6 +80,7 @@ impl Collection {
                 hotkeys,
                 folders,
                 transitions,
+                value_bindings,
                 ..
             } => {
                 let mut scenes = scenes;
@@ -120,6 +123,7 @@ impl Collection {
                     hotkeys,
                     folders,
                     transitions: *transitions,
+                    value_bindings,
                 })
             }
             _ => None,

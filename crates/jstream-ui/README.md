@@ -120,7 +120,7 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker, its transition presets, its hotkey bindings, its scene folders and
+  for the bus picker, its transition presets, its hotkey bindings, its value bindings, its scene folders and
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
   are its parent's with its overrides applied (effects included), `shown_items`, and the children of the
   groups in its tree likewise, `keyframe_children`, which `item_in` and the selection
@@ -199,7 +199,9 @@ Contents ([Design](#design) explains the choices):
   arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
-  `looks` table in `looks.rs`), the Add source dialog (`add_source.rs`:
+  `looks` table in `looks.rs`), the learn button beside a live setting, a fader or a send
+  (`learn.rs`, ADR-0178, whose control matching and learned binding are tested
+  natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -237,7 +239,7 @@ Contents ([Design](#design) explains the choices):
   output and for each output with its state, Start or Stop, FX button and ⋯ menu, and a
   running one's stats line; Duplicate; each output's settings dialog, which creates or
   edits a stream, recording or virtual camera and its stream key, applies nothing until
-  OK or Apply and follows another client's changes to untouched fields, whose drafts,
+  Save and follows another client's changes to untouched fields, whose drafts,
   edits, copies and Start all are tested natively; and the delete confirmation);
   `encoders.rs`: `Profiles`, its encoder profile and video mix list and editor, in the
   panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
@@ -279,13 +281,15 @@ Contents ([Design](#design) explains the choices):
   are tested natively.
 - **3D rendering** (`rendering.rs`,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
-  decision 1): `RenderingSettings`, the 3D rendering page, one toggle per `Switch`
-  (Shadows, Ambient occlusion, Volumetric fog, Floor reflections) in a property grid
-  under Effects, each with one help line and an (i). It reads the switches with
+  decisions 1 and 3): `RenderingSettings`, the 3D rendering page, one toggle per
+  `Switch` (Shadows, Ambient occlusion, Volumetric fog, Floor reflections, Reflection
+  probes) in a property grid under Effects, each with one help line and an (i), then a
+  Probe resolution select (Up to 128, 256 or 512 px, `max_probe_resolution`, sent with
+  `probe_cap`). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
-  `read`, `set` and each `Switch`'s change are tested natively.
+  `read`, `set`, each `Switch`'s change and the probe cap are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Audio plugins section of
   the Settings dialog's Audio page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
@@ -556,7 +560,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
   platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
-  with a cube icon, and its `light` after it with the sparkle icon, placed at 64 × 64),
+  with a cube icon, and its `light` and `reflection_probe` after it with the sparkle
+  icon, placed at 64 × 64),
   plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
@@ -566,7 +571,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Creating new sends `source.create` and
   `item.add` as one batch (a new `text` or `timer` starting bold with a soft shadow,
   `starting_settings`, over its kind's plain defaults), with a box of the prototype's native size for the type
-  (Shape 400 × 120 and Timer 300 × 90, which the prototype doesn't have),
+  (Shape 400 × 120, Timer 300 × 90 and Fog card 1024 × 576, which the prototype doesn't have),
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
   its first placement, or, placed nowhere, at its own size when the engine reports one
@@ -652,11 +657,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   for any), the message's Key, the Field within it (a dotted path, blank for the whole
   message), its States (`recording=1, playing=0.5`, for a field that is text) and its
   curve, with At 0 (off), At 1 (on), Number at 0, Number at 1 and Smoothing as its
-  fields, starting on the transport's `playing`, ADR-0171; not on a camera), that
+  fields, starting on the transport's `playing`, ADR-0171, and on an effect or source
+  setting a Colour choice, Lightens it, Its #rrggbb text or A palette by its text, with
+  the Palette (`recording=#ff2020, playing=#20ff40`) for the last, ADR-0171 decision 5,
+  cleared when it moves to a placement property; not on a camera), that
   kind's fields, when its time starts (in step, when shown, or when fired; not for
   audio, MIDI or data), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
-  and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
+  and "+ Add motion" up to 32; each change sends `item.set_motion` with the whole list,
   in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
   (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
   picking a placement property for it drops its effect target; the section doesn't add
@@ -754,6 +762,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
+- **Controller learn** (`learn.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+  The properties form puts a learn button after the reset button of every setting its
+  kind marks `live` that is a number with both ends or a switch, for a source's settings
+  and a filter's; the mixer puts one after each channel's and bus's mute button, and after the dB
+  field of each send that exists. A
+  click reads `midi.last_controls` for a baseline, then every 150 ms for up to 15 s, and
+  binds the first input whose count of control changes grew with `binding.set_value`,
+  over the setting's whole range (a fader's over -60 to +6 dB), 50 ms smoothed, as
+  `learn_<hash of the target>`, so learning again replaces it. A bound button shows its
+  control (`CC 7`) and unbinds it on a click; a learning one says "Move…" and stops on a
+  click, or once its form closes (its signals are read with `try_`, so a closed form ends
+  the loop). An engine that reads no MIDI controls says so in the problem bar.
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
   its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
   (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source
@@ -814,7 +834,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   an override that starts from the parent's camera, or from the framing camera when the
   parent is 2D (`camera_start`, [ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)). A note warns when items already have depth or angles
   (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
-  on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
+  on the camera's target with a 6 px blur and autofocus on, and shows an Autofocus check
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)),
+  Focus distance and Aperture (blur), and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   With a camera on, a scene's own dialog shows `CameraMoves`
@@ -823,11 +845,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   camera, with Open its filter, or saying how to add one, with Add Follow pointer…, which
   opens Add filter on the scene's first display or window capture (`followable`)
   ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)); and
-  Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
+  Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and DAW data (set over the protocol), MIDI included with its Input ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md), `camera_kind`), on Pan and Tilt too, and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. The list is a draft field, which OK sends as
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
-  A keyframe scene shows neither, since it draws its parent's. A group's dialog has a
+  A keyframe scene shows neither, since it draws its parent's. A scene's own dialog
+  that isn't a group's has a Reflections check under Output, sent in `scene.set_options`,
+  whose info tip says what reflects what inside a reflection probe's box
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 2). A group's dialog has a
   Share the 3D space check, sent in `scene.set_options`, and a scene's own camera, when
   the scene places a group, a Moves with picker under Roll (`anchor_choices`: Nothing,
   or each item placing a group, "(flat)" while it doesn't share the space), sent after
@@ -971,10 +997,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `item.set_effects_space`
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so they run
   after the item is placed. It isn't shown under a keyframe's, since the space
-  belongs to the item in every scene. The Add filter dialog lists the vignette, scanlines, bloom and border
+  belongs to the item in every scene. The Add filter dialog lists the vignette, scanlines, hologram, bloom and border
   under Style. A kind with presets (`filter_presets.rs`: the vignette's Subtle, Cinematic
   and Spotlight, the border's Card, Neon and Broadcast frame, the scanlines' Monitor, CRT
-  and Film grain) has a Preset select above its form in the Filters window, which sets the
+  and Film grain, the hologram's Transmission, Steady, Broken signal and Amber) has a Preset select above its form in the Filters window, which sets the
   preset's values and every other setting back to its default in one `filter.set_settings`.
 - **The shell** is the header bar over the workspace. When the desktop app's launch
   check finds a newer release, a dismissable notice sits under the header (`updates.rs`).
@@ -1114,18 +1140,21 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   path beside the original's, `copy_path`; never the stream key), then opens the copy's
   settings. Delete… asks first and is off while the output runs.
   An output's settings dialog (Settings…, a double-click, or "+ Add output" with a kind
-  picker) edits a draft (`OutputDraft`) and applies nothing until OK or Apply, which
+  picker and a Name field) edits a draft (`OutputDraft`) on a property grid (C16) and
+  applies nothing until Save (Add for a new one), which
   send what changed as one batch (`draft_edits`: `output.create` first for a new one,
   then `output.set_target` or `output.set_path` (#1072), `output.set_encoder`,
   `output.set_video_mix`, `output.set_audio_buses`), then the key action
-  (`send_settings`). A new output's ID is read from the engine at send time; if its key
+  (`send_settings`). A new output takes the name typed as its ID (`name_problem` checks it as it is typed, and
+  `send_settings` against the engine's list at send time); if its key
   is refused after the create, Add again sets only the key on it. While the dialog is
   open, another client's change reaches the fields still as the dialog started them
   (`OutputDraft::reseed`). A running output's target and bus are off, as the engine
   refuses those moves; a new mix or encoder applies when it starts again. In the
   desktop app a recording's path has a Browse… button, opening a save dialog for an
-  `.mp4`. The Video section has Edit mix… and the Encoder section Edit encoder… (off for
-  the engine's default) and New…, which open the Encoders & mixes dialog
+  `.mp4`. The Video section has an Edit… link (named Edit mix…) and the Encoder section
+  one (Edit encoder…), each only while a mix or profile is picked, and New… (New
+  encoder…), which open the Encoders & mixes dialog
   (`encoders.rs`) on that mix or profile or on a new one (`LibraryPick`). That dialog
   lists the profiles and mixes on the left, each with a short summary
   (`encoder_short`, `mix_short`), and edits the one picked on the right with the whole
@@ -1187,8 +1216,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   state" checkbox, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decision 1, off for a new sender, and Remove) and an add row. Each change saves the whole setting through `setJtunnel`, the app's own command,
   never a protocol call; a refused change is undone and the app's reason shown (the
-  page itself only asks for a name, an address and a name no other sender has), and
-  while it differs from the setting the app started with it says to restart JStream.
+  page itself only asks for a name, an address and a name no other sender has). The
+  app applies a saved change at once, so nothing says to restart JStream.
   Below them, while the engine's receiver runs, "Senders on this network" lists what
   `jtunnel.senders` answers, read when the page opens and again on each
   `jtunnel.senders_changed`, each sender's name (its own text, shown as text) and
@@ -1589,7 +1618,23 @@ beside it ([Design › Studio mode](#design)).
   the dragged camera with it (`camera::Preview`) until the collection has it, showing it
   in no other scene; a drag that ends with another scene shown is dropped, not
   committed (`Preview::to_commit`). In place of the
-  selection chrome, a pill reads the camera's position and distance to its target.
+  selection chrome, a pill reads the camera's position, distance to its target and
+  field of view.
+- **3D tools and camera mode** (`camera.rs`). The Depth and Turn tools (and Ctrl-drag)
+  start an `Action::Pose`: `camera::pose` moves each dragged box along the ray from the
+  camera through its centre (its distance doubling or halving per `DEPTH_DRAG_PX`, never
+  nearer than `MIN_ITEM_DISTANCE`), or turns and tilts it (not a billboard), shown and committed as a move drag
+  is. Camera mode starts an `Action::Orbit` from any mouse button, its kind
+  (`camera::CameraDrag`: orbit, `look`, `pan`, dolly) from `CameraControls::drag`, which
+  binds the left button to the drag its tool bar button picks, the right and middle to the other, and
+  Shift to the dolly; `camera::pan` slides camera and target along the view's right and
+  down axes, scaled by the target's distance over the focal length so its plane follows
+  the pointer. The wheel goes through `camera::wheel`: `zoom` scales `fov_deg` by
+  `exp(0.001 × deltaY)` within 1° to 170°, or a dolly of `0.2 × deltaY`; a turn opens its
+  own live gesture (`Wheeling`) and commits as an orbit's drop does once no wheel event
+  came for `WHEEL_SETTLE`, or at once when a drag starts. Camera mode and the item tool are left when the canvas shows a 2D scene. The bindings are kept in
+  `localStorage` (`CameraControls::stored`). Save view batches `scene.create_variant`
+  and `scene.set_camera` for a new keyframe scene with the shown camera.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos
