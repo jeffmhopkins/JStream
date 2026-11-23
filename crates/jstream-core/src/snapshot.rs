@@ -6486,7 +6486,7 @@ fn run_chains(
                 meter.gpu_unit_pass(compositor, &pass.scene);
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 if let Some(depth) = &pass.view_depth {
-                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                    cache.depth_layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
                 if pass.surface {
                     for key in surface_keys(&pass.scene) {
@@ -6970,7 +6970,7 @@ fn draw_model(
         (ChainOwner::Item(scene, item), Some(_)) => {
             let key = GpuKey::ModelDepth(scene.clone(), item.clone());
             let [width, height] = boxed.boxed.layer;
-            cache.layer(compositor, &key, width, height)?;
+            cache.depth_layer(compositor, &key, width, height)?;
             Some(key)
         }
         _ => None,
@@ -7084,7 +7084,7 @@ fn draw_model(
     }
 }
 
-/// Makes `layer` transparent all over.
+/// Makes `layer` transparent all over; a depth layer holds nothing (infinitely far).
 ///
 /// # Errors
 /// What the compositor reports for the pass.
@@ -7094,7 +7094,12 @@ fn clear(compositor: &mut Compositor, layer: &jstream_render::Image) -> Result<(
         what: "layer",
         detail: format!("a layer of {width}x{height}"),
     })?;
-    compositor.render_into(&scene(size, Color::TRANSPARENT, &[]), layer)
+    let empty = scene(size, Color::TRANSPARENT, &[]);
+    if layer.is_depth_layer() {
+        compositor.render_view_depth(&empty, layer)
+    } else {
+        compositor.render_into(&empty, layer)
+    }
 }
 
 /// What model `source`, as `shown`, shows on its surfaces and reflects this frame
@@ -7314,7 +7319,7 @@ fn draw_shadows(
         .map(|slot| GpuKey::ShadowMap(scene_id.clone(), slot as u8))
         .collect();
     for key in &keys {
-        cache.layer(compositor, key, side, side)?;
+        cache.depth_layer(compositor, key, side, side)?;
     }
     let mut items = Vec::new();
     let Some(camera) = fill_items(
@@ -7502,7 +7507,7 @@ fn draw_reflection(
     let image_key = GpuKey::Reflection(pass.scene.clone());
     let depth_key = GpuKey::ReflectionDepth(pass.scene.clone());
     cache.layer(compositor, &image_key, width, height)?;
-    cache.layer(compositor, &depth_key, width, height)?;
+    cache.depth_layer(compositor, &depth_key, width, height)?;
     // Each model the pass shows, drawn through the mirrored camera, by the layer the
     // pass places for it.
     let size = [width as f32, height as f32];
@@ -8069,7 +8074,7 @@ pub(crate) fn claim_layers(
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 if let Some(depth) = &pass.view_depth {
-                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                    cache.depth_layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
             }
             ChainStep::Box(owner) => {
@@ -8084,7 +8089,7 @@ pub(crate) fn claim_layers(
                         height,
                     );
                     if boxed.boxed.model && boxed.camera.is_some() {
-                        let _ = cache.layer(
+                        let _ = cache.depth_layer(
                             compositor,
                             &GpuKey::ModelDepth(scene.clone(), item.clone()),
                             width,

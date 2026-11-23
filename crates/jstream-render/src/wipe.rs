@@ -5,7 +5,7 @@
 //! loads it and writes transparent over that region alone, which on a software renderer
 //! is most of a sparse layer's cost.
 
-use crate::image::LAYER_FORMAT;
+use crate::image::{DEPTH_LAYER_FORMAT, LAYER_FORMAT};
 use crate::mips::Region;
 
 const SHADER: &str = "
@@ -21,9 +21,11 @@ fn fs() -> @location(0) vec4<f32> {
 }
 ";
 
-/// The pipeline that writes transparent into a layer, under a scissor.
+/// The pipelines that write transparent into a layer, and nothing (infinitely far) into
+/// a depth layer, under a scissor.
 pub(crate) struct Wipe {
     pipeline: wgpu::RenderPipeline,
+    depth: wgpu::RenderPipeline,
 }
 
 impl Wipe {
@@ -37,51 +39,58 @@ impl Wipe {
             bind_group_layouts: &[],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("jstream-render-wipe"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: LAYER_FORMAT,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        Self { pipeline }
+        let pipeline = |format| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("jstream-render-wipe"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        Self {
+            pipeline: pipeline(LAYER_FORMAT),
+            depth: pipeline(DEPTH_LAYER_FORMAT),
+        }
     }
 
     /// Writes transparent over `region` of the layer `pass` draws into, then leaves the
     /// scissor at the whole `width` by `height` layer. An empty region writes nothing.
+    /// With `depth` the pass draws into a depth layer.
     pub(crate) fn record(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         region: Region,
         (width, height): (u32, u32),
+        depth: bool,
     ) {
         let Some([x0, y0, x1, y1]) = clamp(region, width, height) else {
             return;
         };
         pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0);
-        pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(if depth { &self.depth } else { &self.pipeline });
         pass.draw(0..3, 0..1);
         pass.set_scissor_rect(0, 0, width, height);
     }

@@ -527,6 +527,38 @@ impl<K: Ord + Clone> ResourceCache<K> {
         Ok(self.replace(key, image, 0))
     }
 
+    /// The depth layer for `key` at `width` by `height`, for
+    /// [`Compositor::render_view_depth`] and [`Compositor::draw_model_depth`], and marks
+    /// it used this frame. A depth layer of the same size is reused, as [`Self::layer`]
+    /// reuses a layer.
+    ///
+    /// # Errors
+    /// As for [`Compositor::depth_layer`].
+    pub fn depth_layer(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        width: u32,
+        height: u32,
+    ) -> Result<&Image, RenderError> {
+        let frame = self.frame;
+        let reuse = self.live.get(key).is_some_and(|entry| {
+            entry.image.is_depth_layer()
+                && entry.image.width() == width
+                && entry.image.height() == height
+        });
+        if reuse {
+            let entry = self
+                .live
+                .get_mut(key)
+                .ok_or_else(|| missing("a depth layer"))?;
+            entry.used = frame;
+            return Ok(&entry.image);
+        }
+        let image = compositor.depth_layer(width, height)?;
+        Ok(self.replace(key, image, 0))
+    }
+
     /// The frame being built: what the last [`Self::begin_frame`] returned, or 0 before
     /// the first.
     pub fn frame(&self) -> u64 {

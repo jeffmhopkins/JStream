@@ -1416,7 +1416,8 @@ jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter tha
 gets the scene's view depth: one more draw of its cards, and each model's depth layer
 copied in (the one its layer carries, so a model's triangles aren't drawn again; none
 for a model under half opacity), into
-a half-float canvas layer holding `1 / w` of the nearest thing, the larger value
+a one-channel half-float canvas layer (a depth layer, as a model's depth and a shadow
+map are too) holding `1 / w` of the nearest thing, the larger value
 winning, drawn only for such a filter.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode

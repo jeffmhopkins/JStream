@@ -2177,7 +2177,9 @@ crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetri
 `floor_reflection`, `depth_bloom` and the screen-space reflections the engine adds, below)
 also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
-planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
+planning gives its composite's pass a `GpuKey::ViewDepth` depth layer
+(`ResourceCache::depth_layer`: one channel, as every view depth, model depth and shadow
+map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
 the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
@@ -2208,7 +2210,7 @@ depth, `draw_reflection` draws the scene through the camera mirrored in the floo
 down, `a_camera_mirrors_in_the_floor`) into a `GpuKey::Reflection` layer, each model it
 shows drawn again through that camera into its `GpuKey::ReflectedModel`, lit as it is
 but unshadowed, in place of its layer, and items without a camera left out; then that
-picture's view depth into `GpuKey::ReflectionDepth` (`draw_view_depth` through the
+picture's view depth into the depth layer `GpuKey::ReflectionDepth` (`draw_view_depth` through the
 mirrored camera, every model included). The pass is cut at the floor, since the mirrored
 camera looks up at it from below and the floor would hide everything on it: each model
 is drawn with `ModelDraw::floor`, so nothing of it at or below the plane is drawn or
@@ -2346,7 +2348,7 @@ Shadows ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decisio
 by index with their softness (`Chains::shadowed`). The first `scene`-lit model of a run
 that receives shadows (`ShownModel::receives_shadows`) in a scene with any draws that
 scene's maps (`draw_shadows`): for each of the first 2 such lights, a
-`GpuKey::ShadowMap` layer of 2048² holding the view depth of the scene's pass (found
+`GpuKey::ShadowMap` depth layer of 2048² holding the view depth of the scene's pass (found
 among the chains', the program's and the mixes' passes, `scene_pass`) seen from the
 light, its cards through `render_view_depth` and its models through `draw_view_depth`'s
 model loop, leaving out a model whose source doesn't cast (`casts_shadows`) and a card
