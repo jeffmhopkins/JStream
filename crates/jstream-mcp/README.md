@@ -211,7 +211,8 @@ animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters
 (`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
-and the `vignette`'s blends, shapes and three looks, #1226), the `border` kind's
+and the `vignette`'s blends, shapes and three looks, #1226), the `hologram` effect (a
+picture turned into a projection, on an `additive` card in a 3D scene), the `border` kind's
 settings, its three looks, its 9-slice image frame (#1294) and the order to stack it with a shadow or glow (#1227),
 layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
@@ -237,7 +238,9 @@ panorama `image`, and a `warp` that ramps itself over `warp_ramp_s`
 that shares the set's space (`share_space`), and a camera riding with it
 (`scene.set_camera_anchor`, ignored under a follow camera,
 [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), a camera that moves on its
-own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
+own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera, or a `midi` or `data`
+modifier that moves, turns or zooms it, and `autofocus` on what is at the frame's centre,
+[ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)) or follows the
 pointer over a screen capture (a `follow_pointer` filter on the capture item, which
 keeps the pointer inside a safe margin and gives a 2D scene a camera, with
 `scene.set_camera_follow` as a shortcut, its zoom stepped live by `scene.zoom_camera`,

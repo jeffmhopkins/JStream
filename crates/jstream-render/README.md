@@ -82,8 +82,9 @@ and calls this crate.
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.
-  The pipeline is made on the first draw, and the bake's on the first sky with nebulae
-  or a band (`golden_sky_the_deep_sky_is_baked_once_per_seed`,
+  Its two pipelines (the frame's and the bright stars' table's) are made on the first
+  draw, and the bake's on the first sky with nebulae or a band, unless `warm_3d` made
+  them first (`golden_sky_the_deep_sky_is_baked_once_per_seed`,
   `golden_sky_a_bakes_faces_meet_without_a_seam`,
   `golden_sky_bakes_are_kept_for_the_seeds_in_use`). A pixel looks for a star only
   within six star widths of where its column can hold one. Which cells of the bright
@@ -234,10 +235,10 @@ and calls this crate.
   preview or a snapshot drew is compiled for the program stage, and a caller may
   compile ahead of time on a thread of its own: by drawing what will be drawn on any
   compositor of the context, and with `Compositor::warm_3d` for what a 3D scene alone
-  draws with (the sky's pipeline, its bake's and the scene passes' depth pipelines,
+  draws with (the sky's two pipelines, its bake's and the scene passes' depth pipelines,
   otherwise made at the first draw that needs them). This covers the blend, depth,
-  model, sky, sky bake and filter pipelines; the mip, resolve, wipe, NV12 and ingest ones are still each
-  compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
+  model, sky, sky bake and filter pipelines; the mip, resolve, wipe, probe resampling,
+  NV12 and ingest ones are still each compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
   edited over and over keeps only the versions a compositor still holds, 4 a filter). `Compositor::pipelines_made` counts the
   ones made on the device, so a draw that leaves it as it was waited for no compile.
   `Compositor::open` is the other

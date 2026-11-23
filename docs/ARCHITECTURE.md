@@ -231,8 +231,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
   turn, depth and per-item perspective, drawn in stacking order with no depth buffer (only a 3D model writes depth, below).
   A scene with a `camera` (`SceneCamera`: position, target, field of view, roll,
-  `depth_sort`, and a depth of field's `focus_px` and `blur_px`,
-  [ADR-0108](adr/0108-camera-depth-of-field.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
+  `depth_sort`, a depth of field's `focus_px` and `blur_px`,
+  [ADR-0108](adr/0108-camera-depth-of-field.md), and `autofocus`, which glides the focus
+  to what is at the frame's centre,
+  [ADR-0176](adr/0176-controllers-and-live-data-drive-scene-cameras.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
   canvas extended toward the viewer is one space, each item's geometry is its pose
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
@@ -780,9 +782,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `scene.set_camera` gives a scene a camera, making it a 3D scene, or removes it; it is
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
   protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
-  ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
+  ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77), and since 0.167 its
+  `autofocus` glides the focus to what is at the frame's centre.
   `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
-  which a camera can't hear), and
+  which a camera can't hear; `midi` and `data` since 0.167,
+  [ADR-0176](adr/0176-controllers-and-live-data-drive-scene-cameras.md)), and
   a `follow_pointer` filter on a display or window capture item a camera that glides
   after the pointer over it, keeping it inside a safe margin, and supplying the framing
   camera to a 2D scene ([ADR-0120](adr/0120-follow-pointer-is-a-filter.md), protocol
@@ -1183,7 +1187,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.08 MB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.45 MB
   of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
   `hotkey` and `binding` each carry every action's, because `hotkey.set` and

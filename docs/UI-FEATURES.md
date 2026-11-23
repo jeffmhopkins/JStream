@@ -562,7 +562,7 @@ not remove them; they move into the prototype's look.
   the "Motion" section, in the Inspector's Motion tab (IN-11), with the modifier count
   on the tab and as its hint while folded, lists the item's
   motion modifiers, or "No motion yet." when it has none. Each is a row with Moves (X, Y, Scale, Rotation, Tilt, Turn, Depth,
-  Opacity or a crop edge), How (Wiggle, Oscillate with its Shape, Drift, or Shake), that
+  Opacity, a crop edge, Width or Height), How (Wiggle, Oscillate with its Shape, Drift, or Shake), that
   kind's fields (Amount, Speed, Detail and Seed; Amount, Period and Phase; Rate and Wrap;
   Amount, Speed, Decay and Length), Starts (In step, When shown, or When fired), an On
   check, Fire on a row that starts when fired (it sends `item.trigger_motion` for that

@@ -1160,7 +1160,10 @@ lock only to add the kinds it found (see *CLAP plugins* under Purpose).
 `jtunnel.senders` (0.114) and `profile.get`'s `network` read the JTunnel receiver
 outside it, taking only the audio sources' wanted-set mutex to clone the receiver.
 `data.list` and `data.get` (0.140, ADR-0171) read the live data outside it, taking only
-the live data's own lock.
+the live data's own lock. `midi.last_controls` (0.168, ADR-0178) is answered on the same
+path, before the queries the graph answers: it takes the collection lock only to reach
+the MIDI inputs, and reads each one's latest control change under `MidiInputs`' leaf
+lock.
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -1757,8 +1760,9 @@ on a software device of its own);
 a scene that fails to draw is logged at `debug`. Not primed: a scene made or changed
 after the collection opened, which is compiled where it is first drawn (its preview,
 while it is edited); a source's filters while the source has no frame; and each
-compositor's own uploads and bakes (a model's buffers, a still's texture, a sky seed's
-cube maps), which the stage still makes when it first draws the scene.
+compositor's own uploads and bakes (a still's texture, a sky seed's cube maps, a model's
+buffers), which the stage still makes when it first draws the scene, a model's on its
+`jstream-models` thread unless a warm scene already keeps it uploaded (below).
 
 **Nested scenes.** A `scene` source shows its scene composited at the canvas size,
 then placed like any image. The shot is scheduled inside out: each nested scene is
@@ -2317,7 +2321,7 @@ warm scene whose `reflections` is on while the switch is (`probe_bytes`, its pan
 faces in half-float RGBA at its capped face size,
 `a_reflection_probe_counts_its_capture`).
 
-A map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,
+A shadow map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,
 for each scene, what its maps were last drawn of (`KeptShadows`): every card a view depth
 draws, by its picture's `jstream_render::Seen`, placement, crop and opacity, and every
 casting model `depth_models` lists, by its upload (`SeenModel`), where its item places
@@ -4075,7 +4079,8 @@ and reports a change to the list over a one-slot channel that it never waits on;
 `jtunnel.senders_changed`, and `start_jtunnel` and `stop_jtunnel` take it alone, after
 setting the slot, to emit the same); its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
-lock held. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
+lock held; `midi.last_controls` takes that leaf lock under the collection lock to read
+the inputs' latest control changes. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
 receiver's thread takes it alone to put a state message and set the watches on its key,
 `data.list` and `data.get` take it alone, outside the collection lock, a `grid`
 source's painter takes it under its own drawing lock to read its keys (on the paint
@@ -4146,7 +4151,9 @@ reads both under the collection lock and the snapshot thread only receives them.
 release committed values and fire due timeline cues (each runs as its action's call
 would under that lock, [Timelines](#timelines)), and sleeps without it. The
 `jstream-values` thread does the same: it takes the collection lock for each tick, reads
-the MIDI state and the live data's watches (atomics) under it, and sleeps without it. The WASM plugins' registry lock
+the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
+binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
+takes the live data's lock briefly, last, to find or make its watch, as a plan does. The WASM plugins' registry lock
 and the host's lock are taken with no other engine lock held, and released before a
 plugin loads, before an event is emitted and before a subscription closes; under the
 registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
