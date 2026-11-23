@@ -580,11 +580,15 @@ pub fn fx_title(what: &str, count: usize) -> String {
 pub const HEALTH_WINDOW: usize = 5;
 
 /// The pipeline's health, from `stats.tick`'s running drop totals: what was dropped
-/// over the last [`HEALTH_WINDOW`] ticks.
+/// over the last [`HEALTH_WINDOW`] ticks while an output or recording ran. What drops
+/// while none runs (a preview's work) is no output's loss, so it counts for nothing
+/// (#1690).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Health {
     /// The last tick seen: its `seq` and totals.
     last: Option<(u64, DropCounts)>,
+    /// Whether the last tick listed a running output.
+    running: bool,
     /// The drops of each recent interval, newest last, with the ticks missed in it.
     recent: VecDeque<(DropCounts, u64)>,
 }
@@ -594,6 +598,8 @@ pub struct Health {
 pub struct HealthReading {
     /// Whether any tick has arrived yet.
     pub sampled: bool,
+    /// Whether the last tick listed a running output.
+    pub running: bool,
     /// Drops over the window.
     pub drops: DropCounts,
     /// Ticks the window is missing (a gap in `seq`): the drops still count, over a
@@ -602,14 +608,19 @@ pub struct HealthReading {
 }
 
 impl Health {
-    /// Takes one `stats.tick`. A `seq` that doesn't increase, or a total that shrank,
-    /// means the engine restarted: the totals start over and nothing is counted for
-    /// that tick.
-    pub fn observe(&mut self, seq: u64, drops: DropCounts) {
+    /// Takes one `stats.tick`, and whether it lists a running output. An interval's
+    /// drops count when an output ran at its start (so the one an output stopped in
+    /// does); one that began with none running counts as nothing dropped. A `seq` that doesn't increase, or a total that shrank, means
+    /// the engine restarted: the totals start over and nothing is counted for that
+    /// tick.
+    pub fn observe(&mut self, seq: u64, drops: DropCounts, running: bool) {
+        let ran = self.running;
+        self.running = running;
         if let Some((last_seq, last)) = self.last
             && seq > last_seq
             && let Some(delta) = difference(drops, last)
         {
+            let delta = if ran { delta } else { DropCounts::default() };
             self.recent.push_back((delta, seq - last_seq - 1));
             while self.recent.len() > HEALTH_WINDOW {
                 self.recent.pop_front();
@@ -628,6 +639,7 @@ impl Health {
         );
         HealthReading {
             sampled: self.last.is_some(),
+            running: self.running,
             drops,
             missed_ticks,
         }
@@ -651,6 +663,9 @@ impl HealthReading {
     pub fn summary(&self) -> String {
         if !self.sampled {
             return "No stats yet.".into();
+        }
+        if !self.running && !self.dropping() {
+            return "No output or recording is running. Previews don't count as drops.".into();
         }
         let d = self.drops;
         let parts: Vec<String> = [
@@ -687,6 +702,9 @@ impl HealthReading {
     pub fn short(&self) -> String {
         if !self.sampled {
             return "No stats yet".into();
+        }
+        if !self.running && !self.dropping() {
+            return "Idle".into();
         }
         let d = self.drops;
         let total = [
@@ -1365,7 +1383,8 @@ pub fn Outputs() -> impl IntoView {
                         outputs,
                         ..
                     } => {
-                        health.try_update(|health| health.observe(seq, drops));
+                        let running = !outputs.is_empty();
+                        health.try_update(|health| health.observe(seq, drops, running));
                         panel.stats.try_set(
                             outputs
                                 .into_iter()
@@ -2870,12 +2889,12 @@ mod tests {
     fn health_sums_the_last_ticks() {
         let mut health = Health::default();
         assert!(!health.reading().sampled);
-        health.observe(1, drops(10));
+        health.observe(1, drops(10), true);
         let first = health.reading();
         assert!(first.sampled);
         assert!(!first.dropping(), "the first tick is only a baseline");
-        health.observe(2, drops(13));
-        health.observe(4, drops(15));
+        health.observe(2, drops(13), true);
+        health.observe(4, drops(15), true);
         let reading = health.reading();
         assert_eq!(reading.drops.output_packets, 5);
         assert_eq!(reading.missed_ticks, 1);
@@ -2883,7 +2902,7 @@ mod tests {
 
         // Old intervals fall out of the window.
         for seq in 5..=9 {
-            health.observe(seq, drops(15));
+            health.observe(seq, drops(15), true);
         }
         assert!(!health.reading().dropping());
         assert!(health.reading().summary().starts_with("Healthy"));
@@ -2892,12 +2911,12 @@ mod tests {
     #[test]
     fn an_engine_restart_starts_health_over() {
         let mut health = Health::default();
-        health.observe(5, drops(10));
-        health.observe(6, drops(12));
+        health.observe(5, drops(10), true);
+        health.observe(6, drops(12), true);
         assert!(health.reading().dropping());
-        health.observe(1, drops(0));
+        health.observe(1, drops(0), true);
         assert!(!health.reading().dropping());
-        health.observe(2, drops(1));
+        health.observe(2, drops(1), true);
         assert_eq!(health.reading().drops.output_packets, 1);
     }
 
@@ -3050,7 +3069,7 @@ mod tests {
     fn health_has_a_short_form_for_the_header() {
         let mut health = Health::default();
         assert_eq!(health.reading().short(), "No stats yet");
-        health.observe(1, drops(10));
+        health.observe(1, drops(10), true);
         assert_eq!(health.reading().short(), "Healthy");
         health.observe(
             2,
@@ -3059,9 +3078,40 @@ mod tests {
                 render_ticks: 2,
                 ..DropCounts::default()
             },
+            true,
         );
         assert_eq!(health.reading().short(), "5 frames dropped");
         assert!(health.reading().summary().contains("3 output packets"));
+    }
+
+    /// With no output or recording running, the pipeline's drops (a preview's work) are
+    /// no output's loss: the header reads "Idle", not frames dropped (#1690).
+    #[test]
+    fn health_counts_nothing_while_no_output_runs() {
+        let mut health = Health::default();
+        health.observe(1, drops(0), false);
+        health.observe(
+            2,
+            DropCounts {
+                render_ticks: 132,
+                ..DropCounts::default()
+            },
+            false,
+        );
+        let idle = health.reading();
+        assert!(!idle.dropping());
+        assert_eq!(idle.short(), "Idle");
+        assert!(idle.summary().starts_with("No output"));
+        // An output starts: the interval it started in doesn't count, the next does.
+        let packets = |output_packets| DropCounts {
+            render_ticks: 132,
+            output_packets,
+            ..DropCounts::default()
+        };
+        health.observe(3, packets(2), true);
+        assert_eq!(health.reading().short(), "Healthy");
+        health.observe(4, packets(6), true);
+        assert_eq!(health.reading().short(), "4 frames dropped");
     }
 
     /// A new output takes the name typed (C16): blank or another output's is refused,
