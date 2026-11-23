@@ -160,7 +160,7 @@ pub fn long_name(binding: &ValueBinding) -> String {
 }
 
 /// Each input's latest control change, or `None` when the engine answers none.
-async fn controls(session: &crate::session::Session) -> Option<Vec<MidiControlInfo>> {
+pub(crate) async fn controls(session: &crate::session::Session) -> Option<Vec<MidiControlInfo>> {
     match query(session, Query::MidiLastControls).await {
         Ok(QueryResult::MidiLastControls { controls }) => Some(controls),
         _ => None,
@@ -215,23 +215,76 @@ fn watch(
     );
 }
 
-/// The learn button for `target`, mapping a controller onto `range`.
+/// The binding of channel `channel_id` to `target` over `range`, named [`learn_id`]
+/// (ADR-0183 decision 5): the setting follows the channel, mapped onto `range`.
+pub fn follows(channel_id: &str, target: &ValueTarget, range: (f64, f64)) -> ValueBinding {
+    let end = |v: f64| Finite32::new(v as f32).unwrap_or(Finite32::ZERO);
+    ValueBinding {
+        binding_id: learn_id(target),
+        input: MotionKind::Channel {
+            channel_id: channel_id.to_owned(),
+            smoothing_ms: 0,
+            curve: MotionCurve::Linear,
+            from: end(range.0),
+            to: end(range.1),
+        },
+        target: target.clone(),
+        amount: None,
+    }
+}
+
+/// Where `value` sits in `range`, 0 to 1: a new channel's default, so the setting
+/// doesn't move when it starts following it.
+pub fn fraction(value: f64, range: (f64, f64)) -> f32 {
+    let span = range.1 - range.0;
+    if span.abs() < f64::EPSILON {
+        return 0.0;
+    }
+    (((value - range.0) / span).clamp(0.0, 1.0)) as f32
+}
+
+/// What the control menu shows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Menu {
+    /// The menu, at a point in the window.
+    Open(f64, f64),
+    /// The channel search, at a point in the window.
+    Follow(f64, f64),
+}
+
+/// The control button for `target`, mapping a controller or a channel onto `range`
+/// (ADR-0178, ADR-0183): one menu to learn a MIDI control, make a channel, follow one
+/// or remove the control. Once the setting follows a channel, the button shows its name.
 #[component]
 pub fn Learn(
     /// The setting a learned control drives.
     target: ValueTarget,
     /// What the control's lowest and highest map onto, in the setting's unit.
     range: (f64, f64),
+    /// The setting's name, which a channel made from it takes.
+    #[prop(optional, into)]
+    label: Option<String>,
+    /// The setting's value now, so a channel made from it starts there.
+    #[prop(optional, into)]
+    current: Option<Signal<Option<f64>>>,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let target = StoredValue::new(target);
+    let label = StoredValue::new(label.unwrap_or_else(|| "Control".into()));
     let learning = RwSignal::new(false);
+    let menu = RwSignal::new(None::<Menu>);
     let bound = move || {
         studio.collection.with(|c| {
             c.as_ref().and_then(|c| {
                 target.with_value(|t| c.value_bindings.iter().find(|b| &b.target == t).cloned())
             })
+        })
+    };
+    let channel = move || {
+        bound().and_then(|b| match b.input {
+            MotionKind::Channel { channel_id, .. } => Some(channel_id),
+            _ => None,
         })
     };
     let learn = move || {
@@ -256,44 +309,183 @@ pub fn Learn(
             }
         });
     };
-    let click = move |_| {
+    let follow = move |channel_id: String| {
+        menu.set(None);
+        if let Some(s) = session.0.get_value() {
+            let binding = target.with_value(|t| follows(&channel_id, t, range));
+            studio.apply(&s, vec![Edit::BindingSetValue { binding }]);
+        }
+    };
+    let make = move |name: String| {
+        menu.set(None);
+        let Some(s) = session.0.get_value() else {
+            return;
+        };
+        let scene = studio.selection.with_untracked(|sel| sel.scene.clone());
+        let at = current
+            .and_then(|c| c.get_untracked())
+            .map_or(0.0, |v| fraction(v, range));
+        let channel = studio.collection.with_untracked(|c| {
+            crate::panels::channels::new_channel(
+                &name,
+                scene,
+                at,
+                c.as_ref().map_or(&[][..], |c| &c.channels[..]),
+            )
+        });
+        let binding = target.with_value(|t| follows(&channel.channel_id, t, range));
+        let id = channel.channel_id.clone();
+        studio.apply(
+            &s,
+            vec![
+                Edit::ChannelSet { channel },
+                Edit::BindingSetValue { binding },
+            ],
+        );
+        crate::panels::channels::open_channel(studio, id);
+    };
+    let remove = move || {
+        menu.set(None);
+        if let (Some(binding), Some(s)) = (bound(), session.0.get_value()) {
+            studio.apply(
+                &s,
+                vec![Edit::BindingClearValue {
+                    binding_id: binding.binding_id,
+                }],
+            );
+        }
+    };
+    let click = move |e: leptos::ev::MouseEvent| {
         if learning.get_untracked() {
             learning.set(false);
-        } else if let Some(binding) = bound() {
-            if let Some(s) = session.0.get_value() {
-                studio.apply(
-                    &s,
-                    vec![Edit::BindingClearValue {
-                        binding_id: binding.binding_id,
-                    }],
-                );
-            }
-        } else {
-            learn();
+            return;
         }
+        let (x, y) = (f64::from(e.client_x()), f64::from(e.client_y()));
+        menu.set(Some(Menu::Open(x, y)));
     };
     let title = move || match (learning.get(), bound()) {
         (true, _) => "Move a fader, knob or button on a MIDI controller. Click to stop.".into(),
-        (false, Some(binding)) => long_name(&binding),
-        (false, None) => "Learn a MIDI controller: click, then move it.".to_owned(),
+        (false, Some(binding)) => match channel() {
+            Some(id) => format!(
+                "Follows the channel “{}”. Click for its menu.",
+                studio
+                    .collection
+                    .with(|c| c.as_ref().map_or(id.clone(), |c| c.channel_name(&id)))
+            ),
+            None => long_name(&binding).replace("Click to unbind it.", "Click for its menu."),
+        },
+        (false, None) => {
+            "Control this setting: learn a MIDI control, or make or follow a channel.".to_owned()
+        }
     };
     let text = move || match (learning.get(), bound()) {
         (true, _) => "Move…".to_owned(),
-        (false, Some(binding)) => short_name(&binding),
+        (false, Some(binding)) => match channel() {
+            Some(id) => studio
+                .collection
+                .with(|c| c.as_ref().map_or(id.clone(), |c| c.channel_name(&id))),
+            None => short_name(&binding),
+        },
         (false, None) => String::new(),
+    };
+    // Below the button, kept inside the window.
+    let place = |x: f64, y: f64| {
+        let (w, h) = web_sys::window()
+            .map(|w| {
+                let n = |v: Result<
+                    leptos::wasm_bindgen::JsValue,
+                    leptos::wasm_bindgen::JsValue,
+                >| v.ok().and_then(|v| v.as_f64());
+                (
+                    n(w.inner_width()).unwrap_or(1600.0),
+                    n(w.inner_height()).unwrap_or(1000.0),
+                )
+            })
+            .unwrap_or((1600.0, 1000.0));
+        let left = (x - 200.0).min(w - 296.0).max(4.0);
+        let top = if y + 330.0 > h {
+            (y - 330.0).max(4.0)
+        } else {
+            y + 12.0
+        };
+        (format!("{left}px"), format!("{top}px"))
+    };
+    let open_menu = move || {
+        let Menu::Open(x, y) = menu.get()? else {
+            return None;
+        };
+        let name = label.get_value();
+        let linked = channel();
+        let has = bound().is_some();
+        Some(view! {
+            <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
+            <div class="context-menu control-menu" role="menu" style:left=place(x, y).0 style:top=place(x, y).1>
+                <div class="ctx-head">{format!("Control “{name}”")}</div>
+                <button type="button" class="menuitem" role="menuitem" on:click=move |_| { menu.set(None); learn(); }>
+                    <span class="ctx-check"></span>
+                    <span class="ctx-label">"Learn MIDI control"</span>
+                    <span class="hint">"move a knob"</span>
+                </button>
+                {match linked.clone() {
+                    Some(id) => view! {
+                        <button type="button" class="menuitem" role="menuitem" on:click=move |_| { menu.set(None); crate::panels::channels::open_channel(studio, id.clone()); }>
+                            <span class="ctx-check"></span>
+                            <span class="ctx-label">"Open channel"</span>
+                        </button>
+                    }.into_any(),
+                    None => {
+                        let named = name.clone();
+                        view! {
+                            <button type="button" class="menuitem" role="menuitem" on:click=move |_| make(named.clone())>
+                                <span class="ctx-check"></span>
+                                <span class="ctx-label">"Make channel"</span>
+                                <span class="hint">{name.clone()}</span>
+                            </button>
+                        }.into_any()
+                    }
+                }}
+                <button type="button" class="menuitem" role="menuitem" on:click=move |_| menu.set(Some(Menu::Follow(x, y)))>
+                    <span class="ctx-check"></span>
+                    <span class="ctx-label">"Follow channel…"</span>
+                </button>
+                {has.then(|| view! {
+                    <div class="menu-sep"></div>
+                    <button type="button" class="menuitem danger" role="menuitem" on:click=move |_| remove()>
+                        <span class="ctx-check"></span>
+                        <span class="ctx-label">"Remove control"</span>
+                    </button>
+                })}
+            </div>
+        })
+    };
+    let follow_menu = move || {
+        let Menu::Follow(x, y) = menu.get()? else {
+            return None;
+        };
+        Some(view! {
+            <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
+            <div class="context-menu control-menu follow" style:left=place(x, y).0 style:top=place(x, y).1>
+                <crate::panels::channels::ChannelSearch placeholder="Follow a channel" pick=follow make=make />
+            </div>
+        })
     };
     view! {
         <button
+            type="button"
             class="learn"
             class:learning=learning
             class:bound=move || bound().is_some()
+            class:chip=move || channel().is_some()
             title=title
             aria-label=title
+            aria-haspopup="menu"
             on:click=click
         >
-            <Icon name="midi" size=13 />
+            {move || channel().is_none().then(|| view! { <Icon name="midi" size=13 /> })}
             {text}
         </button>
+        {open_menu}
+        {follow_menu}
     }
 }
 
@@ -339,6 +531,22 @@ mod tests {
             source_id: SourceId::new("mic"),
         };
         assert_ne!(learn_id(&other), learn_id(&target));
+    }
+
+    #[test]
+    fn following_a_channel_maps_it_onto_the_range_from_where_the_setting_is() {
+        let target = ValueTarget::SourceGain {
+            source_id: SourceId::new("mic"),
+        };
+        let binding = follows("key_light", &target, (0.0, 2.5));
+        assert_eq!(binding.problem(), None);
+        assert_eq!(binding.binding_id, learn_id(&target));
+        assert!(
+            matches!(binding.input, MotionKind::Channel { ref channel_id, .. } if channel_id == "key_light")
+        );
+        assert_eq!(fraction(1.25, (0.0, 2.5)), 0.5);
+        assert_eq!(fraction(9.0, (0.0, 2.5)), 1.0);
+        assert_eq!(fraction(1.0, (1.0, 1.0)), 0.0);
     }
 
     #[test]

@@ -1435,6 +1435,8 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
                 <Learn
                     target=ValueTarget::SourceGain { source_id: id.get_value() }
                     range=FADER_THROW
+                    label=format!("{} volume", untrack(name))
+                    current=Signal::derive(move || audio().map(|a| f64::from(a.gain_db.get())))
                 />
             </Show>
             <details class="routing">
@@ -1614,6 +1616,8 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
                         bus_id: bus_id.clone(),
                     })
                     range=FADER_THROW
+                    label=format!("Send to {}", untrack(bus_name))
+                    current=Signal::derive(move || gain().map(f64::from))
                 />
             </Show>
         </li>
@@ -1772,7 +1776,12 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                 commit_gain,
             )}
             {mute_button(muted, toggle_mute)}
-            <Learn target=ValueTarget::BusGain { bus_id: id.get_value() } range=FADER_THROW />
+            <Learn
+                target=ValueTarget::BusGain { bus_id: id.get_value() }
+                range=FADER_THROW
+                label=format!("{} fader", untrack(name))
+                current=Signal::derive(move || bus.with(|b| b.as_ref().map(|b| f64::from(b.gain_db.get()))))
+            />
             <details class="routing">
                 <summary>"More"</summary>
                 <label>

@@ -39,6 +39,10 @@ one job, and a screen uses only these tokens from `style.css`.
 
 Don't use the on-air red for errors or warnings that aren't live.
 
+The one exception is a series: the Sequence panel's lanes take `--accent`, `--ok`,
+`--warn` and `--code-keyword` in turn (`.seq-lane.lane-N`), only to tell the lanes
+apart.
+
 <a id="buttons"></a>
 ## Buttons
 <!-- @section
@@ -193,7 +197,9 @@ The property grid, as OBS's Properties lay a source's settings out:
 - A setting a controller can drive (live, a number with both ends or a switch) has a
   learn button (`button.learn`, the MIDI icon) after its reset, in a third column that
   takes only its width: `--muted` and borderless at rest, `--accent` with a border when
-  bound (with its control's short name, `CC 7`) or while it is learning.
+  bound (with its control's short name, `CC 7`) or while it is learning. A click opens
+  its one menu (learn, make or follow a channel, remove). A setting that follows a
+  channel shows the channel's name as a `--selected` chip in `--link` instead.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for

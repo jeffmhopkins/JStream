@@ -6618,7 +6618,7 @@ stamp = { hash = "b3:62e74973e55c9e88", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/Cargo.toml"]
-stamp = { hash = "b3:6fe50802e85773f4", by = "agent:claude-linux-hotkeys", note = "Cargo.toml adds the web-sys features AddEventListenerOptions and WheelEvent for the wheel listener; the build steps are unchanged." }
+stamp = { hash = "b3:f8c02965d305342d", by = "agent:claude", note = "Cargo.toml only adds web-sys features (Performance, PointerEvent, SvgElement); the build steps are unchanged." }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/Trunk.toml"]
 stamp = { hash = "b3:f87a888e55181fde" }
@@ -6675,7 +6675,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:a24ceea10ff148b3", by = "agent:release-alpha8", note = """Added that learning stops once the form closes, since learn.rs now reads its signals with try_ (review B1). | merge: The Add source text lists reflection_probe after light (#1609) and the Fog card's 1024 x 576 box (fog card), matching the 20-kind ORDER; "+ Add motion" up to 32 and the camera's Autofocus and Aperture (blur) (#1631), the Reflections check (#1609), the hologram's Style and presets (hologram follow-up) and the Controller learn bullet (CC PR 3 value bindings) match too, as does the control mock keeping value bindings.""" }
+stamp = { hash = "b3:6d54b69917c31822", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:a5184aecff315beb", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
@@ -6741,7 +6741,7 @@ stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "#1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:5afe415fe6a42c4c", by = "agent:ui-design", note = "Added the two tab levels (.segmented in the Inspector and the Filters window, the 32 px Settings rail), the Inspector's 88 px label column and segmented control, number fields without steppers but the mixer's gain, the caption inside the box that scrubs, and the Arrange panel's name; checked against style.css, inspector.rs, number.rs and transform.rs." }
+stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:35d1568aba88cf64", by = "agent:claude", note = "Edited the header, pairing and Audio plugins paragraphs for C11 (Settings pages, PairDialog with numbered steps, New code/Done, one-line CLAP callout, desktop-only Check for updates); re-read the rest against the item_menu Duplicate opener and style.css changes." }
@@ -6753,7 +6753,7 @@ stamp = { hash = "b3:079faff276dab0c0", by = "agent:claude", note = "Re-read: Je
 stamp = { hash = "b3:963da80dc92013c6", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via, and no panel shows camera_path beyond the generic preset settings form" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/icons.rs"]
-stamp = { hash = "b3:75cc985ea8357c6f", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:fc75ed935227848b", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/item_menu.rs"]
 stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the header, pairing and Audio plugins paragraphs for C11 (Settings pages, PairDialog with numbered steps, New code/Done, one-line CLAP callout, desktop-only Check for updates); re-read the rest against the item_menu Duplicate opener and style.css changes." }
@@ -6762,7 +6762,7 @@ stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:d8b85b4ad317ad23", by = "agent:release-alpha8", note = "replaced the restart text: a saved change applies at once; checked jtunnel.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:e5ba3547dd251dc2", by = "agent:claude", note = "This branch's rendering.rs follows docs/UI-DESIGN#forms (input.toggle with a label for, Info, one .help line, grouped under an eyebrow) and adds no new design choice; the merge (#1590) brought that pattern and the dialog shell; nothing in Design needed changing | merge: merged #1603 (two tab levels, Inspector rows without steppers, the Transform panel titled Arrange); lib.rs only adds the UI-DESIGN#tabs back-reference; this branch's 3D rendering page uses no tabs, and Design holds | kept from the merged side: Updated: the theme paragraph names the dialog shell, the .field.prop / .prop-grid property grid and dialog::Info; Video settings' checkbox is now Scale existing scenes to fit, General's settings are Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit; checked against updates.rs, agents.rs, warm.rs, video_settings.rs. | kept from the merged side: Added the two tab levels (.segmented in the Inspector and the Filters window, the 32 px Settings rail), the Inspector's 88 px label column and segmented control, number fields without steppers but the mixer's gain, the caption inside the box that scrubs, and the Arrange panel's name; checked against style.css, inspector.rs, number.rs and transform.rs." }
+stamp = { hash = "b3:7e24b64e9e659820", by = "agent:claude", note = "Re-verified after the style.css mute colour change and lib.rs Docs line." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -6781,6 +6781,9 @@ stamp = { hash = "b3:30f9ee975f087129", by = "agent:claude", note = "Agent activ
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/camera_moves.rs"]
 stamp = { hash = "b3:af60373bb41b621a", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/channels.rs"]
+stamp = { hash = "b3:f5e239a65d08717c", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -6816,16 +6819,16 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty lanes/starts/stops and delay_ms None in literals." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:74ed62d207d644db", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
+stamp = { hash = "b3:93e632607d944588", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch: looks.rs's table in the settings form, small buttons, duplicate states refused, bytes; README's looks paragraph matches; the merge brought #1606's settings pages and pairing dialog CSS, separate from the .looks rules" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mixer.rs"]
-stamp = { hash = "b3:05c09dc6c7514b3e", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs." }
+stamp = { hash = "b3:b43915a2af0fa768", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:3b63e63fb69922ad", by = "agent:release-alpha8", note = """Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. | merge: The Add source text lists reflection_probe after light (#1609) and the Fog card's 1024 x 576 box (fog card), matching the 20-kind ORDER; "+ Add motion" up to 32 and the camera's Autofocus and Aperture (blur) (#1631), the Reflections check (#1609), the hologram's Style and presets (hologram follow-up) and the Controller learn bullet (CC PR 3 value bindings) match too, as does the control mock keeping value bindings. | kept from the merged side: Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes""" }
+stamp = { hash = "b3:ad11fbc2b447a68f", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:a003b05cd35bbef4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
@@ -6837,13 +6840,16 @@ stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fm
 stamp = { hash = "b3:0432f3ec2a2b6130", by = "agent:ui-design", note = "Updated: the theme paragraph names the dialog shell, the .field.prop / .prop-grid property grid and dialog::Info; Video settings' checkbox is now Scale existing scenes to fit, General's settings are Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit; checked against updates.rs, agents.rs, warm.rs, video_settings.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:abf87e5531cd427b", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:3921e5a4a1123dc4", by = "agent:release-alpha8", note = """Updated: Depth of field turns autofocus on and shows Autofocus and Aperture (blur); camera motion offers Autofocus. | merge: The Add source text lists reflection_probe after light (#1609) and the Fog card's 1024 x 576 box (fog card), matching the 20-kind ORDER; "+ Add motion" up to 32 and the camera's Autofocus and Aperture (blur) (#1631), the Reflections check (#1609), the hologram's Style and presets (hologram follow-up) and the Controller learn bullet (CC PR 3 value bindings) match too, as does the control mock keeping value bindings.""" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:8bffe645d7f19b51", by = "agent:claude", note = "Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sequence.rs"]
+stamp = { hash = "b3:14d6f9b2fb4898cb", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs." }
@@ -6888,7 +6894,7 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:232e1fd4f554fb51", by = "agent:claude", note = "Round 1 fixes: the pairing paragraph names the refused-code card (N1); the Settings and Video text holds against the base-tracking VideoDraft and the alive guard (B1, N3). | merge: #1594's Rendering page joins settings.rs's rail between Video and Audio after the merge; the design section's Settings text holds. | kept from the merged side: This branch's rendering.rs follows docs/UI-DESIGN#forms (input.toggle with a label for, Info, one .help line, grouped under an eyebrow) and adds no new design choice; the merge (#1590) brought that pattern and the dialog shell; nothing in Design needed changing | kept from the merged side: #1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:4cd4ae2f3240093e", by = "agent:channels", note = "Re-read: UI files only gain empty lanes/starts/stops and delay_ms None in literals." }
+stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "Hotkeys paragraph now names the desktop's Hear hotkeys while another app has the focus check, its hotkeys.global setting, and that a registered chord doesn't reach the page; style.css only spaces the Settings checks." }
@@ -6906,13 +6912,13 @@ stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:63ac58d116477863", by = "agent:studio-two-up", note = "Studio mode rewritten for the two-up: canvas as preview, program monitor (tapped program-mix stream), StudioControls between them sharing one Panel state with the Transitions panel via provide_transitions; Selection notes the canvas follows the preview scene in studio mode; style.css adds the stage-row, stage-label, monitor and studio-controls rules." }
+stamp = { hash = "b3:1a79eae80d56c2e4", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = """Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: The Add source text lists reflection_probe after light (#1609) and the Fog card's 1024 x 576 box (fog card), matching the 20-kind ORDER; "+ Add motion" up to 32 and the camera's Autofocus and Aperture (blur) (#1631), the Reflections check (#1609), the hologram's Style and presets (hologram follow-up) and the Controller learn bullet (CC PR 3 value bindings) match too, as does the control mock keeping value bindings. | kept from the merged side: Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes""" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Re-verified after the style.css mute colour change and lib.rs Docs line." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:feeae3a73d63465b", by = "agent:release-alpha8", note = "Added learn.rs to the panels and value_bindings to the store's Collection. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: The contents list covers the panels code that #1609 (Reflections check, probe switch and cap), the fog card bundle (fog_card in ORDER), the hologram follow-up (hologram in filters.rs KNOWN) and CC PR 3 value bindings (learn.rs, the store's value bindings, learn in both filters.rs forms) changed; the panels it names and their tests match the merged files." }
+stamp = { hash = "b3:8971e16cbff2e7b5", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -6975,7 +6981,7 @@ stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "#1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:5afe415fe6a42c4c", by = "agent:ui-design", note = "Renamed the Transform panel to Arrange in the module list and the keyframe-children note (PanelId::Transform keeps its key); NumberField now has no steppers unless asked (the mixer's gain fields); the Filters window's scope switcher is segmented with counts; checked against dock.rs, number.rs, transform.rs, filters.rs and inspector.rs." }
+stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:35d1568aba88cf64", by = "agent:claude", note = "Edited the Header, Video settings, Settings, Audio plugins and Pairing bullets for C11: Video as a Settings page with a kept draft and Cancel/Save, the Audio page, the Pair a device dialog and Check for updates off in a browser; checked against settings.rs, video_settings.rs, pairing.rs, clap_plugins.rs, header.rs and filters.rs." }
@@ -6987,7 +6993,7 @@ stamp = { hash = "b3:079faff276dab0c0", by = "agent:claude", note = "Re-read: Je
 stamp = { hash = "b3:963da80dc92013c6", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/icons.rs"]
-stamp = { hash = "b3:75cc985ea8357c6f", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:fc75ed935227848b", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/item_menu.rs"]
 stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the Header, Video settings, Settings, Audio plugins and Pairing bullets for C11: Video as a Settings page with a kept draft and Cancel/Save, the Audio page, the Pair a device dialog and Check for updates off in a browser; checked against settings.rs, video_settings.rs, pairing.rs, clap_plugins.rs, header.rs and filters.rs." }
@@ -6996,7 +7002,7 @@ stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:d8b85b4ad317ad23", by = "agent:release-alpha8", note = "jtunnel.rs only drops the restart note; purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:e5ba3547dd251dc2", by = "agent:claude", note = "This branch adds Settings › 3D rendering (rendering.rs): RenderingSettings with one toggle per Switch in a property grid under Effects, one help line and an (i) each, studio.get to read and studio.set_rendering naming one switch, a refusal putting back only that switch, and a none line for engines older than 0.136; the Contents entry says so. The merge (#1590) brought the dialog shell and prop-grid pattern this follows and renamed the General page's settings, which the entries already match | merge: merged #1603 (two tab levels, Inspector rows without steppers, the Transform panel titled Arrange); lib.rs only adds the UI-DESIGN#tabs back-reference; the README's NumberField, Arrange and segmented-control text sits beside this branch's 3D rendering entry, which still matches rendering.rs | kept from the merged side: Re-read the contents list: Settings/General now groups Updates, Hotkeys, Agents and Performance as prop-grid sections, dialog.rs gains Info, icons.rs an info icon; no module or component named here changed name or job, so it holds. | kept from the merged side: Renamed the Transform panel to Arrange in the module list and the keyframe-children note (PanelId::Transform keeps its key); NumberField now has no steppers unless asked (the mixer's gain fields); the Filters window's scope switcher is segmented with counts; checked against dock.rs, number.rs, transform.rs, filters.rs and inspector.rs." }
+stamp = { hash = "b3:7e24b64e9e659820", by = "agent:claude", note = "lib.rs Docs line now names UI-FEATURES#automation; module list unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -7015,6 +7021,9 @@ stamp = { hash = "b3:30f9ee975f087129", by = "agent:claude", note = "Agent activ
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/camera_moves.rs"]
 stamp = { hash = "b3:af60373bb41b621a", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/channels.rs"]
+stamp = { hash = "b3:f5e239a65d08717c", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -7050,16 +7059,16 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty fields in literals." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:74ed62d207d644db", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
+stamp = { hash = "b3:93e632607d944588", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch adds looks.rs, the grid's Looks table (rows, Own colour, brightness, blink, add/remove, the clip launcher preset), which now refuses duplicate states and counts bytes, as the README says; the merge brought #1606's Video and Audio settings pages and Pair a device dialog, which the purpose already covers" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mixer.rs"]
-stamp = { hash = "b3:05c09dc6c7514b3e", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection." }
+stamp = { hash = "b3:b43915a2af0fa768", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:3b63e63fb69922ad", by = "agent:release-alpha8", note = "Added learn.rs to the panels and value_bindings to the store's Collection. | merge: The contents list covers the panels code that #1609 (Reflections check, probe switch and cap), the fog card bundle (fog_card in ORDER), the hologram follow-up (hologram in filters.rs KNOWN) and CC PR 3 value bindings (learn.rs, the store's value bindings, learn in both filters.rs forms) changed; the panels it names and their tests match the merged files. | kept from the merged side: Re-read: the crate's purpose is unchanged by the canvas camera mode and 3D item tools" }
+stamp = { hash = "b3:ad11fbc2b447a68f", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:a003b05cd35bbef4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
@@ -7071,13 +7080,16 @@ stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fm
 stamp = { hash = "b3:0432f3ec2a2b6130", by = "agent:ui-design", note = "Re-read the contents list: Settings/General now groups Updates, Hotkeys, Agents and Performance as prop-grid sections, dialog.rs gains Info, icons.rs an info icon; no module or component named here changed name or job, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:abf87e5531cd427b", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:3921e5a4a1123dc4", by = "agent:release-alpha8", note = "Re-read against round 2 of ADR-0176 (0.167: SceneCamera.autofocus, CameraProperty autofocus, MAX_MOTION_MODIFIERS 32): purpose unchanged. | merge: The contents list covers the panels code that #1609 (Reflections check, probe switch and cap), the fog card bundle (fog_card in ORDER), the hologram follow-up (hologram in filters.rs KNOWN) and CC PR 3 value bindings (learn.rs, the store's value bindings, learn in both filters.rs forms) changed; the panels it names and their tests match the merged files." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:8bffe645d7f19b51", by = "agent:claude", note = "Re-read: the crate's purpose is unchanged by the canvas camera mode and 3D item tools" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sequence.rs"]
+stamp = { hash = "b3:14d6f9b2fb4898cb", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection." }
@@ -7122,7 +7134,7 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:232e1fd4f554fb51", by = "agent:claude", note = "Round 1 B1 fix: the Video settings bullet now says the VideoDraft follows the collection until edited (differs from its base); checked against video_settings.rs and settings.rs, including the alive guard on Save's close. | merge: #1594 adds the 3D rendering Settings page (rendering.rs); resolved the conflict so SettingsPage lists General, Video, 3D rendering, Audio, Plugins, Devices and kept main's 3D rendering bullet beside this branch's Audio plugins one. | kept from the merged side: This branch adds Settings › 3D rendering (rendering.rs): RenderingSettings with one toggle per Switch in a property grid under Effects, one help line and an (i) each, studio.get to read and studio.set_rendering naming one switch, a refusal putting back only that switch, and a none line for engines older than 0.136; the Contents entry says so. The merge (#1590) brought the dialog shell and prop-grid pattern this follows and renamed the General page's settings, which the entries already match | kept from the merged side: #1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:4cd4ae2f3240093e", by = "agent:channels", note = "Re-read: UI files only gain empty fields in literals." }
+stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "updates.rs' Settings dialog gains the desktop-only global hotkeys check and ui_settings.rs the hotkeys.global key; the purpose text holds." }
@@ -7140,7 +7152,7 @@ stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:63ac58d116477863", by = "agent:studio-two-up", note = "Studio two-up: Workspace, Store (followed_preview), the Transitions panel's StudioControls and StageLabel, and canvas/monitor.rs's ProgramMonitor listed in Contents; app.rs provides the shared transitions state, header turns studio mode on with the shown scene on preview." }
+stamp = { hash = "b3:1a79eae80d56c2e4", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#views"."body"]
 stamp = { hash = "b3:c8a34bdd85887b52", by = "agent:claude-perf-suite", note = "review N2: labels are projector#<channel>:<scene|program|source:<id>>, checked against Picture in projector.rs; the channel survives the 64-char cut" }
@@ -7186,6 +7198,9 @@ stamp = { hash = "b3:87accd39f503289f", by = "agent:obs-ui-thread", note = "canv
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/capture-targets.spec.js"]
 stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note = "New spec capture-targets.spec.js uses the existing describeKinds and openAddSource fixtures as described; the mock daemon's MockEngine now also lists a window in capture.targets, which the harness text doesn't enumerate. Still holds." }
+
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/channels.spec.js"]
+stamp = { hash = "b3:9b386547acd2bc1d", by = "agent:claude", note = "New channels.spec.js uses connect and rev from fixtures.js unchanged; polish.spec.js only lists two more panels. Harness unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/clap-plugins.spec.js"]
 stamp = { hash = "b3:5f4b408edbb1a7f7", by = "agent:claude", note = "Re-read against the spec changes (video-settings, clap-plugins, plugins, menus) and the new pairing.spec.js, which routes the WebSocket as the other specs do; the harness itself is unchanged." }
@@ -7251,7 +7266,7 @@ stamp = { hash = "b3:9d476b1c074b987d", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:89aec0f640be3928", by = "agent:plugin-uninstall", note = "re-read: the harness is unchanged; plugins.spec.js only answers one more routed call, plugin.uninstall | merge: #1606 made Video a Settings page with Cancel and Save, added an Audio page (the CLAP plugins section) and a Pair a device dialog (C11), and moved one plugins.spec.js tab check; the Plugins page, plugins.rs and the remove dialog test are unchanged, so Remove… and its dialog still hold (jstream-ui lib tests: 507 passed) | kept from the merged side: Re-read against the spec changes (video-settings, clap-plugins, plugins, menus) and the new pairing.spec.js, which routes the WebSocket as the other specs do; the harness itself is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/polish.spec.js"]
-stamp = { hash = "b3:87a97947216058b2", by = "agent:claude", note = "Re-read against the spec edits: connect, menus (new sub() submenu helper), keyframes and polish specs use the same harness, mock engine and fixtures; nothing in the harness changed." }
+stamp = { hash = "b3:37a42ef6cced2e9c", by = "agent:claude", note = "New channels.spec.js uses connect and rev from fixtures.js unchanged; polish.spec.js only lists two more panels. Harness unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/projectors.spec.js"]
 stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "Re-read: projectors.spec.js gains a test but no fixture; the harness text holds." }
@@ -7302,7 +7317,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:06814779b56cbe0e", by = "agent:claude", note = "The Menus and Add source entry says Color shows neither New | Existing nor a Name field, and the Filters entry that the picked kind's settings are chips." }
+stamp = { hash = "b3:f0dd850ec5ea84a9", by = "agent:claude", note = "Tests list adds Channels (channels.spec.js) and Polish now says thirteen panels; both specs pass locally against the mock daemon." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7315,6 +7330,9 @@ stamp = { hash = "b3:87accd39f503289f", by = "agent:obs-ui-thread", note = "The 
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/capture-targets.spec.js"]
 stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note = "Added the Capture targets bullet for capture-targets.spec.js: describes the window kind, lists only the mock window after None, OK is one edit, reopened shows mock:window; matches the spec, which passes locally with the full suite (106)." }
+
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/channels.spec.js"]
+stamp = { hash = "b3:9b386547acd2bc1d", by = "agent:claude", note = "Tests list adds Channels (channels.spec.js) and Polish now says thirteen panels; both specs pass locally against the mock daemon." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/clap-plugins.spec.js"]
 stamp = { hash = "b3:5f4b408edbb1a7f7", by = "agent:claude", note = "Edited Plugins, Audio plugins, Menus, Video settings and keyframes lines and added Pairing; each matches its spec after this change." }
@@ -7380,7 +7398,7 @@ stamp = { hash = "b3:9d476b1c074b987d", by = "agent:claude", note = "Edited Plug
 stamp = { hash = "b3:89aec0f640be3928", by = "agent:plugin-uninstall", note = "re-read and edited: the Plugins bullet names plugin.uninstall and the Remove dialog test (Cancel sends nothing, Remove sends one call, the row goes) | merge: #1606 made Video a Settings page with Cancel and Save, added an Audio page (the CLAP plugins section) and a Pair a device dialog (C11), and moved one plugins.spec.js tab check; the Plugins page, plugins.rs and the remove dialog test are unchanged, so Remove… and its dialog still hold (jstream-ui lib tests: 507 passed) | kept from the merged side: Edited Plugins, Audio plugins, Menus, Video settings and keyframes lines and added Pairing; each matches its spec after this change." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/polish.spec.js"]
-stamp = { hash = "b3:87a97947216058b2", by = "agent:claude", note = "Updated the connect, menus, keyframes and sharing descriptions for Connection details, the Order, Duplicate and Reference or clone submenus and the canvas menu's new order; re-read the rest against the specs." }
+stamp = { hash = "b3:37a42ef6cced2e9c", by = "agent:claude", note = "Tests list adds Channels (channels.spec.js) and Polish now says thirteen panels; both specs pass locally against the mock daemon." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/projectors.spec.js"]
 stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "The Projectors entry now covers Backdrop's object row Pop out: Source in a window or full screen, opening a ?projector=source: page titled Source: Backdrop, as the new test asserts." }
@@ -8499,19 +8517,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:374275300293be0b", by = "agent:ui-design", note = "Added the small button (button.sm, 24 px, 12 px text) used by the Arrange panel rows and matched by Set key; checked against style.css and transform.rs." }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read against style.css: the learn button is a quiet icon button like the reset; the button rules hold. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: CC PR 3 value bindings' learn button is borderless and fill-less at rest, the ghost style described here, with an accent border only while bound or learning, so the primary, secondary and danger rules are untouched. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "New buttons are flat secondary fills or ghost links; the trigger editor's Play it/Stop it is the one primary; Delete channel/sequence are red text, not solid." }
 
 ["UI-DESIGN#colour"."body"]
-stamp = { hash = "b3:a1ffb6e5ce1aba11", by = "agent:ui-design", note = "Added the Button row (--button, --button-hover), the tokens that replace the hex fills in style.css (PR #1585 N5); every other token unchanged." }
+stamp = { hash = "b3:a3c5352cbd307662", by = "agent:claude", note = "New panels use existing tokens: --selected chips, --link actions, --danger-text deletes; added the one exception, lane series colours, as the plan's mockups draw them. Mute uses --selected, not --warn." }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read: button.learn uses --muted, --text and --accent tokens only. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: The only style.css change across the train is CC PR 3 value bindings' button.learn rules, which use only existing tokens (--muted, --text, --accent, --border) with the accent marking a bound or learning state as it marks a checked control, so the role table holds. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "New panels use existing tokens: --selected chips, --link actions, --danger-text deletes; added the one exception, lane series colours, as the plan's mockups draw them. Mute uses --selected, not --warn." }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read: style.css adds only the learn button and its column; controls hold. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: The style.css hunk from CC PR 3 value bindings draws no select, checkbox, toggle or row state, so how controls and lists are drawn still matches style.css. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Re-verified after the mute colour change: switch, rows and truncation as before." }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the naming rule: everything in a chain is a filter, and an item's own are item filters, never effects, as the Filters panel, window and Add filter now say." }
@@ -8520,7 +8538,7 @@ stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: copy rules and the (i) side-with-room placement (dialog.rs tip_side, .info-tip.up/.end) still hold; the merge's toast text 'Saved to …' follows them." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read: the learn button's copy (Move…, Learn a MIDI controller: click, then move it.) follows the copy rules. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: CC PR 3 value bindings' learn button adds no helper line, callout or info style, and #1609's Reflections info tip follows the one-helper-line-plus-(i) rule. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Re-verified after the mute colour change in style.css; nothing in this section changed." }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the picker rule (C15): Add source and Add filter share one layout, a 320 px list with search and eyebrow groups and row icons, and the pick's 40 px tile, name and line, then what it needs and a callout for where it lands." }
@@ -8529,16 +8547,16 @@ stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the p
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: the dialog shell text still matches style.css (--dialog-s/m/l 440/600/860, 56px header with .modal-sub, sticky ::after fade, 56px footer with 32px buttons and .footer-left); the merge added only .toast-action." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read: style.css changes don't touch dialogs. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: CC PR 3 value bindings adds a .modal .field.prop:has(> .learn) column inside the form grid without touching dialog widths, header, footer or the picker layout, which keeps its layout with the fog card's and #1609's reflection probe's new entries. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Re-verified after the mute colour change in style.css; nothing in this section changed." }
 
 ["UI-DESIGN#forms"."body"]
-stamp = { hash = "b3:f03c6985415ce395", by = "agent:claude", note = "Added the learn button's third column after the reset and its colours, against style.css and properties.rs." }
+stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:abf87e5531cd427b", by = "agent:claude", note = "Added the learn button's third column after the reset and its colours, against style.css and properties.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Added the learn button's third column after the reset and its colours, against style.css and properties.rs. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: The learn-button bullet CC PR 3 value bindings added matches the merged style.css (a third auto column after the 20 px reset column, muted and borderless at rest, accent with a border when bound or learning) and learn.rs's midi icon. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Re-verified after the colour edit; learn button bullet unchanged since last verify." }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8547,19 +8565,28 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read: style.css changes don't touch menus. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: The train's one style.css addition, CC PR 3 value bindings' .field.prop:has(> .learn) grid and button.learn, changes no menu lines, slots or danger styling. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Control menu and point menu use the context-menu family: 28 px lines with the 20 px leading slot, an eyebrow head, the delete line last in red." }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read: style.css changes don't touch tabs. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: No segmented control, panel strip or page rail rule changes in the train's style.css; CC PR 3 value bindings' learn column on the property grid is outside this section. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Re-verified after the mute colour change in style.css; nothing in this section changed." }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = """Re-read: the learn button's 11 px text matches the small control text. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: CC PR 3 value bindings' learn button sets its control name ("CC 7") in 11 px sans; that is no code a person types, so the monospace rule doesn't apply and no type scale changes. | kept from the merged side: style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds""" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Eyebrows for Driven by, Shaping, Drives, Starts when; mono only for live levels and ruler ticks." }
+
+["UI-FEATURES#automation"."body"]
+stamp = { hash = "b3:ee31832813e9a6ab", by = "agent:claude", note = "New area: VC-01, VC-02, SQ-01 to SQ-03, checked against the built panels in a browser against a real daemon." }
+
+["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/channels.rs"]
+stamp = { hash = "b3:f5e239a65d08717c", by = "agent:claude", note = "New area: VC-01, VC-02, SQ-01 to SQ-03, checked against the built panels in a browser against a real daemon." }
+
+["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/sequence.rs"]
+stamp = { hash = "b3:14d6f9b2fb4898cb", by = "agent:claude", note = "New area: VC-01, VC-02, SQ-01 to SQ-03, checked against the built panels in a browser against a real daemon." }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:cde78ab12de7f331", by = "agent:release-alpha8", note = """#1631 raised the Inspector's "+ Add motion" limit to 32 and CC PR 3 value bindings added Width and Height to MotionProperty::ALL, which the Moves select offers, so the Moves list now names Width and Height after a crop edge. | kept from the merged side: The 3D tools bullet now says Depth doubles or halves distance per 200 px with a 10 px floor and Turn leaves billboards alone; matches camera::pose""" }
@@ -8622,7 +8649,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "CV-03 holds
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: CV-04, CV-08 and CV-11 are done, and their notes match the code; CV-08 now says the box's handles resize as usual with no size (review N1). crop.rs gives the picture, the crop gesture, Clear crop's uncropped extent and the readout; mod.rs the crop mode, Alt crop, the amber chrome and ghost, the Crop tool and the pill texts; model.rs commits box and crop as one batch; live.rs streams item.set_crop live; store.rs supplies sizes from source.sizes and source.size_changed, with the canvas size for a nested scene, and leaves crop mode on a scene switch; transform.rs only makes rotate and from_local pub(crate)." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:4cd4ae2f3240093e", by = "agent:channels", note = "Re-read: store.rs only gains empty timeline fields in a literal; no UI feature changed." }
+stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "store.rs gains channels, the open channel and sequence, and the playing timelines; nothing the canvas rows describe changed." }
 
 ["UI-FEATURES#dialogs"."body"]
 stamp = { hash = "b3:0a5ac7ff27c5b2bf", by = "agent:release-alpha8", note = "DL-03 has #1609's Reflections check and #1631's Autofocus and Aperture (blur) with Pan and Tilt in camera motion, matching scene_properties.rs and camera_moves.rs; DL-06 lists the fog card bundle's Fog card after Backdrop and #1609's Reflection probe after Light, as the 20-kind ORDER has them." }
@@ -8649,10 +8676,10 @@ stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "The pane
 stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read against app.rs's Toast component change: docking is unaffected." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:5afe415fe6a42c4c", by = "agent:ui-design", note = "The panel list, DK-02 (second tab level is a segmented control), DK-07 and DK-08 now name Arrange; checked against dock.rs titles and the Editing layout." }
+stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "dock.rs adds Channels (right) and Sequence (bottom) to the View menu; workspace.rs maps them to their panels. Docking rows still hold." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:63ac58d116477863", by = "agent:studio-two-up", note = "Intro now lists Transitions as the presets, and says studio mode shares the canvas's place with the controls and the program monitor; DK rows unchanged." }
+stamp = { hash = "b3:1a79eae80d56c2e4", by = "agent:claude", note = "dock.rs adds Channels (right) and Sequence (bottom) to the View menu; workspace.rs maps them to their panels. Docking rows still hold." }
 
 ["UI-FEATURES#filters"."body"]
 stamp = { hash = "b3:d895a7b3f5cad48b", by = "agent:release-alpha8", note = "With the hologram follow-up's Transmission, Steady, Broken signal and Amber presets FL-11 names every kind filter_presets.rs gives presets, and the text below the table describes CC PR 3 value bindings' learn button on any chain's live settings, wired through LearnOwner::Filter in both forms." }
@@ -8700,7 +8727,7 @@ stamp = { hash = "b3:eb0be18275af4cb2", by = "agent:claude", note = "Added the l
 stamp = { hash = "b3:07c779d3c72ccfd4", by = "agent:ui-design", note = "IN-01 kind falls back to its ID with a capital; IN-02 Position and size with the 88 px label column; IN-04 the 20 px chain between W and H; IN-06 crop two by two; IN-07 the opacity slider; IN-11 the segmented control. Checked against inspector.rs, number.rs and style.css." }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:abf87e5531cd427b", by = "agent:claude", note = "Added the learn button after the reset of live numbers and switches in the Properties form, against properties.rs and learn.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.rs passes the setting's label and value to the control button; the Inspector rows still hold, the menu is described under Channels and sequences." }
 
 ["UI-FEATURES#keyboard"."body"]
 stamp = { hash = "b3:55d82fbadddc32cb", by = "agent:claude", note = "KB-01 lists K, D, R and Esc leaving camera mode; KB-02 adds Ctrl-drag depth in 3D; checked against on_key and on_down" }
@@ -8727,7 +8754,7 @@ stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "CM-01 no
 stamp = { hash = "b3:12e75b1c4a962912", by = "agent:claude", note = "Added the learn buttons on channels, buses and existing sends (-60 to +6 dB), against mixer.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
 
 ["UI-FEATURES#mixer"."file:crates/jstream-ui/src/panels/mixer.rs"]
-stamp = { hash = "b3:05c09dc6c7514b3e", by = "agent:claude", note = "Added the learn buttons on channels, buses and existing sends (-60 to +6 dB), against mixer.rs." }
+stamp = { hash = "b3:b43915a2af0fa768", by = "agent:claude", note = "mixer.rs passes each fader's and send's name and value to the control button, which now opens the channel menu (VC-01); mixer rows still hold." }
 
 ["UI-FEATURES#objects"."body"]
 stamp = { hash = "b3:dafbc926c88dc4ba", by = "agent:claude-daw", note = "OB-11's example tooltip now includes DAW data (Bitwig) and the every-sender wording, matching page_api_grant and its test." }
@@ -8742,7 +8769,7 @@ stamp = { hash = "b3:372b1ab4238c8b43", by = "agent:claude-daw", note = "OB-11's
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:4cd4ae2f3240093e", by = "agent:channels", note = "Re-read: labels.rs and store.rs only gain empty timeline fields in literals; no UI feature changed." }
+stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "store.rs additions don't touch the Sources panel rows." }
 
 ["UI-FEATURES#outputs"."body"]
 stamp = { hash = "b3:eac6f54446437f4a", by = "agent:ui-design", note = "Added that the output's settings dialog is titled Output settings over its ID, kind and state (outputs.rs); the Encoders & mixes tagline subtitle was removed, which no row quoted." }
@@ -8766,13 +8793,13 @@ stamp = { hash = "b3:7fe7afe330fa254a", by = "agent:ui-design", note = "WS-05 no
 stamp = { hash = "b3:67cb3de4e6103ee0", by = "agent:help-about", note = "Re-read: style.css adds the brand-mark image style, a.menuitem and the About dialog styles in the existing palette; index.html adds the icon copy and favicon; the theme rows WS-01..08 still hold" }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/src/icons.rs"]
-stamp = { hash = "b3:75cc985ea8357c6f", by = "agent:claude", note = "Re-read: the midi icon and learn styles use the theme tokens. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:fc75ed935227848b", by = "agent:claude", note = "icons.rs adds the sequence icon; style.css adds the new panels' rules from existing tokens, lane colours from --accent, --ok, --warn, --code-keyword. Theme rows unchanged." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/src/panels/number.rs"]
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:2dfef33cc5b1bd80", by = "agent:release-alpha8", note = "Re-read: the midi icon and learn styles use the theme tokens. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: CC PR 3 value bindings' learn rules and its midi glyph in icons.rs add no colour outside the WS-01 palette variables and no new font or scrollbar styling. | kept from the merged side: style.css only gained the canvas tool bar's text-button width rule; theme tokens unchanged" }
+stamp = { hash = "b3:236aa8cc423e4bfe", by = "agent:claude", note = "Re-verified after the mute colour change in style.css." }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }

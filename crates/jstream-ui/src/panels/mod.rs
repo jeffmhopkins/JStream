@@ -12,6 +12,7 @@
 pub mod add_source;
 pub mod agent;
 pub mod camera_moves;
+pub mod channels;
 pub mod codec_downloads;
 mod confirm;
 pub mod curve;
@@ -32,6 +33,7 @@ pub mod outputs;
 pub mod properties;
 pub mod scene_properties;
 pub(crate) mod scenes;
+pub mod sequence;
 pub mod source_properties;
 mod sources;
 pub mod stats;
