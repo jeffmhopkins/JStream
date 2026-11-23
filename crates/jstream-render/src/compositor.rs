@@ -2157,6 +2157,12 @@ impl Compositor {
         {
             return Ok(());
         }
+        // Taken out before the last set is set aside, so that never pushes it out.
+        let kept = self
+            .spare
+            .iter()
+            .position(|set| set.width == width && set.height == height)
+            .map(|kept| self.spare.remove(kept));
         if let Some(mut last) = self.targets.take() {
             // Rendered into by the render before this one.
             last.used = renders - 1;
@@ -2166,12 +2172,8 @@ impl Compositor {
             }
             self.spare.push(last);
         }
-        if let Some(kept) = self
-            .spare
-            .iter()
-            .position(|set| set.width == width && set.height == height)
-        {
-            self.targets = Some(self.spare.remove(kept));
+        if kept.is_some() {
+            self.targets = kept;
             return Ok(());
         }
         #[cfg(test)]

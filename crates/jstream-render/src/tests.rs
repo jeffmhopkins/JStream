@@ -2300,13 +2300,20 @@ fn renders_at_alternating_sizes_keep_their_targets() {
     }
     // One set for each size, made once, and the two not rendered into last kept aside.
     assert_eq!(compositor.targets_kept(), (3, 2));
-    // More sizes than are kept: the oldest goes.
+    // One more size than are kept aside still rotates without making any.
+    for _ in 0..3 {
+        for (width, height) in [(16, 8), (8, 4), (6, 6), (4, 4)] {
+            draw(compositor, width, height, Color::BLACK, &items);
+        }
+    }
+    assert_eq!(compositor.targets_kept(), (4, 3));
+    // More sizes than that: the oldest goes.
     for size in 20..25 {
         draw(compositor, size, size, Color::BLACK, &items);
     }
     assert_eq!(
         compositor.targets_kept(),
-        (8, crate::compositor::SPARE_TARGETS)
+        (9, crate::compositor::SPARE_TARGETS)
     );
     // A size not rendered at for a while is let go.
     for _ in 0..=crate::compositor::SPARE_RENDERS {
