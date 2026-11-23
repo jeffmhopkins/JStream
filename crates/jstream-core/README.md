@@ -3261,7 +3261,8 @@ picture size of the scene's canvas, once per due tick for every stream of that s
 that size, and with the scene's captures as well as the program's. Monitored scenes
 draw after every mix, so the program never waits for one: one not begun within the
 tick's period (`MixFrame::deadline`) is skipped, its layers kept, nothing pushed, and
-counted as a frame not read back in `render_ticks`. A scene not planned yet waits; one
+counted in the program drawer's `preview_skipped`, not in `render_ticks`: no output
+missed it (#1690). A scene not planned yet waits; one
 deleted ends its stream as before. A monitored scene, and the program at a size only
 preview streams take, also give way while the GPU is behind and an output has a
 picture to draw, so an open preview costs a stream no frame: its own rate falls, to
@@ -3427,7 +3428,7 @@ What each stage contributes:
 | Stage | Read from | Fields |
 |---|---|---|
 | Capture mailbox | the frames a stream replaced ([`CaptureStats::frames_skipped`](../jstream-platform/src/capture.rs)) beside a read that took no new frame (`Pace` in [`runtime/captures.rs`](src/runtime/captures.rs)), a device's once across its captures, published by the render thread | `capture_frames` |
-| Render loop | ticks skipped to catch up with the media clock, published by the render thread | `render_ticks` |
+| Render loop | ticks skipped to catch up with the media clock, and frames an output's or a virtual camera's readback missed, published by the render thread; a picture only preview streams take counts in `profile.get`'s `preview_skipped` instead, as no output missed it (#1690) | `render_ticks` |
 | Mixer input | overrun and late frames, each input while it records | `audio_frames` |
 | Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
 | Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, or because the GPU has not finished the conversions of two earlier ticks, one per such session, published by the render thread | `encode_frames` |
@@ -3509,7 +3510,9 @@ losses, for `dropped_frames`; the audio subscriber's losses, the output thread's
 drops and the publish link's, for `dropped_packets`. The meters are on their own lock,
 which the stats thread takes after the drop ledger and before the collection lock, and
 never with it. Each meter keeps the samples of the last ten seconds: `kbps` is the
-bytes since the previous sample over the time between them, and `health` compares the
+bytes since the newest sample at least four seconds old (`RATE_WINDOW`, or the oldest
+kept while the run is younger) over the time between them, so a keyframe's burst
+doesn't swing a steady stream's rate (#1693), and `health` compares the
 newest sample with the one at the window's start (`waiting` until a video frame was
 sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
 `fair` otherwise). Lost video frames there are the `dropped_frames` and the frames
@@ -4714,15 +4717,17 @@ encoder session gets both, the older first (`MixFrame::earlier`), and a picture 
 or virtual camera only the newest. When all three buffers are still on their way the GPU is
 behind: a mix that only feeds readbacks skips that tick's composite (its layers kept,
 as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
-ticks and frames that land behind a repeat are counted in `render_ticks`, and so is a monitored scene a preview stream
-shows (*Preview*), drawn after every mix, when the tick's period ran out before it
-began. A picture only this machine sees gives way to the outputs' before any of that:
+ticks and frames that land behind a repeat are counted in `render_ticks`, unless only
+preview streams take the picture: those, and a monitored scene a preview stream shows
+(*Preview*), drawn after every mix, skipped when the tick's period ran out before it
+began, are counted in the program drawer's `preview_skipped` instead, so the drops a
+client shows are only those an output or a virtual camera missed (#1690). A picture only this machine sees gives way to the outputs' before any of that:
 a monitored scene, or the program at a size only preview streams take
 (`MixFrame::local`, from `VideoTap::local`, never a frame an output's session or a
 virtual camera also takes). The draw counts each tick it drew anything out and back in
 as it does the conversions, and while the GPU has not finished the tick before, a tick
 that has an output's picture to draw skips the local ones (their layers kept, nothing
-pushed, counted in `render_ticks`), so a preview's work never queues ahead of a
+pushed, counted in `preview_skipped`), so a preview's work never queues ahead of a
 stream's frame and the preview's rate falls instead. After `LOCAL_YIELD_TICKS` (15) due
 ticks in a row a local picture is drawn anyway, so a preview under a GPU that never
 catches up still shows about two pictures a second at 30

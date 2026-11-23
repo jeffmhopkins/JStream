@@ -116,6 +116,8 @@ pub(crate) struct DrawerTotals {
     pub(crate) maxes: SecondMaxes,
     /// The ticks skipped (the program only).
     pub(crate) skipped: u64,
+    /// The pictures only preview streams take that were skipped (the program only).
+    pub(crate) preview_skipped: u64,
     pub(crate) phases: [u64; PHASES],
     pub(crate) units: Vec<(UnitKey, UnitTotals)>,
 }
@@ -300,6 +302,7 @@ pub(crate) struct DrawMeter {
     seconds: u64,
     maxes: SecondMaxes,
     skipped: u64,
+    preview_skipped: u64,
     phases: [u64; PHASES],
     /// The phases' time in the frame being drawn, folded into `phases` when it ends.
     frame_phases: [u64; PHASES],
@@ -341,6 +344,7 @@ impl Default for DrawMeter {
             seconds: 0,
             maxes: SecondMaxes::default(),
             skipped: 0,
+            preview_skipped: 0,
             phases: [0; PHASES],
             frame_phases: [0; PHASES],
             published: None,
@@ -552,6 +556,12 @@ impl DrawMeter {
         self.skipped = self.skipped.saturating_add(skipped);
     }
 
+    /// Counts `skipped` pictures the drawer drew or read back for preview streams only
+    /// and skipped (#1690): no output missed them, so they are no drops.
+    pub(crate) fn preview_skip(&mut self, skipped: u64) {
+        self.preview_skipped = self.preview_skipped.saturating_add(skipped);
+    }
+
     /// Forgets the time counted in a frame that failed part-way, so it isn't folded
     /// into the next frame that draws.
     pub(crate) fn discard_frame(&mut self) {
@@ -645,6 +655,7 @@ impl DrawMeter {
             seconds: self.seconds,
             maxes: self.maxes,
             skipped: self.skipped,
+            preview_skipped: self.preview_skipped,
             phases: self.phases,
             units,
         });
