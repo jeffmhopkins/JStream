@@ -211,4 +211,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0198](0198-an-arrival-can-be-a-planet-with-its-sun.md) | An arrival can be several pictures pinned around one another, the last lighting the scene | accepted | agent |  |
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
+| [ADR-0208](0208-value-bindings-aim-ptz-cameras.md) | PTZ cameras in the desktop app: the camera list, the PTZ panel, and value bindings that aim a head | accepted | agent |  |
 <!-- @generated end adr-index -->

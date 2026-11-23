@@ -285,6 +285,8 @@ pub(crate) struct Ptz {
     /// The client whose drive last set each camera moving, by camera name: its session
     /// ending stops the camera (ADR-0146 §3).
     drivers: Vec<(String, ClientId)>,
+    /// The pose the value bindings last aimed each camera at, by camera name (ADR-0208).
+    bound: Vec<(String, PtzPose)>,
 }
 
 impl Ptz {
@@ -315,6 +317,7 @@ impl Ptz {
             program: None,
             preview: None,
             drivers: Vec::new(),
+            bound: Vec::new(),
         })
     }
 
@@ -471,6 +474,77 @@ impl Ptz {
                 }
             }
         }
+    }
+
+    /// Aims the cameras the value bindings drive (ADR-0208) at the counts `aims` gives,
+    /// at the fastest speed. A camera this machine doesn't list is skipped. A camera is
+    /// sent an aim only when its bound pose changed, so a control at rest sends nothing,
+    /// and the head's queue keeps only the latest unsent aim. Pan and tilt move together
+    /// in VISCA, so a binding on only one of them takes the other from where the head
+    /// last answered it was (or was last aimed); until it has answered, a pan or tilt
+    /// binding waits.
+    pub(crate) fn follow_axes(&mut self, aims: &[crate::value_bindings::PtzAim]) {
+        if self.heads.is_empty() {
+            self.bound.clear();
+            return;
+        }
+        let mut wanted: Vec<(String, PtzPose)> = Vec::new();
+        for aim in aims {
+            let at = match wanted.iter().position(|(camera, _)| *camera == aim.camera) {
+                Some(at) => at,
+                None => {
+                    wanted.push((aim.camera.clone(), PtzPose::default()));
+                    wanted.len() - 1
+                }
+            };
+            let pose = &mut wanted[at].1;
+            let unsigned = u16::try_from(aim.count.max(0)).unwrap_or(u16::MAX);
+            match aim.axis {
+                jstream_protocol::PtzAxis::Pan => pose.pan = Some(aim.count),
+                jstream_protocol::PtzAxis::Tilt => pose.tilt = Some(aim.count),
+                jstream_protocol::PtzAxis::Zoom => pose.zoom = Some(unsigned),
+                jstream_protocol::PtzAxis::Focus => pose.focus = Some(unsigned),
+            }
+        }
+        let mut bound = Vec::with_capacity(wanted.len());
+        for (camera, mut pose) in wanted {
+            let Some(head) = self.head(&camera) else {
+                continue;
+            };
+            let last = self
+                .bound
+                .iter()
+                .find(|(c, _)| *c == camera)
+                .map(|(_, pose)| *pose);
+            if pose.pan.is_some() != pose.tilt.is_some() {
+                let answered = {
+                    let status = lock(&head.shared.status);
+                    status.answered.then_some(status.pose)
+                };
+                let other = |pick: fn(&PtzPose) -> Option<i32>| {
+                    last.as_ref()
+                        .and_then(pick)
+                        .or_else(|| answered.as_ref().and_then(pick))
+                };
+                if pose.pan.is_none() {
+                    pose.pan = other(|p| p.pan);
+                } else {
+                    pose.tilt = other(|p| p.tilt);
+                }
+                if pose.pan.is_none() || pose.tilt.is_none() {
+                    pose.pan = None;
+                    pose.tilt = None;
+                }
+            }
+            if !pose.is_empty() && last != Some(pose) {
+                let _ = head.tx.send(Cmd::Aim {
+                    pose,
+                    speed: MAX_PTZ_PAN_SPEED,
+                });
+            }
+            bound.push((camera, pose));
+        }
+        self.bound = bound;
     }
 
     /// Queues `shot` for its head, if this machine lists the camera.

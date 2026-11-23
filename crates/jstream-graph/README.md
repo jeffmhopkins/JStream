@@ -521,6 +521,10 @@ that does not want to change the graph it has.
   names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
   a number's ends and whether it is whole, or a switch), `None` while it is missing, and
   `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
+  A PTZ head's axis (`ptz_axis`, [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md))
+  is bound with no lookup and no setter probe, since the camera list is the machine's,
+  not the collection's: its range is the axis's whole counts, and it has no
+  `value_edit`, as the engine aims the head instead of editing.
 - **Channels** (`channel.rs`, ADR-0183): `channel.set` sets one whole by its
   `channel_id` (inverse `channel.delete`, or `channel.set` with the one it replaced)
   after `ChannelInfo::problem` (`invalid_argument` at `channel.<field>`), the limit of

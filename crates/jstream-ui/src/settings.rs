@@ -17,7 +17,8 @@
 //! - **Devices** pairs remote browsers and lists the paired devices (`pairing.rs`),
 //!   when a server in front of the engine pairs them. In the desktop app it starts with
 //!   "Allow devices on my network", then "Receive from JTunnel senders" (`jtunnel.rs`),
-//!   then "Accept a PTZ controller" (`ptz_controllers.rs`).
+//!   then "Control PTZ cameras" (`ptz_cameras.rs`), then "Accept a PTZ controller"
+//!   (`ptz_controllers.rs`).
 //!
 //! The shell provides [`SettingsDialog`] as a context, so a menu item or a notice can
 //! open the dialog on the page it is about. The dialog shows one page at a time; a page
@@ -237,6 +238,7 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                         SettingsPage::Devices => view! {
                             <NetworkAccessSetting />
                             <crate::jtunnel::JtunnelSettingView />
+                            <crate::ptz_cameras::PtzCameraSettingView />
                             <crate::ptz_controllers::PtzControllerSettingView />
                             <Pairing />
                             <crate::agents::ApprovedAgents />

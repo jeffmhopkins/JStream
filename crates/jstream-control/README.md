@@ -191,6 +191,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - channels (ADR-0183): `channel.set`'s `ChannelInfo::problem`, `channel.delete` of an
     unknown ID, and `channel.values`, which answers each channel at its default (its
     `off_value` while off) with no driver, since the mock follows no controls.
+  - PTZ cameras ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)):
+    none unless `MockEngine::with_ptz_cameras` names some, each reachable at pan, tilt
+    and zoom 0 and focus 4096. `ptz.list` answers them; a `ptz.*` action on one succeeds
+    (`ptz.aim` moves its reported pose and `ptz.home` centres pan and tilt, the rest
+    change nothing), on an unlisted camera is `invalid_argument`, and with none listed is
+    `action_failed`, as the engine's are. `MockEngine::ptz_actions` lists the actions
+    taken. There is no head, so no drive ever moves the pose.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;

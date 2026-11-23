@@ -3,7 +3,8 @@
 //! ([`ValueRange`]), and the setter edit that gives it a value ([`value_edit`]).
 //!
 //! A value binding names a source setting, a filter setting on any chain, a fader or a
-//! send. `binding.set_value` checks the target exists and takes a number: a setting its
+//! send, or (ADR-0208) one axis of a PTZ camera's position, which the engine turns into
+//! aims rather than edits ([`value_edit`] gives none). `binding.set_value` checks the target exists and takes a number: a setting its
 //! kind marks `live` of type `int`, `float` or `bool`, an audio source's fader (not a
 //! `scene` source's), a bus's, or a send that exists. Unlike an action binding, a value
 //! binding is not removed with the object it names: it is left driving nothing, as a
@@ -152,6 +153,17 @@ fn set(
         ));
     }
     let range = range(state, kinds, &binding.target, at)?;
+    // A PTZ axis (ADR-0208) is no setting of the collection: the engine aims the head, so
+    // there is no setter to probe. Its camera belongs to the machine and isn't looked up.
+    if matches!(binding.target, ValueTarget::PtzAxis { .. }) {
+        let old = state.value_bindings.insert(id.clone(), binding.clone());
+        return Ok(vec![match old {
+            Some(binding) => Edit::BindingSetValue { binding },
+            None => Edit::BindingClearValue {
+                binding_id: id.clone(),
+            },
+        }]);
+    }
     // The engine gives the target its value through the setter, so a target the setter
     // refuses (a `scene` source's fader, a send that doesn't exist) is refused here.
     let mut work = state.clone();
@@ -272,6 +284,16 @@ fn range(
                 .bus(bus_id)
                 .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
             return Ok(fader);
+        }
+        // The head's own counts (ADR-0146 §5, ADR-0208): whole numbers over the range
+        // the protocol carries.
+        ValueTarget::PtzAxis { axis, .. } => {
+            let (min, max) = axis.range();
+            return Ok(ValueRange::Number {
+                min: f64::from(min),
+                max: f64::from(max),
+                whole: true,
+            });
         }
         _ => {
             return Err(invalid(

@@ -31,10 +31,11 @@ fn main() {
         all(target_os = "linux", feature = "webkitgtk")
     ))]
     {
-        // Declares `pick_path`, `set_network`, `set_jtunnel`, `set_ptz_controllers` and
-        // the screenshot commands so tauri-build writes `allow-pick-path`,
-        // `allow-set-network`, `allow-set-jtunnel`, `allow-set-ptz-controllers`,
-        // `allow-save-screenshot`, `allow-open-saved` and `allow-show-saved` (the
+        // Declares `pick_path`, `set_network`, `set_jtunnel`, `set_ptz_controllers`,
+        // `set_ptz_cameras` and the screenshot commands so tauri-build writes
+        // `allow-pick-path`, `allow-set-network`, `allow-set-jtunnel`,
+        // `allow-set-ptz-controllers`, `allow-set-ptz-cameras`, `allow-save-screenshot`,
+        // `allow-open-saved` and `allow-show-saved` (the
         // `browse`, `network`, `jtunnel`, `ptz` and `screenshots` capabilities grant those
         // and no other). Without this the Windows build rejects
         // the capabilities as unknown permissions.
@@ -44,6 +45,7 @@ fn main() {
                 "set_network",
                 "set_jtunnel",
                 "set_ptz_controllers",
+                "set_ptz_cameras",
                 "save_screenshot",
                 "open_saved",
                 "show_saved",

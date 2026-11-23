@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 
 use jstream_anim::{Midi, Smoothing};
 use jstream_graph::Graph;
-use jstream_protocol::{Edit, ValueBinding};
+use jstream_protocol::{Edit, PtzAxis, ValueBinding, ValueTarget};
 use jstream_sources::{LiveData, MidiInputs};
 
 /// How often the engine ticks the driver while the collection holds a binding: about
@@ -64,6 +64,20 @@ pub(crate) struct ValueDriver {
     driven: BTreeMap<String, Driven>,
     last: Option<Instant>,
     edits: Vec<Edit>,
+    /// The PTZ positions the last tick gave (ADR-0208): a camera, an axis and the count,
+    /// in binding order.
+    aims: Vec<PtzAim>,
+}
+
+/// One PTZ axis a value binding drives, and the count it gives it now (ADR-0208).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PtzAim {
+    /// The camera, by name.
+    pub(crate) camera: String,
+    /// The axis.
+    pub(crate) axis: PtzAxis,
+    /// The count.
+    pub(crate) count: i32,
 }
 
 impl ValueDriver {
@@ -72,8 +86,14 @@ impl ValueDriver {
         &self.edits
     }
 
+    /// The PTZ positions the bindings give now, in binding order (ADR-0208).
+    pub(crate) fn aims(&self) -> &[PtzAim] {
+        &self.aims
+    }
+
     /// Follows `graph`'s bindings for the time since the last tick and works out their
-    /// setter edits. Returns whether those changed.
+    /// setter edits, and the PTZ positions ([`aims`](Self::aims)). Returns whether the
+    /// edits changed.
     pub(crate) fn tick(
         &mut self,
         graph: &Graph,
@@ -87,6 +107,7 @@ impl ValueDriver {
         self.last = Some(now);
         self.keep(graph, midi, data);
         let mut edits = Vec::with_capacity(self.driven.len());
+        let mut aims = Vec::new();
         for driven in self.driven.values_mut() {
             let raw = driven.reader.read();
             if !driven.moved {
@@ -108,10 +129,23 @@ impl ValueDriver {
                 .map_or(1.0, f64::from);
             let from = driven.midi.from;
             let value = from + (driven.midi.value(level) - from) * amount;
+            if let ValueTarget::PtzAxis { camera, axis } = &driven.binding.target {
+                let (min, max) = axis.range();
+                let v = if value.is_finite() { value } else { 0.0 };
+                // Within the axis's `i32` range once clamped, so the cast is exact.
+                let count = v.round().clamp(f64::from(min), f64::from(max)) as i32;
+                aims.push(PtzAim {
+                    camera: camera.clone(),
+                    axis: *axis,
+                    count,
+                });
+                continue;
+            }
             if let Some(edit) = jstream_graph::value_edit(&driven.binding.target, range, value) {
                 edits.push(edit);
             }
         }
+        self.aims = aims;
         if edits == self.edits {
             return false;
         }

@@ -109,7 +109,9 @@ Contents ([Design](#design) explains the choices):
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
   sender's state" (its JSON tested natively), and `desktop_ptz()`
-  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
+  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`,
+  and `desktop_ptz_cameras()` and `set_ptz_cameras`, which read and save its "Control
+  PTZ cameras" as a `PtzCameraSetting` of `PtzCameraEntry`s (ADR-0208).
   `same_engine` says
   whether the open session is that app's own engine, and `own_engine` asks it of the
   session's `ConnectedEngine` (for Browse… and the canvas's full-resolution preview).
@@ -319,6 +321,23 @@ Contents ([Design](#design) explains the choices):
   (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
   check, and `accepts`, whether a heard sender is on the list, tested natively. The
   store's `jtunnel_changed` counts `jtunnel.senders_changed`.
+- **PTZ cameras** (`ptz_cameras.rs`, [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)
+  decision 1): `PtzCameraSettingView`, the desktop app's "Control PTZ cameras" switch and
+  camera list on the Devices page, with Edit filling the form for Save camera, saved
+  through `host::set_ptz_cameras` and applied by the app at once; `current`, the setting
+  last saved in this window or else the app's at start; and `with_camera`, the form's
+  check, tested natively.
+- **PTZ panel** (`panels/ptz.rs`, ADR-0146, ADR-0208): `Ptz`, the "PTZ cameras" dock panel
+  (`PanelId::Ptz`, on the right from the View menu). It reads `ptz.list` every 500 ms while
+  shown and controls the picked camera: a pad of arrows that drive while held
+  (`ptz.drive`, stopped on release, on leaving and on cleanup), Home, Wide and Tele, focus
+  modes with Near and Far, one Speed (`drive_speeds`, `zoom_speed`), the pose as number
+  fields that aim (`aim_pose`) each with `learn::Learn` on a `ValueTarget::PtzAxis`
+  (`mapping_range`), presets 1 to 16 and a field with Save arming a store, a preset menu
+  (recall, save, name, key, scene shot), names kept in the UI settings under
+  `ptz.preset_names` (`preset_name`, `with_preset_name`), and the selected scene's shot
+  (`shots_with`, `shot_label`, `scene.set_ptz_shots`). The pure helpers are tested
+  natively.
 - **PTZ controllers** (`ptz_controllers.rs`): `PtzControllerSettingView`, the desktop
   app's "Accept a PTZ controller" switch, endpoints and allowed controllers on the
   Devices page, and `with_endpoint`, `with_allowed` and `target_label`, the add rows'
@@ -371,7 +390,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
   `network`, `networkOpen`, `wheelFocusOnly`, `browse`, `allowNetwork`, `jtunnel`,
-  `setJtunnel`, `ptz` and `setPtz`) before the page loads,
+  `setJtunnel`, `ptz`, `setPtz`, `ptzCameras` and `setPtzCameras`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -1312,7 +1331,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   address and what accepting lets it do (ADR-0123 §3: the first use is explicit), and
   only Accept in that prompt adds it, through the same save. With the receiver off it
   says senders show while receiving is on.
-  Below it, "Accept a PTZ controller"
+  Below it, "Control PTZ cameras" (`ptz_cameras.rs`,
+  [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md) decision 1), shown
+  only when the global has `ptzCameras` and `setPtzCameras`: the switch, the cameras
+  (name, address and port, transport and VISCA address, each with Edit and Remove) and
+  a form that adds one or, after Edit, saves it. Each change saves the whole setting
+  through `setPtzCameras`; a refused change is undone and the app's reason shown, and
+  the app applies a saved one at once, so there is no restart note. The PTZ panel's
+  gear and empty state open this page and scroll to it.
+  Then "Accept a PTZ controller"
   ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
   §3), shown only when the global has `ptz` and `setPtz`: the switch, the endpoints
   (address and port, transport, VISCA address and what each drives, each with Remove)

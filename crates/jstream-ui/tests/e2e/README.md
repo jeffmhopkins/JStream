@@ -30,7 +30,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
   `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
   audio, so they get mixer channels), and the encoder profile `High quality`. It has no outputs. It stops
-  when its standard input closes. Given `--agent-token <token>`, it serves as the
+  when its standard input closes. Each `--ptz-camera <name>` lists a PTZ camera,
+  reachable at home, which `ptz.*` actions move (`MockEngine::with_ptz_cameras`). Given `--agent-token <token>`, it serves as the
   desktop app does with agents on: the page's `--token` is the window's token, the
   agent token is the one an agent presents, and the server asks before a new agent
   connects, keeping the always-allowed ones in memory. It is a crate of its own because `jstream-ui` (layer
@@ -485,11 +486,20 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Channels** (`channels.spec.js`, [ADR-0183](../../../../docs/adr/0183-virtual-control-channels.md)):
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
+- **PTZ cameras** (`ptz.spec.js`, [ADR-0208](../../../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)):
+  with no camera listed, the panel's empty state naming `--ptz-camera`; with two
+  (`--ptz-camera`), the picker, the head answering, a typed zoom aiming it, the control
+  button on each axis, a preset named and saved from its menu and Save, and the selected
+  scene's shot set from the position and from a preset, then cleared, with the other
+  camera keeping its own pose; and as the desktop app (its global stubbed, as
+  `browse.spec.js` does), the gear opening Settings › Devices' camera list, a camera
+  added without a port saved with VISCA over IP's, and a name taken already refused
+  unsaved.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
   Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
-  menu's thirteen panels, adding Live chat, which says it waits on YouTube sign-in.
+  menu's fourteen panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

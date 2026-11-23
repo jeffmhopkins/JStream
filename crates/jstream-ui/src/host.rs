@@ -3,14 +3,16 @@
 //!
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
 //! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, network,
-//! networkOpen, browse, allowNetwork, jtunnel, setJtunnel, ptz, setPtz, saveScreenshot,
-//! openSaved, showSaved }`: its in-process engine's WebSocket URL and control token,
+//! networkOpen, browse, allowNetwork, jtunnel, setJtunnel, ptz, setPtz, ptzCameras,
+//! setPtzCameras, saveScreenshot, openSaved, showSaved }`: its in-process engine's WebSocket URL and control token,
 //! whether its virtual camera can be used, the default project's folder `collection`
 //! asset paths are relative to, whether "Allow devices on my network" was on at start and its listener
 //! opened, `browse`, which
 //! opens a native file dialog, and `allowNetwork`, which saves that setting; `jtunnel` and
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
-//! `setJtunnel` and `setPtz` save them. `saveScreenshot` saves a screenshot in Downloads and
+//! `setJtunnel` and `setPtz` save them; `ptzCameras` is the machine's PTZ camera list
+//! (ADR-0208 decision 1), which `setPtzCameras` saves and the app applies at once.
+//! `saveScreenshot` saves a screenshot in Downloads and
 //! answers its path, and `openSaved` and `showSaved` open such a file or show it in its
 //! folder (ADR-0163 §3). In a browser the global is absent and the UI shows
 //! the connect form.
@@ -413,6 +415,101 @@ pub async fn set_ptz(setting: &PtzSetting) -> Option<String> {
     }
 }
 
+/// The desktop app's "Control PTZ cameras" setting as it was when the app started
+/// (ADR-0208 decision 1), if the page runs in an app that has it.
+pub fn desktop_ptz_cameras() -> Option<PtzCameraSetting> {
+    let global = global()?;
+    Reflect::get(&global, &JsValue::from_str("setPtzCameras"))
+        .ok()
+        .filter(JsValue::is_function)?;
+    let value = Reflect::get(&global, &JsValue::from_str("ptzCameras")).ok()?;
+    let text = leptos::web_sys::js_sys::JSON::stringify(&value)
+        .ok()?
+        .as_string()?;
+    Some(PtzCameraSetting::parse(&text))
+}
+
+/// One camera of [`PtzCameraSetting`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PtzCameraEntry {
+    /// Its name, which shots, `ptz.*` actions and value bindings take.
+    pub name: String,
+    /// Its address and port, as `192.168.1.40:52381`.
+    pub address: String,
+    /// `visca_ip`, `udp` or `tcp`.
+    pub transport: String,
+    /// Its VISCA address on that link, 1 to 7.
+    pub visca: u8,
+}
+
+/// "Control PTZ cameras": whether JStream drives this machine's heads, and which.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PtzCameraSetting {
+    /// Whether it drives them.
+    pub on: bool,
+    /// The cameras, in the order the person added them.
+    pub cameras: Vec<PtzCameraEntry>,
+}
+
+impl PtzCameraSetting {
+    /// The setting from the desktop global's JSON; what it can't read is left out.
+    pub fn parse(text: &str) -> Self {
+        let value: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+        let cameras = value
+            .get("cameras")
+            .and_then(serde_json::Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter_map(|entry| {
+                        Some(PtzCameraEntry {
+                            name: entry.get("name")?.as_str()?.to_owned(),
+                            address: entry.get("address")?.as_str()?.to_owned(),
+                            transport: entry.get("transport")?.as_str()?.to_owned(),
+                            visca: u8::try_from(entry.get("visca")?.as_u64()?).ok()?,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self {
+            on: value.get("on").and_then(serde_json::Value::as_bool) == Some(true),
+            cameras,
+        }
+    }
+
+    /// The setting as the desktop app's `setPtzCameras` takes it.
+    pub fn to_json(&self) -> String {
+        serde_json::json!({
+            "on": self.on,
+            "cameras": self
+                .cameras
+                .iter()
+                .map(|c| serde_json::json!({
+                    "name": c.name,
+                    "address": c.address,
+                    "transport": c.transport,
+                    "visca": c.visca,
+                }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string()
+    }
+}
+
+/// Asks the desktop app to save "Control PTZ cameras", which it applies at once.
+/// Resolves to `None` when it was saved and applied, or why not.
+pub async fn set_ptz_cameras(setting: &PtzCameraSetting) -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        save_setting_js("setPtzCameras", &setting.to_json()).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = setting;
+        Some("only the JStream app can save this".to_owned())
+    }
+}
+
 /// Asks the desktop app to save "Allow devices on my network", which applies when it
 /// next starts. Resolves to whether it was saved.
 pub async fn allow_network(allow: bool) -> bool {
@@ -627,5 +724,30 @@ mod tests {
         ));
         assert!(!super::same_engine("", "ws://127.0.0.1:1/api/v1/ws"));
         assert!(!super::same_engine("ws://127.0.0.1:1/api/v1/ws", ""));
+    }
+
+    /// The PTZ camera list reads back as the app wrote it, skipping what it can't read.
+    #[test]
+    fn the_ptz_camera_setting_round_trips() {
+        use super::{PtzCameraEntry, PtzCameraSetting};
+        let setting = PtzCameraSetting {
+            on: true,
+            cameras: vec![PtzCameraEntry {
+                name: "Wide".into(),
+                address: "192.168.1.40:52381".into(),
+                transport: "visca_ip".into(),
+                visca: 2,
+            }],
+        };
+        assert_eq!(PtzCameraSetting::parse(&setting.to_json()), setting);
+        let partial = PtzCameraSetting::parse(
+            r#"{"on":"yes","cameras":[{"name":"x"},{"name":"Close","address":"10.0.0.9:5678","transport":"tcp","visca":1}]}"#,
+        );
+        assert!(!partial.on);
+        assert_eq!(partial.cameras.len(), 1);
+        assert_eq!(
+            PtzCameraSetting::parse("not json"),
+            PtzCameraSetting::default()
+        );
     }
 }

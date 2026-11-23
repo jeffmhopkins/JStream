@@ -772,7 +772,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
   [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
-  setting, a fader or a send, drawn and heard without being stored; `midi.last_controls`
+  setting, a fader or a send, drawn and heard without being stored, or since 0.180 one
+  axis of a PTZ head, aimed rather than stored
+  ([ADR-0208](adr/0208-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
   reports each input's latest control change, for learning one.
   `channel.set` and `channel.delete` (protocol 0.169,
   [ADR-0183](adr/0183-virtual-control-channels.md)) set and remove a channel: up to eight
@@ -1280,8 +1282,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
   `midi` one to follow a controller, a `data` one to follow a sender's live data, and a
-  value binding, `binding.set_value`, for a filter's or source's setting, a fader or a send,
-  and a channel, `channel.set`, gathering controls into one value anything follows)
+  value binding, `binding.set_value`, for a filter's or source's setting, a fader, a send
+  or a PTZ head's axis, and a channel, `channel.set`, gathering controls into one value anything follows)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), the hologram effect, borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live
