@@ -163,14 +163,14 @@ depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md#heade
 JStream streams to any service that takes RTMP or RTMPS (YouTube, Twitch and most
 others) with the server address and stream key the service gives you.
 
-1. In **Outputs**, press **+ Add output**, choose **Stream (RTMP)**, paste the
+1. In **Outputs**, press **+ Add output**, keep **Stream** picked, paste the
    **server URL** without the key (for example YouTube's `rtmps://` address), paste the
    **Stream key**, and press **Add**. The key is kept in Windows Credential Manager,
-   never in JStream's files, and shows only masked. Treat it like a password: never
+   never in JStream's files, and shows only as **Saved**. Treat it like a password: never
    paste it into a chat or an issue.
 2. Each output is one row in **Outputs**, with its state and a Start button. To change
    it later, double-click the row (or choose **Settings…** in its **⋯** menu); nothing
-   changes until you press **OK** or **Apply**.
+   changes until you press **Save**.
 3. Press **Go Live** at the top right. It starts every stream output whose key is set;
    **End stream** stops them. Each row shows its state, and the stream reconnects by
    itself if the connection drops.
@@ -178,8 +178,8 @@ others) with the server address and stream key the service gives you.
 An output sends H.264 at the engine's default rate unless you pick otherwise. To change
 the codec or bit rate, or to send a vertical picture (1080 × 1920 for Shorts or TikTok),
 make an encoder or a video mix in **Encoders & mixes…**, under the output rows, and pick
-it in the output's settings, under **Encoder** or **Video**. From there, **Edit encoder…**,
-**New…** and **Edit mix…** open the same dialog on the one you need. A running output
+it in the output's settings, under **Encoder** or **Video**. From there, **Edit…** beside
+either and **New…** beside the encoder open the same dialog on the one you need. A running output
 takes the new choice when it next starts. **Start all**, above the rows, starts every
 output that can start, recordings and the virtual camera too; **Stop all** beside it
 stops everything that runs.
@@ -198,7 +198,7 @@ create the broadcast in YouTube Studio and stream to it with its key.
 depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#outputs"]
 -->
 
-In **Outputs**, press **+ Add output** and add a **Recording (MP4)** with the file path
+In **Outputs**, press **+ Add output**, pick **Record** and give it the file path
 to write. In the desktop app, **Browse…** beside that field opens a save dialog; a
 browser page keeps the path as text. Then press **Record** at the top. **Stop
 recording** finishes the file. A recording runs on its own, whether or not you are live.

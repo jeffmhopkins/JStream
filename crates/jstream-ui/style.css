@@ -1114,7 +1114,22 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .output-field input[type="text"], .output-field input[type="password"] { min-width: 0; flex: 1; }
 .output-dialog .path-row, .output-dialog .key-row, .output-dialog .encoder-row { display: flex; align-items: center; gap: 8px; }
 .output-dialog .encoder-row select { flex: 1; min-width: 0; }
-.key-mask { flex: 1; font-family: "IBM Plex Mono", ui-monospace, monospace; letter-spacing: 2px; color: var(--text-soft); }
+/* C16: a saved stream key reads "Saved" with a green dot, in a field frame, never the
+   key; Remove marks it "Removed on Save". */
+.key-mask { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--app); color: var(--text-soft); }
+.key-mask::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.key-mask.removed { color: var(--dim); }
+.key-mask.removed::before { background: var(--faint); }
+.output-dialog .prop-value { padding-top: 6px; color: var(--text); }
+.output-dialog .help.warn-text { color: var(--warn); }
+.output-dialog .output-kind { width: 100%; }
+.output-vcam { display: grid; gap: 4px; margin-top: 8px; }
+.output-warning { margin: 10px 0 0; }
+/* A light action beside a field (UI-DESIGN › Buttons, ghost and link): link-coloured
+   text with no fill. */
+.modal button.link { height: 28px; padding: 0 4px; border: 0; background: none; color: var(--link); text-decoration: none; }
+.modal button.link:hover:not(:disabled) { background: none; color: var(--text); text-decoration: underline; }
+.modal button.link.danger-link { color: var(--danger-text); }
 .output-note { margin: 0; color: var(--dim); font-size: 11px; }
 .output-note.warning { color: var(--warn); }
 .output-dialog .vcam-status { margin: 0; }
