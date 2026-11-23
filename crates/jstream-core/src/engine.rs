@@ -7504,7 +7504,7 @@ impl State {
             return None;
         }
         // ADR-0184 rule 7: about a frame at 60 fps while a lane plays, so a fade has no
-        // visible steps; and ADR-0188: the same while a channel's value or a binding's
+        // visible steps; and ADR-0190: the same while a channel's value or a binding's
         // setting is still moving (a control turned, its smoothing settling), so smoothed
         // motion has none either.
         let timelines = &self.timelines;

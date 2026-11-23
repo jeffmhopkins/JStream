@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0188"
+id = "ADR-0190"
 title = "Values tick at a frame's pace while one is moving"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0188: Values tick at a frame's pace while one is moving
+# ADR-0190: Values tick at a frame's pace while one is moving
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -42,5 +42,11 @@ control move jerkily, with smoothing short enough not to lag.
 - The thread does twice the work while a value moves, as it already did while a lane
   plays, and goes back to 30 a second once everything has settled; a resting show costs
   what it did.
+- An input that never sits still, such as live data or an audio level feeding a channel,
+  keeps the thread at 60 a second, under the engine's lock, for as long as it moves. That
+  is the cost of drawing it without steps.
 - The first tick after a control moves from rest can still be up to 33 ms away, a delay
   well within a smoothing time.
+- A smoothing field edits an input's `smoothing_ms` while its control drives, so the
+  engine keeps following an input that changed only its smoothing time: it keeps where it
+  rested, whether it moved and its level, and the setting goes on following the control.

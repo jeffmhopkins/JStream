@@ -6,7 +6,7 @@
 //! with the same one-pole [`Smoothing`] and maps it with the same [`Midi`] parameters.
 //! The engine's `jstream-values` thread ticks the [`ValueDriver`] about 30 times a
 //! second while the collection holds a binding, and about 60 while a value is still
-//! moving (ADR-0188). Each tick turns every moved binding's
+//! moving (ADR-0190). Each tick turns every moved binding's
 //! value into its target's setter edit ([`jstream_graph::value_edit`]); when the set of
 //! edits changes, the engine draws and hears the collection with them on top of the open
 //! gestures' settings, through the shown graph a `live.set` of a source setting uses.
@@ -127,8 +127,17 @@ impl ValueDriver {
         for binding in graph.value_bindings() {
             match self.driven.get_mut(&binding.binding_id) {
                 Some(driven) if driven.binding == *binding && !driven.unresolved => {}
-                // The same control with another target or mapping: it keeps following.
-                Some(driven) if driven.binding.input == binding.input && !driven.unresolved => {
+                // The same control with another target, amount or smoothing time: it keeps
+                // following, so a moved control goes on driving.
+                Some(driven)
+                    if crate::channels::same_but_smoothing(
+                        &driven.binding.input,
+                        &binding.input,
+                    ) && !driven.unresolved =>
+                {
+                    if let Some(params) = crate::channels::mapping(&binding.input) {
+                        driven.midi = params;
+                    }
                     driven.amount = binding.amount.as_ref().map(|id| data.channels().cell(id));
                     driven.binding = binding.clone();
                 }
@@ -247,6 +256,12 @@ mod tests {
             driver.edits(),
             [Edit::BusSetFader { bus_id, .. }] if bus_id.as_str() == "fx"
         ));
+        // A new smoothing time keeps the moved control driving, from where it is.
+        let before = gain(driver.edits()).expect("a fader");
+        graph.apply(&[bound(20, 7, "fx")], None).expect("rebinds");
+        driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(183));
+        let kept = gain(driver.edits()).expect("still driving");
+        assert!(kept <= before && kept > -100.0, "{before} then {kept}");
         // Another control starts afresh: at rest until it moves.
         graph.apply(&[bound(100, 8, "fx")], None).expect("rebinds");
         assert!(driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(200)));
