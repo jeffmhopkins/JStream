@@ -247,7 +247,18 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
   taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
-  says bye when it stops; it never announces itself or sends audio or MIDI. Every 10 s
+  says bye when it stops; it never announces itself or sends audio or MIDI. Beside each
+  keepalive it may send a names packet
+  ([ADR-0181](../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md),
+  `jtunnel/names.rs`): what the collection calls the sender's 32 modulation params, each
+  the name of what reads its `params` key's `values.<n>` (an enabled `data` modifier on an
+  item, named by its source and property, or on a scene's camera, by the scene and
+  property, or a value binding, by its target), a reader naming the sender winning a
+  slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine
+  works them out after every applied batch, undo, redo and load (`State::changed`) and
+  when the receiver starts, and hands a change to `Receiver::set_names`. Only a sender
+  whose state is on is named; the list goes while any slot is named, then as an empty
+  list four more times, and a sender never named gets none. Every 10 s
   it asks the LAN for senders from that socket (an mDNS PTR query for
   `_jtunnel._udp.local` to 224.0.0.251:5353, so a legacy unicast query that senders
   answer directly; `JtunnelSetup::discover` names where, `None` for nobody), lists those
@@ -856,7 +867,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   (which subscribes to it at once), stopped and started again
   (`a_jtunnel_setting_applies_live_with_no_restart`), a sender's state read with
   `data.list` and `data.get`
-  (ADR-0171), a CLAP filter on the master chain run on its
+  (ADR-0171), a sender's params named after an item's, a camera's and two value
+  bindings' readers of its `params` key, a disabled one and another sender's naming
+  nothing, sent again beside the next keepalive, cleared with an empty list once
+  unbound, and none sent to a sender whose state is off
+  (`what_reads_a_senders_params_names_them_on_the_sender`, ADR-0181), a CLAP filter on the master chain run on its
   own fake host by the program stage's thread, put on the host's block, and its host
   stopped when the filter is removed (`a_master_clap_filter_runs_on_a_host`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
@@ -4077,7 +4092,9 @@ takes only its own senders list's leaf mutex, which `jtunnel.senders` also takes
 and reports a change to the list over a one-slot channel that it never waits on; the
 `jstream-jtunnel-events` thread takes the collection lock to emit
 `jtunnel.senders_changed`, and `start_jtunnel` and `stop_jtunnel` take it alone, after
-setting the slot, to emit the same); its senders'
+setting the slot, to emit the same, and `start_jtunnel` then again to name the senders'
+params); each sender's names (ADR-0181) are a leaf mutex, which `Receiver::set_names`
+takes under the collection lock and the receiver's thread alone; its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
 lock held; `midi.last_controls` takes that leaf lock under the collection lock to read
 the inputs' latest control changes. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
