@@ -11,7 +11,7 @@
 
 use crate::command::Action;
 use crate::filter::FilterOwner;
-use crate::id::{BusId, FilterId, SourceId};
+use crate::id::{BusId, FilterId, ItemId, SceneId, SourceId};
 use crate::motion::{MAX_MOTION_PARAM_LEN, MotionKind, check_motion_id};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -215,7 +215,8 @@ pub const MAX_VALUE_BINDINGS: usize = 256;
 
 /// The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in
 /// the collection that isn't an item's or a camera's, which their own motion modifiers
-/// drive. Serialized with an internal `type` tag.
+/// drive, or since 0.179 a switch: a mute, or whether a placement shows its item
+/// (ADR-0207). Serialized with an internal `type` tag.
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -258,6 +259,29 @@ pub enum ValueTarget {
         /// The bus it sends into.
         bus_id: BusId,
     },
+    /// An audio source's mute, a switch: muted at one half or more (ADR-0207, since
+    /// 0.179). A `scene` source has none.
+    SourceMute {
+        /// The source.
+        source_id: SourceId,
+    },
+    /// A bus's mute, the master's included, a switch: muted at one half or more
+    /// (ADR-0207, since 0.179).
+    BusMute {
+        /// The bus.
+        bus_id: BusId,
+    },
+    /// Whether a placement shows its item, a switch: shown at one half or more
+    /// (ADR-0207, since 0.179), as `item.set_visible` would set it, so it cuts, with no
+    /// appear or disappear effect.
+    ItemVisible {
+        /// The item.
+        item_id: ItemId,
+        /// The scene whose placement of the item it drives, as `item.set_visible`'s
+        /// `scene_id`: omitted for the item's own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
 }
 
 impl ValueTarget {
@@ -269,7 +293,10 @@ impl ValueTarget {
             }
             ValueTarget::SourceGain { .. }
             | ValueTarget::BusGain { .. }
-            | ValueTarget::SendGain { .. } => None,
+            | ValueTarget::SendGain { .. }
+            | ValueTarget::SourceMute { .. }
+            | ValueTarget::BusMute { .. }
+            | ValueTarget::ItemVisible { .. } => None,
         }
     }
 }
@@ -288,6 +315,16 @@ impl fmt::Display for ValueTarget {
             ValueTarget::SendGain { source_id, bus_id } => {
                 write!(f, "the send of source {source_id} into bus {bus_id}")
             }
+            ValueTarget::SourceMute { source_id } => write!(f, "the mute of source {source_id}"),
+            ValueTarget::BusMute { bus_id } => write!(f, "the mute of bus {bus_id}"),
+            ValueTarget::ItemVisible {
+                item_id,
+                scene_id: None,
+            } => write!(f, "whether item {item_id} shows"),
+            ValueTarget::ItemVisible {
+                item_id,
+                scene_id: Some(scene_id),
+            } => write!(f, "whether item {item_id} shows in scene {scene_id}"),
         }
     }
 }

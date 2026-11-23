@@ -260,3 +260,101 @@ fn the_setter_keeps_the_value_within_the_range() {
     };
     assert_eq!(gain_db.map(Finite32::get), Some(-6.0));
 }
+
+/// ADR-0207: a mute and a placement's visibility are switches a binding drives, on at one
+/// half, and the setter refuses what has no mute.
+#[test]
+fn mutes_and_visibility_are_switch_targets() {
+    use jstream_protocol::{ItemId, SceneId};
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![
+            tone("hum"),
+            Edit::ItemAdd {
+                scene_id: SceneId::new("a"),
+                item_id: ItemId::new("i"),
+                source_id: SourceId::new("cam"),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+        ],
+    );
+    let hum = ValueTarget::SourceMute {
+        source_id: SourceId::new("hum"),
+    };
+    let master = ValueTarget::BusMute {
+        bus_id: BusId::master(),
+    };
+    let shown = ValueTarget::ItemVisible {
+        item_id: ItemId::new("i"),
+        scene_id: None,
+    };
+    for target in [&hum, &master, &shown] {
+        assert_eq!(g.value_range(target), Some(ValueRange::Switch), "{target}");
+    }
+    assert_eq!(
+        value_edit(&hum, ValueRange::Switch, 0.75),
+        Some(Edit::SourceSetAudio {
+            source_id: SourceId::new("hum"),
+            enabled: None,
+            follow: None,
+            gain_db: None,
+            muted: Some(true),
+        })
+    );
+    assert_eq!(
+        value_edit(&master, ValueRange::Switch, 0.25),
+        Some(Edit::BusSetFader {
+            bus_id: BusId::master(),
+            gain_db: None,
+            muted: Some(false),
+        })
+    );
+    assert_eq!(
+        value_edit(&shown, ValueRange::Switch, 0.5),
+        Some(Edit::ItemSetVisible {
+            item_id: ItemId::new("i"),
+            scene_id: None,
+            visible: true,
+        })
+    );
+    apply_ok(
+        &mut g,
+        vec![
+            bind("hum", hum),
+            bind("master", master),
+            bind("shown", shown),
+        ],
+    );
+    // A `scene` source has no mute, and an item must exist.
+    let scene = apply_err(
+        &mut g,
+        vec![bind(
+            "k",
+            ValueTarget::SourceMute {
+                source_id: SourceId::new("sa"),
+            },
+        )],
+    );
+    assert_eq!(invalid_reason(scene).0, "edits.0.binding.target");
+    let missing = apply_err(
+        &mut g,
+        vec![bind(
+            "k",
+            ValueTarget::ItemVisible {
+                item_id: ItemId::new("nope"),
+                scene_id: None,
+            },
+        )],
+    );
+    assert!(matches!(
+        missing,
+        ProtocolError::NotFound {
+            entity: EntityKind::Item,
+            ..
+        }
+    ));
+}

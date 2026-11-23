@@ -108,6 +108,14 @@ fn target_label(graph: &Graph, target: &ValueTarget) -> String {
         ValueTarget::SendGain { source_id, bus_id } => {
             format!("{} to {}", source(source_id), bus(bus_id))
         }
+        ValueTarget::SourceMute { source_id } => format!("{} Mute", source(source_id)),
+        ValueTarget::BusMute { bus_id } => format!("{} Mute", bus(bus_id)),
+        ValueTarget::ItemVisible { item_id, .. } => format!(
+            "{} Visible",
+            state
+                .item(item_id)
+                .map_or("", |(_, item)| source(item.source_id()))
+        ),
         _ => String::new(),
     }
 }
