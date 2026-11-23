@@ -3205,7 +3205,11 @@ program or of a scene, in H.264, JPEG or PNG, isn't drawn by the hub: once the e
 program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
 under the start lock but never waiting for a start, asking again 200 ms later while an
 output is starting and 5 s later after a stage that failed to open) and holds it while
-such a stream is open. It opens the stream's encoder session (as above) and hands its
+such a stream is open. It opens the stream's encoder session (as above, but for NV12
+input at an even picture size, `staged_format`, so the render thread converts the
+picture on the GPU and reads back the planes, as it does for an output's session, and
+the encoder converts nothing; RGBA8 at an odd one,
+`a_staged_preview_encodes_nv12_at_an_even_size`) and hands its
 input to the stage (`Program::attach_preview`). The stage's render thread then draws
 the program at the stream's picture size, on every `base / fps`th base tick (at least
 every tick), on the stage's compositor, with the stage's captures. The encoder is opened
@@ -4653,7 +4657,7 @@ session, whose reference frames are those readbacks (ADR-0145), and a readback m
 only for the probe that falls behind is no dropped frame, so it is never counted in
 the drops (`MixFrame::probe_only`); a mix none of them is fed is not read back.
 Outputs' sessions open in NV12, so when every consumer of a mix is one of them (no
-camera, no picture queue, no session opened in RGBA8 such as a preview's H.264, no
+camera, no picture queue, no session opened in RGBA8 such as a preview's H.264 at an odd size, no
 armed probe, nothing held, and an even size) the mix is converted by `Nv12Converter`
 into planes and read back as NV12 (ADR-0117 §4), and the CPU draw converts its frame
 with `rgb_to_nv12`; otherwise it is read back as RGBA8, which an NV12 session converts

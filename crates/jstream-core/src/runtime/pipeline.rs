@@ -3437,8 +3437,8 @@ impl From<VideoInput> for TapInput {
 
 impl TapInput {
     /// Pushes the frame `pixels` of `size`, stamped `pts`: NV12 when `planar`, else
-    /// RGBA8. A picture stream and a session opened for RGBA8 (the preview's H.264)
-    /// take only RGBA8, so they skip an NV12 frame, one left from before they were
+    /// RGBA8. A picture stream and a session opened for RGBA8 (a preview's H.264 at an
+    /// odd size) take only RGBA8, so they skip an NV12 frame, one left from before they were
     /// attached. `false` once its reader has gone.
     fn push(&self, size: FrameSize, pts: MediaTime, pixels: &[u8], planar: bool) -> bool {
         match self {
@@ -3845,9 +3845,10 @@ impl Frames {
             let probed = taps.iter().any(|tap| tap.probed());
             frame.readback = fed || probed;
             frame.probe_only = frame.readback && !fed;
-            // Only encoder sessions opened for NV12 take it: a camera, a picture stream
-            // and a session opened for RGBA (the preview's H.264) need RGBA, and so does
-            // a probe's reference.
+            // Only encoder sessions opened for NV12 take it, a preview's H.264 at an
+            // even size among them: a camera, a picture stream and a session opened
+            // for RGBA (a preview's at an odd size) need RGBA, and so does a probe's
+            // reference.
             frame.planar = fed
                 && !held
                 && !probed
@@ -5871,7 +5872,7 @@ mod tests {
         );
     }
 
-    /// A session opened for RGBA8, as the preview's H.264 is, skips an NV12 frame: one
+    /// A session opened for RGBA8, as a preview's H.264 at an odd size is, skips an NV12 frame: one
     /// shown before it joined a mix read back as NV12. It takes the next RGBA8 frame.
     #[test]
     fn a_session_opened_for_rgba_skips_an_nv12_frame() {
