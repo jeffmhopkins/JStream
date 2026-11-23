@@ -1,4 +1,4 @@
-//! A backdrop's warp aimed straight ahead (ADR-0186): the rotations that lay its sky out
+//! A backdrop's warp aimed straight ahead (ADR-0187): the rotations that lay its sky out
 //! around the scene's straight ahead when a warp starts, and hold the direction of
 //! travel near it while at warp.
 //!
@@ -163,7 +163,7 @@ mod tests {
         assert!(close(&multiply(&quarter, &inverse(&quarter)), &IDENTITY));
     }
 
-    /// ADR-0186: a turn within the limit is kept, one past it is brought back to it, and
+    /// ADR-0187: a turn within the limit is kept, one past it is brought back to it, and
     /// a roll about the travel is free.
     #[test]
     fn the_travel_is_held_within_its_limit() {

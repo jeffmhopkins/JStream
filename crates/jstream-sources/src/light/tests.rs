@@ -223,7 +223,7 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
     assert_eq!(sky.sky_seed, 42);
     assert!((sky.warp - 0.75).abs() < 1e-6);
     assert!((sky.warp_ramp_s - 3.0).abs() < 1e-6);
-    // ADR-0186: the warp's aim and how far it may look.
+    // ADR-0187: the warp's aim and how far it may look.
     assert_eq!(sky.warp_aim, crate::WarpAim::Ahead);
     assert!((sky.warp_look_deg - 25.0).abs() < 1e-6);
     let mut older = settings(json!({"type": "environment"}));

@@ -452,7 +452,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   (default: toward the sky's centre, which the item turns) or `ahead` (along the scene's
   straight ahead from the moment the warp starts, the travel swinging at most
   `warp_look_deg`, 0 to 180, default 10, while at warp), carried as a `WarpAim`
-  ([ADR-0186](../../docs/adr/0186-a-warp-can-travel-straight-ahead.md)). Its frame is one transparent pixel: it
+  ([ADR-0187](../../docs/adr/0187-a-warp-can-travel-straight-ahead.md)). Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that
   places it gives a position, an aim and a strength (`jstream-core`'s README).
 - `reflection_probe`

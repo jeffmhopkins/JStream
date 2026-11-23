@@ -34,10 +34,10 @@ const NEBULA_2: &str = "#2471a8";
 const MAX_WARP_RAMP_S: f64 = 10.0;
 
 /// The widest a backdrop's warp aimed ahead lets its direction of travel turn from
-/// straight ahead, in degrees (ADR-0186).
+/// straight ahead, in degrees (ADR-0187).
 const MAX_WARP_LOOK_DEG: f64 = 180.0;
 
-/// Where a backdrop's warp travels toward (ADR-0186).
+/// Where a backdrop's warp travels toward (ADR-0187).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WarpAim {
     /// The sky's own centre ahead, which its item's turn, tilt and rotation turn
@@ -138,7 +138,7 @@ pub struct ShownEnvironment {
     /// How many seconds the backdrop takes to go from still to full warp, or back, when
     /// `warp` changes, 0 to 10; 0 changes at once.
     pub warp_ramp_s: f32,
-    /// Where the warp travels toward (ADR-0186).
+    /// Where the warp travels toward (ADR-0187).
     pub warp_aim: WarpAim,
     /// With the warp aimed ahead, how far its direction of travel may turn from straight
     /// ahead while at warp, in degrees, 0 to 180.

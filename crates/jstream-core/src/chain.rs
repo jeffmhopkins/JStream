@@ -688,7 +688,7 @@ pub(crate) struct SkyState {
     pub(crate) travel: f64,
     /// Whether its warp is heading down toward a lower setting.
     pub(crate) dropping: f32,
-    /// With its warp aimed ahead (ADR-0186), the rotation that lays its sky out from
+    /// With its warp aimed ahead (ADR-0187), the rotation that lays its sky out from
     /// its item's: the sky is drawn turned by its item's rotation after this one. `None`
     /// lays it out as its item turns it.
     pub(crate) aim: Option<crate::warp_aim::Rotation>,
@@ -700,7 +700,7 @@ pub(crate) struct SkyState {
     pub(crate) left: Option<u64>,
 }
 
-/// The sky a backdrop cross-fades from as a warp aimed ahead starts (ADR-0186): as it
+/// The sky a backdrop cross-fades from as a warp aimed ahead starts (ADR-0187): as it
 /// was drawn the frame before, still.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LeavingSky {
@@ -714,10 +714,10 @@ pub(crate) struct LeavingSky {
 }
 
 /// How long a backdrop takes to cross-fade to the sky a warp aimed ahead lays out, in
-/// seconds of media time (ADR-0186).
+/// seconds of media time (ADR-0187).
 pub(crate) const AIM_FADE_S: f64 = 0.5;
 
-/// How a backdrop's warp is aimed this frame (ADR-0186): its item's turn, tilt and
+/// How a backdrop's warp is aimed this frame (ADR-0187): its item's turn, tilt and
 /// rotation, and with the warp aimed ahead, how far its travel may turn, in degrees.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct WarpAiming {
@@ -736,7 +736,7 @@ impl SkyState {
     /// still drawing, keeps it as it is. It is dropping while its warp is still above
     /// `target`, easing out as it nears a `target` above 0.
     ///
-    /// With its warp aimed ahead (ADR-0186), a warp that starts from still, or a first
+    /// With its warp aimed ahead (ADR-0187), a warp that starts from still, or a first
     /// step or a jump that lands at warp, lays the sky out around the scene's straight
     /// ahead as the item turns it now; one that starts from still after a frame drew
     /// cross-fades from that frame's sky over [`AIM_FADE_S`]. At warp, a turn of the
@@ -832,7 +832,7 @@ impl SkyState {
     }
 
     /// The turn, tilt and rotation the sky is drawn at, in degrees, for its item's
-    /// `aiming`: the item's own, or with its warp aimed ahead (ADR-0186), the item's
+    /// `aiming`: the item's own, or with its warp aimed ahead (ADR-0187), the item's
     /// after the sky's layout, the travel held within its limit while at warp.
     pub(crate) fn angles(&self, aiming: WarpAiming) -> [f32; 3] {
         use crate::warp_aim::{from_angles, held_ahead, multiply, to_angles};
@@ -4238,7 +4238,7 @@ mod tests {
         ahead: None,
     };
 
-    /// ADR-0186: a warp aimed ahead lays the sky out around straight ahead as it starts,
+    /// ADR-0187: a warp aimed ahead lays the sky out around straight ahead as it starts,
     /// cross-fading from the sky before; at warp a turn swings the travel up to its
     /// limit and no further, and turning back moves it at once; after the warp the sky
     /// stays where it was left, and a turn turns it from there.
@@ -4431,7 +4431,7 @@ mod tests {
         assert_eq!(switching[1], [255, 255, 255, 255], "{switching:?}");
     }
 
-    /// ADR-0186: as a warp aimed ahead starts, the backdrop cross-fades from the sky its
+    /// ADR-0187: as a warp aimed ahead starts, the backdrop cross-fades from the sky its
     /// item turned to one laid out around straight ahead: an item tilted to show the
     /// sky's zenith ahead shows its horizon ahead once the fade is over, and a mix of
     /// the two halfway.

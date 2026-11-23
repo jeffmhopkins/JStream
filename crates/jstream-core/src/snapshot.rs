@@ -3770,7 +3770,7 @@ pub(crate) enum GpuKey {
     /// for differs from the one it holds.
     Sky(SceneId),
     /// The sky a 3D scene's backdrop cross-fades from as a warp aimed ahead starts
-    /// (ADR-0186), drawn under its [`GpuKey::Sky`] while it fades.
+    /// (ADR-0187), drawn under its [`GpuKey::Sky`] while it fades.
     SkyLeaving(SceneId),
     /// A reflection probe's capture (ADR-0170 decision 3): its scene seen from its
     /// box's centre, as a panorama four faces wide and two high, kept between captures.
@@ -7823,7 +7823,7 @@ fn scene_lights(
 /// with its picture when that source's frame was uploaded this frame. Also how many
 /// environment lights the scene places, so a caller can log the ones that don't count.
 ///
-/// A backdrop whose warp is aimed ahead lights the scene as it is drawn (ADR-0186): laid
+/// A backdrop whose warp is aimed ahead lights the scene as it is drawn (ADR-0187): laid
 /// out around the travel, as its sky's state last stepped.
 fn scene_environment<'c>(
     (shot, cache, chains): (&Shot, &'c ResourceCache<GpuKey>, &Chains),
@@ -8027,7 +8027,7 @@ fn draw_sky_of(
         *state
     };
     // A warp aimed ahead that has just started cross-fades from the sky laid out before
-    // it, still, drawn under this one (ADR-0186).
+    // it, still, drawn under this one (ADR-0187).
     let leaving_key = GpuKey::SkyLeaving(scene.clone());
     if state.leaving.is_some() {
         cache.layer(compositor, &leaving_key, canvas.width(), canvas.height())?;
@@ -8089,7 +8089,7 @@ fn draw_sky_of(
     Ok(())
 }
 
-/// How the warp of an environment light's backdrop is aimed (ADR-0186), oriented as
+/// How the warp of an environment light's backdrop is aimed (ADR-0187), oriented as
 /// `environment` is by its item.
 fn warp_aiming(
     environment: &jstream_render::Environment<'_>,
@@ -8240,7 +8240,7 @@ fn under_sky<'a>(
 }
 
 /// The layers scene `scene`'s sky backdrop drew this frame at the canvas size, bottom
-/// first: the sky a warp aimed ahead cross-fades from while it does (ADR-0186), then
+/// first: the sky a warp aimed ahead cross-fades from while it does (ADR-0187), then
 /// the sky (ADR-0167).
 fn sky_layers<'a>(
     scene: &SceneId,

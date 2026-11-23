@@ -1875,7 +1875,7 @@ stars have travelled, advanced once a frame by the warp's mean rate times the me
 time since the last (a step back or of over a second jumps to the setting and moves
 nothing; a step of no time, a held clock, keeps the warp as it is).
 With its warp aimed ahead
-([ADR-0186](../../docs/adr/0186-a-warp-can-travel-straight-ahead.md)) it also keeps the
+([ADR-0187](../../docs/adr/0187-a-warp-can-travel-straight-ahead.md)) it also keeps the
 rotation that lays the sky out around the scene's straight ahead, taken as a warp starts
 and adjusted while at warp to hold the travel within its limit (`warp_aim.rs` holds the
 rotations), and the sky
@@ -2315,7 +2315,7 @@ decision 9) isn't one of those lights: `scene_environment` takes the scene's fir
 in stacking order, as the model's sky (`ModelDraw::environment`), at its intensity
 times its item's opacity and oriented by its item's turn, tilt and rotation
 ([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), after the
-layout a warp aimed ahead keeps in its backdrop's `SkyState` (ADR-0186), and a second one is logged once
+layout a warp aimed ahead keeps in its backdrop's `SkyState` (ADR-0187), and a second one is logged once
 (`Chains::environments_warned`). Planning puts the frame of the source its `image`
 names in the shot when it places the light (`look_sky`), so it is uploaded though no
 item shows it, and the sky reads that upload; a source the pipeline captures isn't

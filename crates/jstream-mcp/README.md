@@ -237,7 +237,7 @@ panorama `image`, and a `warp` that ramps itself over `warp_ramp_s` (motion modi
 the light's item may drive its numbers and colours)
 ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)) and may travel straight
 ahead of a vehicle whose sky turns (`warp_aim`, `warp_look_deg`,
-[ADR-0186](../../docs/adr/0186-a-warp-can-travel-straight-ahead.md)), a rig moved as one by a group
+[ADR-0187](../../docs/adr/0187-a-warp-can-travel-straight-ahead.md)), a rig moved as one by a group
 that shares the set's space (`share_space`), and a camera riding with it
 (`scene.set_camera_anchor`, ignored under a follow camera,
 [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), a camera that moves on its
