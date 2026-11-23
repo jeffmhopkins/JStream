@@ -418,17 +418,17 @@ which the page never has; a recording's copy writes beside it under a free name,
 know can't be copied: "This page can't copy this output yet." Under the rows, "+ Add output"
 and "Encoders & mixes…" open dialogs.
 
-An output's settings dialog (Settings…, or a double-click on its row), titled "Output settings" over the output's ID, kind and state, has General (the
-server URL or the recording's path, with Browse… in the desktop app, and the stream key),
-Video (the mix, or "Program (canvas size)", with Edit mix…), Encoder (the profile, with
-Edit encoder…, off for the engine's default, and New…, which open the Encoders & mixes
-dialog on that profile or on a new one) and Audio (the bus). Nothing applies until OK or Apply, which send what changed
+An output's settings dialog (Settings…, or a double-click on its row), titled "Output settings" over the output's ID, kind and state, is a property grid (C16) with General (its Name, the output's ID), Destination (the
+server URL or the recording's path, with Browse… in the desktop app, each with one help line, and the stream key),
+Video (Shows: the mix, or "Program (canvas size)", with an Edit… link while a mix is picked), Encoder (the profile, with
+an Edit… link while one is picked, and New…, which open the Encoders & mixes
+dialog on that profile or on a new one) and Audio (Bus). Nothing applies until Save, which sends what changed
 as one batch (`output.set_target`, `output.set_path` (#1072), `output.set_encoder`,
 `output.set_video_mix`, `output.set_audio_buses`), then the key. A set key reads
-"••••••••" with Change… and Remove; the key is write-only, so there is no Show. While the
+"Saved", with a green dot in a field frame, beside Replace… and Remove; the key is write-only, so there is no Show.
+A cleartext target's warning is a callout under Destination. While the
 output runs, its target and bus are off, with a note. Delete… (bottom left) and the row's
-Delete… ask first. "+ Add output" opens the same dialog with a kind picker (Stream,
-Recording, Virtual camera); OK becomes Add and sends `output.create` with the other fields
+Delete… ask first: "Delete output-1?", saying its settings (and saved stream key, when it has one) are removed for good, with a solid red Delete. There is no Apply. "+ Add output" opens the same dialog, titled "Add output", with a Name field starting at the first free ID (blank, or another output's, is named under it and turns Add off) and a "Stream | Record | Virtual camera" segmented control for the kind; Save becomes Add and sends `output.create` under that name with the other fields
 in one batch, then the key. If the key is refused after the output was created, the dialog stays open on that output, and Add again sets only its key rather than adding a second one; a virtual camera sends no encoder, mix or bus. While the
 dialog is open, another client's change to the output reaches each field still as the
 dialog started it, and a field the person changed keeps theirs. The Encoders & mixes

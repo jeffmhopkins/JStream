@@ -108,7 +108,7 @@ test('a recording uses a save dialog, and a stream does not', async ({ page, dae
   await page.getByRole('button', { name: '+ Add output' }).click();
   const dialog = page.getByRole('dialog', { name: 'Output settings' });
   await expect(dialog.getByRole('button', { name: 'Browse…' })).toHaveCount(0);
-  await dialog.getByLabel('Kind').selectOption('record');
+  await dialog.getByRole('group', { name: 'Kind' }).getByRole('button', { name: 'Record', exact: true }).click();
   const browse = dialog.getByRole('button', { name: 'Browse…' });
   await expect(browse).toBeVisible();
 

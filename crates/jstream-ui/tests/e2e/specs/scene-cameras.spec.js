@@ -80,7 +80,7 @@ test('scene properties give a scene a camera, and Alt-drag orbits it', async ({ 
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move(from.x + 60, from.y, { steps: 6 });
-  await expect(page.locator('.stage-overlay .readout text')).toHaveText(/^Camera -?\d+, -?\d+, -?\d+ · 1500 px from target$/);
+  await expect(page.locator('.stage-overlay .readout text')).toHaveText(/^Camera -?\d+, -?\d+, -?\d+ · 1500 px from target · \d+°$/);
   await expect.poll(() => calls.sent('live.set').length).toBeGreaterThan(0);
   await page.mouse.up();
   await page.keyboard.up('Alt');
