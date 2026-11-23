@@ -8001,7 +8001,7 @@ stamp = { hash = "b3:5da0006a6faf1847", by = "agent:claude", note = "UI-FEATURES
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#transitions"]
-stamp = { hash = "b3:993d9216ea0a580b", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:9e3c8a2f4aab4952", by = "agent:claude", note = "Re-read after TR-03's delete-question change: the scene steps only say the Transitions panel sets up the presets Transition uses; holds" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
