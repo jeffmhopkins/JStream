@@ -62,7 +62,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `stats.tick`s the same way, since the mock runs no pipeline.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
-  page a `source.size_changed`. `recordCalls` routes it too, passing everything on, and
+  page a `source.size_changed`. `liveSources` routes it to answer `data.list`, `data.get`
+  and `midi.last_controls` from what a test last gave the function it returns, since the
+  mock engine hears no DAW and no MIDI. `recordCalls` routes it too, passing everything on, and
   its `sent(type)` lists every edit or action of that type the page has sent, for the
   transition edits the mock engine refuses.
 - **Console errors fail a test.** Every console error and uncaught exception on a
@@ -485,6 +487,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Channels** (`channels.spec.js`, [ADR-0183](../../../../docs/adr/0183-virtual-control-channels.md)):
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
+- **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
+  fader's row opening its menu, Map control… opening the dialog, a Mod picked there
+  changing nothing until Use, which is one edit and names the Mod on the control button;
+  Cancel changing nothing; and the menu's Learn taking the one MIDI control that moves
+  after it opened, as one edit.
 - **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
   is mapped, then listing a channel made in the Channels panel as a group with
   "+ Target…"; a search that matches nothing saying so; a click on the channel opening its
