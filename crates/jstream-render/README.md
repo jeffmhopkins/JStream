@@ -84,9 +84,11 @@ and calls this crate.
   `dropping` (0 to 1, easing out over the last 0.15 toward its setting, [ADR-0186](../../docs/adr/0186-the-sky-eases-out-of-warp-toward-rest.md)) the deep sky returns early, squeezed ahead, and zooms back out to its
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
-  about 0.6 px wide. A `SkyPicture` is drawn over all of it, read through the tangent
-  plane at its centre (`pinned`), covering what is behind it and fading as the deep sky
+  about 0.6 px wide. Up to `MAX_SKY_PICTURES` (4) `SkyPicture`s are drawn over all of
+  it, bottom first, each read through the tangent plane at its centre (`pinned`, one
+  texture binding each, 7 to 10), covering what is behind it and fading as the deep sky
   does at warp ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
+  [ADR-0198](../../docs/adr/0198-an-arrival-can-be-a-planet-with-its-sun.md),
   `golden_sky_a_pinned_picture_covers_the_sky_where_it_is`). The engine places the layer under the scene's items with no camera.
   Its two pipelines (the frame's and the bright stars' table's) are made on the first
   draw, and the bake's on the first sky with nebulae or a band, unless `warm_3d` made

@@ -58,7 +58,7 @@ pub use model::{
 pub use probe::ProbeFace;
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
-pub use sky::{DeepSky, MAX_STAR_BRIGHTNESS, SkyDraw, SkyPicture};
+pub use sky::{DeepSky, MAX_SKY_PICTURES, MAX_STAR_BRIGHTNESS, SkyDraw, SkyPicture};
 
 #[cfg(test)]
 mod tests;
