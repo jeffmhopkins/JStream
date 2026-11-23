@@ -7373,6 +7373,9 @@ stamp = { hash = "b3:37a42ef6cced2e9c", by = "agent:claude", note = "New channel
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/projectors.spec.js"]
 stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "Re-read: projectors.spec.js gains a test but no fixture; the harness text holds." }
 
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/projects.spec.js"]
+stamp = { hash = "b3:74ed841d65c4e32a", by = "agent:issues-thread", note = "Re-read against projects.spec.js: it adds no fixture, daemon or setup change; it routes the page's WebSocket itself, as codec-downloads.spec.js does, so the harness description still holds" }
+
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/properties.spec.js"]
 stamp = { hash = "b3:b563d5871ad1dce2", by = "agent:claude", note = "Specs now pick the Filters tab and use recordCalls for the colour source's preview; no harness change." }
 
@@ -7419,7 +7422,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:1c3d0e18106dab9b", by = "agent:release-alpha9", note = "Tests list adds Channels (channels.spec.js) and Polish now says thirteen panels; both specs pass locally against the mock daemon. | merge: #1641's channels.spec.js bullet and the View menu's thirteen panels merged beside alpha.8's specs; re-read against the specs | merge: main's #1639 changes the outputs spec's Encoders & mixes bullet (its rail and + buttons) beside #1641's channels.spec.js bullet; both hold | kept from the merged side: Outputs bullet names the rail's + buttons (New encoder, New video mix); codec-downloads bullet still holds: the offer is still over the editor." }
+stamp = { hash = "b3:af949c062e57c72c", by = "agent:issues-thread", note = "Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7504,6 +7507,9 @@ stamp = { hash = "b3:37a42ef6cced2e9c", by = "agent:claude", note = "Tests list 
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/projectors.spec.js"]
 stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "The Projectors entry now covers Backdrop's object row Pop out: Source in a window or full screen, opening a ?projector=source: page titled Source: Backdrop, as the new test asserts." }
+
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/projects.spec.js"]
+stamp = { hash = "b3:74ed841d65c4e32a", by = "agent:issues-thread", note = "Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/properties.spec.js"]
 stamp = { hash = "b3:b563d5871ad1dce2", by = "agent:claude", note = "Updated properties, scene-filters and filters spec descriptions for the title/subtitle, the Settings | Filters segments with counts, and a colour source's own picture by source_id." }
