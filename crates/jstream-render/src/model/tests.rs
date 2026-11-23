@@ -86,11 +86,23 @@ fn draw_lit(
     lights: Option<&[SceneLight]>,
 ) -> Snapshot {
     let uploaded = compositor.upload_model(model).expect("the model uploads");
+    draw_uploaded(compositor, &uploaded, geometry, camera, lighting, lights)
+}
+
+/// [`draw_lit`], of a model uploaded already.
+fn draw_uploaded(
+    compositor: &mut Compositor,
+    uploaded: &crate::GpuModel,
+    geometry: ItemGeometry,
+    camera: Option<SceneCamera>,
+    lighting: Lighting,
+    lights: Option<&[SceneLight]>,
+) -> Snapshot {
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
     compositor
         .draw_model(
             &ModelDraw {
-                model: &uploaded,
+                model: uploaded,
                 geometry,
                 camera,
                 lighting,
@@ -101,6 +113,7 @@ fn draw_lit(
                 materials: &[],
                 texture: None,
                 reflection: None,
+                probe: None,
             },
             &layer,
         )
@@ -245,6 +258,76 @@ fn golden_model_through_a_camera_the_near_faces_hide_the_far_ones() {
     assert_near(rgb(&shot, at.0, at.1), FRONT, at);
 }
 
+/// A model's layer knows the box its model can cover (#1070), and so does the depth
+/// layer drawn beside it, so a scene placing them draws only there: the box is well
+/// inside the layer for a small model, and the scene looks as it does when the layer
+/// is drawn whole. A model whose bounds reach behind the viewer has no box.
+#[test]
+fn a_models_layer_is_bounded_by_its_models_box() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = Some(SceneCamera::framing(canvas()));
+    let geometry = boxed(80.0, 50.0, 30.0);
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let model_draw = |geometry| ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera,
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(&model_draw(geometry), &layer)
+        .expect("the model draws");
+    let content = layer.content().expect("the model's box is known");
+    assert!(
+        content.width > 20 && content.width < WIDTH / 2 && content.height < HEIGHT,
+        "{content:?}"
+    );
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    let bounded = render(compositor, &items);
+    // Forgetting the box draws the whole layer.
+    layer.mark_changed();
+    assert_eq!(layer.content(), None);
+    let whole = render(compositor, &items);
+    assert_eq!(bounded.rgba(), whole.rgba());
+    assert!(count(&bounded, FRONT) > 300, "the cube shows");
+
+    // Its depth, over a cleared layer, has the same box.
+    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let empty = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    compositor.render_into(&empty, &depth).expect("it clears");
+    compositor
+        .draw_model_depth(&model_draw(geometry), &depth)
+        .expect("the depth draws");
+    assert_eq!(depth.content(), Some(content));
+
+    // Large enough to reach past the viewer, the model's bounds have no box.
+    compositor
+        .draw_model(&model_draw(boxed(80.0, 50.0, 5000.0)), &layer)
+        .expect("the model draws");
+    assert_eq!(layer.content(), None);
+}
+
 /// ADR-0107 decision 3: a flipped placement mirrors the model but still draws its front.
 #[test]
 fn golden_model_a_mirrored_cube_still_shows_its_front() {
@@ -308,6 +391,55 @@ fn golden_model_a_textured_plane_reads_upright() {
     assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
     assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
     assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+}
+
+/// ADR-0177 decision 1: a model another thread uploaded for a compositor draws as one
+/// the compositor uploaded itself, and a texture level written in more than one band
+/// (2048 px wide, so four of 512 rows) lands whole.
+#[test]
+fn golden_model_one_uploaded_on_another_thread_draws_the_same() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    const SIDE: u32 = 2048;
+    // A solid colour in each quadrant: red, green, blue, white.
+    let quadrant = |x: u32, y: u32| match (x < SIDE / 2, y < SIDE / 2) {
+        (true, true) => [255, 0, 0, 255],
+        (false, true) => [0, 255, 0, 255],
+        (true, false) => [0, 0, 255, 255],
+        (false, false) => [255, 255, 255, 255],
+    };
+    let rgba: Vec<u8> = (0..SIDE)
+        .flat_map(|y| (0..SIDE).flat_map(move |x| quadrant(x, y)))
+        .collect();
+    let texture = ModelTexture::new(SIDE, SIDE, rgba, TextureColor::Srgb).expect("a texture");
+    let plane = Shape::Plane
+        .model(Material::default())
+        .expect("the plane builds");
+    let material = Material {
+        base_color_texture: Some(TextureRef { texture: 0 }),
+        unlit: true,
+        ..plane.materials()[0].clone()
+    };
+    let model = Model::new(plane.primitives().to_vec(), vec![material], vec![texture])
+        .expect("the plane builds");
+    let uploader = opened.compositor.model_uploader();
+    let aside = std::thread::scope(|scope| {
+        scope
+            .spawn(|| uploader.upload(&model))
+            .join()
+            .expect("the upload doesn't panic")
+    })
+    .expect("the model uploads");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let compositor = &mut opened.compositor;
+    let shot = draw_uploaded(compositor, &aside, geometry, None, Lighting::Studio, None);
+    assert_near(rgb(&shot, 60, 30), [255, 0, 0], (60, 30));
+    assert_near(rgb(&shot, 100, 30), [0, 255, 0], (100, 30));
+    assert_near(rgb(&shot, 60, 70), [0, 0, 255], (60, 70));
+    assert_near(rgb(&shot, 100, 70), [255, 255, 255], (100, 70));
+    let here = draw(compositor, &model, geometry, None, Lighting::Studio);
+    assert_eq!(shot.rgba(), here.rgba(), "uploaded here, it draws the same");
 }
 
 /// ADR-0107 decision 4: the studio key light is above and to the left, so a sphere is
@@ -441,6 +573,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     materials: &[],
                     texture: None,
                     reflection: None,
+                    probe: None,
                 },
                 &layer,
             )
@@ -485,6 +618,7 @@ fn a_model_from_another_compositor_is_refused() {
             materials: &[],
             texture: None,
             reflection: None,
+            probe: None,
         },
         &layer,
     );
@@ -587,6 +721,7 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     materials: &[],
                     texture: None,
                     reflection: None,
+                    probe: None,
                 },
                 &layer,
             )
@@ -948,6 +1083,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
         depth_sort: false,
         focus_px: None,
         blur_px: Finite32::ZERO,
+        autofocus: false,
     };
     let map = compositor.layer(256, 256).expect("a map");
     let clear = Scene {
@@ -972,6 +1108,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                 materials: &[],
                 texture: None,
                 reflection: None,
+                probe: None,
             },
             &map,
         )
@@ -1024,6 +1161,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                     materials: &[],
                     texture: None,
                     reflection: None,
+                    probe: None,
                 },
                 &layer,
             )
@@ -1082,6 +1220,7 @@ fn sky_sphere(
                 materials: &[],
                 texture: None,
                 reflection: None,
+                probe: None,
             },
             &layer,
         )
@@ -1207,6 +1346,92 @@ fn golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload() {
     }
 }
 
+/// ADR-0170 decision 3: a rough surface blurs a panorama's bright points into soft
+/// light, not one sharp copy per tap of its blur. A half-rough metal sphere under a
+/// black sky scattered with single bright texels shows the stars as a smooth glow: no
+/// two neighbouring pixels across its middle differ much, though the stars light it.
+#[test]
+fn golden_model_a_rough_surface_blurs_a_starry_sky_smoothly() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let (width, height) = (256u32, 128u32);
+    let mut rgba = vec![0u8; (width * height * 4) as usize];
+    for y in (5..height).step_by(16) {
+        for x in (3..width).step_by(16) {
+            let at = ((y * width + x) * 4) as usize;
+            rgba[at..at + 4].copy_from_slice(&[255, 255, 255, 255]);
+        }
+    }
+    for at in (3..rgba.len()).step_by(4) {
+        rgba[at] = 255;
+    }
+    let stars = opened
+        .compositor
+        .upload_rgba8(width, height, &rgba)
+        .expect("the panorama uploads");
+    let sphere = Shape::Sphere
+        .model(Material {
+            base_color: [1.0, 1.0, 1.0, 1.0],
+            metallic: 1.0,
+            roughness: 0.5,
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let uploaded = opened
+        .compositor
+        .upload_model(&sphere)
+        .expect("the model uploads");
+    let layer = opened.compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let environment = super::Environment {
+        sky: Color::WHITE,
+        horizon: Color::WHITE,
+        ground: Color::WHITE,
+        intensity: 16.0,
+        turn_deg: 0.0,
+        image: Some(&stars),
+    };
+    opened
+        .compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera,
+                lighting: Lighting::Scene,
+                lights: Some(&[]),
+                shadows: &[],
+                environment: Some(environment),
+                floor: None,
+                materials: &[],
+                texture: None,
+                reflection: None,
+                probe: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    let shot = render(&mut opened.compositor, &items);
+    let row: Vec<u32> = (56..104).map(|x| luma(rgb(&shot, x, 50))).collect();
+    let jump = row
+        .windows(2)
+        .map(|pair| pair[0].abs_diff(pair[1]))
+        .max()
+        .unwrap_or(0);
+    let lit = row.iter().sum::<u32>() / row.len() as u32;
+    assert!(lit > 6, "the stars light the sphere: {row:?}");
+    assert!(
+        jump < 24,
+        "the stars blur smoothly: a jump of {jump} in {row:?}"
+    );
+}
+
 /// ADR-0151 decision 4: a model cut at a floor draws nothing at or below it, in its
 /// picture or its view depth, so a scene drawn mirrored in its floor shows only what
 /// stands above it. The cube spans y 30 to 70; a floor at 50 keeps its upper half.
@@ -1232,6 +1457,7 @@ fn golden_model_a_floor_cuts_what_is_below_it() {
         materials: &[],
         texture: None,
         reflection: None,
+        probe: None,
     };
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
     compositor
@@ -1319,6 +1545,7 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
                     materials: &[],
                     texture: None,
                     reflection: None,
+                    probe: None,
                 },
                 &layer,
             )
@@ -1380,6 +1607,7 @@ fn driven_middle(
                 materials,
                 texture: None,
                 reflection: None,
+                probe: None,
             },
             &layer,
         )
@@ -1562,6 +1790,59 @@ fn two_boxes(boxes: [([f32; 3], [f32; 3], [u8; 3]); 2]) -> Model {
         })
         .collect();
     Model::new(primitives, cube.materials().to_vec(), vec![]).expect("the model builds")
+}
+
+/// The opaque primitives draw their depth first and are shaded where it is equal, so
+/// the nearest shows whatever order they are in, and of two in one plane the first.
+#[test]
+fn golden_model_opaque_primitives_show_the_nearest_in_any_order_and_the_first_in_a_plane() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let geometry = boxed(80.0, 50.0, 60.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let near = ([0.0, 0.0, 0.3], [0.5, 0.5, 0.01], [0, 0, 255]);
+    let far = ([0.0, 0.0, -0.3], [1.0, 1.0, 0.01], [255, 0, 0]);
+    let a = draw(
+        compositor,
+        &two_boxes([near, far]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    let b = draw(
+        compositor,
+        &two_boxes([far, near]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_eq!(a.rgba(), b.rgba(), "the order of the primitives shows");
+    assert_near(rgb(&a, 80, 50), [0, 0, 255], (80, 50));
+    assert!(
+        count(&a, [255, 0, 0]) > 500,
+        "the far box shows around the near one"
+    );
+    // In one plane: the first primitive's colour, whole, not a mix of the two.
+    let red = ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]);
+    let blue = ([0.0, 0.0, 0.0], [0.5, 0.5, 0.01], [0, 0, 255]);
+    let first_red = draw(
+        compositor,
+        &two_boxes([red, blue]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_near(rgb(&first_red, 80, 50), [255, 0, 0], (80, 50));
+    let first_blue = draw(
+        compositor,
+        &two_boxes([blue, red]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_near(rgb(&first_blue, 80, 50), [0, 0, 255], (80, 50));
 }
 
 /// ADR-0165 decision 2: a model whose surfaces sit at the focus draws as it does with no
@@ -1831,6 +2112,7 @@ fn textured_plane_driven(
                 texture,
                 materials,
                 reflection: None,
+                probe: None,
             },
             &layer,
         )
@@ -1963,6 +2245,7 @@ fn golden_model_a_reflection_replaces_the_studio_environment() {
                     texture: None,
                     materials: &[],
                     reflection,
+                    probe: None,
                 },
                 &layer,
             )
@@ -1987,6 +2270,119 @@ fn golden_model_a_reflection_replaces_the_studio_environment() {
     );
     let unlit = seen(compositor, Lighting::Unlit, Some(&green));
     assert_near(unlit, [255, 255, 255], (80, 50));
+}
+
+/// Draws a white mirror sphere as [`sky_sphere`] does, under a uniform grey sky, with
+/// `probe` around it.
+fn probed_sphere(compositor: &mut Compositor, probe: Option<super::ProbeLookup<'_>>) -> Snapshot {
+    let mirror = Shape::Sphere
+        .model(Material {
+            base_color: [1.0, 1.0, 1.0, 1.0],
+            metallic: 1.0,
+            roughness: 0.05,
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let uploaded = compositor.upload_model(&mirror).expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let grey = Color {
+        r: 0.5,
+        g: 0.5,
+        b: 0.5,
+        a: 1.0,
+    };
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera,
+                lighting: Lighting::Scene,
+                lights: Some(&[]),
+                shadows: &[],
+                environment: Some(super::Environment {
+                    sky: grey,
+                    horizon: grey,
+                    ground: grey,
+                    intensity: 1.0,
+                    turn_deg: 0.0,
+                    image: None,
+                }),
+                floor: None,
+                materials: &[],
+                texture: None,
+                reflection: None,
+                probe,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    render(compositor, &items)
+}
+
+/// A panorama layer of one colour, as a probe's capture.
+fn capture(compositor: &mut Compositor, rgba: [u8; 4]) -> crate::Image {
+    let colour = crate::tests::solid(compositor, 8, 4, rgba);
+    let items = [crate::tests::item(
+        &colour,
+        Placement::Legacy(crate::LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    let scene = Scene {
+        canvas: FrameSize::new(8, 4).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &items,
+    };
+    compositor
+        .render_image(&scene)
+        .expect("the capture renders")
+}
+
+/// ADR-0170 decisions 3 and 5: a mirror inside a probe's box reflects the probe's
+/// capture in place of the sky; outside every box, and where the capture saw nothing,
+/// the sky shows as without one.
+#[test]
+fn golden_model_a_probe_replaces_the_environment_inside_its_box() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let red = capture(compositor, [255, 0, 0, 255]);
+    let empty = capture(compositor, [0, 0, 0, 0]);
+    let around = |image| super::ProbeLookup {
+        image,
+        centre: [80.0, 50.0, 0.0],
+        half: [100_000.0; 3],
+        fade: 1.0,
+    };
+    let sky = rgb(&probed_sphere(compositor, None), 80, 50);
+    let inside = rgb(&probed_sphere(compositor, Some(around(&red))), 80, 50);
+    assert!(
+        inside[0] > inside[1] + 60 && inside[0] > inside[2] + 60,
+        "the capture's red is reflected: {inside:?} (sky {sky:?})"
+    );
+    let far = super::ProbeLookup {
+        centre: [1_000_000.0, 0.0, 0.0],
+        half: [10.0; 3],
+        ..around(&red)
+    };
+    assert_near(
+        rgb(&probed_sphere(compositor, Some(far)), 80, 50),
+        sky,
+        (80, 50),
+    );
+    assert_near(
+        rgb(&probed_sphere(compositor, Some(around(&empty))), 80, 50),
+        sky,
+        (80, 50),
+    );
 }
 
 /// ADR-0107 decision 7: a card drawn after a model, but behind it, is hidden where the
@@ -2021,6 +2417,7 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         floor: None,
         texture: None,
         reflection: None,
+        probe: None,
         materials: &[],
     };
     compositor
@@ -2063,4 +2460,67 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         assert_near(rgb(&shot, 80, 50), want, (80, 50));
         assert_near(rgb(&shot, 120, 50), [255, 255, 255], (120, 50));
     }
+}
+
+/// Every compositor on a device shares the pipelines made on it (`pipelines.rs`): a
+/// second one, as each output start opens, compiles nothing the first compiled, and
+/// draws a model and a sky as the first did, with its own layouts and bind groups.
+#[test]
+fn a_second_compositor_on_the_device_makes_no_pipeline_again() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let camera = SceneCamera::framing(canvas());
+    let shoot = |compositor: &mut Compositor| {
+        let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        let sky = crate::sky::SkyDraw {
+            environment: super::Environment {
+                sky: Color::rgb(0.0, 0.0, 1.0),
+                horizon: Color::rgb(1.0, 1.0, 1.0),
+                ground: Color::rgb(0.0, 1.0, 0.0),
+                intensity: 1.0,
+                turn_deg: 0.0,
+                image: None,
+            },
+            camera,
+            stars: 0.0,
+            star_brightness: 1.0,
+            opacity: 1.0,
+            deep: crate::sky::DeepSky::NONE,
+            warp: 0.0,
+            travel: 0.0,
+            dropping: 0.0,
+        };
+        compositor.draw_sky(&sky, &layer).expect("the sky draws");
+        let sky = render(
+            compositor,
+            &[crate::tests::item(
+                &layer,
+                Placement::Legacy(crate::LegacyTransform::IDENTITY),
+                Crop::NONE,
+                1.0,
+            )],
+        );
+        let cube = draw(
+            compositor,
+            &coloured_cube(),
+            boxed(80.0, 50.0, 40.0),
+            Some(camera),
+            Lighting::Studio,
+        );
+        (sky, cube)
+    };
+    let first = shoot(&mut opened.compositor);
+    let made = opened.compositor.pipelines_made();
+    assert!(made > 0, "the first compositor made its pipelines");
+    let mut other = opened.compositor.sibling();
+    let second = shoot(&mut other);
+    assert_eq!(
+        opened.compositor.pipelines_made(),
+        made,
+        "the second compositor found every pipeline made"
+    );
+    assert_eq!(first.0.rgba(), second.0.rgba(), "the same sky");
+    assert_eq!(first.1.rgba(), second.1.rgba(), "the same cube");
+    assert!(count(&first.1, FRONT) > 100, "the cube shows");
 }

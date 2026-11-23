@@ -36,6 +36,59 @@ fn settings_map_to_values() {
     assert_eq!(v.color, [1.0, 1.0, 1.0, 1.0]);
 }
 
+/// The sample points lie in the unit hemisphere about +z, each farther out than the
+/// one before, the first a tenth of the radius and a bit away and the last at all of it.
+#[test]
+fn the_kernel_fills_the_hemisphere_from_the_point_outward() {
+    for count in [1, 8, 16] {
+        let reach = |i| {
+            let [x, y, z] = super::kernel(i, count);
+            assert!(z > 0.0, "{count}: sample {i} is above the surface");
+            (x * x + y * y + z * z).sqrt()
+        };
+        let reaches: Vec<f32> = (0..count).map(reach).collect();
+        assert!(reaches.windows(2).all(|w| w[0] < w[1]), "{reaches:?}");
+        assert!(reaches[0] >= 0.1, "{reaches:?}");
+        assert!(
+            (reaches[count as usize - 1] - 1.0).abs() < 1e-6,
+            "{reaches:?}"
+        );
+    }
+    // What `sample.wgsl` worked out per sample: sample 3 of 8.
+    let (u, phi, s) = (3.5f32 / 8.0, 3.0 * 2.399_963_2f32, 4.0f32 / 8.0);
+    let reach = 0.1 + 0.9 * s * s;
+    let [x, y, z] = super::kernel(3, 8);
+    let want = [
+        u.sqrt() * phi.cos() * reach,
+        u.sqrt() * phi.sin() * reach,
+        (1.0 - u).sqrt() * reach,
+    ];
+    for (got, want) in [x, y, z].into_iter().zip(want) {
+        assert!((got - want).abs() < 1e-6, "{got} against {want}");
+    }
+}
+
+/// The uniform is `sample.wgsl`'s `Params`: three scalars, 16 points and the tile's
+/// 16 rotations, two a `vec4`.
+#[test]
+fn the_sample_uniform_holds_the_kernel_and_the_turns() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let v = super::values(&settings(KIND, json!({"quality": "high"})));
+    let bytes = super::sample_uniforms(&v, &depth(&opened, |_| 100.0));
+    assert_eq!(bytes.len(), 16 + 16 * 16 + 8 * 16);
+    let float = |at: usize| f32::from_le_bytes(bytes[at..at + 4].try_into().expect("four"));
+    // Rotation 0 is no turn, rotation 4 a quarter.
+    let turns = 16 + 16 * 16;
+    assert_eq!((float(turns), float(turns + 4)), (1.0, 0.0));
+    assert!(float(turns + 2 * 16).abs() < 1e-6 && (float(turns + 2 * 16 + 4) - 1.0).abs() < 1e-6);
+    // Low quality leaves the points past its 8 at zero.
+    let v = super::values(&settings(KIND, json!({})));
+    let bytes = super::sample_uniforms(&v, &depth(&opened, |_| 100.0));
+    assert!(bytes[16 + 8 * 16..16 + 16 * 16].iter().all(|&b| b == 0));
+}
+
 fn apply(opened: &mut Opened, ao: &mut crate::VideoFilter, input: &Image) -> Snapshot {
     let output = opened
         .compositor

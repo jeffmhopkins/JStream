@@ -113,12 +113,46 @@ fn values(settings: &Settings) -> Values {
     }
 }
 
+/// The most samples a pixel takes: `sample.wgsl`'s `kernel`.
+const MAX_SAMPLES: usize = 16;
+
+/// Sample `i` of `count`: its point in the unit hemisphere about +z, on a golden-angle
+/// spiral from the pole out, scaled by how far of the radius it reaches, the first
+/// near the point and the last at the full radius.
+fn kernel(i: u32, count: u32) -> [f32; 3] {
+    let u = (i as f32 + 0.5) / count as f32;
+    let phi = i as f32 * 2.399_963_2;
+    let r = u.sqrt();
+    let s = (i + 1) as f32 / count as f32;
+    let reach = 0.1 + 0.9 * (s * s);
+    [
+        r * phi.cos() * reach,
+        r * phi.sin() * reach,
+        (1.0 - u).sqrt() * reach,
+    ]
+}
+
 fn sample_uniforms(v: &Values, depth: &ViewDepth) -> Vec<u8> {
-    Uniforms::new()
-        .f32(v.radius)
-        .f32(depth.focal_px)
-        .u32(v.samples)
-        .finish()
+    let count = v.samples.clamp(1, MAX_SAMPLES as u32);
+    let mut out = Uniforms::new().f32(v.radius).f32(depth.focal_px).u32(count);
+    for i in 0..MAX_SAMPLES as u32 {
+        let [x, y, z] = if i < count {
+            kernel(i, count)
+        } else {
+            [0.0; 3]
+        };
+        out = out.vec4([x, y, z, 0.0]);
+    }
+    // The 4 x 4 tile's rotations, a sixteenth of a turn each, two a `vec4`.
+    let turn = |i: u32| {
+        let angle = i as f32 / 16.0 * std::f32::consts::TAU;
+        (angle.cos(), angle.sin())
+    };
+    for pair in 0..8 {
+        let ((c0, s0), (c1, s1)) = (turn(pair * 2), turn(pair * 2 + 1));
+        out = out.vec4([c0, s0, c1, s1]);
+    }
+    out.finish()
 }
 
 fn apply_uniforms(v: &Values, depth: &ViewDepth) -> Vec<u8> {

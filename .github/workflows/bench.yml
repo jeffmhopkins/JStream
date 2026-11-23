@@ -44,7 +44,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
-  BENCH_ARGS: -p jstream-render -p jstream-audio -p jstream-encode --bench composite --bench mix --bench session --locked
+  BENCH_ARGS: -p jstream-render -p jstream-audio -p jstream-encode --bench composite --bench filters --bench mix --bench session --locked
 
 jobs:
   bench:

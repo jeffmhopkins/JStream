@@ -112,14 +112,24 @@ impl Graph {
     /// that doesn't apply (its source was deleted meanwhile) is skipped.
     #[must_use]
     pub fn with_values(&self, values: &[Edit]) -> Graph {
-        let mut copy = self.clone();
-        for (at, edit) in values.iter().enumerate() {
-            let mut work = copy.state.clone();
-            if apply_edit(&mut work, &copy.kinds, edit, at, &BTreeSet::new()).is_ok() {
-                copy.state = work;
+        // The values are applied in place on one copy. An edit that fails may have
+        // changed part of the state first, so on a failure the copy is made again
+        // without it: a clone per failure, not per value, since this runs under the
+        // engine's lock as often as the values change (ADR-0178).
+        let mut skipped = BTreeSet::new();
+        'again: loop {
+            let mut copy = self.clone();
+            for (at, edit) in values.iter().enumerate() {
+                if skipped.contains(&at) {
+                    continue;
+                }
+                if apply_edit(&mut copy.state, &copy.kinds, edit, at, &BTreeSet::new()).is_err() {
+                    skipped.insert(at);
+                    continue 'again;
+                }
             }
+            return copy;
         }
-        copy
     }
 
     /// [`apply`](Self::apply), for an engine whose outputs in `running` are running: an
@@ -412,6 +422,17 @@ fn move_item(
 }
 
 /// Applies one edit to `state` and returns the edits that undo it.
+/// Applies one edit as a batch with no running outputs would, for a check that
+/// works on a copy of the state.
+pub(crate) fn apply_one(
+    state: &mut State,
+    kinds: &Kinds,
+    edit: &Edit,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    apply_edit(state, kinds, edit, at, &BTreeSet::new())
+}
+
 fn apply_edit(
     state: &mut State,
     kinds: &Kinds,
@@ -438,6 +459,9 @@ fn apply_edit(
         return applied;
     }
     if let Some(applied) = crate::hotkey::apply(state, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::value::apply(state, kinds, edit, at) {
         return applied;
     }
     if let Some(applied) = crate::organise::apply(state, edit, at) {

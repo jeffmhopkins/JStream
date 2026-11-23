@@ -5,7 +5,8 @@
 //! each tap's weight falling off where the pixel it glows onto is more than `depth_px`
 //! nearer than the tap, by their distances in the scene's view depth, so a glow doesn't
 //! bleed across something in front of it; and the glow times `strength` is added over
-//! the picture. Without a view depth (a 2D scene, any chain but a scene's) it blooms as
+//! the picture. The bright pass puts each texel's `1 / w` in its alpha, which nothing
+//! else reads, so a tap of the blur is one load, and the blur's weights are made here. Without a view depth (a 2D scene, any chain but a scene's) it blooms as
 //! plain bloom does, with no fade by distance.
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
@@ -146,6 +147,26 @@ fn taps(radius: f32) -> (f32, f32, u32) {
     (sigma, step, (reach / step).ceil() as u32)
 }
 
+/// The taps one side of a pixel can have, and the pixel's own.
+const KERNEL: usize = MAX_TAPS as usize + 1;
+
+/// One direction of the blur, as `blur.wgsl` takes it: each tap's weight and its whole
+/// offset in texels, the pixel's own first, and 1 over the weight of all of them (both
+/// sides), which a tap past the frame or behind something still counts in.
+fn kernel(radius: f32) -> ([[f32; 2]; KERNEL], u32, f32) {
+    let (sigma, step, count) = taps(radius);
+    let count = count.min(MAX_TAPS as u32);
+    let mut kernel = [[0.0; 2]; KERNEL];
+    let mut total = 0.0;
+    for (i, tap) in kernel.iter_mut().enumerate().take(count as usize + 1) {
+        let offset = i as f32 * step;
+        let weight = (-offset * offset / (2.0 * sigma * sigma)).exp();
+        *tap = [weight, offset.round_ties_even()];
+        total += if i == 0 { weight } else { 2.0 * weight };
+    }
+    (kernel, count, 1.0 / total.max(1e-6))
+}
+
 pub(super) struct DepthBloom {
     values: Values,
     depth: Option<ViewDepth>,
@@ -203,23 +224,29 @@ impl Pass for DepthBloom {
             params: &params,
             target: &bright,
         })?;
-        let (sigma, step, count) = taps(v.radius * 0.5);
+        let (kernel, count, norm) = kernel(v.radius * 0.5);
         let across = ctx.scratch(size.0, size.1)?;
         let down = bright;
-        for (dir, from, to) in [([1.0, 0.0], &down, &across), ([0.0, 1.0], &across, &down)] {
-            let params = Uniforms::new()
-                .vec2(dir)
-                .f32(sigma)
-                .f32(step)
-                .u32(count)
+        for (dir, from, to) in [([1, 0], &down, &across), ([0, 1], &across, &down)] {
+            let mut params = Uniforms::new()
+                .i32(dir[0])
+                .i32(dir[1])
+                .i32(count as i32)
                 .f32(focal)
                 .f32(v.depth)
-                .finish();
+                .f32(norm);
+            // Two taps a `vec4`, the last padded.
+            for two in kernel.chunks(2) {
+                let [weight, offset] = two[0];
+                let [next_weight, next_offset] = two.get(1).copied().unwrap_or_default();
+                params = params.vec4([weight, offset, next_weight, next_offset]);
+            }
+            // Each texel's distance is in its alpha: the blur reads no view depth.
             ctx.draw(&Draw {
                 shader: BLUR,
                 input: from,
-                aux: Some(aux),
-                params: &params,
+                aux: None,
+                params: &params.finish(),
                 target: to,
             })?;
         }

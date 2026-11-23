@@ -114,6 +114,17 @@ pub struct SceneCamera {
     /// field when this is above 0. Default 0 (ADR-0108).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub blur_px: Finite32,
+    /// Whether the focus follows whatever is at the centre of the frame (since 0.167,
+    /// ADR-0176 decision 5): with a depth of field, each frame the engine measures the
+    /// nearest item the viewing axis meets and glides `focus_px` there, holding the last
+    /// distance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it
+    /// focuses. Default `false`, which isn't written.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub autofocus: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl SceneCamera {
@@ -139,6 +150,7 @@ impl SceneCamera {
             depth_sort: true,
             focus_px: None,
             blur_px: Finite32::ZERO,
+            autofocus: false,
         }
     }
 

@@ -45,6 +45,33 @@ fn settings_map_to_values() {
     assert_eq!(super::taps(4.0), (2.0, 1.0, 6));
 }
 
+/// The blur's kernel is the Gaussian `blur.wgsl` used to work out per tap: the weight
+/// of each tap at its distance, its offset in whole texels, and 1 over the weight of
+/// the pixel's own tap and both sides.
+#[test]
+fn the_kernel_holds_each_taps_weight_and_whole_offset() {
+    for radius in [0.0, 1.5, 4.0, 12.0, 50.0] {
+        let (sigma, step, count) = super::taps(radius);
+        let (kernel, taps, norm) = super::kernel(radius);
+        assert_eq!(taps, count, "{radius}");
+        assert!((taps as usize) < kernel.len(), "{radius}");
+        assert_eq!(kernel[0], [1.0, 0.0], "{radius}");
+        let mut total = 1.0;
+        for (i, &[weight, offset]) in kernel.iter().enumerate().skip(1) {
+            if i > taps as usize {
+                assert_eq!([weight, offset], [0.0, 0.0], "{radius}: tap {i}");
+                continue;
+            }
+            let at = i as f32 * step;
+            assert_eq!(weight, (-at * at / (2.0 * sigma * sigma)).exp(), "{radius}");
+            assert_eq!(offset, at.round_ties_even(), "{radius}: tap {i}");
+            assert!(offset >= 1.0 && offset.fract() == 0.0, "{radius}: tap {i}");
+            total += 2.0 * weight;
+        }
+        assert!((norm * total - 1.0).abs() < 1e-6, "{radius}: {norm}");
+    }
+}
+
 /// A picture black but for a white column at x = 8, its pixels at `left` px for x below
 /// 16 and `right` px from 16 on.
 fn scene(opened: &Opened, (left, right): (f32, f32)) -> (Image, ViewDepth) {

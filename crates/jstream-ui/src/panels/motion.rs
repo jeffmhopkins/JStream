@@ -36,6 +36,8 @@ pub fn property_name(property: MotionProperty) -> &'static str {
         MotionProperty::CropTop => "Crop top",
         MotionProperty::CropRight => "Crop right",
         MotionProperty::CropBottom => "Crop bottom",
+        MotionProperty::Width => "Width",
+        MotionProperty::Height => "Height",
         // An effect's setting (ADR-0138): shown, but not offered here yet.
         MotionProperty::Effect => "Effect setting",
         // A source's setting (ADR-0171): shown, but not offered here yet.
@@ -50,7 +52,10 @@ pub fn property_unit(property: MotionProperty) -> &'static str {
     match property {
         MotionProperty::Rotation | MotionProperty::Tilt | MotionProperty::Turn => "°",
         // A factor: 0.1 is ±10%.
-        MotionProperty::Scale | MotionProperty::Opacity => "×",
+        MotionProperty::Scale
+        | MotionProperty::Opacity
+        | MotionProperty::Width
+        | MotionProperty::Height => "×",
         _ => "px",
     }
 }

@@ -19,8 +19,8 @@
 //!   nothing.
 //! - **Saving.** Each change asks the app to save the whole setting
 //!   (`host::set_jtunnel`, the app's own command, which no engine client reaches). A
-//!   refused change is undone on the page. It applies when the app next starts, and the
-//!   page says so while the saved setting differs from the one the app started with.
+//!   refused change is undone on the page. The app applies a saved change at once,
+//!   with no restart, and the senders heard are read again when receiving turns on.
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
@@ -92,7 +92,7 @@ pub fn JtunnelSettingView() -> impl IntoView {
     let Some(started) = crate::host::desktop_jtunnel() else {
         return ().into_any();
     };
-    let setting = RwSignal::new(started.clone());
+    let setting = RwSignal::new(started);
     let problem = RwSignal::new(None::<String>);
     let name = RwSignal::new(String::new());
     let address = RwSignal::new(String::new());
@@ -143,10 +143,6 @@ pub fn JtunnelSettingView() -> impl IntoView {
         Err(why) => {
             problem.set(Some(why.to_owned()));
         }
-    };
-    let changed = {
-        let started = started.clone();
-        move || setting.with(|now| *now != started)
     };
     // The senders heard on the LAN, read when the page opens and on each change.
     let listed = RwSignal::new(None::<(bool, Vec<JtunnelSenderInfo>)>);
@@ -312,9 +308,6 @@ pub fn JtunnelSettingView() -> impl IntoView {
                 />
                 <button type="submit">"Add sender"</button>
             </form>
-            {move || changed().then(|| view! {
-                <p class="settings-check-note" role="status">"Restart JStream to apply this."</p>
-            })}
             {move || problem.get().map(|why| view! { <p class="problem" role="alert">{why}</p> })}
         </section>
     }

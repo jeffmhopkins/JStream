@@ -72,3 +72,37 @@ fn the_switches_are_set_one_at_a_time_and_kept_in_their_file() {
     drop(engine);
     std::fs::remove_dir_all(&dir).expect("cleaned up");
 }
+
+/// The probes' resolution cap (ADR-0170 decision 3) is one of the face sizes: another is
+/// refused and changes nothing.
+#[test]
+fn a_probe_resolution_cap_is_one_of_the_face_sizes() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    set(
+        &control,
+        RenderFeaturesChange {
+            max_probe_resolution: Some(256),
+            ..RenderFeaturesChange::default()
+        },
+    );
+    let capped = RenderFeatures {
+        max_probe_resolution: 256,
+        ..RenderFeatures::ALL
+    };
+    assert_eq!(rendering(&control), Some(capped));
+    let refused = block_on(control.call(Call::Action {
+        action: Action::StudioSetRendering {
+            change: RenderFeaturesChange {
+                max_probe_resolution: Some(300),
+                reflection_probes: Some(false),
+                ..RenderFeaturesChange::default()
+            },
+        },
+    }));
+    assert!(
+        matches!(&refused, Err(error) if error.to_string().contains("max_probe_resolution")),
+        "{refused:?}"
+    );
+    assert_eq!(rendering(&control), Some(capped), "nothing changed");
+}

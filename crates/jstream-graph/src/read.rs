@@ -189,6 +189,7 @@ impl Graph {
                 .bindings()
                 .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                 .collect(),
+            value_bindings: self.value_bindings().cloned().collect(),
             folders: self.state.folders().iter().map(Folder::to_info).collect(),
             labels: self.state.labels().iter().map(Label::to_info).collect(),
         }
@@ -462,6 +463,7 @@ mod tests {
                 master: Default::default(),
                 hotkeys: vec![],
                 bindings: vec![],
+                value_bindings: vec![],
                 folders: Vec::new(),
                 labels: Vec::new(),
             }

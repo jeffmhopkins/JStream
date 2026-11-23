@@ -989,6 +989,16 @@ impl LiveSources {
         ))
     }
 
+    /// The 3D model `source_id`'s running instance shows (ADR-0107), if it shows one.
+    /// It reaches nothing: the source is neither shown nor heard for it.
+    pub(crate) fn model(
+        &self,
+        source_id: &SourceId,
+    ) -> Option<std::sync::Arc<jstream_media::model::Model>> {
+        let running = self.entries.get(source_id)?.running.as_ref()?;
+        running.source.model().map(|shown| shown.model)
+    }
+
     /// Whether a mix (the program's, a video mix's or a preview's) looked at
     /// `source_id`'s running instance in the latest plan: it is drawn anyway, so a warm
     /// scene that draws it holds nothing more for it (ADR-0150).
@@ -1214,7 +1224,8 @@ impl LiveSources {
             return Some((
                 frame
                     .with_model(running.source.model())
-                    .with_light(running.source.light()),
+                    .with_light(running.source.light())
+                    .with_probe(running.source.probe()),
                 None,
             ));
         }
@@ -1251,7 +1262,8 @@ impl LiveSources {
         // model in its place.
         let frame = frame
             .with_model(running.source.model())
-            .with_light(running.source.light());
+            .with_light(running.source.light())
+            .with_probe(running.source.probe());
         Some((frame, next))
     }
 

@@ -171,18 +171,23 @@ fn extinction(scene: vec3<f32>) -> f32 {
 }
 
 // The light of scene light `source` reaching `q` and scattered toward the viewer along
-// `to_eye`.
+// `to_eye`, before any shadow. Nothing past its range, which is tested before anything
+// that costs a square root.
 fn in_light(source: Light, q: vec3<f32>, to_eye: vec3<f32>) -> vec3<f32> {
     var travel = source.aim.xyz;
     var strength = 1.0;
     if source.at.w < 1.5 {
         let from_light = q - source.at.xyz;
-        let d = length(from_light);
+        let d2 = dot(from_light, from_light);
+        let range = source.aim.w;
+        if range > 0.0 && d2 >= range * range {
+            return vec3<f32>(0.0);
+        }
+        let d = sqrt(d2);
         if d <= 1e-4 {
             return vec3<f32>(0.0);
         }
         travel = from_light / d;
-        let range = source.aim.w;
         if range > 0.0 {
             let x = clamp(1.0 - (d / range) * (d / range), 0.0, 1.0);
             strength = x * x;
@@ -206,6 +211,21 @@ fn in_light(source: Light, q: vec3<f32>, to_eye: vec3<f32>) -> vec3<f32> {
     let k = 1.0 + g * g - 2.0 * g * cos_theta;
     let phase = (1.0 - g * g) / (k * sqrt(k));
     return source.color.rgb * strength * phase;
+}
+
+// Whether the ray `eye + slope * D`, for D from `start` to `end`, comes within the range
+// of `source`: a point or spot light with a range lights nothing farther than it, so a
+// ray that never comes that near takes nothing from it at any step.
+fn in_range(source: Light, eye: vec3<f32>, slope: vec3<f32>, start: f32, end: f32) -> bool {
+    let range = source.aim.w;
+    if source.at.w >= 1.5 || range <= 0.0 {
+        return true;
+    }
+    let from_light = eye - source.at.xyz;
+    // Where along the ray it is nearest to the light, kept to the part marched.
+    let nearest = clamp(-dot(from_light, slope) / dot(slope, slope), start, end);
+    let gap = from_light + slope * nearest;
+    return dot(gap, gap) < range * range;
 }
 
 @fragment
@@ -240,23 +260,41 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         vec2<i32>(textureDimensions(shadow0)),
         vec2<i32>(textureDimensions(shadow1)),
     );
-    let fog = p.color.rgb;
+    // The lights this ray can take anything from, a bit each: the others are skipped at
+    // every step. A sum, not an array: see `reaches`. A directional light with no shadow
+    // map gives every step of a ray the same light, so it is taken once, into `steady`.
+    let lights = min(p.light_count, MAX_LIGHTS);
+    var near = 0u;
+    var steady = vec3<f32>(0.0);
+    for (var l = 0u; l < lights; l = l + 1u) {
+        let source = p.lights[l];
+        if source.at.w >= 1.5 && !shadows_light(0u, l) && !shadows_light(1u, l) {
+            steady = steady + p.density.w * in_light(source, eye, to_eye);
+        } else if in_range(source, eye, slope, start, end) {
+            near = near | (1u << l);
+        }
+    }
+    // The scene's point at distance D along the view is `position + along * D`.
+    let along = p.right.xyz * slope.x + p.down.xyz * slope.y + p.forward.xyz;
+    let fog = p.color.rgb + steady;
     var through = 1.0;
     var light = vec3<f32>(0.0);
     for (var i = 0u; i < p.steps; i = i + 1u) {
         let d = start + (f32(i) + offset) * dd;
         let q = eye + slope * d;
-        let scene = p.position.xyz + p.right.xyz * q.x + p.down.xyz * q.y
-            + p.forward.xyz * (focal - q.z);
-        let sigma = extinction(scene);
+        let sigma = extinction(p.position.xyz + along * d);
         if sigma <= 0.0 {
             continue;
         }
         var here = fog;
-        for (var l = 0u; l < min(p.light_count, MAX_LIGHTS); l = l + 1u) {
-            let lit = reaches(l, q, sizes);
-            if lit > 0.0 {
-                here = here + p.density.w * lit * in_light(p.lights[l], q, to_eye);
+        for (var l = 0u; l < lights; l = l + 1u) {
+            if (near & (1u << l)) == 0u {
+                continue;
+            }
+            // The shadow map is read only for light that would arrive.
+            let arriving = in_light(p.lights[l], q, to_eye);
+            if any(arriving > vec3<f32>(0.0)) {
+                here = here + p.density.w * reaches(l, q, sizes) * arriving;
             }
         }
         let kept = exp(-sigma * ds);

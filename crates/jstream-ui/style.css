@@ -2368,6 +2368,19 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
 .modal .field.prop .field-warning,
 .modal .field.prop .problem { margin-left: 132px; }
 .field.prop .reset:disabled { visibility: hidden; }
+/* Controller learn (ADR-0178): a third column after the reset, on a live number or
+   switch. Quiet until it learns or holds a binding, which shows the control's name. */
+.field.prop:has(> .learn) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.modal .field.prop:has(> .learn) { grid-template-columns: minmax(0, 1fr) 20px auto; }
+button.learn {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 24px; min-width: 24px; padding: 0 4px;
+  border-color: transparent; background: none; color: var(--muted);
+  font-size: 11px; white-space: nowrap;
+}
+button.learn:hover { color: var(--text); }
+button.learn.bound { color: var(--accent); border-color: var(--border); }
+button.learn.learning { color: var(--accent); border-color: var(--accent); }
 
 /* A form outside the setting descriptors: the same grid by hand. `.prop-grid` holds
    `.prop-row`s, each a `.prop-label` and a `.prop-control`, whose `.help` is one line. */

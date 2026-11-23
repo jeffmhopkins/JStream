@@ -10,7 +10,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
-use crate::binding::Trigger;
+use crate::binding::{Trigger, ValueBinding};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
@@ -833,10 +833,12 @@ pub enum Edit {
     },
     /// Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the
     /// Mixer when it is nested, its background colour, and since 0.116 whether the
-    /// studio keeps it warm (ADR-0117 §7). Every field left out takes its default. A
+    /// studio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect
+    /// each other (ADR-0170 decision 2). Every field left out takes its default. A
     /// keyframe scene has options of its own, except a background, which it shows from
-    /// its parent, and `keep_warm`, which its parent decides. `invalid` for a background
-    /// that isn't a colour, or a background or `keep_warm` on a keyframe scene. Inverse: `scene.set_options` with the previous options.
+    /// its parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`
+    /// for a background that isn't a colour, or a background, `keep_warm` or
+    /// `reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.
     #[serde(rename = "scene.set_options")]
     SceneSetOptions {
         /// The scene to change.
@@ -903,7 +905,7 @@ pub enum Edit {
     SceneSetCameraMotion {
         /// The scene to change.
         scene_id: SceneId,
-        /// The new list, at most 8. Empty removes every modifier.
+        /// The new list, at most 32. Empty removes every modifier.
         #[serde(default)]
         motion: Vec<CameraMotionModifier>,
     },
@@ -1052,6 +1054,32 @@ pub enum Edit {
     BindingClear {
         /// The trigger to unbind.
         trigger: Trigger,
+    },
+    /// Sets a value binding (since 0.168, ADR-0178): a MIDI control or a live-data field
+    /// driving one number, a new one or the whole of one with the same `binding_id` in
+    /// its place. Setting it is an undoable edit, but what it drives is never stored, so
+    /// moving its control never adds to an undo history. Rejected with
+    /// `invalid_argument` at `binding.<field>` for what [`ValueBinding::problem`]
+    /// refuses, at `binding.target.param` for a setting its kind doesn't mark `live` or
+    /// that isn't a number or `bool`, at `binding.target` for a `scene` source's fader or
+    /// a send that doesn't exist,
+    /// and at `binding` for a 257th binding ([`MAX_VALUE_BINDINGS`](crate::MAX_VALUE_BINDINGS));
+    /// with `not_found` for a source, filter or bus it names that doesn't exist.
+    /// Deleting that object later leaves the binding in place, driving nothing, as a
+    /// timeline's cue is left. Inverse: `binding.clear_value`, or `binding.set_value`
+    /// with the binding it replaced.
+    #[serde(rename = "binding.set_value")]
+    BindingSetValue {
+        /// The binding.
+        binding: ValueBinding,
+    },
+    /// Removes a value binding: the number it drove shows its stored value again.
+    /// Rejected with `not_found` (entity `binding`) for an ID no value binding has.
+    /// Inverse: `binding.set_value` with the binding.
+    #[serde(rename = "binding.clear_value")]
+    BindingClearValue {
+        /// The binding's ID.
+        binding_id: String,
     },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
@@ -1389,6 +1417,8 @@ impl Edit {
             Edit::HotkeyClear { .. } => "hotkey.clear",
             Edit::BindingSet { .. } => "binding.set",
             Edit::BindingClear { .. } => "binding.clear",
+            Edit::BindingSetValue { .. } => "binding.set_value",
+            Edit::BindingClearValue { .. } => "binding.clear_value",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",

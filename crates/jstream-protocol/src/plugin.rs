@@ -95,6 +95,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // once they grant it (decision 10), and a plugin never does.
     ("data.list", N),
     ("data.get", N),
+    // What the person plays on their controllers (ADR-0178), as their DAW's state is.
+    ("midi.last_controls", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),
@@ -179,6 +181,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("hotkey.set_labels", Class(E)),
     ("binding.set", Class(E)),
     ("binding.clear", Class(E)),
+    // A value binding drives a setting live and stores only itself (ADR-0178).
+    ("binding.set_value", Class(E)),
+    ("binding.clear_value", Class(E)),
     ("timeline.set", N),
     ("timeline.delete", N),
     ("output.create", N),

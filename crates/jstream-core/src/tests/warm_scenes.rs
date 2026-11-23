@@ -498,3 +498,115 @@ fn the_gpu_limit_evicts_from_the_bottom_but_keeps_preview() {
         "{refused:?}"
     );
 }
+
+/// A reflection probe (ADR-0170 decision 3) counts its capture toward the warm scenes'
+/// GPU memory, its panorama and six faces at the face size it is set to, in a scene
+/// whose surfaces reflect, and only there.
+#[test]
+fn a_reflection_probe_counts_its_capture() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    batch(&control, edits(vec![create("main"), create("a")])).expect("scenes");
+    batch(
+        &control,
+        edits(vec![
+            Edit::SourceCreate {
+                source_id: SourceId::new("probe"),
+                name: "probe".into(),
+                kind: SourceKind::Builtin {
+                    kind: "reflection_probe".into(),
+                },
+                settings: [("resolution".to_owned(), serde_json::json!("128"))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+            add("a", "a_probe", "probe"),
+        ]),
+    )
+    .expect("a probe");
+    preview(&control, "a");
+    let capture = 128 * 128 * 14 * 8;
+    let bytes_of_a = |control: &dyn Control| {
+        warm_profile(control)
+            .into_iter()
+            .find(|(scene, ..)| scene == "a")
+            .map(|(_, bytes, _)| bytes)
+    };
+    // Before the probe's first frame its size is read as the canvas's, so wait until
+    // it reports its own.
+    let sized = super::audio::eventually(|| {
+        matches!(
+            super::query(&control, Query::SourceSizes),
+            Ok(QueryResult::SourceSizes { sources })
+                if sources
+                    .iter()
+                    .any(|size| size.source_id == SourceId::new("probe") && size.size.is_some())
+        )
+    });
+    assert!(sized, "the probe reports its size");
+    // A scene whose surfaces don't reflect captures nothing, so turning its
+    // reflections on adds the capture to what its sources hold.
+    let plain = bytes_of_a(&control).expect("a is warm");
+    batch(
+        &control,
+        edits(vec![Edit::SceneSetOptions {
+            scene_id: SceneId::new("a"),
+            options: jstream_protocol::SceneOptions {
+                reflections: true,
+                ..jstream_protocol::SceneOptions::default()
+            },
+        }]),
+    )
+    .expect("reflections");
+    let reflective = bytes_of_a(&control).expect("a is warm");
+    assert!(reflective >= plain + capture, "{reflective} after {plain}");
+}
+
+/// ADR-0177 decision 5: the 3D model a warm scene's source shows is published for the
+/// program stage to keep uploaded, and no longer once its scene isn't warm.
+#[test]
+fn a_warm_scenes_model_is_published_for_the_program_stage() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let cube = Edit::SourceCreate {
+        source_id: SourceId::new("cube"),
+        name: "Cube".into(),
+        kind: SourceKind::Builtin {
+            kind: "model".into(),
+        },
+        settings: jstream_protocol::Settings(
+            [("shape".to_owned(), json!("cube"))].into_iter().collect(),
+        ),
+        duplicated_from: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("main"),
+            create("a"),
+            create("b"),
+            cube,
+            add("a", "a_cube", "cube"),
+        ]),
+    )
+    .expect("scenes");
+    assert!(hub.load_warm_models().is_empty(), "no scene is warm yet");
+
+    assert!(engine.settle_sources(), "the sources were built in time");
+    preview(&control, "a");
+    let models = hub.load_warm_models();
+    let model = models
+        .get(&SourceId::new("cube"))
+        .expect("the Preview scene's model is published");
+    assert!(!model.primitives().is_empty());
+    preview(&control, "a");
+    assert!(
+        std::sync::Arc::ptr_eq(&models, &hub.load_warm_models()),
+        "published again only when a model changed"
+    );
+
+    preview(&control, "b");
+    assert!(hub.load_warm_models().is_empty(), "a is no longer warm");
+}

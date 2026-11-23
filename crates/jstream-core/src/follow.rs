@@ -1,8 +1,10 @@
 //! A scene camera's motion and its follow camera (ADR-0113,
 //! docs/adr/0113-camera-motion-and-follow-pointer.md).
 //!
-//! Camera motion ([`CameraMotion`]) is a pure function of time, as an item's is: each
-//! modifier's value is added to one camera property as the camera is drawn.
+//! Camera motion ([`CameraMotion`]) is a pure function of time and of the shot's MIDI and
+//! data levels, as an item's is: each modifier's value is added to one camera property as
+//! the camera is drawn, and `pan` and `tilt` then turn the view about the camera
+//! (ADR-0176).
 //!
 //! A follow camera ([`Follow`]) is not: it glides after the pointer over a capture item
 //! through springs it carries from frame to frame, so the render thread keeps one per
@@ -58,6 +60,7 @@ use jstream_protocol::{
     Placed, SceneCamera, SceneId, Vec3,
 };
 
+use crate::reactive::Bindings;
 use crate::snapshot::{CaptureKey, Captures};
 
 /// A scene family's camera motion, as `jstream-anim` evaluates it: each modifier with
@@ -77,14 +80,18 @@ impl CameraMotion {
     }
 
     /// `camera` with the motion's values at `at` added, the scene first shown on program
-    /// at `shown`. The field of view is held to 1 to 170°, focus above 0 and blur to 0 to
-    /// 64, and a camera that would reach its target keeps its unmoved position. Allocates
-    /// nothing.
+    /// at `shown`. `heard` gives a MIDI or data modifier's smoothed `0..=1` level by
+    /// modifier ID (ADR-0176), as an item's evaluation takes it; one it has none for
+    /// rests at its `from`. The field of view is held to 1 to 170°, focus above 0 and blur
+    /// to 0 to 64, and a camera that would reach its target keeps its unmoved position.
+    /// The pan and tilt then turn the view about the moved position, as a live aim does
+    /// (ADR-0152). Allocates nothing.
     pub(crate) fn apply(
         &self,
         camera: SceneCamera,
         at: MediaTime,
         shown: Option<MediaTime>,
+        heard: impl Fn(&str) -> Option<f32>,
     ) -> SceneCamera {
         if self.0.is_empty() {
             return camera;
@@ -94,8 +101,18 @@ impl CameraMotion {
         let mut out = camera;
         let mut position = [0.0_f32; 3];
         let mut target = [0.0_f32; 3];
+        let (mut pan, mut tilt) = (0.0_f64, 0.0_f64);
+        let mut autofocus = if camera.autofocus { 1.0_f32 } else { 0.0 };
+        let mut drives_autofocus = false;
         for (property, modifier) in self.0.iter() {
-            let value = jstream_anim::evaluate(std::slice::from_ref(modifier), engine_s, shown_s).x;
+            let value = jstream_anim::evaluate_with(
+                std::slice::from_ref(modifier),
+                engine_s,
+                shown_s,
+                |_| None,
+                &heard,
+            )
+            .x;
             let value = value as f32;
             match property {
                 CameraProperty::PositionX => position[0] += value,
@@ -122,6 +139,12 @@ impl CameraMotion {
                         out.blur_px,
                     );
                 }
+                CameraProperty::Pan if value.is_finite() => pan += f64::from(value),
+                CameraProperty::Tilt if value.is_finite() => tilt += f64::from(value),
+                CameraProperty::Autofocus if value.is_finite() => {
+                    autofocus += value;
+                    drives_autofocus = true;
+                }
                 _ => {}
             }
         }
@@ -133,11 +156,15 @@ impl CameraMotion {
             target: moved(out.target, target),
             ..out
         };
-        if moved_camera.validate().is_ok() {
+        let mut moved = if moved_camera.validate().is_ok() {
             moved_camera
         } else {
             out
+        };
+        if drives_autofocus {
+            moved.autofocus = autofocus >= 0.5;
         }
+        crate::aim::turn(moved, (pan, tilt, 1.0))
     }
 }
 
@@ -158,7 +185,9 @@ pub(crate) struct CameraMoves {
 impl CameraMoves {
     /// `base`, the camera the scene draws through, as it is at `at`: glided after the
     /// pointer by the follow camera, then moved by the motion. `shown` is when the scene
-    /// started being drawn on program, `zooms` the zoom steps asked for its family.
+    /// started being drawn on program, `zooms` the zoom steps asked for its family, and
+    /// `bindings` the shot's, whose camera levels its MIDI and data modifiers read
+    /// (ADR-0176).
     pub(crate) fn apply(
         &self,
         base: SceneCamera,
@@ -166,7 +195,7 @@ impl CameraMoves {
         canvas: Canvas,
         captures: &dyn Captures,
         cameras: &mut Cameras,
-        zooms: i64,
+        (zooms, bindings): (i64, &Bindings),
     ) -> SceneCamera {
         let followed = match &self.follow {
             Some(plan) => {
@@ -183,7 +212,9 @@ impl CameraMoves {
             }
             None => base,
         };
-        self.motion.apply(followed, at, shown)
+        self.motion.apply(followed, at, shown, |id| {
+            bindings.camera_level(&self.family, id)
+        })
     }
 
     /// Whether it changes the camera with time.
@@ -825,10 +856,56 @@ impl Follow {
 /// How long a scene's follow camera is kept after the last frame that drew it.
 const KEEP_S: f64 = 10.0;
 
-/// The follow cameras of a render context, one per scene family (ADR-0113 §3).
+/// The follow cameras of a render context, one per scene family (ADR-0113 §3), and the
+/// autofocus of each family's camera (ADR-0176 decision 5).
 #[derive(Debug, Default)]
 pub(crate) struct Cameras {
     follows: BTreeMap<SceneId, Follow>,
+    focuses: BTreeMap<SceneId, Autofocus>,
+}
+
+/// The time constant of an autofocus's glide, in seconds: a lens that settles in about a
+/// third of a second, rather than snapping from one item to the next.
+const AUTOFOCUS_S: f64 = 0.12;
+
+/// A camera's autofocus between frames: the distance it focuses at, and the frame time
+/// it was last stepped to.
+#[derive(Clone, Copy, Debug)]
+struct Autofocus {
+    distance: f64,
+    at: MediaTime,
+}
+
+/// Where the ray from `origin` along the unit `forward` first meets the rectangle
+/// `corners` (in order around it), as the distance along it, when that is in front of
+/// the origin by more than 1 px.
+pub(crate) fn ray_meets(
+    origin: [f64; 3],
+    forward: [f64; 3],
+    corners: [[f64; 3]; 4],
+) -> Option<f64> {
+    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let (u, v) = (sub(corners[1], corners[0]), sub(corners[3], corners[0]));
+    let normal = cross(u, v);
+    let facing = dot(normal, forward);
+    if facing.abs() < 1e-9 {
+        return None;
+    }
+    let t = dot(normal, sub(corners[0], origin)) / facing;
+    if !(t.is_finite() && t > 1.0) {
+        return None;
+    }
+    let hit = sub([0, 1, 2].map(|i| origin[i] + forward[i] * t), corners[0]);
+    let (a, b) = (dot(hit, u) / dot(u, u), dot(hit, v) / dot(v, v));
+    ((0.0..=1.0).contains(&a) && (0.0..=1.0).contains(&b)).then_some(t)
 }
 
 impl Cameras {
@@ -860,10 +937,63 @@ impl Cameras {
         state.step(base, canvas, bx, pointer, at)
     }
 
-    /// Forgets the follow cameras no frame has drawn for [`KEEP_S`] before `at`.
+    /// `camera`, `family`'s, focused by its autofocus at `at` (ADR-0176 decision 5),
+    /// when it has `autofocus` on and a depth of field; any other camera as it is.
+    /// `measure` gives the distance to whatever is at the frame's centre, or `None` when
+    /// nothing is there, and is called once per frame time, so a frame that draws the
+    /// camera for many items measures once. The first frame lands on what it measures
+    /// (else on `focus_px`); later frames glide toward each measure in log distance, and
+    /// hold while nothing is measured.
+    pub(crate) fn autofocus(
+        &mut self,
+        family: &SceneId,
+        camera: SceneCamera,
+        at: MediaTime,
+        measure: impl FnOnce() -> Option<f64>,
+    ) -> SceneCamera {
+        let Some(fallback) = camera.focus_px else {
+            return camera;
+        };
+        if !camera.autofocus || camera.blur_px.get() <= 0.0 {
+            return camera;
+        }
+        let distance = match self.focuses.get_mut(family) {
+            Some(state) if at > state.at => {
+                if let Some(target) = measure().filter(|d| d.is_finite() && *d >= 1.0) {
+                    let dt = at.as_secs_f64() - state.at.as_secs_f64();
+                    let k = 1.0 - (-dt / AUTOFOCUS_S).exp();
+                    let from = state.distance.max(1.0).ln();
+                    state.distance = (from + (target.ln() - from) * k).exp();
+                }
+                state.at = at;
+                state.distance
+            }
+            // A frame time already stepped, or one before it (a clock stepped back): the
+            // focus holds.
+            Some(state) => state.distance,
+            None => {
+                let distance = measure()
+                    .filter(|d| d.is_finite() && *d >= 1.0)
+                    .unwrap_or(f64::from(fallback.get()));
+                self.focuses
+                    .insert(family.clone(), Autofocus { distance, at });
+                distance
+            }
+        };
+        let focus = (distance as f32).clamp(1.0, jstream_protocol::MAX_DRAWN_PX);
+        SceneCamera {
+            focus_px: Some(finite(focus, fallback)),
+            ..camera
+        }
+    }
+
+    /// Forgets the follow cameras and autofocuses no frame has drawn for [`KEEP_S`]
+    /// before `at`.
     pub(crate) fn sweep(&mut self, at: MediaTime) {
         let now = at.as_secs_f64();
         self.follows
+            .retain(|_, state| now - state.at.as_secs_f64() <= KEEP_S);
+        self.focuses
             .retain(|_, state| now - state.at.as_secs_f64() <= KEEP_S);
     }
 }
@@ -1220,7 +1350,7 @@ mod tests {
             drift("roll", CameraProperty::Roll, -2.0),
         ]);
         assert!(!motion.is_still());
-        let camera = motion.apply(base(), ms(2000), None);
+        let camera = motion.apply(base(), ms(2000), None, |_| None);
         assert!((camera.position.x.get() - (base().position.x.get() + 20.0)).abs() < 1e-3);
         assert_eq!(camera.fov_deg.get(), MAX_FOV_DEG);
         assert!((camera.roll_deg.get() + 4.0).abs() < 1e-3);
@@ -1230,7 +1360,201 @@ mod tests {
             CameraProperty::PositionZ,
             -base().target_distance(),
         )]);
-        assert_eq!(onto.apply(base(), ms(1000), None).position, base().position);
-        assert_eq!(CameraMotion::default().apply(base(), ms(5), None), base());
+        assert_eq!(
+            onto.apply(base(), ms(1000), None, |_| None).position,
+            base().position
+        );
+        assert_eq!(
+            CameraMotion::default().apply(base(), ms(5), None, |_| None),
+            base()
+        );
+    }
+
+    /// ADR-0176 decision 5: the axis meets a rectangle only inside it and in front.
+    #[test]
+    fn the_centre_ray_meets_a_card_inside_it_and_in_front() {
+        let card = |z: f64| {
+            [
+                [-10.0, -10.0, z],
+                [10.0, -10.0, z],
+                [10.0, 10.0, z],
+                [-10.0, 10.0, z],
+            ]
+        };
+        let ahead = [0.0, 0.0, -1.0];
+        let met = ray_meets([0.0, 0.0, 500.0], ahead, card(0.0)).expect("met");
+        assert!((met - 500.0).abs() < 1e-9);
+        assert_eq!(
+            ray_meets([0.0, 0.0, 500.0], [0.0, 0.0, 1.0], card(0.0)),
+            None,
+            "behind"
+        );
+        assert_eq!(
+            ray_meets([20.0, 0.0, 500.0], ahead, card(0.0)),
+            None,
+            "beside"
+        );
+        // A card turned 60° about y is still met at its centre.
+        let (c, s) = (60f64.to_radians().cos(), 60f64.to_radians().sin());
+        let corners = [(-10.0, -10.0), (10.0, -10.0), (10.0, 10.0), (-10.0, 10.0)]
+            .map(|(x, y): (f64, f64)| [x * c, y, -x * s]);
+        let met = ray_meets([0.0, 0.0, 300.0], ahead, corners).expect("met");
+        assert!((met - 300.0).abs() < 1e-9);
+    }
+
+    /// ADR-0176 decision 5: autofocus lands on its first measure, measures once a frame
+    /// time, glides after, holds while nothing is met, and leaves a camera without it
+    /// alone.
+    #[test]
+    fn autofocus_lands_then_glides_and_holds() {
+        let family = SceneId::new("a");
+        let camera = SceneCamera {
+            autofocus: true,
+            ..base()
+        };
+        let mut cameras = Cameras::default();
+        let focus = |c: SceneCamera| c.focus_px.expect("focus").get();
+        let first = cameras.autofocus(&family, camera, ms(0), || Some(400.0));
+        assert_eq!(focus(first), 400.0, "lands");
+        let again = cameras.autofocus(&family, camera, ms(0), || panic!("measured twice"));
+        assert_eq!(focus(again), 400.0);
+        let gliding = focus(cameras.autofocus(&family, camera, ms(40), || Some(1600.0)));
+        assert!(gliding > 400.0 && gliding < 1600.0, "{gliding}");
+        let held = focus(cameras.autofocus(&family, camera, ms(80), || None));
+        assert_eq!(held, gliding, "nothing at the centre holds");
+        let mut later = held;
+        for i in 3..60 {
+            later = focus(cameras.autofocus(&family, camera, ms(i * 40), || Some(1600.0)));
+        }
+        assert!((later - 1600.0).abs() < 1.0, "{later}");
+        // Off, or with no depth of field, the camera is as it was.
+        let manual = SceneCamera {
+            autofocus: false,
+            ..base()
+        };
+        assert_eq!(
+            cameras.autofocus(&family, manual, ms(5000), || Some(1.0)),
+            manual
+        );
+        let sharp = SceneCamera {
+            focus_px: None,
+            ..camera
+        };
+        assert_eq!(
+            cameras.autofocus(&family, sharp, ms(5000), || Some(1.0)),
+            sharp
+        );
+        // A first frame that meets nothing focuses at `focus_px`.
+        let other = SceneId::new("b");
+        assert_eq!(
+            focus(cameras.autofocus(&other, camera, ms(0), || None)),
+            800.0
+        );
+    }
+
+    /// ADR-0176 decision 5: an `autofocus` modifier switches it at one half.
+    #[test]
+    fn a_controller_switches_autofocus() {
+        let f = |v: f32| Finite32::new(v).expect("finite");
+        let button = |from: f32, to: f32| {
+            CameraMotion::of(&[jstream_protocol::CameraMotionModifier {
+                modifier_id: "af".into(),
+                property: CameraProperty::Autofocus,
+                kind: MotionKind::Midi {
+                    control: jstream_protocol::MotionMidiControl::Cc,
+                    controller: Some(64),
+                    channel: None,
+                    input: None,
+                    smoothing_ms: 0,
+                    curve: jstream_protocol::MotionCurve::Linear,
+                    from: f(from),
+                    to: f(to),
+                },
+                clock: MotionClock::Engine,
+                enabled: true,
+            }])
+        };
+        let on = button(0.0, 1.0);
+        assert!(!on.apply(base(), ms(0), None, |_| Some(0.0)).autofocus);
+        assert!(on.apply(base(), ms(0), None, |_| Some(1.0)).autofocus);
+        let off = button(0.0, -1.0);
+        let af = SceneCamera {
+            autofocus: true,
+            ..base()
+        };
+        assert!(off.apply(af, ms(0), None, |_| Some(0.0)).autofocus);
+        assert!(!off.apply(af, ms(0), None, |_| Some(1.0)).autofocus);
+        // With no modifier on it, the camera's own switch stands.
+        assert!(
+            CameraMotion::default()
+                .apply(af, ms(0), None, |_| None)
+                .autofocus
+        );
+    }
+
+    /// ADR-0176: a MIDI modifier maps its smoothed level onto its range, and pan and tilt
+    /// turn the view about the camera's position.
+    #[test]
+    fn a_controller_moves_the_camera_and_turns_it() {
+        let f = |v: f32| Finite32::new(v).expect("finite");
+        let fader = |id: &str, property, from, to| jstream_protocol::CameraMotionModifier {
+            modifier_id: id.into(),
+            property,
+            kind: MotionKind::Midi {
+                control: jstream_protocol::MotionMidiControl::Cc,
+                controller: Some(20),
+                channel: Some(16),
+                input: Some("Bitwig".into()),
+                smoothing_ms: 50,
+                curve: jstream_protocol::MotionCurve::Linear,
+                from: f(from),
+                to: f(to),
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        };
+        let motion = CameraMotion::of(&[
+            fader("fov", CameraProperty::Fov, 0.0, -20.0),
+            fader("pan", CameraProperty::Pan, -45.0, 45.0),
+            fader("tilt", CameraProperty::Tilt, 0.0, 30.0),
+            fader("x", CameraProperty::PositionX, 0.0, 100.0),
+        ]);
+        assert!(!motion.is_still());
+        // Before anything is sent each rests at its `from`.
+        let rest = motion.apply(base(), ms(0), None, |_| None);
+        assert_eq!(rest.fov_deg.get(), 40.0);
+        let level = |id: &str| match id {
+            "fov" | "x" => Some(1.0),
+            "pan" => Some(0.75),
+            "tilt" => Some(0.0),
+            _ => None,
+        };
+        let moved = motion.apply(base(), ms(0), None, level);
+        assert_eq!(moved.fov_deg.get(), 20.0);
+        let p = moved.position;
+        assert!((p.x.get() - (base().position.x.get() + 100.0)).abs() < 1e-3);
+        // Panned 22.5° right of where the moved camera looks (it moved 100 px right of
+        // its target), level, at the same distance.
+        let d = [
+            moved.target.x.get() - p.x.get(),
+            moved.target.y.get() - p.y.get(),
+            moved.target.z.get() - p.z.get(),
+        ];
+        let yaw = f64::from(d[0]).atan2(f64::from(-d[2])).to_degrees();
+        let before = (-100f64)
+            .atan2(f64::from(base().target_distance()))
+            .to_degrees();
+        assert!((yaw - (before + 22.5)).abs() < 0.01, "{yaw}");
+        assert!(d[1].abs() < 0.01, "{d:?}");
+        let length = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        let expect = base().target_distance().hypot(100.0);
+        assert!((length - expect).abs() < 0.5, "{length} vs {expect}");
+        // Tilted up 30°: the target rises (scene y is down).
+        let up = motion.apply(base(), ms(0), None, |id| {
+            Some(if id == "tilt" { 1.0 } else { 0.0 })
+        });
+        let rise = up.position.y.get() - up.target.y.get();
+        let expect = base().target_distance() * 30f32.to_radians().sin();
+        assert!((rise - expect).abs() < 0.5, "{rise} vs {expect}");
     }
 }

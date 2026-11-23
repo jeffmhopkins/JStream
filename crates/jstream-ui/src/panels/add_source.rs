@@ -179,6 +179,13 @@ fn known(kind: &str) -> Option<Known> {
             MediaAndWeb,
             Some((64.0, 64.0)),
         ),
+        "reflection_probe" => (
+            "Reflection probe",
+            "An invisible box whose surfaces reflect the rest of a 3D scene.",
+            "sparkle",
+            MediaAndWeb,
+            Some((64.0, 64.0)),
+        ),
         "browser" => (
             "Browser",
             "A web page or widget.",
@@ -206,6 +213,13 @@ fn known(kind: &str) -> Option<Known> {
             "palette",
             Generated,
             Some((1920.0, 1080.0)),
+        ),
+        "fog_card" => (
+            "Fog card",
+            "A wisp of fog that fades out at its edges, to place in a 3D scene.",
+            "palette",
+            Generated,
+            Some((1024.0, 576.0)),
         ),
         "shape" => (
             "Shape",
@@ -240,7 +254,7 @@ fn known(kind: &str) -> Option<Known> {
 }
 
 /// The prototype's order of the kinds it knows.
-const ORDER: [&str; 18] = [
+const ORDER: [&str; 20] = [
     "display",
     "window",
     "webcam",
@@ -251,10 +265,12 @@ const ORDER: [&str; 18] = [
     "image",
     "model",
     "light",
+    "reflection_probe",
     "browser",
     "text",
     "color",
     "backdrop",
+    "fog_card",
     "shape",
     "timer",
     "waveform",

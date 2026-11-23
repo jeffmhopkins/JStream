@@ -313,6 +313,7 @@ fn three_d(c: &mut Criterion) {
             materials: &[],
             texture: None,
             reflection: None,
+            probe: None,
         };
         group.bench_function(BenchmarkId::new("shape", shape.name()), |b| {
             b.iter(|| {
@@ -360,6 +361,7 @@ fn three_d(c: &mut Criterion) {
         depth_sort: false,
         focus_px: None,
         blur_px: Finite32::ZERO,
+        autofocus: false,
     };
     let aim = [600.0f64, 600.0, -800.0];
     let lights = [jstream_render::SceneLight {
@@ -400,6 +402,7 @@ fn three_d(c: &mut Criterion) {
                         materials: &[],
                         texture: None,
                         reflection: None,
+                        probe: None,
                     },
                     &map,
                 )
@@ -418,6 +421,7 @@ fn three_d(c: &mut Criterion) {
                         materials: &[],
                         texture: None,
                         reflection: None,
+                        probe: None,
                     },
                     &layer,
                 )

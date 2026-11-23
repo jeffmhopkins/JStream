@@ -20,7 +20,9 @@ mod image;
 mod ingest;
 mod mips;
 mod model;
+mod pipelines;
 mod place;
+mod probe;
 mod readback;
 mod scene;
 mod sky;
@@ -31,7 +33,7 @@ mod turn;
 mod wipe;
 
 pub use cache::{Reclaimed, ResourceCache};
-pub use compositor::Compositor;
+pub use compositor::{Compositor, ModelUploader};
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
 pub use error::{NO_ADAPTER_HINT, RenderError};
 pub use filter::{
@@ -44,13 +46,14 @@ pub use filter::{
     reads_shadows as video_filter_reads_shadows, reflection_floor as video_filter_reflection_floor,
 };
 pub use gpu::{OpenOptions, adapter_available, context_lost};
-pub use image::Image;
+pub use image::{Image, Seen};
 pub use jstream_protocol::BlendMode;
 pub use model::{
     CardDraw, Environment, GpuModel, LightKind, Lighting, LiveTexture, MAX_EMISSIVE_STRENGTH,
-    MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, SHADOW_MAP_PX, SceneLight,
-    ShadowMap,
+    MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, ProbeLookup, SHADOW_MAP_PX,
+    SceneLight, SeenModel, ShadowMap,
 };
+pub use probe::ProbeFace;
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 pub use sky::{DeepSky, MAX_STAR_BRIGHTNESS, SkyDraw};

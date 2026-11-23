@@ -175,7 +175,8 @@ impl GpuContext {
     /// every clone and every later call. wgpu keeps one device-lost callback and one
     /// error handler per device, so every compositor on the context shares the watch that
     /// installs them, instead of each replacing the last one's (`jstream-render`). `None`
-    /// when the watch already made is not a `T`.
+    /// when the watch already made is not a `T`. `jstream-render` keeps what else its
+    /// compositors on the device share in the same value (the pipelines they made).
     pub fn watch<T: Any + Send + Sync>(&self, init: impl FnOnce() -> T) -> Option<Arc<T>> {
         let made = self.watch.get_or_init(|| Arc::new(init()));
         Arc::clone(made).downcast().ok()

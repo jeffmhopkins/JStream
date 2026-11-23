@@ -403,7 +403,8 @@ pub enum Event {
         outcome: crate::ApprovalOutcome,
     },
     /// The JTunnel senders `jtunnel.senders` lists changed (0.114, ADR-0123 §3): one was
-    /// heard for the first time, said goodbye, or went unheard for 35 s. Runtime state,
+    /// heard for the first time, said goodbye, or went unheard for 35 s, or the host
+    /// turned receiving on, off or started it again with other senders. Runtime state,
     /// so no `rev`. A client that shows them reads `jtunnel.senders` again.
     #[serde(rename = "jtunnel.senders_changed")]
     JtunnelSendersChanged {},
