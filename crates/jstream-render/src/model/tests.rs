@@ -629,7 +629,7 @@ fn golden_model_depth_hides_a_camera_card_but_not_a_screen_item() {
         probe: None,
     };
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
-    let own_depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let own_depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
     compositor
         .draw_model(&draw, &layer)
         .expect("the model draws");
