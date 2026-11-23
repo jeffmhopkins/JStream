@@ -116,6 +116,8 @@ pub(crate) struct DrawerTotals {
     pub(crate) maxes: SecondMaxes,
     /// The ticks skipped (the program only).
     pub(crate) skipped: u64,
+    /// The GPU submits the drawer's thread made ([`DrawMeter::submitted`]).
+    pub(crate) submits: u64,
     pub(crate) phases: [u64; PHASES],
     pub(crate) units: Vec<(UnitKey, UnitTotals)>,
 }
@@ -300,6 +302,9 @@ pub(crate) struct DrawMeter {
     seconds: u64,
     maxes: SecondMaxes,
     skipped: u64,
+    submits: u64,
+    /// The thread's submit count when it was last read, or `None` before the first read.
+    submits_seen: Option<u64>,
     phases: [u64; PHASES],
     /// The phases' time in the frame being drawn, folded into `phases` when it ends.
     frame_phases: [u64; PHASES],
@@ -339,6 +344,8 @@ impl Default for DrawMeter {
             seconds: 0,
             maxes: SecondMaxes::default(),
             skipped: 0,
+            submits: 0,
+            submits_seen: None,
             phases: [0; PHASES],
             frame_phases: [0; PHASES],
             published: None,
@@ -527,6 +534,18 @@ impl DrawMeter {
         self.skipped = self.skipped.saturating_add(skipped);
     }
 
+    /// Counts the GPU submits the drawer's thread has made since the last call, given
+    /// the thread's running count (`jstream_render::submits_on_this_thread`). Called at
+    /// the end of each frame, before [`Self::end_frame`]. The first call only notes the
+    /// count, so submits from before the meter's first frame are not that frame's.
+    pub(crate) fn submitted(&mut self, thread_total: u64) {
+        if let Some(seen) = self.submits_seen.replace(thread_total) {
+            self.submits = self
+                .submits
+                .saturating_add(thread_total.saturating_sub(seen));
+        }
+    }
+
     /// Forgets the time counted in a frame that failed part-way, so it isn't folded
     /// into the next frame that draws.
     pub(crate) fn discard_frame(&mut self) {
@@ -620,6 +639,7 @@ impl DrawMeter {
             seconds: self.seconds,
             maxes: self.maxes,
             skipped: self.skipped,
+            submits: self.submits,
             phases: self.phases,
             units,
         });

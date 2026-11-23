@@ -245,6 +245,7 @@ impl Nv12Converter {
                 state: wgpu::TextureUses::PRESENT,
             }),
         );
+        crate::gpu::count_submit();
         queue.submit([encoder.finish()]);
         Ok(())
     }
@@ -446,6 +447,7 @@ impl Nv12Planes {
                 texture.size(),
             );
         }
+        crate::gpu::count_submit();
         queue.submit([encoder.finish()]);
         let mut out = Vec::with_capacity(w as usize * h as usize * 3 / 2);
         map_rows(

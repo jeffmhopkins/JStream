@@ -193,6 +193,7 @@ impl Spans {
         });
         encoder.resolve_query_set(&set.queries, 0..count, &set.resolve, 0);
         encoder.copy_buffer_to_buffer(&set.resolve, 0, &set.readback, 0, u64::from(count) * 8);
+        crate::gpu::count_submit();
         queue.submit([encoder.finish()]);
         set.state.store(PENDING, Ordering::Release);
         let state = Arc::clone(&set.state);

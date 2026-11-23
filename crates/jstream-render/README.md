@@ -1248,6 +1248,14 @@ timestamps (at most 256 spans) and maps them, and `gpu_units` polls without wait
 hands back each unit's GPU time in each frame read since, a frame or two late. Texture
 writes, readbacks and the encoders' conversion carry no timestamps.
 
+**Submits a thread made** (`submits_on_this_thread`, `src/gpu.rs`). Each submit to the
+queue costs its thread a fixed time in wgpu and the driver however little work it
+carries, and a frame makes one per pass. The crate counts its own, per thread:
+`Gpu::submit_work`'s, the timed frame's resolve, the encoders' conversion and the test
+readbacks. A drawer reads the count at the end of each frame, and `profile.get` reports
+the difference per frame (`DrawerProfile`'s `submits`). A platform's or a browser's
+submits on the same queue are not counted.
+
 **GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
 bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU
 before the OS resets the device. `Compositor::time_passes` turns the timing on (it

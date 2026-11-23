@@ -47,7 +47,7 @@ pub use filter::{
     reads_surface as video_filter_reads_surface, reflection_floor as video_filter_reflection_floor,
     screen_reflections_descriptor,
 };
-pub use gpu::{OpenOptions, adapter_available, context_lost};
+pub use gpu::{OpenOptions, adapter_available, context_lost, submits_on_this_thread};
 pub use image::{Image, Seen};
 pub use jstream_protocol::BlendMode;
 pub use model::{

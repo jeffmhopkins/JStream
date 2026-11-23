@@ -1718,6 +1718,7 @@ fn serve(
     let started = Instant::now();
     let drawn = drawing(shot, live, captures, size, at, rgba, meter);
     if drawn.is_ok() {
+        meter.submitted(jstream_render::submits_on_this_thread());
         meter.end_frame(started.elapsed(), Instant::now(), drop);
     } else {
         meter.discard_frame();

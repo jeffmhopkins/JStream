@@ -510,6 +510,10 @@ fn drawer_profile(
                 .over_budget
                 .saturating_sub(before.map_or(0, |b| b.over_budget)),
             skipped: now.skipped.saturating_sub(before.map_or(0, |b| b.skipped)),
+            submits: per_frame(
+                now.submits.saturating_sub(before.map_or(0, |b| b.submits)),
+                frames,
+            ),
             phases,
         },
         drawn,
@@ -721,6 +725,11 @@ fn percent(used: Duration, span: Duration) -> Finite32 {
 /// `nanos` in milliseconds.
 fn ms(nanos: u64) -> Finite32 {
     finite((nanos as f64 / 1_000_000.0) as f32)
+}
+
+/// `total` over `frames` frames, as an average per frame.
+fn per_frame(total: u64, frames: u64) -> Finite32 {
+    finite((total as f64 / frames.max(1) as f64) as f32)
 }
 
 fn finite(value: f32) -> Finite32 {
