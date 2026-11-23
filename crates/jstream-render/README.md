@@ -81,7 +81,7 @@ and calls this crate.
   aberrated (a shift in log-tan by the rapidity of `warp` × 0.9 of light's speed) and
   Doppler shifted (bluer and brighter ahead, redder and dimmer behind, leaning cool),
   over a blue background-radiation glow ahead (`radiation`). While the warp is
-  `dropping` (0 to 1, easing out as it nears a cruise) the deep sky returns early, squeezed ahead, and zooms back out to its
+  `dropping` (0 to 1, easing out over the last 0.15 toward its setting, [ADR-0186](../../docs/adr/0186-the-sky-eases-out-of-warp-toward-rest.md)) the deep sky returns early, squeezed ahead, and zooms back out to its
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.

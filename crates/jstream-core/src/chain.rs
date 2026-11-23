@@ -697,7 +697,7 @@ impl SkyState {
     /// `target`; a step back in time or of over a second, as a seek makes, takes the
     /// warp to `target` and moves nothing, and a step of no time, a held or paused clock
     /// still drawing, keeps it as it is. It is dropping while its warp is still above
-    /// `target`, easing out as it nears a `target` above 0.
+    /// `target`, easing out as it nears it.
     pub(crate) fn step(&mut self, frame: u64, at_s: f64, (target, ramp_s): (f32, f32)) {
         match self.stepped {
             Some((stepped, _)) if stepped == frame => return,
@@ -721,11 +721,10 @@ impl SkyState {
             _ => self.warp = target,
         }
         // Dropping in full while above the setting, easing out over the last 0.15 toward
-        // a setting above 0 (a drop to 0 ends continuous, with nothing to ease).
+        // any setting, 0 included (ADR-0186), so a setting that moves, as a modifier
+        // makes it, moves this with it rather than snapping it.
         self.dropping = if target >= self.warp {
             0.0
-        } else if target <= 0.0 {
-            1.0
         } else {
             ((self.warp - target) / 0.15).min(1.0)
         };
@@ -4091,8 +4090,29 @@ mod tests {
         );
         sky.step(7, 30.5, (0.0, 2.0));
         assert!((sky.warp - 0.25).abs() < 1e-6 && sky.dropping == 1.0);
+        // Toward 0 too it eases out over the last 0.15 (ADR-0186).
+        sky.step(70, 30.7, (0.0, 2.0));
+        assert!(
+            (sky.warp - 0.15).abs() < 1e-5 && (sky.dropping - 1.0).abs() < 1e-4,
+            "{}",
+            sky.dropping
+        );
+        sky.step(71, 30.85, (0.0, 2.0));
+        assert!((sky.dropping - 0.5).abs() < 1e-3, "{}", sky.dropping);
         sky.step(8, 31.0, (0.0, 2.0));
         assert!(sky.warp == 0.0 && sky.dropping == 0.0, "it arrives");
+        // A setting that falls to 0 under the warp moves it a little, never in a jump:
+        // a modifier's envelope decaying to nothing (ADR-0186).
+        sky.step(80, 40.0, (0.12, 2.0));
+        sky.step(81, 40.01, (0.01, 2.0));
+        let before = sky.dropping;
+        assert!((before - 0.7).abs() < 1e-3, "{before}");
+        sky.step(82, 40.02, (0.0, 2.0));
+        assert!(
+            (sky.dropping - 0.11 / 0.15).abs() < 1e-3,
+            "{before} to {}",
+            sky.dropping
+        );
         // Toward a cruise above 0 it eases out over the last 0.15.
         sky.step(9, 31.5, (1.0, 0.0));
         sky.step(10, 32.0, (0.1, 4.0));
