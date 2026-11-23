@@ -18,12 +18,12 @@
 //! same setting add up. A light's `intensity` is kept within 0 to 64, `range_px` within 0
 //! to 1 000 000, `cone_deg` within 1 to 170, and `softness` and `shadow_softness` within
 //! 0 to 1; its `color` takes the sum as a fraction of full on each of its red, green and
-//! blue, within 0 and full. A model's `color`, `metallic` and `roughness` change every
-//! material, or with `material` only the file's materials of that name, which also take
-//! `emissive` (the glow's colour, lightened at its own brightness) and
-//! `emissive_strength` (a multiplier of the glow, 1 at rest, within 0 and 64). A setting
-//! the source's kind doesn't drive, an `emissive` one with no material, and a material
-//! the model doesn't have add nothing. An environment light's `intensity` follows too,
+//! blue, within 0 and full. A model's `color`, `metallic`, `roughness` and
+//! `emissive_strength` (a multiplier of the glow, 1 at rest, within 0 and 64) change
+//! every material, or with `material` only the file's materials of that name, which also
+//! take `emissive` (the glow's colour, lightened at its own brightness). A setting the
+//! source's kind doesn't drive, an `emissive` one with no material, and a material the
+//! model doesn't have add nothing. An environment light's `intensity` follows too,
 //! and so does its sky ([`environment`]): `stars`, `nebula` and `galaxy` within 0 to 1,
 //! `star_brightness` within 0 to 8 and `warp` within 0 to 1, which its backdrop's ramp
 //! then eases toward; its `sky_color`, `horizon_color`, `ground_color`, `nebula_color` and
@@ -279,7 +279,7 @@ pub(crate) fn materials(
             ("metallic", _) => drive.metallic = v,
             ("roughness", _) => drive.roughness = v,
             ("emissive", Some(_)) => drive.emissive = v,
-            ("emissive_strength", Some(_)) => drive.emissive_strength = v,
+            ("emissive_strength", _) => drive.emissive_strength = v,
             _ => continue,
         }
         out[n] = drive;
@@ -430,14 +430,17 @@ mod tests {
     }
 
     #[test]
-    fn a_model_takes_a_drive_a_modifier_and_glow_only_by_material() {
+    fn a_model_takes_a_drive_a_modifier_and_a_glows_colour_only_by_material() {
         let drives = [
             (setting("color", None), modifier("0.5")),
             (setting("emissive_strength", Some("led")), modifier("2")),
             (setting("emissive", Some("led")), modifier("0.1")),
             (setting("roughness", Some("trim")), modifier("-0.2")),
-            // A glow needs a material, a zero adds nothing, and an unknown setting none.
-            (setting("emissive_strength", None), modifier("3")),
+            // Every material's glow strength at once, as a switch for all its lights.
+            (setting("emissive_strength", None), modifier("-3")),
+            // A glow's colour needs a material, a zero adds nothing, and an unknown
+            // setting none.
+            (setting("emissive", None), modifier("0.4")),
             (setting("metallic", None), modifier("0")),
             (setting("lighting", None), modifier("1")),
         ];
@@ -463,6 +466,10 @@ mod tests {
                 MaterialDrive {
                     material: Some("trim"),
                     roughness: -0.2,
+                    ..MaterialDrive::default()
+                },
+                MaterialDrive {
+                    emissive_strength: -3.0,
                     ..MaterialDrive::default()
                 },
             ]

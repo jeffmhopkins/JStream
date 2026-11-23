@@ -438,8 +438,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   it, each frame: a light's colour, intensity, range, cone and softness as it lights the
   scene, an environment light's intensity and its sky (colours, stars, nebula, galaxy
   band and warp, `sourced::environment`) as it lights and draws it, and a model's
-  colour, metallic and roughness, or by material its glow, as it draws it. Nothing is
-  stored. A painting `data` modifier sets a light's colour, a
+  colour, metallic, roughness and glow strength, or by material its glow, as it draws
+  it. Nothing is stored. A painting `data` modifier sets a light's colour, a
   model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
   `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
 - **Value bindings** (`value_bindings.rs`,
