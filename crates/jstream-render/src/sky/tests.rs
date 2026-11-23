@@ -805,9 +805,13 @@ fn golden_sky_bakes_are_kept_for_the_seeds_in_use() {
     draw(&mut opened.compositor, &deep(1.0, 1.0, 1));
     assert_eq!(opened.compositor.sky_bakes(), 6);
     // A sky with no nebulae and no band reads no bake: after 900 draws of it the kept
-    // ones are gone, though it never asked for one.
-    let plain = sky(night(), SceneCamera::framing(canvas()));
-    for _ in 0..900 {
+    // ones are gone, though it never asked for one. Each travels on, so each is drawn:
+    // a layer that already holds its sky draws nothing and counts for nothing (#1622).
+    for step in 0..900 {
+        let plain = SkyDraw {
+            travel: f64::from(step),
+            ..sky(night(), SceneCamera::framing(canvas()))
+        };
         draw(&mut opened.compositor, &plain);
     }
     assert_eq!(opened.compositor.sky_bakes_kept(), 0);

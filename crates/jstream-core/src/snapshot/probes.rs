@@ -428,12 +428,11 @@ fn capture(
                 continue;
             };
             pose(compositor, shown.model, shown.shown);
-            let (drives, driving) =
-                crate::sourced::materials(
-                    shot.source_drives(shown.item),
-                    |m| shot.source_value(shown.item, m, at),
-                    |m| shot.tint(shown.item, m),
-                );
+            let (drives, driving) = crate::sourced::materials(
+                shot.source_drives(shown.item),
+                |m| shot.source_value(shown.item, m, at),
+                |m| shot.tint(shown.item, m),
+            );
             let (texture, reflection) = super::model_maps(shot, cache, shown.source, shown.shown);
             let lit = shown.shown.lighting == jstream_media::model::Lighting::Scene;
             compositor.draw_model(
