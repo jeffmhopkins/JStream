@@ -262,12 +262,27 @@ jobs:
           $ninja = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja'
           if (-not (Test-Path (Join-Path $ninja 'ninja.exe'))) { throw "no ninja.exe under $vs" }
           Add-Content -Path $env:GITHUB_PATH -Value $ninja
+      # The DirectX Shader Compiler the zip ships beside the exes (ADR-0175): Microsoft's
+      # release, pinned and checked against its SHA-256 here; `dist` checks each file it
+      # copies against its own pinned hash.
+      - name: The DirectX Shader Compiler
+        shell: pwsh
+        env:
+          DXC_URL: https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2502/dxc_2025_02_20.zip
+          DXC_SHA256: 70b1913a1bfce4a3e1a5311d16246f4ecdf3a3e613abec8aa529e57668426f85
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'dxc.zip'
+          curl.exe -sSLf -o $zip $env:DXC_URL
+          if ($LASTEXITCODE -ne 0) { throw "downloading $env:DXC_URL failed" }
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($hash -ne $env:DXC_SHA256) { throw "dxc zip SHA-256 is $hash, expected $env:DXC_SHA256" }
+          Expand-Archive -Path $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'dxc')
       # Named after the commit tested: a dispatched run's branch tip, or a pull_request
       # run's head rather than the merge commit it checks out.
       - shell: bash
         env:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: cargo xtask dist --ui-dir ui-dist --out dist --revision "${SHA::10}"
+        run: cargo xtask dist --ui-dir ui-dist --out dist --revision "${SHA::10}" --dxc-dir "$RUNNER_TEMP/dxc"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: dist/*.zip

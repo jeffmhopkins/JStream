@@ -1765,9 +1765,12 @@ signed with the same certificate if releases are signed
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)). The hosts look for the helper there
 (`CefConfig::beside_exe`). It also holds `jstream-plugin-host.exe`, the out-of-process
 CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), which the engine
-starts from beside its own exe.
+starts from beside its own exe. Beside the exes are Microsoft's DirectX Shader Compiler DLLs,
+`dxcompiler.dll` and `dxil.dll`, which wgpu's DX12 backend loads to compile shaders faster
+than FXC when an output starts; without them it uses FXC
+([ADR-0175](adr/0175-ship-the-directx-shader-compiler.md)).
 Release builds link the C runtime statically and need only OS components (WebView2, Media
-Foundation, Direct3D 12).
+Foundation, Direct3D 12) beyond what the zip holds.
 
 - **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
   `portable` marker file is present. Every host finds it through `jstream-platform`'s
@@ -1794,11 +1797,17 @@ Foundation, Direct3D 12).
   `locales`, the renamed bootstrap and DLL, CEF's `CREDITS.html` (its licences, FFmpeg's
   LGPL text among them) and a `CEF-VERSION.txt` naming the CEF and Chromium build, from
   `archive.json`. `--no-browser` builds the zip without browser sources (no CMake or
-  Ninja needed). `.cargo/config.toml` links the C runtime statically for every MSVC
+  Ninja needed). `--dxc-dir` names an unzipped DXC release (v1.8.2502): `dist` checks
+  each DLL for the zip's architecture and each of its three licence files against a pinned
+  BLAKE3 hash before it builds, copies the DLLs beside the exes (refusing one that imports
+  the Visual C++ runtime) and the licences, with a `DXC-VERSION.txt`, into a `dxc` folder,
+  and adds a paragraph to `README.txt`. `--no-dxc` builds the zip without DXC, and `dist`
+  refuses to run with neither. `.cargo/config.toml` links the C runtime statically for every MSVC
   build. A `RUSTFLAGS` variable replaces the config's flags, so `dist` adds `crt-static`
   back to it. The zip is written by `dist` itself, deflated, with fixed timestamps, so
   the same files make the same zip. The `dist` job in `after-review.yml` builds it with
-  the release UI its `dist-ui` job builds, names it after the commit tested
+  the release UI its `dist-ui` job builds and the DXC release it downloads and checks
+  against its SHA-256, names it after the commit tested
   (`--revision`), and uploads it as an artifact, as is, on `main` and on a PR once
   review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The helper's
   package also has the Linux helper's executable, so `dist` builds the DLL alone

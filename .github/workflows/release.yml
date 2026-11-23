@@ -144,12 +144,28 @@ jobs:
           $ninja = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja'
           if (-not (Test-Path (Join-Path $ninja 'ninja.exe'))) { throw "no ninja.exe under $vs" }
           Add-Content -Path $env:GITHUB_PATH -Value $ninja
+      # The DirectX Shader Compiler the zip ships beside the exes (ADR-0175): Microsoft's
+      # release, pinned and checked against its SHA-256 here; `dist` checks each file it
+      # copies against its own pinned hash.
+      - name: The DirectX Shader Compiler
+        shell: pwsh
+        env:
+          DXC_URL: https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2502/dxc_2025_02_20.zip
+          DXC_SHA256: 70b1913a1bfce4a3e1a5311d16246f4ecdf3a3e613abec8aa529e57668426f85
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'dxc.zip'
+          curl.exe -sSLf -o $zip $env:DXC_URL
+          if ($LASTEXITCODE -ne 0) { throw "downloading $env:DXC_URL failed" }
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($hash -ne $env:DXC_SHA256) { throw "dxc zip SHA-256 is $hash, expected $env:DXC_SHA256" }
+          Expand-Archive -Path $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'dxc')
       - shell: bash
         env:
           TAG: ${{ needs.ui.outputs.tag }}
-        run: cargo xtask dist --ui-dir ui-dist --out dist --revision "$TAG"
+        run: cargo xtask dist --ui-dir ui-dist --out dist --revision "$TAG" --dxc-dir "$RUNNER_TEMP/dxc"
       # Windows's part of the release text: what the build is, the unsigned warning, the
-      # CEF build it ships (ADR-0021 asks each release to name it) and the zip's SHA-256.
+      # CEF build it ships (ADR-0021 asks each release to name it), the DirectX Shader
+      # Compiler release it ships (ADR-0175) and the zip's SHA-256.
       - name: Write the checksum and the release notes
         shell: bash
         env:
@@ -161,6 +177,7 @@ jobs:
           zip="jstream-${TAG}-windows-x64.zip"
           sha256sum "$zip" > "$zip.sha256"
           cef=$(head -n 1 "jstream-${TAG}-windows-x64/browser/CEF-VERSION.txt" | tr -d '\r')
+          dxc=$(head -n 1 "jstream-${TAG}-windows-x64/dxc/DXC-VERSION.txt" | tr -d '\r')
           {
             echo "### Windows"
             echo
@@ -169,6 +186,8 @@ jobs:
             echo "This build is **not code-signed**, so Windows SmartScreen may warn that it protected your PC: choose *More info*, then *Run anyway*."
             echo
             echo "Browser sources run the Chromium Embedded Framework, \`${cef}\` (licences in \`browser\\CREDITS.html\`)."
+            echo
+            echo "Shaders compile with ${dxc%%,*} (\`dxcompiler.dll\` and \`dxil.dll\`, licences in the \`dxc\` folder)."
             echo
             echo "SHA-256: \`$(cut -d ' ' -f 1 "$zip.sha256")\`"
             echo
