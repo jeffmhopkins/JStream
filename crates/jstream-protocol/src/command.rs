@@ -10,7 +10,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
-use crate::binding::Trigger;
+use crate::binding::{Trigger, ValueBinding};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
@@ -1055,6 +1055,32 @@ pub enum Edit {
         /// The trigger to unbind.
         trigger: Trigger,
     },
+    /// Sets a value binding (since 0.168, ADR-0178): a MIDI control or a live-data field
+    /// driving one number, a new one or the whole of one with the same `binding_id` in
+    /// its place. Setting it is an undoable edit, but what it drives is never stored, so
+    /// moving its control never adds to an undo history. Rejected with
+    /// `invalid_argument` at `binding.<field>` for what [`ValueBinding::problem`]
+    /// refuses, at `binding.target.param` for a setting its kind doesn't mark `live` or
+    /// that isn't a number or `bool`, at `binding.target` for a `scene` source's fader or
+    /// a send that doesn't exist,
+    /// and at `binding` for a 257th binding ([`MAX_VALUE_BINDINGS`](crate::MAX_VALUE_BINDINGS));
+    /// with `not_found` for a source, filter or bus it names that doesn't exist.
+    /// Deleting that object later leaves the binding in place, driving nothing, as a
+    /// timeline's cue is left. Inverse: `binding.clear_value`, or `binding.set_value`
+    /// with the binding it replaced.
+    #[serde(rename = "binding.set_value")]
+    BindingSetValue {
+        /// The binding.
+        binding: ValueBinding,
+    },
+    /// Removes a value binding: the number it drove shows its stored value again.
+    /// Rejected with `not_found` (entity `binding`) for an ID no value binding has.
+    /// Inverse: `binding.set_value` with the binding.
+    #[serde(rename = "binding.clear_value")]
+    BindingClearValue {
+        /// The binding's ID.
+        binding_id: String,
+    },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
     /// an action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't
@@ -1391,6 +1417,8 @@ impl Edit {
             Edit::HotkeyClear { .. } => "hotkey.clear",
             Edit::BindingSet { .. } => "binding.set",
             Edit::BindingClear { .. } => "binding.clear",
+            Edit::BindingSetValue { .. } => "binding.set_value",
+            Edit::BindingClearValue { .. } => "binding.clear_value",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",

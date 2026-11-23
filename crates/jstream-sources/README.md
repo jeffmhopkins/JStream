@@ -226,7 +226,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   without a lock or an allocation. It also keeps each controller's, the bend's and the
   pressure's latest value on any channel (`controller_any`, `bend_any`, `pressure_any`),
   which a `midi` motion modifier with no channel follows
-  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)). A reader skips a log slot a push is writing. CC 120
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)), and its latest control
+  change with how many it has had (`last_control`), which `MidiInputs::last_controls` lists
+  per named input for learning a value binding
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)). A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
   `drawn(name)` is the state a source's `input` setting draws. An input thread pushes

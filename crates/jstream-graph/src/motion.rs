@@ -125,6 +125,8 @@ fn property(p: MotionProperty) -> Option<Property> {
         MotionProperty::CropTop => Property::CropTop,
         MotionProperty::CropRight => Property::CropRight,
         MotionProperty::CropBottom => Property::CropBottom,
+        MotionProperty::Width => Property::Width,
+        MotionProperty::Height => Property::Height,
         _ => return None,
     })
 }

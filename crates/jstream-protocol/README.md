@@ -61,7 +61,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
   `send.remove`, `hotkey.set`, `hotkey.set_labels`,
-  `hotkey.clear`, `binding.set`, `binding.clear`, `transition.create`, `transition.update`, `transition.delete`,
+  `hotkey.clear`, `binding.set`, `binding.clear`, `binding.set_value`, `binding.clear_value`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
@@ -126,7 +126,9 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)):
   `Trigger`, a MIDI note, control change or program change, on one channel or any, from
   one input or any (`Trigger::problem`, shared by every implementation), and `Binding`,
-  a trigger and its action as reads report it. See [Controller bindings](#bindings).
+  a trigger and its action as reads report it; since 0.168 a `ValueBinding`, a control
+  or live-data field driving a `ValueTarget` (ADR-0178), and `MidiControlInfo`, an
+  input's latest control change. See [Controller bindings](#bindings).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -165,7 +167,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `midi.last_controls` (since 0.168, with `MidiControlInfo` in `binding.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -371,7 +373,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.167 because a scene camera's motion takes `midi` and `data`
+`PROTOCOL_VERSION` is 0.168 because a value binding (`binding.set_value` and
+`binding.clear_value`, listed in `state.get`'s `value_bindings`) has a MIDI control or a
+live-data field drive a live setting of any source or filter, a fader or a send,
+`midi.last_controls` reports each input's latest control change for a client that
+learns one, and `MotionProperty` gains `width` and `height`
+([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md));
+0.167 because a scene camera's motion takes `midi` and `data`
 modifiers, so a controller or a DAW's live data drives its position, aim, roll and field
 of view, `CameraProperty` gains `pan` and `tilt`, which turn the view about the
 camera, and `autofocus`, `SceneCamera` gains `autofocus`, which focuses on what is at the
@@ -1458,7 +1466,7 @@ scene names its family's camera.
 ## Controller bindings
 <!-- @section
 covers = ["crates/jstream-protocol/src/binding.rs"]
-depends_on = ["docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
+depends_on = ["docs/adr/0122-controller-input-midi-and-one-binding-system.md", "docs/adr/0178-value-bindings-drive-any-number.md"]
 -->
 
 Controller bindings (0.96) are collection state beside the hotkeys
@@ -1490,6 +1498,31 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   `removed_bindings`, and `delete.plan` in `bindings`, ordered by trigger.
 - Reads report a binding as a `Binding {trigger, action}` whose `action` is plain JSON,
   as `HotkeyBinding`'s is. `Binding::action` parses it.
+
+Value bindings (0.168, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
+are the other half of ADR-0122's binding system: a MIDI control or a live-data field
+driving one number, listed in `state.get`'s `value_bindings` by ID.
+- **`ValueBinding {binding_id, <kind and its fields>, target}`** reads what a `midi` or
+  `data` motion modifier reads, with the same fields flattened (`kind`, `control`,
+  `controller`, `channel`, `input`, `key`, `field`, `range`, `states`, `smoothing_ms`,
+  `curve`, `from`, `to`). `ValueBinding::problem` refuses another `kind`, a malformed
+  `binding_id` (a modifier ID's rules) or a malformed `target.param`, and anything a
+  modifier's own check refuses, as `binding.<field>`.
+- **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
+  `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
+  {source_id}`, `bus_gain {bus_id}` and `send_gain {source_id, bus_id}`.
+- **`binding.set_value {binding}`** sets a binding by ID, whole, a new one (inverse
+  `binding.clear_value`) or in place of one (inverse `binding.set_value` with the old).
+  The collection refuses, at `binding.target` or `binding.target.param`, a setting its
+  kind doesn't mark `live` or that isn't an `int`, `float` or `bool`, a `scene` source's
+  fader and a send that doesn't exist; `not_found` for a missing source, filter or bus;
+  and `invalid_argument` at `binding` for a 257th ([`MAX_VALUE_BINDINGS`]).
+- **`binding.clear_value {binding_id}`** removes one, or is `not_found` (entity
+  `binding`).
+- A value binding is **not** removed with what it names: it stays, driving nothing.
+- **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
+  count}` for each MIDI input that has sent a control change, for a client that learns
+  one: the control whose `count` grows is the one moved.
 
 <a id="organisation"></a>
 ## Folders, labels and scene options
@@ -1762,7 +1795,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
   parses as empty), every controller binding (`bindings`, ordered by trigger; omitted
-  when there are none, so missing, also from a pre-0.96 server, parses as empty), the
+  when there are none, so missing, also from a pre-0.96 server, parses as empty), every
+  value binding (`value_bindings`, ordered by ID; omitted when there are none, so
+  missing, also from a pre-0.168 server, parses as empty), the
   master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
@@ -1853,6 +1888,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   address). Listing a sender trusts it with nothing. `on` false and no senders while
   the receiver is off, the default. Runtime state, so no `rev`. A plugin can't read it
   (the person's LAN addresses).
+- `midi.last_controls` (0.168,
+  [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 6): each
+  MIDI input that has sent a control change, ordered by name, as `MidiControlInfo
+  {input, channel, controller, value, count}`, its latest one with the value it holds
+  now and how many it has sent since the engine started. A client learning a control for
+  a value binding reads it once, then until a `count` grows. Runtime state, so no `rev`.
+  A plugin can't read it.
 - `data.list` and `data.get {input, key}` (0.140,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
   live data, each JTunnel sender's newest state message per key (a DAW's transport,
@@ -2527,7 +2569,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
-  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), creating, deleting and retargeting outputs, their encoders and stream
+  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` and `studio.set_rendering` (application settings), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2901,8 +2943,8 @@ evaluates as each frame is drawn. A modifier never writes the item's values: `st
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
-`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`, or since
-0.145 `source` with its `source`), its
+`opacity`, the four `crop_*` edges and since 0.168 `width` and `height`, or since 0.109
+`effect` with its `effect`, or since 0.145 `source` with its `source`), its
 `kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
@@ -2967,7 +3009,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   otherwise, and on a setting that isn't a colour, it changes nothing.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
-  and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
+  as `width` and `height` do one side of the box after `scale` (ADR-0178), and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
 - **Effect settings** (since 0.109,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): `property`
   `effect` drives a number setting of one of the item's own effects instead, which

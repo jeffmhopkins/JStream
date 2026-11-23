@@ -75,6 +75,7 @@ mod tempo;
 mod tests;
 mod timelines;
 mod transition;
+mod value_bindings;
 mod values;
 mod warm_file;
 mod youtube;

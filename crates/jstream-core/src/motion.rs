@@ -203,11 +203,9 @@ pub(crate) fn apply(
     let placement = match placement {
         Placement::Geometry(geometry) => {
             let moved = (|| {
-                let size = Size::try_new(
-                    by.scale_of(geometry.size.width.get()),
-                    by.scale_of(geometry.size.height.get()),
-                )
-                .ok()?;
+                let [width, height] =
+                    by.size_of(geometry.size.width.get(), geometry.size.height.get());
+                let size = Size::try_new(width, height).ok()?;
                 Some(jstream_protocol::ItemGeometry {
                     center: Vec2::new(
                         geometry.center.x.get() + by.x,
@@ -232,9 +230,9 @@ pub(crate) fn apply(
             moved.position[1] += by.y;
             // A legacy scale is signed, a negative one flipping its axis: motion scales
             // the size and keeps the flip.
-            let scaled = |s: f32| s.signum() * by.scale_of(s.abs());
-            moved.scale[0] = scaled(moved.scale[0]);
-            moved.scale[1] = scaled(moved.scale[1]);
+            let [width, height] = by.size_of(moved.scale[0].abs(), moved.scale[1].abs());
+            moved.scale[0] = moved.scale[0].signum() * width;
+            moved.scale[1] = moved.scale[1].signum() * height;
             moved.rotation_deg += by.rotation;
             // One past `ItemTransform::check_drawable`'s bounds (stacked scales past
             // `MAX_LEGACY_SCALE`, a value that isn't finite) stays where it is (#1130),
@@ -556,6 +554,35 @@ mod tests {
             moved(&[drift(Property::Scale, 1.0, Clock::Engine)]),
             [-2.0, 2.0]
         );
+    }
+
+    /// ADR-0178: width and height stretch one side alone, after scale, and a mirrored
+    /// legacy item keeps its flip.
+    #[test]
+    fn width_and_height_stretch_one_side() {
+        let mirrored = LegacyTransform {
+            scale: [-1.0, 1.0],
+            ..LegacyTransform::IDENTITY
+        };
+        let (placement, _, _) = apply(
+            &offsets(
+                &[
+                    drift(Property::Scale, 1.0, Clock::Engine),
+                    drift(Property::Width, 0.5, Clock::Engine),
+                    drift(Property::Height, -0.25, Clock::Engine),
+                ],
+                at(1.0),
+                None,
+                None,
+            ),
+            Placement::Legacy(mirrored),
+            Crop::NONE,
+            1.0,
+        );
+        let Placement::Legacy(transform) = placement else {
+            panic!("a legacy transform stays one");
+        };
+        assert_eq!(transform.scale, [-3.0, 1.5]);
     }
 
     /// #1125 review N5: stacked scale modifiers that would make a box too large to draw

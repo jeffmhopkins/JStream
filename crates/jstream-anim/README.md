@@ -58,7 +58,8 @@ Contents:
 
 - Motion ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
   `Modifier` is one motion modifier on an item: a `Property` (`x`, `y`, `scale`,
-  `rotation`, `tilt`, `turn`, `depth`, `opacity`, the four crop edges), a `Kind`
+  `rotation`, `tilt`, `turn`, `depth`, `opacity`, the four crop edges, and `width` and
+  `height`, which stretch one axis), a `Kind`
   (`Wiggle`: seeded smooth noise with octaves; `Oscillate`: a sine, triangle, square or
   saw `Shape` with period and phase; `Drift`: a rate, optionally wrapping; `Impulse`: a
   decaying sine that lasts `duration_ms`, for a shake; `Audio`, below) and a `Clock`
@@ -68,8 +69,8 @@ Contents:
   trigger yet, so the engine passes none. `check_list` refuses more than
   `MAX_MODIFIERS`, duplicate or empty IDs and out-of-range parameters. `evaluate` sums an
   item's modifiers at one moment into `Offsets`, without allocating, so the render
-  thread calls it per item per frame: positions, angles and crop add, scale and opacity
-  multiply, and a step that would leave a sum non-finite is skipped. `Offsets::blend` mixes two sides' outputs across a keyframe move, which keeps
+  thread calls it per item per frame: positions, angles and crop add, scale, opacity, width and height
+  multiply (`Offsets::size_of` gives the box's two factors, scale times each side's), and a step that would leave a sum non-finite is skipped. `Offsets::blend` mixes two sides' outputs across a keyframe move, which keeps
   every wave's phase.
 - Audio-reactive modifiers
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): `Kind::Audio`

@@ -1123,6 +1123,7 @@ mod tests {
                 "font",
                 "jtunnel",
                 "kind",
+                "midi",
                 "profile",
                 "quality",
                 "state",

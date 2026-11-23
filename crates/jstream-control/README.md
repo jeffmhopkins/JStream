@@ -108,7 +108,7 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends, hotkey and controller bindings, folders and labels in memory, with an
+mixes, buses, sends, hotkey, controller and value bindings, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -185,6 +185,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     already-bound trigger, then the hotkeys' action checks (`check_bindable`, shared),
     and `binding.clear` of an unbound trigger. The same deletes remove the controller
     bindings naming what they delete, listed in `removed_bindings`.
+  - value bindings (ADR-0178): `binding.set_value`'s `ValueBinding::problem` only, since
+    the mock describes no kinds' settings, and `binding.clear_value` of an unknown ID.
+    `midi.last_controls` answers the controls `MockEngine::move_control` moved.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;
@@ -264,7 +267,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
   the hotkey bindings with their labels (in `state.get`, ordered by chord), and the
-  controller bindings (ordered by trigger, omitted while there are none).
+  controller bindings (ordered by trigger, omitted while there are none) and value
+  bindings (ordered by ID, likewise).
   `video.snapshot` is not one of those reads, nor are the frame sheets (`video.frames`,
   `scene.switch_and_watch`): the mock has no compositor and answers them with
   `internal`, as it does for any protocol variant it does not implement;

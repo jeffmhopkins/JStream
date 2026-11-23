@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 18;
+pub const SCHEMA_VERSION: u32 = 19;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -65,6 +65,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
     v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16, v16_to_v17, v17_to_v18,
+    v18_to_v19,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -473,6 +474,41 @@ fn v16_to_v17(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Version 19 adds value bindings (`value_bindings`) and motion modifiers on an item's
+/// width or height alone (ADR-0178). A version 18 file has neither, so it upgrades
+/// unchanged; either there is refused, as version 18 refused it.
+fn v18_to_v19(value: &mut Value) -> Result<(), String> {
+    if value.get("value_bindings").is_some() {
+        return Err("a version 18 file has no `value_bindings`".into());
+    }
+    let stretches = |motion: Option<&Value>| {
+        motion
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|m| {
+                matches!(
+                    m.get("property").and_then(Value::as_str),
+                    Some("width" | "height")
+                )
+            })
+    };
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let items = scene.get("items").and_then(Value::as_array);
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if items
+            .into_iter()
+            .flatten()
+            .chain(overrides.into_iter().flatten())
+            .any(|holder| stretches(holder.get("motion")))
+        {
+            return Err("a version 18 motion modifier moves no width or height alone".into());
+        }
+    }
+    Ok(())
+}
+
 /// Why a collection file could not be loaded. The message never quotes the file's
 /// values beyond IDs, so it is safe to log.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -587,6 +623,11 @@ struct File {
     /// like `hotkeys`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     bindings: Vec<FileBinding>,
+    /// Value bindings (ADR-0178), ordered by ID; omitted when there are none. Loaded as
+    /// saved, without looking up what they name: one whose target is gone, or of a
+    /// kind not installed, is kept, as the collection keeps it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    value_bindings: Vec<jstream_protocol::ValueBinding>,
     /// Transition presets and the default (ADR-0029); omitted while they are the one
     /// `cut` preset a new collection starts with, so such a collection saves as it did
     /// before presets existed.
@@ -1188,6 +1229,7 @@ impl Graph {
                     action: action.clone(),
                 })
                 .collect(),
+            value_bindings: state.value_bindings.values().cloned().collect(),
         };
         let mut json = serde_json::to_string_pretty(&file).expect(
             "invariant: the file holds only strings, finite numbers, bools, and maps with \
@@ -1265,6 +1307,12 @@ impl Graph {
             };
             applied.map_err(|error| LoadError::Invalid {
                 object,
+                error: Box::new(error),
+            })?;
+        }
+        for binding in &file.value_bindings {
+            crate::value::load(&mut graph.state, binding).map_err(|error| LoadError::Invalid {
+                object: format!("value binding `{}`", binding.binding_id),
                 error: Box::new(error),
             })?;
         }

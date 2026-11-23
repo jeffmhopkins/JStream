@@ -30,6 +30,7 @@ mod source_sizes;
 mod sources;
 mod timelines;
 mod transitions;
+mod value_bindings;
 mod values;
 mod warm_scenes;
 #[cfg(all(windows, feature = "hw-tests"))]
