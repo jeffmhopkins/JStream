@@ -532,6 +532,72 @@ pub enum MotionClock {
     Unknown,
 }
 
+/// How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or
+/// replaces it.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum MappingMode {
+    /// An offset: its value is added to the stored value (multiplied into a scale), so
+    /// the stored value, keyframes and other mappings still count.
+    #[default]
+    Add,
+    /// An override: its value is the value, in the property's or setting's own unit;
+    /// `add` mappings still add on top.
+    Replace,
+    /// A mode this version of the protocol doesn't know, from a newer server. Never
+    /// sent; the engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+impl MappingMode {
+    /// Why a motion row of `kind` can't take this mode, or `None`: only a reader (`midi`,
+    /// `data`, `channel` or `audio`) may replace, and an unknown mode is refused.
+    pub fn problem_on(self, kind: &MotionKind) -> Option<&'static str> {
+        match self {
+            MappingMode::Add => None,
+            MappingMode::Replace => (!matches!(
+                kind,
+                MotionKind::Midi { .. }
+                    | MotionKind::Data { .. }
+                    | MotionKind::Channel { .. }
+                    | MotionKind::Audio { .. }
+            ))
+            .then_some("only a `midi`, `data`, `channel` or `audio` modifier can replace"),
+            MappingMode::Unknown => Some("is not one this version of the protocol knows"),
+        }
+    }
+
+    /// Whether it is the motion rows' default, `add`, so a modifier leaves it out.
+    pub fn is_add(&self) -> bool {
+        *self == MappingMode::Add
+    }
+
+    /// Whether it is the value bindings' default, `replace`, so a binding leaves it out.
+    pub fn is_replace(&self) -> bool {
+        *self == MappingMode::Replace
+    }
+
+    /// The value bindings' default, `replace`.
+    pub fn replace() -> Self {
+        MappingMode::Replace
+    }
+}
+
 /// One motion modifier on an item (ADR-0099 decision 3).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct MotionModifier {
@@ -562,6 +628,10 @@ pub struct MotionModifier {
     /// collection doesn't hold applies it fully. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
+    /// Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default
+    /// `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace.
+    #[serde(default, skip_serializing_if = "MappingMode::is_add")]
+    pub mode: MappingMode,
 }
 
 /// The longest effect parameter name a [`MotionEffect`] takes, in bytes.
@@ -680,6 +750,9 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
         }
         if m.clock == MotionClock::Unknown {
             return Err(problem(field("clock"), unknown));
+        }
+        if let Some(reason) = m.mode.problem_on(&m.kind) {
+            return Err(problem(field("mode"), reason));
         }
         if let Some(reason) = effect_problem(m.property, m.effect.as_ref()) {
             return Err(problem(field("effect"), reason));
@@ -1169,6 +1242,7 @@ mod tests {
 
     fn wiggle(id: &str, amplitude: f32) -> MotionModifier {
         MotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: id.into(),
             property: MotionProperty::X,
             effect: None,
@@ -1187,6 +1261,30 @@ mod tests {
 
     fn field_of(motion: &[MotionModifier]) -> Option<String> {
         check_motion(motion).err().map(|p| p.field)
+    }
+
+    #[test]
+    fn only_a_reader_replaces_and_add_is_left_out() {
+        let parse = |json: serde_json::Value| -> MotionModifier {
+            serde_json::from_value(json).expect("a modifier")
+        };
+        let fader = parse(serde_json::json!({
+            "modifier_id": "a", "property": "x", "kind": "midi", "controller": 1,
+            "mode": "replace"
+        }));
+        assert_eq!(fader.mode, crate::MappingMode::Replace);
+        assert_eq!(check_motion(std::slice::from_ref(&fader)), Ok(()));
+        let shake = MotionModifier {
+            mode: crate::MappingMode::Replace,
+            ..wiggle("w", 3.0)
+        };
+        assert_eq!(field_of(&[shake]).as_deref(), Some("motion.0.mode"));
+        let unknown = parse(serde_json::json!({
+            "modifier_id": "a", "property": "x", "kind": "midi", "mode": "multiply"
+        }));
+        assert_eq!(field_of(&[unknown]).as_deref(), Some("motion.0.mode"));
+        let json = serde_json::to_value(wiggle("w", 3.0)).expect("json");
+        assert!(json.get("mode").is_none(), "add is the default, left out");
     }
 
     #[test]

@@ -420,7 +420,12 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
   motion modifiers, turned into `jstream-anim`'s when the shot is planned. A `width` or
   `height` modifier stretches the item's box on one axis about its centre
-  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 7).
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 7). A
+  reader modifier whose `mode` is `replace`
+  ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)) sets its property in
+  `jstream_anim::Offsets::set` instead of adding to it; `motion::apply` takes each
+  property's own value through `Offsets::on` and `Offsets::base`, so the last replace
+  sets it and the adds go on top.
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
   modifier hearing the program mix, a bus or a source.
@@ -452,7 +457,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
   modifier adding to a number or colour setting of one of its item's effects each
   frame, within the setting's range, by the path a Move's blend uses, with the layer padded for the
-  most and the least it reaches.
+  most and the least it reaches. A `replace` modifier (ADR-0203) sets a number setting
+  before the others add to it (`Shot::source_value` gives what a modifier makes of the
+  setting's own value), and the padding reaches from the own value to its range.
 - **Driven source settings** (`sourced.rs`,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4): a
   `source` modifier adding to a live setting of its item's own source as that item draws
@@ -460,7 +467,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   scene, an environment light's intensity and its sky (colours, stars, nebula, galaxy
   band and warp, `sourced::environment`) as it lights and draws it, and a model's
   colour, metallic, roughness and glow strength, or by material its glow, as it draws
-  it. Nothing is stored. A painting `data` modifier sets a light's colour, a
+  it. Nothing is stored. A `replace` modifier (ADR-0203) sets a light's or a sky's
+  number the same way; a model's materials take none, since their own values are the
+  model's. A painting `data` modifier sets a light's colour, a
   model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
   `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
 - **Value bindings** (`value_bindings.rs`,
@@ -475,7 +484,10 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   or range is unchanged across a batch keeps its follower, as does one (or a channel's
   input) whose input changed only its `smoothing_ms` (`same_but_smoothing`), which takes
   the new time and goes on driving; a missing target drives
-  nothing. A binding's `amount` scales its value toward `from` by a channel's level.
+  nothing. Each target takes its last moved `replace` binding's value, or its stored
+  value (`Graph::stored_value`), plus every moved `add` binding's, and a binding that
+  isn't `enabled` drives nothing
+  ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)). A binding's `amount` scales its value toward `from` by a channel's level.
   An `audio` input (ADR-0206) hears the scope the engine keeps for it in the live
   sources' heard map (`FilterAssets::motion_heard`): on each tick its own `AudioMeter`
   measures the scope's latest window (the FFT only for a band) and its envelope follows
@@ -502,7 +514,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   camera motion and follow camera, planned with the shot; camera motion reads its
   `midi` and `data` levels from the shot's bindings, and its `pan` and `tilt` turn the
   view about the camera as the live aim does
-  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)). A follow camera holds its
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
+  A `replace` camera modifier sets its property, pulled toward the camera's own value by
+  its amount, before the adds (ADR-0203); a replaced pan or tilt is the turn itself. A follow camera holds its
   zoom by default and only pans at the box's edges
   ([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md)).
 - **Live aim** (`aim.rs`,

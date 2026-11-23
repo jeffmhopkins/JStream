@@ -127,6 +127,8 @@ pub fn set_smoothing(input: &mut MotionKind, ms: u32) {
 pub fn learned(control: &MidiControlInfo, target: &ValueTarget, range: (f64, f64)) -> ValueBinding {
     let end = |v: f64| Finite32::new(v as f32).unwrap_or(Finite32::ZERO);
     ValueBinding {
+        enabled: true,
+        mode: jstream_control::protocol::MappingMode::Replace,
         binding_id: learn_id(target),
         input: MotionKind::Midi {
             control: MotionMidiControl::Cc,
@@ -242,6 +244,8 @@ fn watch(
 pub fn follows(channel_id: &str, target: &ValueTarget, range: (f64, f64)) -> ValueBinding {
     let end = |v: f64| Finite32::new(v as f32).unwrap_or(Finite32::ZERO);
     ValueBinding {
+        enabled: true,
+        mode: jstream_control::protocol::MappingMode::Replace,
         binding_id: learn_id(target),
         input: MotionKind::Channel {
             channel_id: channel_id.to_owned(),

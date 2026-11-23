@@ -384,7 +384,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.178 because a channel's `inputs` and a value binding's input
+`PROTOCOL_VERSION` is 0.181 because a value binding and a reader motion row (`midi`,
+`data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
+`replace`; a value binding's target sums its `add` bindings onto the last moved
+`replace` binding's value or its stored value, a binding gains `enabled`, and a
+`replace` row sets its property itself
+([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)); 0.178 because a channel's `inputs` and a value binding's input
 may be an `audio` level, a source's, a bus's or the program mix's, followed by its
 attack and release
 ([ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)); 0.172 because a scene whose `reflections` is on also reflects
@@ -1534,7 +1539,8 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
 Value bindings (0.168, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
 are the other half of ADR-0122's binding system: a MIDI control or a live-data field
 driving one number, listed in `state.get`'s `value_bindings` by ID.
-- **`ValueBinding {binding_id, <kind and its fields>, target}`** reads what a `midi` or
+- **`ValueBinding {binding_id, <kind and its fields>, target, amount?, mode?,
+  enabled?}`** reads what a `midi` or
   `data` motion modifier reads, with the same fields flattened (`kind`, `control`,
   `controller`, `channel`, `input`, `key`, `field`, `range`, `states`, `smoothing_ms`,
   `curve`, `from`, `to`). `ValueBinding::problem` refuses another `kind`, a malformed
@@ -1555,6 +1561,12 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
   count}` for each MIDI input that has sent a control change, for a client that learns
   one: the control whose `count` grows is the one moved.
+- A value binding's **`mode`** (since 0.181,
+  [ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)) is `replace` (the
+  default, omitted) or `add`. Each tick, a target takes the value of the `replace` binding
+  that moved last, or its stored value when none has, plus every moved `add` binding's
+  value, kept in its range. **`enabled`** (default `true`, omitted) set to false bypasses
+  a binding: it stays listed and drives nothing.
 - A value binding's input may also be `kind` `audio` (since 0.178,
   [ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)): an
   audio modifier's fields, its attack and release following the level.
@@ -3094,6 +3106,17 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   as `width` and `height` do one side of the box after `scale` (ADR-0178), and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
+- **`mode`** (since 0.181,
+  [ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)): `add` (the default,
+  omitted) applies a value as above. A `midi`, `data`, `channel` or `audio` modifier may
+  be `replace` instead (another kind is refused at `motion.<n>.mode`): its value is the
+  property itself, a position, angle, depth or crop in its own unit, an opacity from 0 to
+  1, a scale, width or height factor, or an effect's or source's number setting. The last
+  enabled `replace` modifier on a property sets it, and the `add` ones then apply on top.
+  Its `amount` channel pulls it toward the item's own value. A model's material and a
+  colour setting take no `replace`. During a Move, a property both sides replace blends,
+  and one only one side replaces switches halfway. A scene camera's motion takes `mode`
+  as well, a replaced pan or tilt being the turn itself.
 - **Effect settings** (since 0.109,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): `property`
   `effect` drives a number setting of one of the item's own effects instead, which

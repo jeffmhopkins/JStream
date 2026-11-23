@@ -124,6 +124,7 @@ impl Reader {
 /// `kind` as a modifier, so the reactive readers and `jstream-anim` take it.
 fn as_modifier(id: &str, kind: &MotionKind) -> MotionModifier {
     MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: id.to_owned(),
         property: MotionProperty::X,
         effect: None,

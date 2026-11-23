@@ -649,6 +649,7 @@ impl Bindings {
                 continue;
             }
             let modifier = MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: camera.modifier_id.clone(),
                 property: MotionProperty::X,
                 effect: None,
@@ -1139,6 +1140,7 @@ mod tests {
     fn light(id: &str, audio: Option<&str>, measure: MotionMeasure) -> MotionModifier {
         let band = measure == MotionMeasure::Band;
         MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property: MotionProperty::Opacity,
             effect: None,
@@ -1363,6 +1365,7 @@ mod tests {
         input: Option<&str>,
     ) -> MotionModifier {
         MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property: MotionProperty::Tilt,
             effect: None,
@@ -1396,6 +1399,7 @@ mod tests {
         let item = ItemId::new("cockpit");
         let heard: HeardScopes = Arc::default();
         let on_camera = |m: MotionModifier| CameraMotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: m.modifier_id,
             property: jstream_protocol::CameraProperty::Fov,
             kind: m.kind,
@@ -1599,6 +1603,7 @@ mod tests {
     ) -> MotionModifier {
         let f = |v: f32| Finite32::new(v).expect("finite");
         MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property: MotionProperty::Opacity,
             effect: None,

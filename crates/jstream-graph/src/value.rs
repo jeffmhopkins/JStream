@@ -117,6 +117,56 @@ impl Graph {
     pub fn value_range(&self, target: &ValueTarget) -> Option<ValueRange> {
         range(&self.state, &self.kinds, target, 0).ok()
     }
+
+    /// The number `target` holds in the collection, as stored: a setting's own value or
+    /// its kind's default, a fader's or a send's gain in dB, a switch as 0 or 1. `None`
+    /// while what it names is missing or holds no number. An `add` binding
+    /// ([ADR-0203](../../../docs/adr/0203-mappings-add-or-replace.md)) adds to it.
+    pub fn stored_value(&self, target: &ValueTarget) -> Option<f64> {
+        let number = |v: &Value| match v {
+            Value::Bool(on) => Some(if *on { 1.0 } else { 0.0 }),
+            v => v.as_f64(),
+        };
+        let setting = |settings: &Settings, kind: &str, param: &str| {
+            settings.get(param).and_then(number).or_else(|| {
+                self.kinds
+                    .get(kind)
+                    .and_then(|d| d.param(param))
+                    .and_then(|p| number(&p.default))
+            })
+        };
+        let state = &self.state;
+        match target {
+            ValueTarget::SourceSetting { source_id, param } => {
+                let source = state.source(source_id)?;
+                match &source.kind {
+                    SourceKind::Builtin { kind } => setting(&source.settings, kind, param),
+                    _ => None,
+                }
+            }
+            ValueTarget::FilterSetting {
+                owner,
+                filter_id,
+                param,
+            } => {
+                let chains = crate::filter::owner_chains(state, owner).ok()?;
+                let (_, _, filter) = chains.find(filter_id)?;
+                setting(&filter.settings, &filter.kind, param)
+            }
+            ValueTarget::SourceGain { source_id } => state
+                .source(source_id)?
+                .audio
+                .as_ref()
+                .map(|a| f64::from(a.gain_db.get())),
+            ValueTarget::BusGain { bus_id } => {
+                state.bus(bus_id).map(|b| f64::from(b.gain_db.get()))
+            }
+            ValueTarget::SendGain { source_id, bus_id } => {
+                state.send(source_id, bus_id).map(|g| f64::from(g.get()))
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Applies `binding.set_value` and `binding.clear_value`, and returns the edits that

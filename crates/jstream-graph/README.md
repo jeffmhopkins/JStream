@@ -519,8 +519,12 @@ that does not want to change the graph it has.
   `send.set` would make it. `binding.clear_value` is `not_found` (entity `binding`) for an
   ID none has. Deleting what a value binding names leaves it in place, so its touched set
   names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
-  a number's ends and whether it is whole, or a switch), `None` while it is missing, and
-  `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
+  a number's ends and whether it is whole, or a switch), `None` while it is missing,
+  `Graph::stored_value` the number it holds as stored (a setting's own or its kind's
+  default, a gain in dB, a switch as 0 or 1), which `add` bindings add to
+  ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)), and `value_edit` the
+  setter edit that gives it a value, clamped, rounded or switched. A motion modifier's
+  `mode` becomes `jstream_anim::Modifier::replace` (`motion.rs`), a camera's too.
 - **Channels** (`channel.rs`, ADR-0183): `channel.set` sets one whole by its
   `channel_id` (inverse `channel.delete`, or `channel.set` with the one it replaced)
   after `ChannelInfo::problem` (`invalid_argument` at `channel.<field>`), the limit of

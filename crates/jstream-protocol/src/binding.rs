@@ -317,6 +317,26 @@ pub struct ValueBinding {
     /// fully. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
+    /// Whether it replaces its target's value or adds to it (ADR-0203, since 0.181).
+    /// Default `replace`, omitted. Each target takes its stored value, or the last moved
+    /// `replace` binding's by ID, plus every moved `add` binding's, kept in its range.
+    #[serde(
+        default = "crate::MappingMode::replace",
+        skip_serializing_if = "crate::MappingMode::is_replace"
+    )]
+    pub mode: crate::MappingMode,
+    /// Whether it drives (ADR-0203, since 0.181): false bypasses it, its target showing
+    /// what the others give. Default `true`, omitted.
+    #[serde(default = "enabled", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 impl ValueBinding {
@@ -336,6 +356,12 @@ impl ValueBinding {
             return Some((
                 "kind".into(),
                 "a value binding reads a `midi` control, a `data` field, a `channel` or an `audio` level".into(),
+            ));
+        }
+        if self.mode == crate::MappingMode::Unknown {
+            return Some((
+                "mode".into(),
+                "is not one this version of the protocol knows".into(),
             ));
         }
         if let Some(reason) = crate::motion::amount_problem(self.amount.as_deref()) {

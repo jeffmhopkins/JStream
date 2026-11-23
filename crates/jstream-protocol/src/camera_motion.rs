@@ -116,6 +116,11 @@ pub struct CameraMotionModifier {
     /// none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
+    /// Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).
+    /// Default `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may
+    /// replace.
+    #[serde(default, skip_serializing_if = "crate::MappingMode::is_add")]
+    pub mode: crate::MappingMode,
 }
 
 fn enabled() -> bool {
@@ -163,6 +168,7 @@ pub fn check_camera_motion(motion: &[CameraMotionModifier]) -> Result<(), Motion
     let as_items: Vec<MotionModifier> = motion
         .iter()
         .map(|m| MotionModifier {
+            mode: m.mode,
             modifier_id: m.modifier_id.clone(),
             property: MotionProperty::X,
             effect: None,
@@ -459,6 +465,7 @@ mod tests {
 
     fn drift(id: &str, property: CameraProperty) -> CameraMotionModifier {
         CameraMotionModifier {
+            mode: crate::MappingMode::Add,
             modifier_id: id.into(),
             property,
             kind: MotionKind::Drift {

@@ -19,8 +19,11 @@
 //! **Value bindings** (`value_bindings.rs`, ADR-0178): each binding waits until its
 //! control first reads something other than it read when the engine started following
 //! it (a controller rests at 0 until it sends, and a data field until it changes), so a
-//! collection opens with its stored values; from then on its smoothed, mapped value
-//! replaces the target's, kept within the target's range. Changing only a binding's
+//! collection opens with its stored values; from then on it drives its target. Each
+//! target takes the value of its `replace` binding that moved last, or its stored value
+//! when none has, plus every moved `add` binding's smoothed, mapped value, kept within
+//! the target's range; a binding that isn't `enabled` drives nothing
+//! ([ADR-0203](../../../docs/adr/0203-mappings-add-or-replace.md)). Changing only a binding's
 //! target or mapping keeps its smoothing and whether it has moved. A binding whose
 //! target is missing drives nothing. Removing a binding shows the stored value again.
 //! A binding with an `amount` moves from its `from` by that channel's level
@@ -34,7 +37,7 @@ use std::time::{Duration, Instant};
 
 use jstream_anim::{Midi, Smoothing};
 use jstream_graph::Graph;
-use jstream_protocol::{Edit, ValueBinding};
+use jstream_protocol::{Edit, ValueBinding, ValueTarget};
 use jstream_sources::{LiveData, MidiInputs};
 
 use crate::reactive::HeardScopes;
@@ -56,6 +59,10 @@ struct Driven {
     rest: f32,
     /// Whether its control has read something else since: only then does it drive.
     moved: bool,
+    /// Its mapped value as of the last tick, once it has moved.
+    value: Option<f64>,
+    /// The driver's clock when that value last changed.
+    changed: u64,
     /// Whether it names a MIDI input the engine doesn't track yet, so it is looked up
     /// again each tick until it appears.
     unresolved: bool,
@@ -68,6 +75,9 @@ pub(crate) struct ValueDriver {
     driven: BTreeMap<String, Driven>,
     last: Option<Instant>,
     edits: Vec<Edit>,
+    /// Counts the changes of the bindings' values, so the last moved `replace` binding
+    /// on a target is known.
+    clock: u64,
 }
 
 impl ValueDriver {
@@ -91,7 +101,8 @@ impl ValueDriver {
         });
         self.last = Some(now);
         self.keep(graph, midi, data, heard);
-        let mut edits = Vec::with_capacity(self.driven.len());
+        // Each moved binding's value, then each target's: the last moved `replace`
+        // binding's value or else the stored one, plus every `add` binding's (ADR-0203).
         for driven in self.driven.values_mut() {
             driven.reader.sample(dt_s, now);
             let raw = driven.reader.read();
@@ -102,9 +113,6 @@ impl ValueDriver {
                 driven.moved = true;
             }
             let level = driven.smoothing.advance(&driven.midi, raw, dt_s);
-            let Some(range) = graph.value_range(&driven.binding.target) else {
-                continue;
-            };
             // Pulled toward `from` by its amount; a channel that doesn't exist drives it
             // fully.
             let amount = driven
@@ -114,7 +122,43 @@ impl ValueDriver {
                 .map_or(1.0, f64::from);
             let from = driven.midi.from;
             let value = from + (driven.midi.value(level) - from) * amount;
-            if let Some(edit) = jstream_graph::value_edit(&driven.binding.target, range, value) {
+            if driven.value != Some(value) {
+                self.clock += 1;
+                driven.changed = self.clock;
+                driven.value = Some(value);
+            }
+        }
+        let mut targets: Vec<&ValueTarget> = Vec::new();
+        for driven in self.driven.values() {
+            if driven.value.is_some()
+                && driven.binding.enabled
+                && !targets.contains(&&driven.binding.target)
+            {
+                targets.push(&driven.binding.target);
+            }
+        }
+        let mut edits = Vec::with_capacity(targets.len());
+        for target in targets {
+            let Some(range) = graph.value_range(target) else {
+                continue;
+            };
+            let driving = || {
+                self.driven.values().filter(move |d| {
+                    d.binding.enabled && d.value.is_some() && d.binding.target == *target
+                })
+            };
+            let replaced = driving()
+                .filter(|d| d.binding.mode.is_replace())
+                .max_by_key(|d| d.changed)
+                .and_then(|d| d.value);
+            let added: f64 = driving()
+                .filter(|d| d.binding.mode.is_add())
+                .filter_map(|d| d.value)
+                .sum();
+            let Some(base) = replaced.or_else(|| graph.stored_value(target)) else {
+                continue;
+            };
+            if let Some(edit) = jstream_graph::value_edit(target, range, base + added) {
                 edits.push(edit);
             }
         }
@@ -192,6 +236,8 @@ fn follow(
         smoothing: Smoothing::default(),
         rest,
         moved: false,
+        value: None,
+        changed: 0,
         unresolved,
     })
 }
@@ -201,8 +247,8 @@ mod tests {
     use super::ValueDriver;
     use jstream_graph::Graph;
     use jstream_protocol::{
-        BusId, Edit, Finite32, MotionCurve, MotionKind, MotionMidiControl, ValueBinding,
-        ValueTarget,
+        BusId, Edit, Finite32, MappingMode, MotionCurve, MotionKind, MotionMidiControl,
+        ValueBinding, ValueTarget,
     };
     use jstream_sources::{LiveData, MidiInputs};
     use std::time::{Duration, Instant};
@@ -210,6 +256,8 @@ mod tests {
     fn bound(smoothing_ms: u32, controller: u8, bus: &str) -> Edit {
         Edit::BindingSetValue {
             binding: ValueBinding {
+                enabled: true,
+                mode: jstream_protocol::MappingMode::Replace,
                 binding_id: "f".into(),
                 input: MotionKind::Midi {
                     control: MotionMidiControl::Cc,
@@ -332,5 +380,87 @@ mod tests {
             &Default::default(),
             t0 + Duration::from_millis(233)
         ));
+    }
+
+    /// A binding `id` of controller `controller` onto the master fader, from `from` to
+    /// `to` dB with no smoothing.
+    fn on_master(id: &str, mode: MappingMode, controller: u8, from: f32, to: f32) -> Edit {
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                enabled: true,
+                mode,
+                binding_id: id.into(),
+                input: MotionKind::Midi {
+                    control: MotionMidiControl::Cc,
+                    controller: Some(controller),
+                    channel: None,
+                    input: None,
+                    smoothing_ms: 0,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::new(from).expect("finite"),
+                    to: Finite32::new(to).expect("finite"),
+                },
+                target: ValueTarget::BusGain {
+                    bus_id: BusId::new("master"),
+                },
+                amount: None,
+            },
+        }
+    }
+
+    #[test]
+    fn add_bindings_sum_onto_the_stored_value_or_the_last_moved_replace() {
+        use jstream_protocol::MappingMode::{Add, Replace};
+        let mut graph = Graph::new();
+        graph
+            .apply(
+                &[
+                    Edit::BusSetFader {
+                        bus_id: BusId::new("master"),
+                        gain_db: Some(Finite32::new(-10.0).expect("finite")),
+                        muted: None,
+                    },
+                    on_master("a", Add, 1, 0.0, 6.0),
+                    on_master("b", Add, 2, 0.0, -3.0),
+                    on_master("c", Replace, 3, -40.0, 0.0),
+                    on_master("d", Replace, 4, -20.0, -30.0),
+                ],
+                None,
+            )
+            .expect("binds");
+        let (midi, data) = (MidiInputs::new(), LiveData::new());
+        let mut driver = ValueDriver::default();
+        let t0 = Instant::now();
+        let mut tick = |graph: &Graph, n: u64| {
+            driver.tick(
+                graph,
+                Some(&midi),
+                &data,
+                &Default::default(),
+                t0 + Duration::from_millis(33 * n),
+            );
+            gain(driver.edits())
+        };
+        assert_eq!(tick(&graph, 0), None, "nothing has moved");
+        midi.push("Pad", 0, &cc(1, 127));
+        assert_eq!(tick(&graph, 1), Some(-4.0), "the stored -10 plus 6");
+        midi.push("Pad", 1, &cc(2, 127));
+        assert_eq!(tick(&graph, 2), Some(-7.0), "and less 3");
+        midi.push("Pad", 2, &cc(3, 127));
+        assert_eq!(tick(&graph, 3), Some(3.0), "replaced by 0, plus 6 less 3");
+        midi.push("Pad", 3, &cc(4, 0));
+        midi.push("Pad", 4, &cc(4, 127));
+        assert_eq!(tick(&graph, 4), Some(-27.0), "the last moved replace wins");
+        midi.push("Pad", 5, &cc(3, 0));
+        assert_eq!(tick(&graph, 5), Some(-37.0), "until the other moves again");
+        // Bypassed, an add binding adds nothing; the others drive on.
+        let Edit::BindingSetValue { mut binding } = on_master("a", Add, 1, 0.0, 6.0) else {
+            unreachable!()
+        };
+        binding.enabled = false;
+        graph
+            .apply(&[Edit::BindingSetValue { binding }], None)
+            .expect("bypasses");
+        assert_eq!(tick(&graph, 6), Some(-43.0));
     }
 }

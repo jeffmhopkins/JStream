@@ -132,6 +132,7 @@ pub fn with_added(list: &[CameraMotionModifier]) -> Option<Vec<CameraMotionModif
     let property = CameraProperty::PositionX;
     let mut next = list.to_vec();
     next.push(CameraMotionModifier {
+        mode: jstream_control::protocol::MappingMode::Add,
         modifier_id: id,
         property,
         kind: sized_kind("Wiggle", gentle(property))?,
@@ -594,6 +595,7 @@ mod tests {
         assert!(matches!(pan, MotionKind::Midi { to, .. } if to.get() == 45.0));
         let named = with_input(&pan, "Bitwig").expect("named");
         let list = [CameraMotionModifier {
+            mode: jstream_control::protocol::MappingMode::Add,
             modifier_id: "pan".into(),
             property: CameraProperty::Pan,
             kind: named,
@@ -635,6 +637,7 @@ mod tests {
         let list: Vec<_> = [(CameraProperty::Fov, fov), (CameraProperty::Roll, roll)]
             .into_iter()
             .map(|(property, kind)| CameraMotionModifier {
+                mode: jstream_control::protocol::MappingMode::Add,
                 modifier_id: format!("{property:?}"),
                 property,
                 kind,

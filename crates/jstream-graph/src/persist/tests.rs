@@ -287,6 +287,7 @@ fn v4_graph() -> Graph {
                 scene_id: None,
                 motion: vec![
                     MotionModifier {
+                        mode: jstream_protocol::MappingMode::Add,
                         modifier_id: "sway".into(),
                         property: MotionProperty::X,
                         effect: None,
@@ -302,6 +303,7 @@ fn v4_graph() -> Graph {
                         amount: None,
                     },
                     MotionModifier {
+                        mode: jstream_protocol::MappingMode::Add,
                         modifier_id: "roll".into(),
                         property: MotionProperty::Rotation,
                         effect: None,
@@ -322,6 +324,7 @@ fn v4_graph() -> Graph {
                 item_id: ItemId::new("i3"),
                 scene_id: Some(SceneId::new("k")),
                 motion: vec![MotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "scroll".into(),
                     property: MotionProperty::CropLeft,
                     effect: None,
@@ -371,6 +374,7 @@ fn v5_graph() -> Graph {
             Edit::SceneSetCameraMotion {
                 scene_id: SceneId::new("a"),
                 motion: vec![CameraMotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "handheld".into(),
                     property: CameraProperty::PositionX,
                     kind: MotionKind::Wiggle {
@@ -642,6 +646,7 @@ fn v12_graph() -> Graph {
         .map(|i| i.motion().to_vec())
         .expect("i4 is in the fixture");
     motion.push(MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "pulse".into(),
         property: MotionProperty::Effect,
         effect: Some(MotionEffect {
@@ -778,6 +783,7 @@ fn v17_graph() -> Graph {
         .map(|i| i.motion().to_vec())
         .expect("i4 is in the fixture");
     motion.push(MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: "glow".into(),
         property: MotionProperty::Source,
         effect: None,
@@ -837,6 +843,8 @@ fn v19_graph() -> Graph {
     let applied = graph.apply(
         &[Edit::BindingSetValue {
             binding: ValueBinding {
+                enabled: true,
+                mode: jstream_protocol::MappingMode::Replace,
                 binding_id: "master_fader".into(),
                 input: MotionKind::Midi {
                     control: MotionMidiControl::Cc,

@@ -243,6 +243,7 @@ pub fn with_added(list: &[MotionModifier]) -> Option<Vec<MotionModifier>> {
         .find(|id| list.iter().all(|m| m.modifier_id != *id))?;
     let mut next = list.to_vec();
     next.push(MotionModifier {
+        mode: jstream_control::protocol::MappingMode::Add,
         modifier_id: id,
         property: MotionProperty::X,
         effect: None,

@@ -5149,6 +5149,7 @@ mod tests {
             item_id: ItemId::new(item),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "drive".into(),
                 property: jstream_protocol::MotionProperty::Source,
                 effect: None,
