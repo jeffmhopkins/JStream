@@ -1125,9 +1125,11 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   - A drop shadow gives its offset plus that span. For its blur, it moves the bound
     into its grown shape frame (`Bound::placed`).
   - A glow gives its radius, the half pixel to its nearest shape pixel's centre and
-    one more pixel, rounded up. Its jump flood runs in the output's frame, and under a
-    bound each pass clears what lies outside it, which holds no seed the flood needs:
-    the steps that carry a seed to a pixel stay in the rectangle between the two.
+    one more pixel, rounded up. Its nearest-seed passes run in the output's frame, and
+    under a bound each pass clears what lies outside it, which holds no seed they need:
+    the bound holds every seed within the reach of a pixel it shades, the two scans
+    read along the row and the column between a pixel and its seed, and the flood's
+    steps that carry a seed to a pixel stay in the rectangle between the two.
 
   Each reach is the kind's whole support, so outside the bound a whole-frame draw is
   transparent too. A kind that opts in joins the test that draws each kind both
@@ -1238,8 +1240,8 @@ adapter (lavapipe has the feature) and checks a built-in one isn't timed.
 
 **The kinds.** Each group documents its kinds here as it lands.
 
-The single-pass pack (V1, `src/filter/pack/`): one draw each, keeping the input's
-size. The colour kinds work on straight sRGB-encoded colour, as OBS does, so OBS's
+The single-pass pack (V1, `src/filter/pack/`): one draw each (sharpen takes a second
+at a radius above 1), keeping the input's size. The colour kinds work on straight sRGB-encoded colour, as OBS does, so OBS's
 numbers carry over; sharpen works on premultiplied encoded colour. Each decodes back to
 premultiplied linear light on the way out.
 
@@ -1258,7 +1260,10 @@ premultiplied linear light on the way out.
   Each key multiplies the input's alpha, so stacked keys only remove more.
 - `sharpen`: an unsharp mask, `amount` (0..4) away from the mean of the
   `(2 radius + 1)²` box, `radius` 1..3 px. It works on premultiplied encoded colour and
-  clamps colour to alpha, so a transparent edge stays clean.
+  clamps colour to alpha, so a transparent edge stays clean. A radius of 1 is one pass
+  of nine taps. A larger one is two, since each tap is decoded and encoded: the mean of
+  each pixel's row of taps into a scratch layer (half floats, which hold it to well
+  under an 8-bit step of the result), then a column of those.
 - `rounded_corners`: `radius` (px, clamped to half the shorter side), `border_width`
   (px) and `border_color` (with alpha). A signed distance antialiases over one pixel;
   outside is transparent; the border sits inside the frame, drawn over the picture.
@@ -1363,7 +1368,7 @@ the input's larger dimension as the output's larger one (1920x1080 stretched to 
 math saturates instead of overflowing, so a size past the adapter's limit fails as
 `TooLarge` when the layer is made. Crop and pad copy input pixels 1:1 with an offset
 (no scaling); only stretch resamples, as bilinear, Catmull-Rom bicubic (4x4 texel loads)
-or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied colour
+or Lanczos-3 (6x6 texel loads, each axis's weights worked out once per pixel), normalised and clamped to a valid premultiplied colour
 (an SDR assumption: values above 1 are clipped).
 The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
@@ -1391,15 +1396,24 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
   (-200 to 200 px, default 8) and `blur` (0 to 100 px, default 8). The input's alpha is
   blurred, tinted, moved and drawn under the input. There is no spread.
 - `outline`: `width` (0 to 64 px, default 4), `color` and `position` (`outside` or
-  `inside`). It uses a jump flood: a seed pass, then steps of S, S/2, ..., 1 and one
-  more step of 1, with S the power of two that reaches width + 1. That is at most 8
-  steps of 9 loads each, in two scratch layers. Coverage is antialiased over one pixel.
+  `inside`). Each pixel's distance to the shape comes from its nearest seed
+  (`multipass/jfa.rs`), found one of two ways by how far it must reach, here width + 1.
+  Up to 17 px it is two passes that find it exactly: the nearest seed along each
+  pixel's row, scanning outward and stopping at the first, then the closest of those
+  over the rows above and below, stopping once the rows are farther than the best. A
+  pass costs about the same whatever it reads until it reads a great deal (about half
+  a millisecond at 1080p on a Radeon 780M), so two passes of a few loads beat a
+  flood's several. Past 17 px it is a jump flood: steps of S, S/2, ..., 1 and one more
+  step of 1, with S the power of two that reaches as far, the first reading the input
+  and marking the seeds as it goes; at most 8 steps of 9 loads each, near-exact.
+  Either way it takes two scratch layers. Coverage is antialiased over one pixel.
   An inside stroke treats the area past the frame as outside the shape.
 - `glow`: `color`, `radius` (0 to 100 px, default 16) and `strength` (0 to 4, default
   1, which multiplies the glow's alpha before it is clamped, so values above 1 widen
   its bright core). Light around an alpha shape, under it, so it needs a transparent
   edge (a logo, text, a keyed camera, or an item's outset, **Bounds** below). It is an
-  even width all round: outline's jump flood, reaching the radius and a half pixel,
+  even width all round: outline's nearest seed, reaching the radius and a half pixel
+  (so the default radius is scanned, and one above 16 flooded),
   gives each pixel its distance `e` past the shape's edge (to its nearest pixel at
   least half opaque, less the half pixel to that pixel's edge), and the glow there is
   `strength × that pixel's alpha × erfc(3e / (radius √2)) / 2`, clamped to 1, and
@@ -1407,8 +1421,7 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
   (sigma radius / 3) gives at `e`, so an edge looks as a blurred glow would, and a
   corner lights as far and as brightly and rounds off, where a blur gives a corner
   about half an edge's light (#1563). A thin stroke glows as brightly as a wide one;
-  a shape less than half opaque has no edge and no glow. That is at most 8 flood steps
-  of 9 loads each, in two scratch layers. Radius 0 or strength 0 copies the input.
+  a shape less than half opaque has no edge and no glow. Radius 0 or strength 0 copies the input.
 - `bloom`: `threshold` (0..1, default 0.7), `intensity` (0 to 4, default 1), `radius`
   (0 to 100 px, default 24) and `tint` (default white). The light that bright parts of
   any picture give off, an opaque camera included: a bright pass keeps what is above
@@ -1888,7 +1901,7 @@ real hardware.
 for the queue, for every built-in kind at its defaults over an opaque picture and over
 a mostly transparent frame of a few shapes (`filter_1080p/<kind>/opaque` and `/shape`),
 for the settings that cost more than a default (`<kind>:<setting>`: the widest blur,
-shadow, glow and outline, the largest sharpen, a Lanczos stretch), and for each
+shadow, glow and outline, an outline of 12 px, the largest sharpen, a Lanczos stretch), and for each
 depth-aware kind over a scene of 16 cards whose view depth is already drawn
 (`scene_filter_1080p/<kind>`, with `volumetric_fog:8_lights` giving the fog eight scene
 lights). `composite.rs`:
