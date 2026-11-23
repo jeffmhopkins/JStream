@@ -776,3 +776,40 @@ fn golden_sky_a_bakes_faces_meet_without_a_seam() {
     }
     assert!(lit > 1_000_000, "the edges show nebulae: {lit}");
 }
+
+/// Bakes are kept for the four seeds drawn last, and let go once no sky has read them
+/// for 900 draws, whether or not the skies drawn since had nebulae.
+#[test]
+fn golden_sky_bakes_are_kept_for_the_seeds_in_use() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let layer = opened.compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let draw = |compositor: &mut Compositor, sky: &SkyDraw<'_>| {
+        compositor.draw_sky(sky, &layer).expect("the sky draws");
+    };
+    for seed in 1..=5 {
+        draw(&mut opened.compositor, &deep(1.0, 1.0, seed));
+    }
+    assert_eq!(opened.compositor.sky_bakes(), 5);
+    assert_eq!(
+        opened.compositor.sky_bakes_kept(),
+        4,
+        "the first was let go"
+    );
+    // The four drawn last are kept, so they bake nothing; the first bakes again.
+    for seed in [5, 4, 3, 2] {
+        draw(&mut opened.compositor, &deep(1.0, 1.0, seed));
+    }
+    assert_eq!(opened.compositor.sky_bakes(), 5);
+    draw(&mut opened.compositor, &deep(1.0, 1.0, 1));
+    assert_eq!(opened.compositor.sky_bakes(), 6);
+    // A sky with no nebulae and no band reads no bake: after 900 draws of it the kept
+    // ones are gone, though it never asked for one.
+    let plain = sky(night(), SceneCamera::framing(canvas()));
+    for _ in 0..900 {
+        draw(&mut opened.compositor, &plain);
+    }
+    assert_eq!(opened.compositor.sky_bakes_kept(), 0);
+    assert_eq!(opened.compositor.sky_bakes(), 6);
+}

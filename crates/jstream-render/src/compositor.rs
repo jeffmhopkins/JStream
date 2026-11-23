@@ -971,6 +971,12 @@ impl Compositor {
         self.sky.as_ref().map_or(0, |sky| sky.baked)
     }
 
+    /// How many seeds' deep skies are kept now (ADR-0174 decision 3).
+    #[cfg(test)]
+    pub(crate) fn sky_bakes_kept(&self) -> usize {
+        self.sky.as_ref().map_or(0, |sky| sky.kept_bakes())
+    }
+
     /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the
     /// picture flat in its box layer, shaded texel by texel where that layer sits in the
     /// scene (its lights, their shadows and its environment, seen from its camera's side)

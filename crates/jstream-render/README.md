@@ -83,7 +83,15 @@ and calls this crate.
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.
   The pipeline is made on the first draw, and the bake's on the first sky with nebulae
   or a band (`golden_sky_the_deep_sky_is_baked_once_per_seed`,
-  `golden_sky_a_bakes_faces_meet_without_a_seam`).
+  `golden_sky_a_bakes_faces_meet_without_a_seam`,
+  `golden_sky_bakes_are_kept_for_the_seeds_in_use`). A pixel looks for a star only
+  within six star widths of where its column can hold one. Which cells of the bright
+  layer hold a star depends on the column and row alone, so a sky with stars first
+  writes that as a table (`fs_stars`, a pass of 281 by 64 `R32Uint` texels: a column
+  across, 32 rows to a texel, a bit a row), and a pixel reads two or three texels and
+  visits only the cells with a star, where a streak at warp would have it hash up to
+  65 cells. The faint layer's streaks are at most 6 cells, and its chance varies with
+  the band a pixel is in, so it still looks at each cell.
 - A **reflection probe's capture**
   ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 3): `Compositor::resample_probe(faces, target)` turns six square faces
@@ -606,9 +614,9 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
-| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per sky drawn (none for a call whose layer already holds the sky) |
+| Sky pipelines (the frame's and the bright stars' table's), sampler, 1x1 stand-in picture, and the star table (281 by 64 `R32Uint`) with its 1x1 stand-in | Compositor, made on its first `draw_sky`; a uniform and one or two bind groups per sky drawn (none for a call whose layer already holds the sky); the table rewritten by each draw of a sky with stars |
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
-| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
+| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
