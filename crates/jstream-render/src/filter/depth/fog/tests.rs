@@ -229,7 +229,7 @@ fn fogged(opened: &mut Opened, items: &[Item<'_>], models: &[ModelDraw<'_>]) -> 
         background: Color::BLACK,
         items,
     };
-    let depth = opened.compositor.layer(W, H).expect("a layer");
+    let depth = opened.compositor.depth_layer(W, H).expect("a layer");
     opened
         .compositor
         .render_view_depth(&scene, &depth)
@@ -321,13 +321,15 @@ fn golden_view_depth_is_empty_without_a_camera() {
         background: Color::BLACK,
         items: &[flat],
     };
-    let depth = opened.compositor.layer(W, H).expect("a layer");
+    let depth = opened.compositor.depth_layer(W, H).expect("a layer");
     opened
         .compositor
         .render_view_depth(&scene, &depth)
         .expect("the view depth draws");
+    // Red, the depth layer's one channel, holds nothing; placed as a picture its alpha
+    // reads 1, as a one-channel texture's does.
     let shot = read(&mut opened, &depth);
-    near(&shot, 80, 50, [0, 0, 0, 0], 0);
+    near(&shot, 80, 50, [0, 0, 0, 255], 0);
 }
 
 /// ADR-0143 decision 4: a model writes its own depth per fragment, nearer than a card
@@ -401,7 +403,7 @@ fn golden_view_depth_takes_the_depth_a_models_layer_carries() {
         probe: None,
     };
     let layer = opened.compositor.layer(W, H).expect("a layer");
-    let own_depth = opened.compositor.layer(W, H).expect("a layer");
+    let own_depth = opened.compositor.depth_layer(W, H).expect("a layer");
     opened
         .compositor
         .draw_model_depth(&draw, &own_depth)

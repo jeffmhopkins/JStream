@@ -134,6 +134,9 @@ struct Material {
 @group(1) @binding(4) var normal_tex: texture_2d<f32>;
 @group(1) @binding(5) var occlusion_tex: texture_2d<f32>;
 @group(1) @binding(6) var emissive_tex: texture_2d<f32>;
+// The sampler of every map but the base colour: less anisotropy, as their detail shapes
+// the light and is lost in it across a grazing surface.
+@group(1) @binding(7) var detail_sampler: sampler;
 // A rigged model's palette (ADR-0151 decision 7): a vertex stands at the weighted sum of
 // its joints' matrices times its position. A model without a rig weighs none of it.
 @group(2) @binding(0) var<storage, read> pose: array<mat4x4<f32>>;
@@ -275,6 +278,19 @@ fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
     return sum / 9.0;
 }
 
+// The scene's sky as a matte surface facing `dir` (in the viewing frame) takes it: one
+// read of the panorama one level above the one `sky` reads its widest ring at, where a
+// filtered texel spans about what that ring's nine reads did together.
+fn sky_matte(dir: vec3<f32>) -> vec3<f32> {
+    let e = frame.environment;
+    if e.ground.w < 0.0 {
+        return sky(dir, 1.0);
+    }
+    let levels = textureNumLevels(sky_tex);
+    let level = blur_level(1.0, f32(textureDimensions(sky_tex).x), levels) + 1.0;
+    return panorama(sky_dir(dir), min(level, f32(levels - 1u)));
+}
+
 // The probe's capture along `d`, a direction in the scene's axes, at mip level
 // `level`: premultiplied, its alpha where the capture saw something.
 fn probe_panorama(d: vec3<f32>, level: f32) -> vec4<f32> {
@@ -334,22 +350,43 @@ fn probe_dir(local: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     return normalize(local + d * t);
 }
 
-// The light a surface at `seen` reflects along `dir`: the probe's capture where it has
-// one (ADR-0170 decision 5), over `env`, the environment's, scaled by the ambient light,
-// where it saw nothing, and `env` alone outside every box.
-fn probed(seen: vec3<f32>, dir: vec3<f32>, roughness: f32, env: vec3<f32>) -> vec3<f32> {
+// What a surface at `seen` reflects along `dir` of its probe (ADR-0170 decision 5).
+struct Probed {
+    // The capture's light along the ray, premultiplied by its alpha.
+    found: vec4<f32>,
+    // How much of the probe the surface takes: 0 outside its box or without one.
+    weight: f32,
+}
+
+fn probe_of(seen: vec3<f32>, dir: vec3<f32>, roughness: f32) -> Probed {
     let p = frame.probe;
     if p.centre.w < 0.5 {
-        return env;
+        return Probed(vec4<f32>(0.0), 0.0);
     }
     let off = seen - p.centre.xyz;
     let local = vec3<f32>(dot(off, p.x.xyz), dot(off, p.y.xyz), dot(off, p.z.xyz));
     let weight = probe_weight(local);
     if weight <= 0.0 {
+        return Probed(vec4<f32>(0.0), 0.0);
+    }
+    return Probed(probe_light(probe_dir(local, dir), roughness * roughness), weight);
+}
+
+// Whether `probe` leaves nothing of the environment's reflection to show: the surface
+// is wholly its probe's and the capture saw something all along the ray, to a thousandth.
+// The environment then need not be read at all.
+fn probe_covers(probe: Probed) -> bool {
+    return probe.weight >= 1.0 && probe.found.a >= 0.999;
+}
+
+// The light a surface reflects: its probe's capture where it has one, over `env`, the
+// environment's, scaled by the ambient light, where it saw nothing, and `env` alone
+// outside every box.
+fn probed(probe: Probed, env: vec3<f32>) -> vec3<f32> {
+    if probe.weight <= 0.0 {
         return env;
     }
-    let found = probe_light(probe_dir(local, dir), roughness * roughness);
-    return mix(env, found.rgb + (1.0 - found.a) * env, weight);
+    return mix(env, probe.found.rgb + (1.0 - probe.found.a) * env, probe.weight);
 }
 
 fn ggx(n_dot_h: f32, alpha: f32) -> f32 {
@@ -442,6 +479,7 @@ fn shadow_texel(s: u32, px: vec2<i32>) -> f32 {
 // the surface by a map pixel's size there, projected into the light's view, and
 // compared with the map over a disc of 12 samples rotated per pixel: a sample is lit
 // when nothing nearer to the light than the point (by a small bias) is stored there.
+// Where the disc's middle and four points of its rim agree, they answer for the disc.
 fn visibility(light: u32, seen: vec3<f32>, n: vec3<f32>, pixel: vec2<f32>) -> f32 {
     for (var s = 0u; s < MAX_SHADOWS; s++) {
         let sh = frame.shadows[s];
@@ -464,6 +502,20 @@ fn visibility(light: u32, seen: vec3<f32>, n: vec3<f32>, pixel: vec2<f32>) -> f3
         let inverse_w = focal / d;
         let spin = fract(52.9829189 * fract(dot(pixel, vec2<f32>(0.06711056, 0.00583715))))
             * 6.2831853;
+        // Five samples first, the middle and four on the rim: where they agree the point
+        // is far from a shadow's edge, and the other samples would say the same.
+        var first = 0.0;
+        for (var k = 0u; k < 5u; k++) {
+            let angle = f32(k) * 1.5707963 + spin;
+            let r = select(sh.forward.w, 0.0, k == 4u);
+            let tap = at + vec2<f32>(cos(angle), sin(angle)) * r;
+            if shadow_texel(s, vec2<i32>(floor(tap))) <= inverse_w * 1.002 {
+                first += 1.0;
+            }
+        }
+        if first == 0.0 || first == 5.0 {
+            return first / 5.0;
+        }
         var lit = 0.0;
         for (var k = 0u; k < 12u; k++) {
             let r = sqrt((f32(k) + 0.5) / 12.0) * sh.forward.w;
@@ -534,7 +586,7 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
     } else if mode < 0.5 {
         base.a = 1.0;
     }
-    var emitted = material.emissive.rgb * textureSample(emissive_tex, tex_sampler, in.uv).rgb;
+    var emitted = material.emissive.rgb * textureSample(emissive_tex, detail_sampler, in.uv).rgb;
     if card {
         emitted = material.emissive.rgb * base.rgb;
     }
@@ -542,7 +594,7 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
     if frame.params.z > 0.5 || material.flags.w > 0.5 {
         color = base.rgb + emitted;
     } else {
-        let surface = textureSample(surface_tex, tex_sampler, in.uv);
+        let surface = textureSample(surface_tex, detail_sampler, in.uv);
         let metallic = clamp(material.surface.x * surface.b, 0.0, 1.0);
         let roughness = clamp(material.surface.y * surface.g, 0.03, 1.0);
         var n = normalize(in.normal);
@@ -561,7 +613,7 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
             // n and t turned over together leave it as it was. The raw front_facing is
             // false with either one alone and true with both, so its sign covers them.
             let b = cross(n, t) * in.tangent.w * select(-1.0, 1.0, front_facing);
-            var m = textureSample(normal_tex, tex_sampler, in.uv).xyz * 2.0 - vec3<f32>(1.0);
+            var m = textureSample(normal_tex, detail_sampler, in.uv).xyz * 2.0 - vec3<f32>(1.0);
             m = vec3<f32>(m.xy * material.surface.z, m.z);
             // The scene's y is down, glTF's normal maps are y-up in texture space: the
             // texture's v runs down, so its green, which points up the texture, is -b.
@@ -604,14 +656,20 @@ fn shade(in: VsOut, front_facing: bool) -> Shaded {
             if frame.environment.right.w < 0.5 {
                 ambient = vec3<f32>(1.0);
             }
-            lit += ambient * diffuse * sky(n, 1.0);
-            reflected = probed(in.seen, blurred, roughness, ambient * sky(blurred, roughness * roughness)) * brdf;
+            lit += ambient * diffuse * sky_matte(n);
+            let probe = probe_of(in.seen, blurred, roughness);
+            var env = vec3<f32>(0.0);
+            if !probe_covers(probe) {
+                env = ambient * sky(blurred, roughness * roughness);
+            }
+            reflected = probed(probe, env) * brdf;
         } else {
             lit += ambient * diffuse * environment(n);
-            reflected = probed(in.seen, blurred, roughness, ambient * environment(blurred)) * brdf;
+            let probe = probe_of(in.seen, blurred, roughness);
+            reflected = probed(probe, ambient * environment(blurred)) * brdf;
         }
         lit += reflected;
-        let occlusion = mix(1.0, textureSample(occlusion_tex, tex_sampler, in.uv).r, material.surface.w);
+        let occlusion = mix(1.0, textureSample(occlusion_tex, detail_sampler, in.uv).r, material.surface.w);
         color = lit * occlusion + emitted;
         out.n = n;
         out.roughness = roughness;

@@ -32,6 +32,11 @@ pub(crate) const UPLOAD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba1
 /// premultiplied linear light, the same as an upload.
 pub(crate) const LAYER_FORMAT: wgpu::TextureFormat = UPLOAD_FORMAT;
 
+/// The format of a depth layer: one channel, red, holding `1 / w` as a half
+/// float, the same bits a colour layer's red held. It blends, so the larger value wins,
+/// and it can be sampled as any float texture; green and blue read 0 and alpha 1.
+pub(crate) const DEPTH_LAYER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+
 /// How the composite shader reads an image's samples.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Alpha {
@@ -360,9 +365,22 @@ impl Image {
         alpha != Alpha::Premultiplied && self.alpha == alpha
     }
 
-    /// The view a layer is drawn into; `None` unless the image is a layer.
+    /// The view a layer is drawn into; `None` unless the image is a colour layer
+    /// ([`layer`]). A depth layer has none here, so nothing draws colour into one.
     pub(crate) fn target(&self) -> Option<&wgpu::TextureView> {
-        self.target.as_ref()
+        self.target.as_ref().filter(|_| !self.is_depth_layer())
+    }
+
+    /// The view a depth layer is drawn into; `None` unless the image is one
+    /// ([`depth_layer`]).
+    pub(crate) fn depth_target(&self) -> Option<&wgpu::TextureView> {
+        self.target.as_ref().filter(|_| self.is_depth_layer())
+    }
+
+    /// Whether this is a depth layer ([`crate::Compositor::depth_layer`]): one channel
+    /// holding `1 / w`, which only the depth draws write.
+    pub fn is_depth_layer(&self) -> bool {
+        self.target.is_some() && self.texture.format() == DEPTH_LAYER_FORMAT
     }
 
     /// Whether this is an upload, which [`rewrite`] can refill in place.
@@ -414,6 +432,16 @@ pub(crate) fn upload_frame(maker: &Maker<'_>, frame: &VideoFrame) -> Result<Imag
     let planes = Planes::opaque(frame)?;
     let to = (planes.width(), planes.height());
     upload_planes(maker, &planes, to)
+}
+
+/// [`upload_frame`] into a texture of `to` texels, the frame's size or smaller each way,
+/// as [`upload_into`] holds one. The image is placed at the frame's size.
+pub(crate) fn upload_frame_into(
+    maker: &Maker<'_>,
+    frame: &VideoFrame,
+    to: (u32, u32),
+) -> Result<Image, RenderError> {
+    upload_planes(maker, &Planes::opaque(frame)?, to)
 }
 
 fn upload_planes(
@@ -674,6 +702,26 @@ pub(crate) fn import_frame(maker: &Maker<'_>, frame: &GpuFrame) -> Result<Image,
 /// A new layer: a texture [`crate::Compositor::render_into`] composites into, placed as
 /// an image. Its contents are undefined until the first composite.
 pub(crate) fn layer(maker: &Maker<'_>, width: u32, height: u32) -> Result<Image, RenderError> {
+    layer_of(maker, width, height, LAYER_FORMAT)
+}
+
+/// A new depth layer: a one-channel texture
+/// [`crate::Compositor::render_view_depth`] and [`crate::Compositor::draw_model_depth`]
+/// draw `1 / w` into, read as any image. Its contents are undefined until the first draw.
+pub(crate) fn depth_layer(
+    maker: &Maker<'_>,
+    width: u32,
+    height: u32,
+) -> Result<Image, RenderError> {
+    layer_of(maker, width, height, DEPTH_LAYER_FORMAT)
+}
+
+fn layer_of(
+    maker: &Maker<'_>,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+) -> Result<Image, RenderError> {
     if width == 0 || height == 0 {
         return Err(RenderError::Invalid {
             what: "layer",
@@ -682,12 +730,16 @@ pub(crate) fn layer(maker: &Maker<'_>, width: u32, height: u32) -> Result<Image,
     }
     check_dimension(maker.gpu, width, height)?;
     let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("jstream-render-layer"),
+        label: Some(if format == DEPTH_LAYER_FORMAT {
+            "jstream-render-depth-layer"
+        } else {
+            "jstream-render-layer"
+        }),
         size: extent(width, height),
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: LAYER_FORMAT,
+        format,
         // `COPY_SRC` for a blend mode that reads what is below the item (ADR-0082).
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::TEXTURE_BINDING

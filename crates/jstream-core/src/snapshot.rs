@@ -580,6 +580,24 @@ impl Boxed {
         })
     }
 
+    /// The size in pixels of the layer the item is drawn into: `layer`, or for a model
+    /// `percent` of its width and of its height, rounded up (ADR-0197). Such a layer
+    /// still stands for the whole canvas and is placed over it ([`Self::extent`]).
+    fn pixels(&self, percent: u32) -> [u32; 2] {
+        if !self.model || percent >= 100 {
+            return self.layer;
+        }
+        let percent = u64::from(percent.max(1));
+        self.layer
+            .map(|px| (u64::from(px) * percent).div_ceil(100).max(1) as u32)
+    }
+
+    /// The size the layer is placed at, which its pixels are sampled across
+    /// ([`jstream_render::Image::set_extent`]).
+    fn extent(&self) -> Option<FrameSize> {
+        FrameSize::new(self.layer[0], self.layer[1]).ok()
+    }
+
     /// The box `placement` puts an item cropped by `crop` in: its geometry, or a legacy
     /// transform's equivalent over the image's size. `None` when that isn't known or the
     /// placement draws nothing.
@@ -734,6 +752,11 @@ pub(crate) struct Shot {
     /// The light items each scene places, bottom first (ADR-0143), whether it was copied
     /// whole or planned as a transition's end. A scene placing none isn't here.
     lights: BTreeMap<SceneId, Vec<Lit>>,
+    /// The arrival pictures of each environment light with some (ADR-0188), by its
+    /// source: what each visible item of its `sky_pictures` scene shows, bottom first,
+    /// one arrival each: a picture, or the pictures of a nested scene, whose frames are
+    /// in [`Self::frames`].
+    pub(crate) sky_pictures: BTreeMap<SourceId, Vec<Vec<SkyPart>>>,
     /// The reflection probe items each copied scene places (ADR-0170 decision 3), in
     /// stacking order, as [`Self::lights`] holds its lights.
     probes: BTreeMap<SceneId, Vec<Lit>>,
@@ -1083,6 +1106,19 @@ impl Transitioning {
     }
 }
 
+/// One picture of an arrival (ADR-0188, ADR-0198): what its item shows, how wide and where.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SkyPart {
+    /// The source whose frame it shows.
+    pub(crate) source: SourceId,
+    /// How much its item scales `sky_picture_deg`: its box's width over the canvas's, or
+    /// a legacy transform's horizontal scale ([`picture_scale`]).
+    pub(crate) scale: f32,
+    /// Its turn (to the right) and tilt (up) from the arrival's first picture, in
+    /// degrees: its item's; 0 for the first.
+    pub(crate) offset_deg: [f32; 2],
+}
+
 impl Default for Shot {
     /// No scene: the primary display's capture fills the output.
     fn default() -> Self {
@@ -1092,6 +1128,7 @@ impl Default for Shot {
             program: None,
             scenes: BTreeMap::new(),
             lights: BTreeMap::new(),
+            sky_pictures: BTreeMap::new(),
             probes: BTreeMap::new(),
             reflective: BTreeSet::new(),
             backgrounds: BTreeMap::new(),
@@ -3573,18 +3610,98 @@ impl<'a> Planner<'a, '_> {
         let SourceRef::Frame(id) = source else {
             return;
         };
-        let Some(image) = out
+        let Some(sky) = out
             .frames
             .get(id)
             .and_then(|frame| frame.light.as_ref())
             .and_then(|light| light.environment.as_ref())
-            .and_then(|sky| sky.image.clone())
         else {
             return;
         };
-        if &image != id {
+        let (image, pictures) = (sky.image.clone(), sky.sky_pictures.clone());
+        if let Some(image) = image
+            && &image != id
+        {
             self.look(&image, out);
         }
+        // Its arrival pictures (ADR-0188): what each visible item of their scene shows,
+        // once per shot, though no item places them.
+        if let Some(scene) = pictures
+            && !out.sky_pictures.contains_key(id)
+        {
+            let mut shown = Vec::new();
+            for item in self.items_of(&scene) {
+                if !item.visible() || item.source_id() == id {
+                    continue;
+                }
+                let state = self.state;
+                // A nested scene is one arrival of several pictures (ADR-0198): its first is the
+                // one ahead, and the others are placed by their turn and tilt from it.
+                let parts = match state.source(item.source_id()).map(Source::kind) {
+                    Some(SourceKind::Scene { scene_id }) if scene_id != &scene => {
+                        let mut parts = Vec::new();
+                        for inner in self.items_of(scene_id) {
+                            if parts.len() == jstream_render::MAX_SKY_PICTURES {
+                                break;
+                            }
+                            if inner.visible()
+                                && inner.source_id() != id
+                                && let Some(part) = self.sky_part(inner.as_ref(), out)
+                            {
+                                parts.push(part);
+                            }
+                        }
+                        if let Some(main) = parts.first_mut() {
+                            main.offset_deg = [0.0; 2];
+                        }
+                        parts
+                    }
+                    _ => self
+                        .sky_part(item.as_ref(), out)
+                        .map(|part| SkyPart {
+                            offset_deg: [0.0; 2],
+                            ..part
+                        })
+                        .into_iter()
+                        .collect(),
+                };
+                if !parts.is_empty() {
+                    shown.push(parts);
+                }
+            }
+            out.sky_pictures.insert(id.clone(), shown);
+        }
+    }
+
+    /// What arrival picture item `item` shows (ADR-0188, ADR-0198): its frame, uploaded though no
+    /// item places it, with its width and its turn and tilt; `None` for an item showing
+    /// a light, a model, a probe, a scene or a capture.
+    fn sky_part(&mut self, item: &GraphItem, out: &mut Shot) -> Option<SkyPart> {
+        let state = self.state;
+        if state
+            .source(item.source_id())
+            .is_some_and(|source| matches!(source.kind(), SourceKind::Scene { .. }))
+        {
+            return None;
+        }
+        let Some(SourceRef::Frame(picture)) = self.look(item.source_id(), out) else {
+            return None;
+        };
+        out.frames
+            .get(&picture)
+            .is_some_and(|frame| {
+                frame.light.is_none() && frame.model.is_none() && frame.probe.is_none()
+            })
+            .then(|| SkyPart {
+                scale: picture_scale(item.placement(), out.canvas),
+                offset_deg: match item.placement() {
+                    GraphPlacement::Geometry(geometry) => {
+                        [geometry.turn_deg.get(), geometry.tilt_deg.get()]
+                    }
+                    _ => [0.0; 2],
+                },
+                source: picture,
+            })
     }
 
     /// What a model `image` shows on its surfaces and reflects, when it names other
@@ -3769,6 +3886,9 @@ pub(crate) enum GpuKey {
     /// and placed under its items. The compositor draws into it only when the sky asked
     /// for differs from the one it holds.
     Sky(SceneId),
+    /// The sky a 3D scene's backdrop cross-fades from as a warp aimed ahead starts
+    /// (ADR-0187), drawn under its [`GpuKey::Sky`] while it fades.
+    SkyLeaving(SceneId),
     /// A reflection probe's capture (ADR-0170 decision 3): its scene seen from its
     /// box's centre, as a panorama four faces wide and two high, kept between captures.
     ProbeMap(SceneId, ItemId),
@@ -4129,6 +4249,41 @@ impl Shot {
     /// ([`ResourceCache::upload_drawn`], #1139).
     fn drawn_only(&self, key: &GpuKey, frame: &Frame) -> bool {
         frame.model.is_none() && !self.chains.values().any(|chain| chain.input == *key)
+    }
+
+    /// How much of the resolution of `spec`'s capture, whose frames are `size`, its
+    /// placements need: how much it is enlarged where it is shown most, over every pass,
+    /// the program's and the video mixes', and every item whose effects draw it, as
+    /// [`Self::scales`] measures a source's frame (0 when none places it). Its upload is
+    /// held at the size its items draw it with that as the planned need
+    /// ([`ResourceCache::upload_frame_drawn`], #1139). `None` when something reads its
+    /// texels as they are, so it is uploaded whole: a video chain, whose filters work in
+    /// the frame's own texels, or a model that shows it on a surface or reflects it.
+    fn capture_need(&self, spec: &CaptureKey, size: FrameSize) -> Option<f32> {
+        let key = GpuKey::Capture(spec.clone());
+        let mapped = self
+            .maps
+            .values()
+            .flat_map(|maps| [&maps.texture, &maps.reflection])
+            .flatten()
+            .any(|map| matches!(map, SourceRef::Capture(shown) if shown == spec));
+        if mapped || self.chains.values().any(|chain| chain.input == key) {
+            return None;
+        }
+        let extent = [size.width(), size.height()];
+        let layers = self
+            .passes
+            .iter()
+            .chain(self.mix_passes.values().flatten())
+            .flat_map(|pass| &pass.layers)
+            .filter(|layer| layer.image == key)
+            .map(|layer| magnification(layer.placement, layer.crop, extent));
+        let boxes = self
+            .boxes
+            .values()
+            .filter(|boxed| matches!(&boxed.source, SourceRef::Capture(shown) if shown == spec))
+            .map(|boxed| magnification(boxed.placement, boxed.crop, extent));
+        Some(layers.chain(boxes).fold(0.0, f32::max))
     }
 
     /// How much each source whose frame a layer draws is enlarged where it is shown
@@ -5989,10 +6144,19 @@ pub(crate) fn compose_metered(
     chains.cameras().sweep(at);
     let uploads = Instant::now();
     let mut planned = None;
+    // The arrival pictures shown now (ADR-0188): only theirs light a scene, so only
+    // theirs are averaged.
+    let arriving = shown_arrivals(shot, chains);
+    chains
+        .picture_means
+        .retain(|source, _| arriving.contains(source));
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
         };
+        if arriving.contains(source) {
+            note_picture_mean(chains, (source, frame), view.program);
+        }
         let started = Instant::now();
         meter.gpu_unit_upload(compositor, source);
         match &frame.pixels {
@@ -6110,9 +6274,15 @@ pub(crate) fn compose_metered(
                 size.height(),
                 rgba,
             )?,
-            CaptureImage::Cpu(frame) => {
-                cache.upload_frame(compositor, &key, capture.version, frame)?
-            }
+            // Held at the size its items draw it, unless something reads its texels as
+            // they are (#1139): a webcam shown small is converted straight into the
+            // texels it is drawn with.
+            CaptureImage::Cpu(frame) => match shot.capture_need(spec, frame.info().size) {
+                Some(planned) => {
+                    cache.upload_frame_drawn(compositor, &key, capture.version, frame, planned)?
+                }
+                None => cache.upload_frame(compositor, &key, capture.version, frame)?,
+            },
             // Opaque, as the CPU path ignores a capture's alpha (#451).
             CaptureImage::Gpu(frame) => cache.import_opaque(compositor, &key, frame)?,
         };
@@ -6166,8 +6336,11 @@ pub(crate) fn compose_metered(
                 let items: Vec<Item<'_>> = image
                     .into_iter()
                     .map(|image| {
-                        let sx = canvas.width() as f32 * scale / image.width() as f32;
-                        let sy = canvas.height() as f32 * scale / image.height() as f32;
+                        // By its extent, the size it is placed at: its texture is
+                        // smaller when its upload is held at the size it is drawn.
+                        let (width, height) = image.extent();
+                        let sx = canvas.width() as f32 * scale / width as f32;
+                        let sy = canvas.height() as f32 * scale / height as f32;
                         Item {
                             image,
                             placement: Placement::Legacy(LegacyTransform {
@@ -6486,7 +6659,7 @@ fn run_chains(
                 meter.gpu_unit_pass(compositor, &pass.scene);
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 if let Some(depth) = &pass.view_depth {
-                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                    cache.depth_layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
                 if pass.surface {
                     for key in surface_keys(&pass.scene) {
@@ -6659,9 +6832,13 @@ fn draw_box(
         return Ok(());
     };
     let key = GpuKey::ItemBox(scene_id.clone(), item_id.clone());
-    let [width, height] = boxed.boxed.layer;
+    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
     cache.layer(compositor, &key, width, height)?;
     if boxed.boxed.model {
+        // Its layer stands for the canvas, however many pixels it has (ADR-0197).
+        if let Some(extent) = boxed.boxed.extent() {
+            cache.set_extent(&key, extent);
+        }
         return draw_model(
             compositor,
             (cache, chains),
@@ -6969,8 +7146,11 @@ fn draw_model(
     let depth_key = match (owner, camera) {
         (ChainOwner::Item(scene, item), Some(_)) => {
             let key = GpuKey::ModelDepth(scene.clone(), item.clone());
-            let [width, height] = boxed.boxed.layer;
-            cache.layer(compositor, &key, width, height)?;
+            let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
+            cache.depth_layer(compositor, &key, width, height)?;
+            if let Some(extent) = boxed.boxed.extent() {
+                cache.set_extent(&key, extent);
+            }
             Some(key)
         }
         _ => None,
@@ -6990,9 +7170,12 @@ fn draw_model(
                     .is_some_and(Chain::reads_surface) =>
         {
             let keys = model_surface_keys(scene, item);
-            let [width, height] = boxed.boxed.layer;
+            let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
             for key in &keys {
                 cache.layer(compositor, key, width, height)?;
+                if let Some(extent) = boxed.boxed.extent() {
+                    cache.set_extent(key, extent);
+                }
             }
             Some(keys)
         }
@@ -7084,7 +7267,7 @@ fn draw_model(
     }
 }
 
-/// Makes `layer` transparent all over.
+/// Makes `layer` transparent all over; a depth layer holds nothing (infinitely far).
 ///
 /// # Errors
 /// What the compositor reports for the pass.
@@ -7094,7 +7277,12 @@ fn clear(compositor: &mut Compositor, layer: &jstream_render::Image) -> Result<(
         what: "layer",
         detail: format!("a layer of {width}x{height}"),
     })?;
-    compositor.render_into(&scene(size, Color::TRANSPARENT, &[]), layer)
+    let empty = scene(size, Color::TRANSPARENT, &[]);
+    if layer.is_depth_layer() {
+        compositor.render_view_depth(&empty, layer)
+    } else {
+        compositor.render_into(&empty, layer)
+    }
 }
 
 /// What model `source`, as `shown`, shows on its surfaces and reflects this frame
@@ -7148,6 +7336,9 @@ fn light_scene(
         live,
         (&mut lights, &mut shadowed),
     );
+    if let Some(light) = arrival_light((shot, &*cache, &*chains), scene_id, at, live) {
+        lights.push(light);
+    }
     let shading = lights
         .iter()
         .filter(|light| light.kind != jstream_render::LightKind::Ambient)
@@ -7164,6 +7355,9 @@ fn light_scene(
         );
     }
     if receives && !shadowed.is_empty() && chains.shadows_of(scene_id).is_none() {
+        // The first model drawn draws the maps of every model that casts, so the
+        // models drawn after it this frame are made ready for that first.
+        ready_casting_models(compositor, (&mut *cache, &mut *chains), shot, scene_id);
         let maps = draw_shadows(
             compositor,
             (&mut *cache, &mut *chains),
@@ -7179,6 +7373,58 @@ fn light_scene(
         chains.drew_shadows(scene_id, maps);
     }
     (lights, shadowed)
+}
+
+/// Makes ready, for the shadow maps the first model drawn in scene `scene_id` draws
+/// this frame (ADR-0151 decision 3), every model the scene's pass shows: its upload
+/// ([`Chains::upload_model`]) and its layer, which [`depth_models`] reads its
+/// placement through. Without this a model drawn later in the frame, or not drawn
+/// before, casts no shadow in that frame: the first frame of a scene with two models
+/// would be lit as if only the first one drawn were there. An upload that fails or is
+/// still coming leaves its model out, as its own draw reports.
+fn ready_casting_models(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    shot: &Shot,
+    scene_id: &SceneId,
+) {
+    let Some(pass) = scene_pass(shot, scene_id) else {
+        return;
+    };
+    for layer in &pass.layers {
+        if !layer.boxed.is_some_and(|boxed| boxed.model) {
+            continue;
+        }
+        let GpuKey::ItemBox(scene, item) = &layer.image else {
+            continue;
+        };
+        let Some(boxed) = shot
+            .boxes
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))
+        else {
+            continue;
+        };
+        let SourceRef::Frame(source) = &boxed.source else {
+            continue;
+        };
+        let Some(shown) = shot
+            .frames
+            .get(source)
+            .and_then(|frame| frame.model.as_ref())
+        else {
+            continue;
+        };
+        if chains
+            .upload_model(compositor, source, &shown.model)
+            .is_err()
+        {
+            continue;
+        }
+        let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
+        if let Err(error) = cache.layer(compositor, &layer.image, width, height) {
+            tracing::debug!(%scene, %item, %error, "a model's layer isn't ready for the shadow maps");
+        }
+    }
 }
 
 /// The shadow maps drawn for scene `scene_id` this run, as a receiver reads them.
@@ -7211,7 +7457,7 @@ fn scene_sky<'c>(
     at: MediaTime,
     live: &LiveParams,
 ) -> Option<jstream_render::Environment<'c>> {
-    let (environment, skies) = scene_environment((shot, cache), scene_id, at, live);
+    let (environment, skies) = scene_environment((shot, cache, chains), scene_id, at, live);
     if skies > 1
         && !chains.environments_warned.contains(scene_id)
         && chains.environments_warned.insert(scene_id.clone())
@@ -7314,7 +7560,7 @@ fn draw_shadows(
         .map(|slot| GpuKey::ShadowMap(scene_id.clone(), slot as u8))
         .collect();
     for key in &keys {
-        cache.layer(compositor, key, side, side)?;
+        cache.depth_layer(compositor, key, side, side)?;
     }
     let mut items = Vec::new();
     let Some(camera) = fill_items(
@@ -7502,7 +7748,7 @@ fn draw_reflection(
     let image_key = GpuKey::Reflection(pass.scene.clone());
     let depth_key = GpuKey::ReflectionDepth(pass.scene.clone());
     cache.layer(compositor, &image_key, width, height)?;
-    cache.layer(compositor, &depth_key, width, height)?;
+    cache.depth_layer(compositor, &depth_key, width, height)?;
     // Each model the pass shows, drawn through the mirrored camera, by the layer the
     // pass places for it.
     let size = [width as f32, height as f32];
@@ -7528,7 +7774,7 @@ fn draw_reflection(
                 lighting: shown.shown.lighting,
                 lights: (shown.shown.lighting == Lighting::Scene).then_some(lights),
                 shadows: &[],
-                environment: scene_environment((shot, &*cache), &pass.scene, at, live).0,
+                environment: scene_environment((shot, &*cache, chains), &pass.scene, at, live).0,
                 // Only what stands above the floor is reflected in it.
                 floor: Some(floor),
                 materials: &drives[..driving],
@@ -7819,8 +8065,11 @@ fn scene_lights(
 /// turn, tilt and rotation,
 /// with its picture when that source's frame was uploaded this frame. Also how many
 /// environment lights the scene places, so a caller can log the ones that don't count.
+///
+/// A backdrop whose warp is aimed ahead lights the scene as it is drawn (ADR-0187): laid
+/// out around the travel, as its sky's state last stepped.
 fn scene_environment<'c>(
-    (shot, cache): (&Shot, &'c ResourceCache<GpuKey>),
+    (shot, cache, chains): (&Shot, &'c ResourceCache<GpuKey>, &Chains),
     id: &SceneId,
     at: MediaTime,
     live: &LiveParams,
@@ -7829,8 +8078,24 @@ fn scene_environment<'c>(
     let found = first.map(|(placed, light, sky)| {
         let (environment, _, opacity) =
             environment_at((shot, cache), (placed, light, sky), at, live);
+        let [turn_deg, tilt_deg, roll_deg] = chains
+            .skies
+            .borrow()
+            .get(id)
+            .filter(|_| sky.backdrop)
+            .map_or(
+                [
+                    environment.turn_deg,
+                    environment.tilt_deg,
+                    environment.roll_deg,
+                ],
+                |state| state.angles(warp_aiming(&environment, sky)),
+            );
         jstream_render::Environment {
             intensity: environment.intensity * opacity,
+            turn_deg,
+            tilt_deg,
+            roll_deg,
             ..environment
         }
     });
@@ -7990,47 +8255,335 @@ fn draw_sky_of(
     };
     let key = GpuKey::Sky(scene.clone());
     cache.layer(compositor, &key, canvas.width(), canvas.height())?;
-    let cache = &*cache;
-    let Some(target) = cache.get(&key) else {
-        return Ok(());
-    };
-    let (environment, look, opacity) =
-        environment_at((shot, cache), (placed, light, sky), at, live);
-    let travel = {
+    // The sky steps once a frame, before its layers are drawn.
+    let state = {
+        let (environment, look, _) =
+            environment_at((shot, &*cache), (placed, light, sky), at, live);
         let mut skies = chains.skies.borrow_mut();
         let state = skies.entry(scene.clone()).or_default();
         state.step(
             cache.frame(),
             at.as_secs_f64(),
             (look.warp, sky.warp_ramp_s),
+            warp_aiming(&environment, sky),
+            (sky_pictures(shot, placed).len(), sky.sky_seed),
         );
-        (state.warp, state.travel, state.dropping)
+        *state
     };
-    let (warp, travel, dropping) = travel;
+    // A warp aimed ahead that has just started cross-fades from the sky laid out before
+    // it, still, drawn under this one (ADR-0187).
+    let leaving_key = GpuKey::SkyLeaving(scene.clone());
+    if state.leaving.is_some() {
+        cache.layer(compositor, &leaving_key, canvas.width(), canvas.height())?;
+    }
+    let cache = &*cache;
+    let Some(target) = cache.get(&key) else {
+        return Ok(());
+    };
+    let (environment, look, opacity) =
+        environment_at((shot, cache), (placed, light, sky), at, live);
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
+    // Its arrival's pictures (ADR-0188, ADR-0198), where their frames were uploaded this frame.
+    let pinned = |arrival: Option<crate::chain::Arrival>| {
+        let mut pictures = [None; jstream_render::MAX_SKY_PICTURES];
+        let parts =
+            arrival.and_then(|arrival| Some((arrival, arrival_parts(shot, placed, arrival)?)));
+        if let Some((arrival, parts)) = parts {
+            for (slot, part) in pictures.iter_mut().zip(parts) {
+                *slot = cache.get(&GpuKey::Frame(part.source.clone())).map(|image| {
+                    jstream_render::SkyPicture {
+                        image,
+                        direction: part_direction(arrival.direction, part.offset_deg)
+                            .map(|v| v as f32),
+                        width_deg: (sky.sky_picture_deg * part.scale).clamp(1.0, 120.0),
+                        opacity: 1.0,
+                    }
+                });
+            }
+        }
+        pictures
+    };
+    let draw =
+        |[turn_deg, tilt_deg, roll_deg]: [f32; 3], (opacity, warp, travel, dropping), arrival| {
+            jstream_render::SkyDraw {
+                environment: jstream_render::Environment {
+                    turn_deg,
+                    tilt_deg,
+                    roll_deg,
+                    ..environment
+                },
+                camera,
+                stars: look.stars,
+                star_brightness: look.star_brightness,
+                opacity,
+                deep: jstream_render::DeepSky {
+                    nebula: look.nebula,
+                    nebula_colors: look.nebula_colors.map(colour),
+                    galaxy: look.galaxy,
+                    seed: sky.sky_seed,
+                },
+                warp,
+                travel,
+                dropping,
+                pictures: pinned(arrival),
+            }
+        };
+    // The new sky shows at `shown * faded`, over the leaving one; drawing the leaving one
+    // at `shown * (1 - faded) / (1 - shown * faded)` makes them `shown * faded` of the new
+    // and `shown * (1 - faded)` of the old, `shown` in all, whatever the backdrop's
+    // opacity, so nothing pops when the leaving sky is dropped.
+    let shown = opacity * fade;
+    let faded = state.faded_in(at.as_secs_f64());
+    let mut left = None;
+    if let (Some(leaving), Some(under)) = (state.leaving, cache.get(&leaving_key)) {
+        let behind = shown * faded;
+        let under_opacity = if behind < 1.0 {
+            (shown * (1.0 - faded) / (1.0 - behind)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        compositor.draw_sky(
+            &draw(
+                leaving.angles,
+                (under_opacity, 0.0, leaving.travel, 0.0),
+                leaving.arrival,
+            ),
+            under,
+        )?;
+        left = Some(cache.frame());
+    }
     compositor.draw_sky(
-        &jstream_render::SkyDraw {
-            environment,
-            camera,
-            stars: look.stars,
-            star_brightness: look.star_brightness,
-            opacity: opacity * fade,
-            deep: jstream_render::DeepSky {
-                nebula: look.nebula,
-                nebula_colors: look.nebula_colors.map(colour),
-                galaxy: look.galaxy,
-                seed: sky.sky_seed,
-            },
-            warp,
-            travel,
-            dropping,
-        },
+        &draw(
+            state.angles(warp_aiming(&environment, sky)),
+            (shown * faded, state.warp, state.travel, state.dropping),
+            state.arrival,
+        ),
         target,
     )?;
     if let Some(state) = chains.skies.borrow_mut().get_mut(scene) {
         state.drawn = Some(cache.frame());
+        state.left = left;
     }
     Ok(())
+}
+
+/// The light scene `scene_id`'s arrival picture shines into it at `at` (ADR-0188): a
+/// directional light from where its backdrop shows the picture, in the picture's average
+/// colour, at the environment light's intensity times its item's opacity times its
+/// `sky_picture_light`, fading as the picture does at warp. `None` while it shows none.
+pub(crate) fn arrival_light(
+    (shot, cache, chains): (&Shot, &ResourceCache<GpuKey>, &Chains),
+    scene_id: &SceneId,
+    at: MediaTime,
+    live: &LiveParams,
+) -> Option<jstream_render::SceneLight> {
+    let (placed, light, sky) = first_environment(shot, scene_id).0?;
+    if !sky.backdrop || sky.sky_picture_light <= 0.0 {
+        return None;
+    }
+    let state = chains.skies.borrow().get(scene_id).copied()?;
+    let arrival = state.arrival?;
+    // The arrival lights the scene from its last picture: a sun over a planet
+    // (ADR-0198).
+    let part = arrival_parts(shot, placed, arrival)?.last()?;
+    let source = &part.source;
+    let (environment, look, opacity) =
+        environment_at((shot, cache), (placed, light, sky), at, live);
+    let shown = crate::chain::deep_shown(state.warp, state.dropping);
+    let intensity = look.intensity * opacity * sky.sky_picture_light * shown;
+    if intensity <= 0.0 {
+        return None;
+    }
+    // Where the backdrop shows it, in the scene; the light shines from there.
+    let rotation = crate::warp_aim::from_angles(state.angles(warp_aiming(&environment, sky)));
+    let d = part_direction(arrival.direction, part.offset_deg);
+    let from = [0, 1, 2].map(|r| (0..3).map(|k| rotation[r][k] * d[k]).sum::<f64>());
+    // Its colour is taken in the frame after it is picked, while it is still faint.
+    let [r, g, b] = chains.picture_means.get(source)?.1;
+    Some(jstream_render::SceneLight {
+        kind: jstream_render::LightKind::Directional,
+        position: [0.0; 3],
+        aim: from.map(|v| -v),
+        color: Color { r, g, b, a: 1.0 },
+        intensity,
+        range_px: 0.0,
+        cone_deg: 45.0,
+        softness: 0.0,
+    })
+}
+
+/// Takes the average colour of arrival picture `source`'s `frame` (ADR-0188), once per
+/// version, for the light it shines: the colour of its opaque parts, straight sRGB. A
+/// frame whose pixels aren't at hand here (a texture, or a still the program stage
+/// holds none of now) shines white, and a still asks for its pixels again so a later
+/// frame takes it.
+fn note_picture_mean(chains: &mut Chains, (source, frame): (&SourceId, &Frame), program: bool) {
+    if chains
+        .picture_means
+        .get(source)
+        .is_some_and(|(version, _)| *version == frame.version)
+    {
+        return;
+    }
+    let mean = match &frame.pixels {
+        Pixels::Copied(_) | Pixels::Video(_) => mean_rgb(frame.rgba()),
+        Pixels::Slot(slot) => mean_rgb(slot.latest().rgba()),
+        Pixels::Still(still) => {
+            match if program { still.held() } else { still.read() } {
+                Some(pixels) => mean_rgb(crate::slot::rgba(&pixels)),
+                None => {
+                    still.want();
+                    // Asked for again; white until then.
+                    chains
+                        .picture_means
+                        .insert(source.clone(), (u64::MAX, [1.0; 3]));
+                    return;
+                }
+            }
+        }
+        Pixels::Gpu { .. } => None,
+    };
+    chains
+        .picture_means
+        .insert(source.clone(), (frame.version, mean.unwrap_or([1.0; 3])));
+}
+
+/// The sources of the arrival pictures the scenes' backdrops show now (ADR-0188), as
+/// their sky state picked them.
+fn shown_arrivals(shot: &Shot, chains: &Chains) -> BTreeSet<SourceId> {
+    if shot.sky_pictures.is_empty() {
+        return BTreeSet::new();
+    }
+    let skies = chains.skies.borrow();
+    skies
+        .iter()
+        .filter_map(|(scene, state)| {
+            let (placed, _, _) = first_environment(shot, scene).0?;
+            let part = arrival_parts(shot, placed, state.arrival?)?.last()?;
+            Some(part.source.clone())
+        })
+        .collect()
+}
+
+/// The average colour of the opaque parts of straight-alpha sRGB `rgba`, straight sRGB,
+/// from at most about 4096 of its pixels; `None` when none is opaque.
+fn mean_rgb(rgba: &[u8]) -> Option<[f32; 3]> {
+    let pixels = rgba.len() / 4;
+    if pixels == 0 {
+        return None;
+    }
+    let step = (pixels / 4096).max(1);
+    let linear = |c: u8| (f32::from(c) / 255.0).powf(2.2);
+    let mut sum = [0.0_f64; 3];
+    let mut weight = 0.0_f64;
+    for pixel in rgba.chunks_exact(4).step_by(step) {
+        let a = f64::from(pixel[3]) / 255.0;
+        for (total, c) in sum.iter_mut().zip(&pixel[..3]) {
+            *total += f64::from(linear(*c)) * a;
+        }
+        weight += a;
+    }
+    (weight > 0.0).then(|| sum.map(|total| ((total / weight) as f32).powf(1.0 / 2.2)))
+}
+
+/// The arrivals of environment light `placed`'s backdrop (ADR-0188): what its
+/// `sky_pictures` scene shows, bottom first; none without one.
+fn sky_pictures<'s>(shot: &'s Shot, placed: &Lit) -> &'s [Vec<SkyPart>] {
+    shot.sky_pictures
+        .get(&placed.source)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// The pictures of the environment light `placed`'s arrival `arrival`, the first ahead.
+fn arrival_parts<'s>(
+    shot: &'s Shot,
+    placed: &Lit,
+    arrival: crate::chain::Arrival,
+) -> Option<&'s [SkyPart]> {
+    let arrivals = sky_pictures(shot, placed);
+    let count = u32::try_from(arrivals.len())
+        .ok()
+        .filter(|count| *count > 0)?;
+    arrivals
+        .get(usize::try_from(arrival.index % count).ok()?)
+        .map(Vec::as_slice)
+}
+
+/// Where in the sky (ADR-0198) a picture `offset_deg` (turn to the right, tilt up) from an
+/// arrival's first picture at `main` is, in the sky's frame (x right, y down): turned
+/// about the sky's up through `main`, then tilted toward it.
+pub(crate) fn part_direction(main: [f64; 3], [turn_deg, tilt_deg]: [f32; 2]) -> [f64; 3] {
+    if turn_deg == 0.0 && tilt_deg == 0.0 {
+        return main;
+    }
+    let length = (main[0] * main[0] + main[1] * main[1] + main[2] * main[2]).sqrt();
+    if length.is_nan() || length <= 1e-9 {
+        return main;
+    }
+    let f = main.map(|v| v / length);
+    // Its right and up, as the backdrop draws a picture there: up toward the sky's
+    // (-y), or toward ahead (-z) straight up or down.
+    let sky_up = if f[1].abs() > 0.999 {
+        [0.0, 0.0, -1.0]
+    } else {
+        [0.0, -1.0, 0.0]
+    };
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let r = cross(sky_up, f);
+    let rl = (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
+    let right = r.map(|v| v / rl);
+    let up = cross(f, right);
+    let angle = |deg: f32| {
+        if deg.is_finite() {
+            f64::from(deg.clamp(-360.0, 360.0)).to_radians()
+        } else {
+            0.0
+        }
+    };
+    let (st, ct) = angle(tilt_deg).sin_cos();
+    let (su, cu) = angle(turn_deg).sin_cos();
+    [0, 1, 2].map(|i| ct * cu * f[i] + ct * su * right[i] + st * up[i])
+}
+
+/// How much an arrival picture's item scales its width (ADR-0188): its box's width over
+/// `canvas`'s, or a legacy transform's horizontal scale; 1 where that isn't a positive
+/// finite number.
+pub(crate) fn picture_scale(placement: &GraphPlacement, canvas: Canvas) -> f32 {
+    let scale = match placement {
+        GraphPlacement::Geometry(geometry) => {
+            geometry.size.width.get() / canvas.width.max(1) as f32
+        }
+        GraphPlacement::Legacy(transform) => transform.scale.x.get().abs(),
+        // A placement a later graph adds: the setting as it is.
+        _ => 1.0,
+    };
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
+}
+
+/// How the warp of an environment light's backdrop is aimed (ADR-0187), oriented as
+/// `environment` is by its item.
+fn warp_aiming(
+    environment: &jstream_render::Environment<'_>,
+    sky: &ShownEnvironment,
+) -> crate::chain::WarpAiming {
+    crate::chain::WarpAiming {
+        angles: [
+            environment.turn_deg,
+            environment.tilt_deg,
+            environment.roll_deg,
+        ],
+        ahead: (sky.warp_aim == jstream_sources::WarpAim::Ahead).then_some(sky.warp_look_deg),
+    }
 }
 
 /// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
@@ -8069,13 +8622,13 @@ pub(crate) fn claim_layers(
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 if let Some(depth) = &pass.view_depth {
-                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                    cache.depth_layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
             }
             ChainStep::Box(owner) => {
                 if let (ChainOwner::Item(scene, item), Some(boxed)) = (owner, shot.boxes.get(owner))
                 {
-                    let [width, height] = boxed.boxed.layer;
+                    let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
                     // One that can't be made fails its item when the chains next draw.
                     let _ = cache.layer(
                         compositor,
@@ -8084,7 +8637,7 @@ pub(crate) fn claim_layers(
                         height,
                     );
                     if boxed.boxed.model && boxed.camera.is_some() {
-                        let _ = cache.layer(
+                        let _ = cache.depth_layer(
                             compositor,
                             &GpuKey::ModelDepth(scene.clone(), item.clone()),
                             width,
@@ -8156,34 +8709,59 @@ fn under_sky<'a>(
     canvas: FrameSize,
     camera: Option<SceneCamera>,
 ) {
-    let drawn = chains
-        .skies
-        .borrow()
-        .get(&pass.scene)
-        .and_then(|sky| sky.drawn);
-    if camera.is_none() || drawn != Some(cache.frame()) {
+    if camera.is_none() {
         return;
     }
-    let Some(image) = cache.get(&GpuKey::Sky(pass.scene.clone())) else {
-        return;
+    for (under, image) in sky_layers(&pass.scene, (cache, chains), canvas)
+        .into_iter()
+        .enumerate()
+    {
+        items.insert(under, sky_item(image));
+    }
+}
+
+/// The layers scene `scene`'s sky backdrop drew this frame at the canvas size, bottom
+/// first: the sky a warp aimed ahead cross-fades from while it does (ADR-0187), then
+/// the sky (ADR-0167).
+fn sky_layers<'a>(
+    scene: &SceneId,
+    (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
+    canvas: FrameSize,
+) -> Vec<&'a jstream_render::Image> {
+    let Some(state) = chains.skies.borrow().get(scene).copied() else {
+        return Vec::new();
     };
-    if (image.width(), image.height()) != (canvas.width(), canvas.height()) {
-        return;
+    let frame = Some(cache.frame());
+    if state.drawn != frame {
+        return Vec::new();
     }
-    items.insert(
-        0,
-        Item {
-            image,
-            placement: Placement::Legacy(LegacyTransform::IDENTITY),
-            crop: Crop::NONE,
-            opacity: OPAQUE,
-            blend: BlendMode::Normal,
-            visible: true,
-            camera: None,
-            depth_run: 0,
-            depth: None,
-        },
-    );
+    let sized = |key: GpuKey| {
+        cache
+            .get(&key)
+            .filter(|image| (image.width(), image.height()) == (canvas.width(), canvas.height()))
+    };
+    let leaving = (state.left == frame)
+        .then(|| sized(GpuKey::SkyLeaving(scene.clone())))
+        .flatten();
+    leaving
+        .into_iter()
+        .chain(sized(GpuKey::Sky(scene.clone())))
+        .collect()
+}
+
+/// A sky backdrop's layer as the item under a scene's items: the canvas, whole.
+fn sky_item(image: &jstream_render::Image) -> Item<'_> {
+    Item {
+        image,
+        placement: Placement::Legacy(LegacyTransform::IDENTITY),
+        crop: Crop::NONE,
+        opacity: OPAQUE,
+        blend: BlendMode::Normal,
+        visible: true,
+        camera: None,
+        depth_run: 0,
+        depth: None,
+    }
 }
 
 /// The item `layer` of a pass draws at `at`, through `camera`, as [`fill_items`] says.
@@ -8369,27 +8947,47 @@ fn draw_surface(
         return Ok(None);
     };
     let targets = [normal, brdf, reflected];
-    compositor.clear_surface(targets)?;
-    for drawn in depth_models(
+    // Only a model that reflects its scene has a surface: one that doesn't, in front, is
+    // nearer in the view depth, which the pass checks.
+    let models: Vec<_> = depth_models(
         (cache, chains),
         (shot, pass),
         (at, canvas, camera),
         live,
         false,
-    ) {
-        // Only a model that reflects its scene has a surface: one that doesn't, in front,
-        // is nearer in the view depth, which the pass checks.
-        if !(drawn.shown.lighting == Lighting::Scene && drawn.shown.reflections) {
-            continue;
+    )
+    .into_iter()
+    .filter(|drawn| drawn.shown.lighting == Lighting::Scene && drawn.shown.reflections)
+    .collect();
+    // One model alone, its surface drawn with its layer this frame at the buffer's size:
+    // merging it would copy it, so its own layers are the buffer.
+    if let [only] = models.as_slice() {
+        let (scene, item) = only.item;
+        let own = model_surface_keys(scene, item);
+        let fits = own
+            .each_ref()
+            .map(|key| cache.get(key))
+            .iter()
+            .all(|layer| {
+                layer.is_some_and(|layer| {
+                    (layer.width(), layer.height()) == (targets[0].width(), targets[0].height())
+                })
+            });
+        if fits && chains.surfaced.contains(&(scene.clone(), item.clone())) {
+            return Ok(Some(own));
         }
+    }
+    compositor.clear_surface(targets)?;
+    for drawn in models {
         // Its surface drawn with its layer this frame, merged; else drawn again here.
         let (scene, item) = drawn.item;
         let layers = model_surface_keys(scene, item).map(|key| cache.get(&key));
         if let (true, [Some(normal), Some(brdf), Some(reflected)]) = (
             chains.surfaced.contains(&(scene.clone(), item.clone())),
             layers,
-        ) && (normal.width(), normal.height()) == (targets[0].width(), targets[0].height())
-        {
+        ) {
+            // Whatever its size: one drawn with fewer pixels than the canvas is spread
+            // over the buffer (ADR-0197).
             compositor.merge_model_surface([normal, brdf, reflected], targets)?;
             continue;
         }
@@ -8397,7 +8995,7 @@ fn draw_surface(
         pose(compositor, drawn.model, shown);
         let reflects = shown.lighting == Lighting::Scene && shown.reflections;
         let environment = reflects
-            .then(|| scene_environment((shot, cache), &pass.scene, at, live).0)
+            .then(|| scene_environment((shot, cache, chains), &pass.scene, at, live).0)
             .flatten();
         let probe = reflects
             .then(|| {
@@ -8676,33 +9274,12 @@ fn fill_tracks<'a>(
         from.as_ref().filter(|from| Some(*from) != to.as_ref()),
         to.as_ref(),
     ];
-    let drawn = chains.skies.borrow();
     let mut under = 0;
     for scene in skies.into_iter().flatten() {
-        if drawn.get(scene).and_then(|sky| sky.drawn) != Some(cache.frame()) {
-            continue;
+        for image in sky_layers(scene, (cache, chains), canvas) {
+            items.insert(under, sky_item(image));
+            under += 1;
         }
-        let Some(image) = cache.get(&GpuKey::Sky(scene.clone())) else {
-            continue;
-        };
-        if (image.width(), image.height()) != (canvas.width(), canvas.height()) {
-            continue;
-        }
-        items.insert(
-            under,
-            Item {
-                image,
-                placement: Placement::Legacy(LegacyTransform::IDENTITY),
-                crop: Crop::NONE,
-                opacity: OPAQUE,
-                blend: BlendMode::Normal,
-                visible: true,
-                camera: None,
-                depth_run: 0,
-                depth: None,
-            },
-        );
-        under += 1;
     }
 }
 
@@ -10767,6 +11344,145 @@ pub(crate) mod tests {
             },
         );
         assert!(!drawn.drawn_only(&key, &frame), "a chain reads its texels");
+    }
+
+    /// A capture's CPU frame only items draw is held at the size they draw it, from its
+    /// first upload, and still shows its colour (#1139): a webcam shown as a small
+    /// picture never fills a texture of its frame's size. One a video chain reads is
+    /// uploaded whole.
+    #[test]
+    fn a_capture_drawn_small_is_uploaded_small() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let size = FrameSize::new(1920, 1080).expect("invariant: non-zero");
+        let info = jstream_media::VideoFrameInfo {
+            size: FrameSize::new(1024, 512).expect("invariant: non-zero"),
+            format: jstream_media::PixelFormat::Rgba8,
+            color: jstream_media::ColorInfo::default(),
+            pts: zero(),
+        };
+        let rgba = std::iter::repeat_n(GREEN, 1024 * 512).flatten().collect();
+        let camera =
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 1024 * 4)])
+                .expect("invariant: a packed frame");
+        let capture = CaptureFrame {
+            version: 1,
+            image: CaptureImage::Cpu(&camera),
+        };
+        // A 1024x512 frame in a 128x64 box: an eighth each way, held at a quarter.
+        let small = Placement::Geometry(jstream_protocol::ItemGeometry {
+            size: jstream_protocol::Size::try_new(128.0, 64.0).expect("positive"),
+            ..jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+        });
+        let mut drawn = shot(vec![(
+            "program",
+            vec![fill("red"), placed(primary(), small)],
+        )]);
+        let spec = CaptureKey::primary();
+        let key = GpuKey::Capture(spec.clone());
+        assert_eq!(drawn.capture_need(&spec, info.size), Some(0.125));
+        for _ in 0..2 {
+            let out = frame_at(&mut compositor, &mut cache, &drawn, Some(&capture), size);
+            assert_eq!(out.pixel(960, 540), Some(GREEN), "the capture's centre");
+            let image = cache.get(&key).expect("uploaded");
+            assert_eq!(
+                (image.width(), image.height(), image.extent()),
+                (256, 128, (1024, 512))
+            );
+        }
+        drawn.chains.insert(
+            ChainOwner::Source(SourceId::new("camera")),
+            Chain {
+                input: key.clone(),
+                filters: Vec::new(),
+                pad: None,
+            },
+        );
+        assert_eq!(
+            drawn.capture_need(&spec, info.size),
+            None,
+            "a chain reads its texels"
+        );
+        frame_at(&mut compositor, &mut cache, &drawn, Some(&capture), size);
+        let image = cache.get(&key).expect("uploaded");
+        assert_eq!((image.width(), image.height()), (1024, 512));
+        // A model that shows it on a surface, or reflects it, reads its texels too.
+        drawn.chains.clear();
+        assert_eq!(drawn.capture_need(&spec, info.size), Some(0.125));
+        for maps in [
+            super::ModelMaps {
+                texture: Some(primary()),
+                reflection: None,
+            },
+            super::ModelMaps {
+                texture: None,
+                reflection: Some(primary()),
+            },
+        ] {
+            drawn.maps.insert(SourceId::new("model"), maps);
+            assert_eq!(drawn.capture_need(&spec, info.size), None);
+        }
+        drawn.maps.clear();
+        // A capture nothing places has no planned need: its draws say what it needs.
+        let unplaced = shot(vec![("program", vec![fill("red")])]);
+        assert_eq!(unplaced.capture_need(&spec, info.size), Some(0.0));
+    }
+
+    /// With no program scene the primary capture fills the canvas, placed by its
+    /// extent: its upload is held smaller than its frame once it is drawn small (an
+    /// output much smaller than the capture, the preview), and it still fills the
+    /// output, frame after frame, rather than showing its top left corner every other
+    /// frame (#1660 B1).
+    #[test]
+    fn a_capture_held_small_still_fills_an_output_with_no_scene() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let size = FrameSize::new(320, 180).expect("invariant: non-zero");
+        let info = jstream_media::VideoFrameInfo {
+            size: FrameSize::new(1024, 512).expect("invariant: non-zero"),
+            format: jstream_media::PixelFormat::Rgba8,
+            color: jstream_media::ColorInfo::default(),
+            pts: zero(),
+        };
+        // Its left half green, its right half red.
+        let rgba = (0..1024 * 512)
+            .flat_map(|i| if i % 1024 < 512 { GREEN } else { RED })
+            .collect();
+        let display =
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 1024 * 4)])
+                .expect("invariant: a packed frame");
+        let capture = CaptureFrame {
+            version: 1,
+            image: CaptureImage::Cpu(&display),
+        };
+        let empty = shot(vec![]);
+        let key = GpuKey::Capture(CaptureKey::primary());
+        let mut widths = Vec::new();
+        for frame in 0..5 {
+            let out = frame_at(&mut compositor, &mut cache, &empty, Some(&capture), size);
+            assert_eq!(
+                out.pixel(80, 90),
+                Some(GREEN),
+                "frame {frame}: its left half"
+            );
+            assert_eq!(
+                out.pixel(240, 90),
+                Some(RED),
+                "frame {frame}: its right half"
+            );
+            let image = cache.get(&key).expect("uploaded");
+            assert_eq!(image.extent(), (1024, 512));
+            widths.push(image.width());
+        }
+        assert_eq!(
+            widths,
+            [1024, 512, 512, 512, 512],
+            "held small, and kept so"
+        );
     }
 
     /// A still image's pixels are let go of once the program stage has uploaded them,

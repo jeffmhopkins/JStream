@@ -241,6 +241,8 @@ struct VideoDeviceState {
     unplugged: Vec<DeviceId>,
     /// The camera controls set, by device and control: the value and whether auto is on.
     controls: BTreeMap<(DeviceId, CameraControlId), (i32, Option<bool>)>,
+    /// The frames handed back to streams ([`CaptureStream::recycle`]).
+    recycled: u64,
 }
 
 impl FakeVideoDevices {
@@ -264,6 +266,12 @@ impl FakeVideoDevices {
     /// How many streams are open.
     pub fn open_streams(&self) -> usize {
         lock(&self.state).streams.len()
+    }
+
+    /// How many frames callers handed back to the devices' streams
+    /// ([`CaptureStream::recycle`]).
+    pub fn recycled(&self) -> u64 {
+        lock(&self.state).recycled
     }
 
     fn all() -> Vec<VideoDeviceInfo> {
@@ -486,6 +494,12 @@ impl CaptureStream for FakeVideoDeviceStream {
 
     fn stats(&self) -> CaptureStats {
         self.stats
+    }
+
+    /// Counted ([`FakeVideoDevices::recycled`]) and dropped.
+    fn recycle(&mut self, surface: VideoSurface) {
+        lock(&self.state).recycled += 1;
+        drop(surface);
     }
 }
 

@@ -18,6 +18,8 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#transitions
 
 use crate::app::SessionContext;
+use crate::icons::Icon;
+use crate::menu::Entry;
 use crate::panels::curve::CurveEditor;
 use crate::panels::number::NumberField;
 use crate::panels::outputs::{action, edit};
@@ -569,25 +571,52 @@ pub fn preset_hint(preset: &TransitionPresetInfo, kinds: &[KindDescriptor]) -> S
     }
 }
 
-/// A preset as the picker lists it: `"<name> — Cut"` or `"<name> — <Kind> · N ms"`, with
-/// " (default)" on the default.
+/// A preset as the picker lists it (C21): `"<name> · Default"` for the default, else
+/// `"<name> · Cut"` or `"<name> · <Kind> N ms"`. The Type and Duration rows under it
+/// show the rest.
 pub fn picker_label(
     preset: &TransitionPresetInfo,
     transitions: &TransitionsInfo,
     kinds: &[KindDescriptor],
 ) -> String {
-    let kind = kind_name(kinds, &preset.kind);
-    let what = if preset.kind == CUT {
-        kind
+    if preset.preset_id == transitions.default {
+        format!("{} · Default", preset.name)
     } else {
-        format!("{kind} · {} ms", preset.duration_ms)
+        format!("{} · {}", preset.name, preset_hint(preset, kinds))
+    }
+}
+
+/// The preset the ⋯ menu's Duplicate adds: the same kind, timing and settings, named
+/// "<name> copy", with an unused ID.
+pub fn duplicate_edit(
+    existing: &TransitionsInfo,
+    preset: &TransitionPresetInfo,
+) -> (TransitionPresetId, Edit) {
+    let name = format!("{} copy", preset.name);
+    let preset_id = next_preset_id(existing.presets.iter().map(|p| &p.preset_id), &name);
+    let edit = Edit::TransitionCreate {
+        preset_id: preset_id.clone(),
+        name,
+        kind: preset.kind.clone(),
+        duration_ms: preset.duration_ms,
+        easing: preset.easing,
+        settings: preset.settings.clone(),
     };
-    let default = if preset.preset_id == transitions.default {
-        " (default)"
+    (preset_id, edit)
+}
+
+/// How far the Duration slider reaches; the field beside it takes up to
+/// [`MAX_DURATION_MS`].
+pub const DURATION_SLIDER_MS: u32 = 5_000;
+
+/// The note at the foot of the Transitions panel: whether studio mode is on, and what a
+/// click on a scene does then.
+pub fn studio_note(studio_mode: bool) -> &'static str {
+    if studio_mode {
+        "Studio mode on · Transition and Cut take preview to program"
     } else {
-        ""
-    };
-    format!("{} — {what}{default}", preset.name)
+        "Studio mode off · a click on a scene puts it on program"
+    }
 }
 
 /// How many scenes name `preset_id` as their transition in, and how many as their
@@ -1269,15 +1298,6 @@ pub fn StudioMode() -> impl IntoView {
     let studio_mode = move || shared.is_none_or(|s| s.studio_mode.get());
     view! {
         <section class="studio" aria-label="Transitions">
-            <p class="hint studio-off">
-                {move || if studio_mode() {
-                    "Studio mode is on: Transition and Cut are between preview and program, \
-                     over the canvas."
-                } else {
-                    "Studio mode is off: clicking a scene puts it on program. Turn it on in \
-                     the header to set a scene up on preview first."
-                }}
-            </p>
             {move || {
                 panel.problem.get().map(|problem| {
                     view! {
@@ -1296,16 +1316,24 @@ pub fn StudioMode() -> impl IntoView {
                 <summary>"Per-scene presets"</summary>
                 <SceneOverrides panel=panel />
             </details>
+            <p
+                class="studio-foot"
+                title="Studio mode is in the header: on, a scene is set up on preview first"
+            >
+                {move || studio_note(studio_mode())}
+            </p>
         </section>
     }
     .into_any()
 }
 
-/// The presets (spec-panels.md 10): a picker of every preset ending in "+ New
-/// preset…", and the picked one's editor. Each field sends its change at once.
+/// The presets (spec-panels.md 10, C21): a toolbar with a picker of every preset, +
+/// for a new one and a ⋯ menu (Rename, Duplicate, Set as default, Delete…), then the
+/// picked one's editor. Each field sends its change at once.
 #[component]
 fn Presets(panel: Panel) -> impl IntoView {
     let shared = use_context::<crate::store::Studio>();
+    let menus = use_context::<crate::menu::Menus>();
     // The preset picked in the list; `None` until one is, when the editor starts on the
     // switch's choice, the selected scene's transition in, or the default.
     let picked = RwSignal::new(None::<TransitionPresetId>);
@@ -1321,6 +1349,12 @@ fn Presets(panel: Panel) -> impl IntoView {
                 })
         })
     });
+    let shown_preset = move || {
+        panel.snapshot.with(|s| {
+            let s = s.as_ref()?;
+            s.preset(&shown.get()?).cloned()
+        })
+    };
     let options = move || {
         panel.snapshot.with(|snapshot| {
             snapshot
@@ -1343,67 +1377,214 @@ fn Presets(panel: Panel) -> impl IntoView {
                 .unwrap_or_default()
         })
     };
+    // Rename swaps the picker for a name field; Enter or leaving it renames, Escape
+    // doesn't. Delete… asks first, naming the preset it was chosen on, and deletes only
+    // that one. Either closes when another preset is picked, added or shown.
+    let renaming = RwSignal::new(false);
+    let deleting = RwSignal::new(None::<TransitionPresetId>);
+    let settle = move || {
+        renaming.set(false);
+        deleting.set(None);
+    };
+    Effect::new(move |before: Option<Option<TransitionPresetId>>| {
+        let now = shown.get();
+        if before.is_some_and(|before| before != now) {
+            settle();
+        }
+        now
+    });
     let pick = move |event: leptos::ev::Event| {
         let value = event_target_value(&event);
-        if value == NEW_PRESET {
-            let Some(made) = panel.snapshot.with_untracked(|s| {
-                let s = s.as_ref()?;
-                Some(
-                    panel
-                        .kinds
-                        .with_untracked(|kinds| new_preset_edit(&s.transitions, kinds)),
-                )
-            }) else {
-                return;
-            };
-            let (preset_id, create) = made;
-            picked.set(Some(preset_id));
-            panel.run(move |session| async move { edit(&*session.control, create).await });
-        } else if !value.is_empty() {
+        if !value.is_empty() {
+            settle();
             picked.set(Some(TransitionPresetId::new(value)));
         }
     };
+    let add = move |_| {
+        let Some((preset_id, create)) = panel.snapshot.with_untracked(|s| {
+            let s = s.as_ref()?;
+            Some(
+                panel
+                    .kinds
+                    .with_untracked(|kinds| new_preset_edit(&s.transitions, kinds)),
+            )
+        }) else {
+            return;
+        };
+        settle();
+        picked.set(Some(preset_id));
+        panel.run(move |session| async move { edit(&*session.control, create).await });
+    };
+    let rename_to = move |name: String| {
+        renaming.set(false);
+        let Some(before) = shown_preset() else {
+            return;
+        };
+        let mut draft = Draft::from_preset(&before);
+        draft.name = name;
+        let kinds = panel.kinds.get_untracked();
+        match update_edit(&before, &draft, &kinds) {
+            Err(problem) => panel.problem.set(Some(problem)),
+            Ok(None) => {}
+            Ok(Some(change)) => {
+                panel.run(move |session| async move { edit(&*session.control, change).await });
+            }
+        }
+    };
+    let name_field = NodeRef::<leptos::html::Input>::new();
+    Effect::new(move |_| {
+        if let Some(field) = name_field.get() {
+            let _ = field.focus();
+            field.select();
+        }
+    });
+    let more = move |event: leptos::ev::MouseEvent| {
+        let (Some(menus), Some(preset)) = (menus, shown_preset()) else {
+            return;
+        };
+        let is_default = panel.snapshot.with_untracked(|s| {
+            s.as_ref()
+                .is_some_and(|s| s.transitions.default == preset.preset_id)
+        });
+        let copy = preset.clone();
+        let preset_id = preset.preset_id.clone();
+        let doomed = preset.preset_id.clone();
+        menus.open(
+            &event,
+            vec![
+                Entry::item("Rename", move || {
+                    deleting.set(None);
+                    renaming.set(true);
+                }),
+                Entry::item("Duplicate", move || {
+                    let Some((new_id, create)) = panel.snapshot.with_untracked(|s| {
+                        s.as_ref().map(|s| duplicate_edit(&s.transitions, &copy))
+                    }) else {
+                        return;
+                    };
+                    settle();
+                    picked.set(Some(new_id));
+                    panel.run(move |session| async move { edit(&*session.control, create).await });
+                }),
+                Entry::item("Set as default", move || {
+                    let preset_id = preset_id.clone();
+                    panel.run(move |session| async move {
+                        edit(&*session.control, Edit::TransitionSetDefault { preset_id }).await
+                    });
+                })
+                .checked(is_default)
+                .disabled_if(is_default),
+                Entry::Sep,
+                Entry::item("Delete…", move || {
+                    renaming.set(false);
+                    deleting.set(Some(doomed.clone()));
+                })
+                .danger()
+                .disabled_if(is_default),
+            ],
+        );
+    };
+    let delete = move |_| {
+        let Some(preset_id) = deleting.get_untracked() else {
+            return;
+        };
+        deleting.set(None);
+        picked.set(None);
+        panel.run(move |session| async move {
+            edit(&*session.control, Edit::TransitionDelete { preset_id }).await
+        });
+    };
     view! {
         <section class="presets" aria-label="Presets">
-            <h3>"Presets"</h3>
-            <p class="hint">
-                "Pick a preset to edit it. Scenes use the default unless you override it: \
-                 right-click a scene, or set it in its Properties or the Inspector."
-            </p>
-            <select class="preset-picker" aria-label="Preset to edit" on:change=pick>
-                {move || {
-                    let now = shown.get().map(|id| id.to_string()).unwrap_or_default();
-                    options()
-                        .into_iter()
-                        .chain(std::iter::once((NEW_PRESET.to_owned(), "+ New preset…".to_owned())))
-                        .map(|(value, label)| {
-                            let selected = value == now;
-                            view! { <option value=value selected=selected>{label}</option> }
-                        })
-                        .collect_view()
-                }}
-            </select>
+            <h3 class="visually-hidden">"Presets"</h3>
+            <div class="preset-bar">
+                <Show
+                    when=move || renaming.get()
+                    fallback=move || view! {
+                        <select class="preset-picker" aria-label="Preset to edit" on:change=pick>
+                            {move || {
+                                let now = shown.get().map(|id| id.to_string()).unwrap_or_default();
+                                options()
+                                    .into_iter()
+                                    .map(|(value, label)| {
+                                        let selected = value == now;
+                                        view! { <option value=value selected=selected>{label}</option> }
+                                    })
+                                    .collect_view()
+                            }}
+                        </select>
+                    }
+                >
+                    <input
+                        type="text"
+                        class="preset-picker"
+                        aria-label="Preset name"
+                        node_ref=name_field
+                        prop:value=move || shown_preset().map(|p| p.name).unwrap_or_default()
+                        on:keydown=move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+                            "Enter" => {
+                                event.prevent_default();
+                                rename_to(event_target_value(&event));
+                            }
+                            "Escape" => {
+                                event.prevent_default();
+                                event.stop_propagation();
+                                renaming.set(false);
+                            }
+                            _ => {}
+                        }
+                        on:blur=move |event| {
+                            if renaming.get_untracked() {
+                                rename_to(event_target_value(&event));
+                            }
+                        }
+                    />
+                </Show>
+                <button type="button" class="bar-icon" aria-label="New preset" title="New preset" on:click=add>
+                    <Icon name="plus" size=16 />
+                </button>
+                <button
+                    type="button"
+                    class="bar-icon more"
+                    aria-label="More for this preset"
+                    aria-haspopup="menu"
+                    title="More"
+                    disabled=move || menus.is_none()
+                    on:click=more
+                >
+                    "⋯"
+                </button>
+            </div>
+            <Show when=move || deleting.with(Option::is_some)>
+                <div class="confirm" role="alertdialog" aria-label="Delete preset">
+                    <p>
+                        {move || {
+                            let name = deleting.get().and_then(|id| {
+                                panel.snapshot.with(|s| s.as_ref()?.preset(&id).map(|p| p.name.clone()))
+                            });
+                            format!(
+                                "Delete “{}”? Scenes that use it go back to the default.",
+                                name.unwrap_or_default(),
+                            )
+                        }}
+                    </p>
+                    <button type="button" class="danger" on:click=delete>"Delete"</button>
+                    <button type="button" class="secondary" on:click=move |_| deleting.set(None)>"Cancel"</button>
+                </div>
+            </Show>
             {move || shown.get().map(|preset_id| view! {
-                <PresetEditor panel=panel preset_id=preset_id picked=picked />
+                <PresetEditor panel=panel preset_id=preset_id />
             })}
         </section>
     }
 }
 
-/// The picker's value for "+ New preset…", which no preset ID can be (IDs have no
-/// spaces).
-const NEW_PRESET: &str = "+ new";
-
-/// The picked preset's fields: Name, its kind (Cut, Fade or Move), then, except for a
-/// cut, its duration, its kind's parameters and its easing; its override counts; and
-/// Make default and Delete, which the default doesn't have. Each change is one
-/// `transition.update`.
+/// The picked preset's fields on the property grid (C21): its Type (Cut, Fade or Move),
+/// then, except for a cut, its Duration (a slider and a field), its kind's parameters
+/// and its Easing; and its override counts. Its name, default and delete are in the
+/// toolbar's ⋯ menu. Each change is one `transition.update`.
 #[component]
-fn PresetEditor(
-    panel: Panel,
-    preset_id: TransitionPresetId,
-    picked: RwSignal<Option<TransitionPresetId>>,
-) -> impl IntoView {
+fn PresetEditor(panel: Panel, preset_id: TransitionPresetId) -> impl IntoView {
     let id = StoredValue::new(preset_id);
     let preset = Memo::new(move |_| {
         panel
@@ -1440,12 +1621,6 @@ fn PresetEditor(
             }
         }
     };
-    let is_default = move || {
-        panel.snapshot.with(|s| {
-            s.as_ref()
-                .is_some_and(|s| s.transitions.default == id.get_value())
-        })
-    };
     let is_cut = move || draft.with(|d| d.kind == CUT);
     let params = move || {
         let kind_id = draft.with(|draft| draft.kind.clone());
@@ -1461,19 +1636,6 @@ fn PresetEditor(
         panel
             .snapshot
             .with(|s| s.as_ref().map(|s| override_note(s, &id.get_value())))
-    };
-    let make_default = move |_| {
-        let preset_id = id.get_value();
-        panel.run(move |session| async move {
-            edit(&*session.control, Edit::TransitionSetDefault { preset_id }).await
-        });
-    };
-    let delete = move |_| {
-        let preset_id = id.get_value();
-        picked.set(None);
-        panel.run(move |session| async move {
-            edit(&*session.control, Edit::TransitionDelete { preset_id }).await
-        });
     };
     let duration = Signal::derive(move || draft.with(|d| d.duration.trim().parse::<f64>().ok()));
     let send_duration = move |ms: f64| {
@@ -1503,56 +1665,69 @@ fn PresetEditor(
         save();
         true
     };
-    let kind_radio = move |kind: KindDescriptor| {
-        let kind_id = kind.kind_id.clone();
-        let checked = {
-            let kind_id = kind_id.clone();
-            move || draft.with(|d| d.kind == kind_id)
-        };
-        view! {
-            <label class="segment" class:on=checked.clone()>
-                <input
-                    type="radio"
-                    name="preset-kind"
-                    prop:checked=checked.clone()
-                    on:change=move |_| {
-                        panel
-                            .kinds
-                            .with_untracked(|kinds| draft.update(|d| d.set_kind(kinds, &kind_id)));
-                        invalid.set(BTreeSet::new());
-                        save();
-                    }
-                />
-                {kind.name}
-            </label>
-        }
+    let choose_kind = move |event: leptos::ev::Event| {
+        let kind_id = event_target_value(&event);
+        panel
+            .kinds
+            .with_untracked(|kinds| draft.update(|d| d.set_kind(kinds, &kind_id)));
+        invalid.set(BTreeSet::new());
+        save();
     };
     view! {
-        <div class="preset-editor">
-            <label class="preset-row">
-                <span class="field-label">"Name"</span>
-                <input
-                    type="text"
-                    prop:value=move || draft.with(|d| d.name.clone())
-                    on:change=move |event| {
-                        let value = event_target_value(&event);
-                        draft.update(|d| d.name = value);
-                        save();
-                    }
-                />
+        <div class="preset-editor prop-grid">
+            <label class="prop-row">
+                <span class="prop-label">"Type"</span>
+                <span class="prop-control">
+                    <select aria-label="Type" on:change=choose_kind>
+                        {move || {
+                            panel
+                                .kinds
+                                .get()
+                                .into_iter()
+                                .map(|kind| {
+                                    let kind_id = kind.kind_id.clone();
+                                    view! {
+                                        <option
+                                            value=kind.kind_id.clone()
+                                            prop:selected=move || draft.with(|d| d.kind == kind_id)
+                                        >
+                                            {kind.name}
+                                        </option>
+                                    }
+                                })
+                                .collect_view()
+                        }}
+                    </select>
+                </span>
             </label>
-            <div class="segmented" role="radiogroup" aria-label="Type">
-                {move || panel.kinds.get().into_iter().map(kind_radio).collect_view()}
-            </div>
             <Show when=move || !is_cut()>
-                <div class="preset-fields">
-                    <NumberField label="Duration" unit="ms" value=duration step=10.0 decimals=0
-                        min=0.0 max=f64::from(MAX_DURATION_MS) send=send_duration />
-                    <For each=params key=|param| param.id.clone() let:param>
-                        <ParamField param=param draft=draft problem=field_problem invalid=invalid saved=save />
-                    </For>
-                    <label class="select-field">
-                        <span class="field-label">"Easing"</span>
+                <div class="prop-row">
+                    <span class="prop-label">"Duration"</span>
+                    <div class="prop-control preset-duration">
+                        <input
+                            type="range"
+                            class="grow"
+                            aria-label="Duration slider"
+                            min="0"
+                            max=DURATION_SLIDER_MS.to_string()
+                            step="50"
+                            prop:value=move || duration.get().unwrap_or_default().to_string()
+                            on:change=move |event| {
+                                if let Ok(ms) = event_target_value(&event).parse::<f64>() {
+                                    send_duration(ms);
+                                }
+                            }
+                        />
+                        <NumberField named="Duration" unit="ms" value=duration step=10.0 decimals=0
+                            min=0.0 max=f64::from(MAX_DURATION_MS) send=send_duration />
+                    </div>
+                </div>
+                <For each=params key=|param| param.id.clone() let:param>
+                    <ParamField param=param draft=draft problem=field_problem invalid=invalid saved=save />
+                </For>
+                <label class="prop-row">
+                    <span class="prop-label">"Easing"</span>
+                    <span class="prop-control">
                         <select aria-label="Easing" on:change=choose_easing>
                             {EASINGS
                                 .into_iter()
@@ -1568,20 +1743,19 @@ fn PresetEditor(
                                 })
                                 .collect_view()}
                         </select>
-                    </label>
-                </div>
+                    </span>
+                </label>
                 <Show when=move || draft.with(|d| matches!(d.easing, Easing::CubicBezier(_)))>
-                    <CurveEditor curve=custom_curve send=send_curve />
+                    <div class="prop-row">
+                        <span class="prop-label">"Curve"</span>
+                        <div class="prop-control">
+                            <CurveEditor curve=custom_curve send=send_curve />
+                        </div>
+                    </div>
                 </Show>
             </Show>
-            {move || field_problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })}
-            <p class="note">{note}</p>
-            <Show when=move || !is_default()>
-                <div class="buttons">
-                    <button on:click=make_default>"Make default"</button>
-                    <button class="danger-text" on:click=delete>"Delete"</button>
-                </div>
-            </Show>
+            {move || field_problem.get().map(|problem| view! { <p class="problem preset-wide" role="alert">{problem}</p> })}
+            <p class="note preset-wide">{note}</p>
         </div>
     }
 }
@@ -1695,10 +1869,9 @@ fn ParamField(
         _ => None,
     });
     view! {
-        <label title=hint>
-            {label}
-            {unit.map(|unit| format!(" ({unit})"))}
-            {control}
+        <label class="prop-row" title=hint>
+            <span class="prop-label">{label}{unit.map(|unit| format!(" ({unit})"))}</span>
+            <span class="prop-control">{control}</span>
         </label>
     }
 }
@@ -2259,13 +2432,10 @@ mod tests {
         let kinds = builtin_transition_kinds();
         let snapshot = studio();
         let t = &snapshot.transitions;
-        assert_eq!(
-            picker_label(&t.presets[0], t, &kinds),
-            "Cut — Cut (default)"
-        );
+        assert_eq!(picker_label(&t.presets[0], t, &kinds), "Cut · Default");
         assert_eq!(
             picker_label(&t.presets[1], t, &kinds),
-            "Fade in — Fade · 500 ms"
+            "Fade in · Fade 500 ms"
         );
         assert_eq!(preset_hint(&t.presets[0], &kinds), "Cut");
         assert_eq!(preset_hint(&t.presets[1], &kinds), "Fade 500 ms");
