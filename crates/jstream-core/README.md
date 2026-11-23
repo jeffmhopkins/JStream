@@ -3441,9 +3441,9 @@ ticks in `render_ticks`, so video stays on the clock that stamps audio
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). Both render-thread counters count base
 ticks (1/30 s by default, 1/60 s when the collection opts into it), whatever the video mixes' rates: `render_ticks` counts every skipped
 base tick, including ones on which no mix was due. The ticks a mix's first draw runs
-over are the exception when nothing else was drawn on that tick: no session had been
-pushed a frame yet, so none was dropped, and the next tick is drawn at the clock
-([Runtime](#runtime), `Frames::only_primed`). The capture mailbox is read only on
+over are the exception when nothing but preview pictures was drawn beside it on that
+tick: no output had been owed a frame, so none was dropped, and the next tick is drawn
+at the clock ([Runtime](#runtime), `Frames::only_primed`). The capture mailbox is read only on
 ticks that draw, and a frame a capture replaced between two reads counts in
 `capture_frames` only when a read beside it took no new frame, so the canvas repeated a
 frame it could have shown. A capture faster than the canvas (a 60 fps webcam on a 30 fps
@@ -4730,9 +4730,16 @@ catches up still shows about two pictures a second at 30
 one uses (pipelines, layers, uploads, its encode targets), so it can run over many
 ticks: it is drawn with no readback, and nothing of it is pushed
 (`MixFrame::priming`), so a session's first frame is one the next follows on time.
-When a tick drew first draws alone, the next is drawn at the clock and the ticks it
-ran over are not counted as skipped, since no session was owed them
-(`Frames::only_primed`, `a_mixes_first_draw_is_not_read_back`). Each first draw is logged once at `info` with its size and how long its tick took. The first tick is drawn at once; later ones fall
+When a tick drew first draws and otherwise only local pictures, the next is drawn at
+the clock and the ticks it ran over are not counted as skipped, since no output was
+owed them; a running preview just misses them (`Frames::only_primed`,
+`a_mixes_first_draw_is_not_read_back`, `a_first_draw_beside_a_preview_alone_counts_no_skip`).
+A session on the GPU path has its ring of encode targets allocated by the thread that
+opens it (`encode_targets`), not on the render thread's first tick for it, where a
+platform's shared textures would lengthen that tick; the tap hands them over and they
+become the mix's ring when it has none yet, and are otherwise freed by the collector
+(`Frames::add`, `targets_allocated_ahead_become_the_new_mixs_ring`). A refusal leaves
+the ring to the render thread, which reports it as before. Each first draw is logged once at `info` with its size and how long its tick took. The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
 (`on_frame_grid`), where the live sources' thread plans for them (*Live sources*). Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and

@@ -538,6 +538,24 @@ fn encode_ring_len() -> usize {
     SessionOptions::default().input_capacity + 2
 }
 
+/// A GPU session's ring of encode targets at `size`, allocated on the thread that opens
+/// it rather than on the render thread, where a platform's shared textures can take
+/// long enough to hold up a tick (#1689). Empty when any refuses: the render thread
+/// then allocates the ring on its first tick for the session, and reports a refusal.
+fn encode_targets(gpu: &dyn GpuInterop, context: &GpuContext, size: FrameSize) -> Vec<GpuFrame> {
+    let mut targets = Vec::with_capacity(encode_ring_len());
+    for _ in 0..encode_ring_len() {
+        match gpu.encode_target(context, size) {
+            Ok(target) => targets.push(target),
+            Err(err) => {
+                tracing::debug!(error = %err, "an encode target could not be allocated ahead");
+                return Vec::new();
+            }
+        }
+    }
+    targets
+}
+
 /// Opens the render thread's [`DrawFn`], on that thread, on the platform's GPU context
 /// when the pipeline has one. The engine's opens the wgpu compositor on that context,
 /// or without one on a hardware adapter first ([`gpu_draw`]). Tests inject [`cpu_draw`]
@@ -1019,6 +1037,8 @@ pub(crate) struct Program {
     device_losses: Option<JoinHandle<()>>,
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
+    /// Allocates a GPU session's encode targets as it opens ([`encode_targets`]).
+    gpu: Arc<dyn GpuInterop>,
     size: FrameSize,
     /// The base frame rate this stage opened at (ADR-0119).
     pub(crate) base_fps: u32,
@@ -1128,6 +1148,12 @@ impl Program {
             if *video.path() != VideoPath::Gpu {
                 claim = None;
             }
+            // Its encode targets are allocated here, not on the render thread's first
+            // tick for it, where they would hold up every picture it draws (#1689).
+            let targets = match (claim.as_ref(), self.context.as_deref()) {
+                (Some(_), Some(context)) => encode_targets(self.gpu.as_ref(), context, feed.size),
+                _ => Vec::new(),
+            };
             let ids = vec![engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&video)))];
             Ok(Encoders {
                 key,
@@ -1136,6 +1162,7 @@ impl Program {
                 audio: Mutex::new(None),
                 attached: AtomicBool::new(false),
                 claim: Mutex::new(claim),
+                targets: Mutex::new(targets),
                 probe: Arc::new(ProbeTap::default()),
                 drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
             })
@@ -1202,6 +1229,7 @@ impl Program {
             claim: lock(&encoders.claim).take(),
             probe: Some(Arc::clone(&encoders.probe)),
             local: false,
+            targets: std::mem::take(&mut *lock(&encoders.targets)),
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
     }
@@ -1237,6 +1265,7 @@ impl Program {
             claim: None,
             probe: None,
             local: true,
+            targets: Vec::new(),
         };
         let _ = self.video_taps.send((feed, tap));
     }
@@ -1466,6 +1495,9 @@ pub(crate) struct Encoders {
     /// A GPU-path session's claim on the context, until [`Program::attach`] hands it to
     /// the render thread with the tap. Dropped with the encoders if never attached.
     claim: Mutex<Option<GpuClaim>>,
+    /// A GPU-path session's encode targets, allocated when it opened, until
+    /// [`Program::attach`] hands them to the render thread with the tap (#1689).
+    targets: Mutex<Vec<GpuFrame>>,
     /// Where the render thread copies the frames it feeds the video session while a
     /// `quality.probe` is armed (ADR-0145).
     probe: Arc<ProbeTap>,
@@ -2833,6 +2865,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         device_losses: Some(device_losses),
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
+        gpu: Arc::clone(&parts.gpu),
         size,
         base_fps: parts.base_fps,
         format,
@@ -3447,6 +3480,10 @@ pub(crate) struct VideoTap {
     /// A preview stream's tap: its picture stays on this machine, and gives way to the
     /// outputs' while the GPU is behind ([`yields`]).
     local: bool,
+    /// A GPU session's encode targets, allocated by the thread that started it so the
+    /// render thread does not stall on them (#1689): they become its mix's ring when
+    /// that has none yet ([`Frames::add`]). Empty for any other tap.
+    targets: Vec<GpuFrame>,
 }
 
 impl VideoTap {
@@ -3752,10 +3789,12 @@ struct Frames {
 
 impl Frames {
     /// Feeds `input` the frames of `feed`, drawn alongside an existing session's with
-    /// the same feed.
-    fn add(&mut self, feed: Feed, mut tap: VideoTap) {
+    /// the same feed. The tap's encode targets become the mix's ring when it has none
+    /// yet; otherwise they go to `free`, so the render thread frees nothing (R-RT-003).
+    fn add(&mut self, feed: Feed, mut tap: VideoTap, mut free: impl FnMut(Garbage)) {
         // From here `feeds_gpu` keeps the thread on the context, so the claim can go.
         drop(tap.claim.take());
+        let targets = std::mem::take(&mut tap.targets);
         let found = self.mixes.iter().position(|frame| {
             frame.mix == feed.mix
                 && frame.size == feed.size
@@ -3763,8 +3802,11 @@ impl Frames {
                 && frame.owner == feed.owner
                 && frame.scene == feed.scene
         });
-        match found {
-            Some(at) => self.targets[at].push(tap),
+        let at = match found {
+            Some(at) => {
+                self.targets[at].push(tap);
+                at
+            }
             None => {
                 self.mixes.push(MixFrame {
                     scene: feed.scene,
@@ -3773,7 +3815,17 @@ impl Frames {
                 self.shown.push(Arc::default());
                 self.targets.push(vec![tap]);
                 self.encode.push(MixEncode::default());
+                self.mixes.len() - 1
             }
+        };
+        if targets.is_empty() {
+            return;
+        }
+        let ring = &mut self.encode[at].ring;
+        if ring.slots.is_empty() && targets.len() == encode_ring_len() {
+            ring.slots = targets;
+        } else {
+            free(Garbage::Targets(targets));
         }
     }
 
@@ -4023,12 +4075,20 @@ impl Frames {
         }
     }
 
-    /// Whether this tick drew something, and only mixes drawn for the first time: no
-    /// session was owed the ticks it ran over, so the next is due at once and none
-    /// counts as skipped.
+    /// Whether this tick drew a mix for the first time, and otherwise only pictures this
+    /// machine alone sees ([`MixFrame::local`]): no output was owed the ticks it ran
+    /// over, so the next is due at once and none counts as skipped. A running preview
+    /// just misses those ticks, as it does while it gives way ([`yields`]).
     fn only_primed(&self) -> bool {
-        let mut due = self.mixes.iter().filter(|frame| frame.due).peekable();
-        due.peek().is_some() && due.all(|frame| frame.priming && frame.primed)
+        let mut primed = false;
+        for frame in self.mixes.iter().filter(|frame| frame.due) {
+            if frame.priming && frame.primed {
+                primed = true;
+            } else if !frame.local {
+                return false;
+            }
+        }
+        primed
     }
 }
 
@@ -4152,7 +4212,7 @@ fn render_loop(job: RenderJob) {
     let budget = frame_budget_at(base_fps);
     while !stop.load(Ordering::Relaxed) {
         for (feed, tap) in inputs.try_iter() {
-            frames.add(feed, tap);
+            frames.add(feed, tap, |garbage| collector.free(garbage));
         }
         cams.extend(cam_inputs.try_iter());
         frames.hold_program(cams.iter().map(VcamTap::owner), size);
@@ -5378,10 +5438,11 @@ mod tests {
     use super::{
         DrawFn, EncodeRing, FRAME_DEN, Feed, Frames, GpuGate, GpuSources, LOCAL_YIELD_TICKS,
         MixFrame, OpenDraw, Switch, SwitchWhy, VideoTap, catch_up, check_video_encoder,
-        encode_ring_len, lock, only_local, open_video, output_size, push_each, stream_info,
-        until_block, video_config, yields,
+        encode_ring_len, encode_targets, lock, only_local, open_video, output_size, push_each,
+        stream_info, until_block, video_config, yields,
     };
     use crate::runtime::captures::rgba_from_surface;
+    use crate::runtime::render::Garbage;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
     use jstream_media::{
         Codec, ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane,
@@ -5459,6 +5520,82 @@ mod tests {
                 std::sync::Arc::new(NoSync),
             ))
         }
+    }
+
+    /// A GPU session's encode targets allocated ahead, as it opened, become its new
+    /// mix's ring: the render thread allocates none on its first tick for it (#1689). A
+    /// second session on the same mix finds a ring there, so its targets are freed
+    /// through the collector, not on the render thread.
+    #[test]
+    fn targets_allocated_ahead_become_the_new_mixs_ring() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let compositor =
+            match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {
+                Ok(compositor) => compositor,
+                Err(err) => {
+                    assert!(
+                        std::env::var_os("CI").is_none(),
+                        "CI has no wgpu adapter: {err}"
+                    );
+                    return;
+                }
+            };
+        let gpu = Targets(compositor);
+        let context = jstream_platform::GpuInterop::open_device(&gpu).expect("context");
+        let size = FrameSize::new(4, 2).expect("size");
+        let ahead = encode_targets(&gpu, &context, size);
+        assert_eq!(ahead.len(), encode_ring_len());
+        let syncs: Vec<_> = ahead
+            .iter()
+            .map(|t| std::sync::Arc::clone(t.sync()))
+            .collect();
+        let feed = Feed {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            scene: None,
+        };
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            None,
+            &feed,
+            &EncoderProfile::DEFAULT,
+            FRAME_DEN,
+        )
+        .expect("fake session");
+        let tap = |targets| VideoTap {
+            targets,
+            ..cpu_tap(session.input())
+        };
+        let mut frames = no_frames();
+        let mut freed = 0;
+        frames.add(feed.clone(), tap(ahead), |_| freed += 1);
+        assert_eq!(freed, 0);
+        // The fake interop allocates nothing: every target comes from those given.
+        let refuses = jstream_platform::fake::FakeGpuInterop;
+        let first = frames.encode[0]
+            .ring
+            .next(&refuses, Some(&context), size, None)
+            .expect("ring")
+            .expect("a target");
+        assert!(
+            syncs
+                .iter()
+                .any(|sync| std::sync::Arc::ptr_eq(sync, first.sync()))
+        );
+
+        frames.add(feed, tap(encode_targets(&gpu, &context, size)), |garbage| {
+            assert!(matches!(garbage, Garbage::Targets(_)));
+            freed += 1;
+        });
+        assert_eq!(freed, 1, "the mix kept its ring");
+        assert_eq!(frames.mixes.len(), 1);
+        assert_eq!(
+            encode_targets(&refuses, &context, size).len(),
+            0,
+            "a refusal leaves the render thread to allocate"
+        );
     }
 
     /// The ring never hands out a target a queued or encoding frame still holds: with
@@ -5970,6 +6107,7 @@ mod tests {
             claim: None,
             probe: None,
             local: false,
+            targets: Vec::new(),
         }
     }
 
@@ -6123,9 +6261,9 @@ mod tests {
         )
         .expect("fake session");
         let input = || cpu_tap(session.input());
-        frames.add(feed(None, 1), input());
-        frames.add(feed(Some("half"), 2), input());
-        frames.add(feed(None, 1), input());
+        frames.add(feed(None, 1), input(), drop);
+        frames.add(feed(Some("half"), 2), input(), drop);
+        frames.add(feed(None, 1), input(), drop);
         assert_eq!(frames.mixes.len(), 2);
         assert_eq!(frames.targets[0].len(), 2);
         assert_eq!(frames.schedule(0), 2);
@@ -6173,10 +6311,10 @@ mod tests {
             FRAME_DEN,
         )
         .expect("fake session");
-        frames.add(shared.clone(), cpu_tap(session.input()));
-        frames.add(owned.clone(), cpu_tap(session.input()));
-        frames.add(owned, cpu_tap(session.input()));
-        frames.add(shared, cpu_tap(session.input()));
+        frames.add(shared.clone(), cpu_tap(session.input()), drop);
+        frames.add(owned.clone(), cpu_tap(session.input()), drop);
+        frames.add(owned, cpu_tap(session.input()), drop);
+        frames.add(shared, cpu_tap(session.input()), drop);
         assert_eq!(frames.mixes.len(), 2);
         assert_eq!(frames.mixes[1].owner, Some(OutputId::new("rec")));
         assert_eq!((frames.targets[0].len(), frames.targets[1].len()), (2, 2));
@@ -6204,7 +6342,7 @@ mod tests {
         )
         .expect("fake session");
         assert!(!frames.feeds_gpu());
-        frames.add(feed(), cpu_tap(session.input()));
+        frames.add(feed(), cpu_tap(session.input()), drop);
         assert!(!frames.feeds_gpu(), "a CPU session can follow a fallback");
         frames.add(
             feed(),
@@ -6214,7 +6352,9 @@ mod tests {
                 claim: None,
                 probe: None,
                 local: false,
+                targets: Vec::new(),
             },
+            drop,
         );
         assert!(frames.feeds_gpu());
     }
@@ -6260,7 +6400,9 @@ mod tests {
                 claim: Some(claim),
                 probe: None,
                 local: false,
+                targets: Vec::new(),
             },
+            drop,
         );
         assert!(frames.feeds_gpu());
         assert!(frames.targets[0].iter().all(|tap| tap.claim.is_none()));
@@ -6298,7 +6440,7 @@ mod tests {
         .expect("fake session");
         let gpu = jstream_platform::fake::FakeGpuInterop;
         let mut frames = no_frames();
-        frames.add(feed(1), cpu_tap(session.input()));
+        frames.add(feed(1), cpu_tap(session.input()), drop);
 
         assert_eq!(frames.schedule(0), 1);
         assert_eq!(frames.prepare(&gpu, None, size), Ok(0));
@@ -6313,7 +6455,7 @@ mod tests {
         assert!(frames.only_primed());
 
         // A second mix arrives while the first is running.
-        frames.add(feed(2), cpu_tap(session.input()));
+        frames.add(feed(2), cpu_tap(session.input()), drop);
         assert_eq!(frames.schedule(2), 2);
         assert_eq!(frames.prepare(&gpu, None, size), Ok(0));
         assert!(!frames.mixes[0].priming && frames.mixes[0].readback);
@@ -6326,6 +6468,75 @@ mod tests {
         assert!(frames.mixes.iter().all(|mix| !mix.priming && mix.readback));
         frames.settle(true);
         assert!(!frames.only_primed());
+    }
+
+    /// A running preview was owed nothing on the tick an output's mix was first drawn:
+    /// the next tick is drawn at the clock and none counts as skipped (#1689). A running
+    /// output was owed it, so its ticks still count.
+    #[test]
+    fn a_first_draw_beside_a_preview_alone_counts_no_skip() {
+        let canvas = FrameSize::new(2, 2).expect("size");
+        let stage = FrameSize::new(4, 4).expect("size");
+        let feed = |size| Feed {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            scene: None,
+        };
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            None,
+            &feed(canvas),
+            &EncoderProfile::DEFAULT,
+            FRAME_DEN,
+        )
+        .expect("fake session");
+        let preview = VideoTap {
+            local: true,
+            ..cpu_tap(session.input())
+        };
+        let gpu = jstream_platform::fake::FakeGpuInterop;
+        let mut frames = no_frames();
+        frames.add(feed(canvas), preview, drop);
+        assert_eq!(frames.schedule(0), 1);
+        assert_eq!(frames.prepare(&gpu, None, stage), Ok(0));
+        frames.settle(true);
+        assert!(frames.only_primed(), "the preview's own first draw");
+
+        assert_eq!(frames.schedule(1), 1);
+        assert_eq!(frames.prepare(&gpu, None, stage), Ok(0));
+        frames.settle(true);
+        assert!(
+            !frames.only_primed(),
+            "nothing was drawn for the first time"
+        );
+
+        // An output starts.
+        frames.add(feed(stage), cpu_tap(session.input()), drop);
+        assert_eq!(frames.schedule(2), 2);
+        assert_eq!(frames.prepare(&gpu, None, stage), Ok(0));
+        assert!(frames.mixes[0].local && !frames.mixes[1].local);
+        assert!(frames.mixes[1].priming);
+        frames.settle(true);
+        assert!(frames.only_primed(), "only the preview was due besides it");
+
+        // A second output starts while the first runs.
+        frames.add(
+            Feed {
+                divisor: 2,
+                ..feed(stage)
+            },
+            cpu_tap(session.input()),
+            drop,
+        );
+        assert_eq!(frames.schedule(3), 3);
+        assert_eq!(frames.prepare(&gpu, None, stage), Ok(0));
+        frames.settle(true);
+        assert!(
+            !frames.only_primed(),
+            "the running output was owed this tick"
+        );
     }
 
     /// A lost device shuts the gate even while a session holds a claim.
@@ -6458,7 +6669,7 @@ mod tests {
             FRAME_DEN,
         )
         .expect("fake session");
-        frames.add(program, cpu_tap(session.input()));
+        frames.add(program, cpu_tap(session.input()), drop);
         assert_eq!(
             frames.mixes.len(),
             1,
