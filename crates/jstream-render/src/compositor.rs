@@ -954,6 +954,12 @@ impl Compositor {
         errors.close(runtime.resample(&self.gpu, &self.owner, faces, target))
     }
 
+    /// How many deep skies [`Self::draw_sky`] has baked (ADR-0174).
+    #[cfg(test)]
+    pub(crate) fn sky_bakes(&self) -> u64 {
+        self.sky.as_ref().map_or(0, |sky| sky.baked)
+    }
+
     /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the
     /// picture flat in its box layer, shaded texel by texel where that layer sits in the
     /// scene (its lights, their shadows and its environment, seen from its camera's side)

@@ -478,3 +478,166 @@ fn golden_sky_dropping_out_of_warp_zooms_the_nebulae_back() {
         "the nebulae rush back: {dropping} dropping, {rising} rising"
     );
 }
+
+/// The nebulae and the band are baked once per seed (ADR-0174): turning the camera,
+/// warping, and changing their colours or amounts read the same bake, another seed
+/// makes its own, and a sky without them makes none.
+#[test]
+fn golden_sky_the_deep_sky_is_baked_once_per_seed() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let plain = shot(
+        &mut opened.compositor,
+        &SkyDraw {
+            stars: 1.0,
+            ..sky(night(), SceneCamera::framing(canvas()))
+        },
+    );
+    assert_eq!(opened.compositor.sky_bakes(), 0, "{}", total(&plain));
+    let first = shot(&mut opened.compositor, &deep(1.0, 1.0, 1));
+    assert_eq!(opened.compositor.sky_bakes(), 1);
+    let turned = shot(
+        &mut opened.compositor,
+        &SkyDraw {
+            camera: looking([0.0; 3], [1.0, -0.4, 0.3]),
+            ..deep(1.0, 1.0, 1)
+        },
+    );
+    assert_ne!(first.rgba(), turned.rgba(), "the sky turned");
+    let recoloured = shot(
+        &mut opened.compositor,
+        &SkyDraw {
+            deep: super::DeepSky {
+                nebula: 0.5,
+                nebula_colors: [Color::rgb(0.1, 1.0, 0.3), Color::rgb(1.0, 0.6, 0.1)],
+                galaxy: 0.2,
+                seed: 1,
+            },
+            ..deep(1.0, 1.0, 1)
+        },
+    );
+    assert_ne!(first.rgba(), recoloured.rgba(), "other colours");
+    shot(
+        &mut opened.compositor,
+        &SkyDraw {
+            warp: 0.1,
+            ..deep(1.0, 1.0, 1)
+        },
+    );
+    assert_eq!(opened.compositor.sky_bakes(), 1, "one seed, one bake");
+    shot(&mut opened.compositor, &deep(1.0, 1.0, 2));
+    assert_eq!(opened.compositor.sky_bakes(), 2, "another seed");
+    // Both are kept, so going back to the first bakes nothing, and draws what it drew.
+    let again = shot(&mut opened.compositor, &deep(1.0, 1.0, 1));
+    assert_eq!(opened.compositor.sky_bakes(), 2);
+    assert_eq!(first.rgba(), again.rgba());
+}
+
+/// The nebulae's colours and amount scale what the bake holds: each colour lights its
+/// own channels, and half the amount is half the light.
+#[test]
+fn golden_sky_the_nebulae_take_their_colours_and_amount_from_the_settings() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let channels = |snapshot: &Snapshot| {
+        snapshot.rgba().chunks(4).fold([0u64; 3], |mut sum, p| {
+            for (s, v) in sum.iter_mut().zip(p) {
+                *s += u64::from(*v);
+            }
+            sum
+        })
+    };
+    let coloured = |nebula, colours: [Color; 2]| SkyDraw {
+        deep: super::DeepSky {
+            nebula,
+            nebula_colors: colours,
+            galaxy: 0.0,
+            seed: 1,
+        },
+        ..deep(1.0, 0.0, 1)
+    };
+    let red = Color::rgb(1.0, 0.0, 0.0);
+    let blue = Color::rgb(0.0, 0.0, 1.0);
+    let [r, _, b] = channels(&shot(&mut opened.compositor, &coloured(1.0, [red, red])));
+    assert!(r > 20_000 && r > b * 3, "red nebulae: {r} red, {b} blue");
+    let [r, _, b] = channels(&shot(&mut opened.compositor, &coloured(1.0, [blue, blue])));
+    assert!(b > 20_000 && b > r * 3, "blue nebulae: {r} red, {b} blue");
+    // Both colours show where a sky has both.
+    let [r, _, b] = channels(&shot(&mut opened.compositor, &coloured(1.0, [red, blue])));
+    assert!(r > 5_000 && b > 5_000, "both colours: {r} red, {b} blue");
+    let full = total(&shot(&mut opened.compositor, &coloured(1.0, [red, blue])));
+    let faint = total(&shot(&mut opened.compositor, &coloured(0.25, [red, blue])));
+    assert!(faint * 2 < full, "a quarter is fainter: {faint} of {full}");
+    assert_eq!(opened.compositor.sky_bakes(), 1);
+}
+
+/// A bake's six faces meet without a seam: seen close up, across an edge or a corner
+/// of the cube, the nebulae run on as smoothly as they do inside a face.
+#[test]
+fn golden_sky_a_bakes_faces_meet_without_a_seam() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // The largest step between two pixels side by side or one above the other.
+    let step = |snapshot: &Snapshot| {
+        let at = |x: u32, y: u32| rgb(snapshot, x, y);
+        let apart = |a: [u8; 3], b: [u8; 3]| {
+            a.iter()
+                .zip(b)
+                .map(|(a, b)| a.abs_diff(b))
+                .max()
+                .unwrap_or(0)
+        };
+        let mut most = 0;
+        for y in 0..HEIGHT - 1 {
+            for x in 0..WIDTH - 1 {
+                most = most
+                    .max(apart(at(x, y), at(x + 1, y)))
+                    .max(apart(at(x, y), at(x, y + 1)));
+            }
+        }
+        most
+    };
+    let close = |aim| SkyDraw {
+        camera: SceneCamera {
+            fov_deg: Finite32::new(3.0).expect("finite"),
+            ..looking([0.0; 3], aim)
+        },
+        ..deep(1.0, 1.0, 5)
+    };
+    let mut lit = 0;
+    for aim in [
+        // Inside a face, for what smooth is.
+        [0.3, 0.2, -1.0],
+        // Each edge between two faces, and the corners.
+        [1.0, 1.0, 0.0],
+        [1.0, -1.0, 0.0],
+        [-1.0, 1.0, 0.0],
+        [-1.0, -1.0, 0.0],
+        [1.0, 0.0, 1.0],
+        [1.0, 0.0, -1.0],
+        [-1.0, 0.0, 1.0],
+        [-1.0, 0.0, -1.0],
+        [0.0, 1.0, 1.0],
+        [0.0, 1.0, -1.0],
+        [0.0, -1.0, 1.0],
+        [0.0, -1.0, -1.0],
+        [1.0, 1.0, 1.0],
+        [-1.0, 1.0, -1.0],
+        [1.0, -1.0, -1.0],
+        [-1.0, -1.0, 1.0],
+    ] {
+        let got = shot(&mut opened.compositor, &close(aim));
+        lit += total(&got);
+        // Inside a face the steps are under 10 of 255; a face laid the wrong way round
+        // steps by 20 or more at its edges.
+        assert!(
+            step(&got) <= 12,
+            "looking {aim:?}: a step of {}",
+            step(&got)
+        );
+    }
+    assert!(lit > 1_000_000, "the edges show nebulae: {lit}");
+}
