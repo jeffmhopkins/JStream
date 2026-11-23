@@ -2596,6 +2596,7 @@ fn profile_info() -> ProfileInfo {
             skipped: 1,
             model_resolution: 85,
             model_frames_reduced: 120,
+            preview_skipped: 4,
             phases: PhaseProfile {
                 uploads_ms: ms(1.25),
                 captures_ms: ms(0.5),

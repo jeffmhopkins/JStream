@@ -392,13 +392,19 @@ pub struct DrawerProfile {
     #[serde(default)]
     pub skipped: u64,
     /// The percentage of their canvas's width and of its height the drawer drew 3D
-    /// models with at the end of the window (ADR-0197, since 0.173): 100 unless the
+    /// models with at the end of the window (ADR-0197, since 0.177): 100 unless the
     /// program's render thread lowered it, or `RenderFeatures::model_resolution` set it.
     #[serde(default = "whole")]
     pub model_resolution: u32,
-    /// The frames of the window drawn with 3D models at less than 100 (since 0.173).
+    /// The frames of the window drawn with 3D models at less than 100 (since 0.177).
     #[serde(default)]
     pub model_frames_reduced: u64,
+    /// The program's pictures that only preview streams take (a monitored scene, or the
+    /// program at a size only they take) skipped because the GPU or the readback was
+    /// behind (0.176, #1690). No output missed them, so `stats.tick`'s drops leave them
+    /// out. Always 0 for the preview.
+    #[serde(default)]
+    pub preview_skipped: u64,
     /// The average time per frame in each phase.
     #[serde(default)]
     pub phases: PhaseProfile,

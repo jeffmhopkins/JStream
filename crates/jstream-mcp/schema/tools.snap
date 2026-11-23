@@ -649,7 +649,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "model_resolution": {
-                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.177). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -9781,7 +9781,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "model_resolution": {
-                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.177). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -21760,7 +21760,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "model_resolution": {
-                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.177). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -33334,7 +33334,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "model_resolution": {
-                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.177). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -45644,7 +45644,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "model_resolution": {
-                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.177). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -46278,7 +46278,7 @@ source: crates/jstream-mcp/src/tests.rs
                     ]
                   },
                   "model_resolution": {
-                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.177). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [

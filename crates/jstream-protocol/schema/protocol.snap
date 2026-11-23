@@ -549,7 +549,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               ]
             },
             "model_resolution": {
-              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.177). `studio.set_rendering`\nrefuses any other value.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -4424,14 +4424,14 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "model_frames_reduced": {
           "default": 0,
-          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.173).",
+          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.177).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "model_resolution": {
           "default": 100,
-          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.173): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
+          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.177): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -4453,6 +4453,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "uploads_ms": 0.0
           },
           "description": "The average time per frame in each phase."
+        },
+        "preview_skipped": {
+          "default": 0,
+          "description": "The program's pictures that only preview streams take (a monitored scene, or the\nprogram at a size only they take) skipped because the GPU or the readback was\nbehind (0.176, #1690). No output missed them, so `stats.tick`'s drops leave them\nout. Always 0 for the preview.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         },
         "skipped": {
           "default": 0,
@@ -11569,7 +11576,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "kbps": {
           "default": 0,
-          "description": "What the output sent over the last tick's interval, in kilobits a second (bytes\ntimes 8 over the milliseconds since the previous sample). 0 on the first tick of\na run that hasn't sent anything yet.",
+          "description": "What the output sent over the last four seconds, in kilobits a second (bytes\ntimes 8 over the milliseconds since the sample four seconds back, or since the\nrun's first sample while it is younger), so a keyframe's burst doesn't swing it\n(#1693; over the last tick's interval before 0.176). 0 on the first tick of a run\nthat hasn't sent anything yet.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -15934,7 +15941,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "model_resolution": {
           "default": 0,
-          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.173): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
+          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.177): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -19029,5 +19036,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.173"
+  "title": "JStream protocol 0.177"
 }

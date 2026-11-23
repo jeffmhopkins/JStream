@@ -819,7 +819,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   kind's boxes, and since 0.172 its lit models also reflect what is on screen;
   `studio.set_rendering` turns probes off and screen-space reflections (off by default)
   on app-wide, caps the
-  probes' face size, sets the screen-space steps, and since 0.173 says how many pixels
+  probes' face size, sets the screen-space steps, and since 0.177 says how many pixels
   3D models are drawn with or leaves that to the engine
   ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol

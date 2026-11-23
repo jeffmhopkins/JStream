@@ -517,6 +517,9 @@ fn drawer_profile(
             model_frames_reduced: now
                 .model_reduced
                 .saturating_sub(before.map_or(0, |b| b.model_reduced)),
+            preview_skipped: now
+                .preview_skipped
+                .saturating_sub(before.map_or(0, |b| b.preview_skipped)),
             phases,
         },
         drawn,
