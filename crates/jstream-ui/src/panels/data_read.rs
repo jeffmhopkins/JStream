@@ -95,7 +95,8 @@ pub fn DataReads(
 ) -> impl IntoView {
     // Other data stays picked while its key and field are being typed, even when they
     // happen to name a Mod.
-    let other = RwSignal::new(kind.with_untracked(|k| k.as_ref().is_some_and(|k| mod_slot(k).is_none())));
+    let other =
+        RwSignal::new(kind.with_untracked(|k| k.as_ref().is_some_and(|k| mod_slot(k).is_none())));
     let edit = move |change: &dyn Fn(&MotionKind) -> Option<MotionKind>| {
         if let Some(next) = kind.with_untracked(|k| k.as_ref().and_then(change)) {
             send(next);

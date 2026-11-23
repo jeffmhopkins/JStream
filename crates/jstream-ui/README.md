@@ -219,8 +219,11 @@ Contents ([Design](#design) explains the choices):
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
   natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
-  `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
-  modifier tested natively), the Filters
+  `CameraMoves`, with the followable items, the Follow pointer note, adding a camera
+  modifier and the MIDI, DAW data and Channel kinds it offers tested natively), the
+  fields that say which live data a reader reads (`data_read.rs`: `DataReads`, shared by
+  the channel card and Camera motion, with a JTunnel sender's Mod slots and their names
+  tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
   Properties dialogs' list and pane, and `FilterUndo`, what the Properties dialogs
   opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
@@ -814,7 +817,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`Studio::channel`): its name, switch (`channel.switch`), a meter that also sets the value
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
-  0 to 1; "+ Channel" adds a `channel` input; each input that reads something shows its
+  0 to 1; "+ Channel" adds a `channel` input; "+ Data" opens `DataReads` on a `data`
+  input of the first Mod no channel reads yet (`next_mod`), added on Add input; each input that reads something shows its
   `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one

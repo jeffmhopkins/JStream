@@ -9,10 +9,10 @@
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
+use super::data_read::{DataReads, MOD_SLOTS, mod_reader, mod_slot};
 use super::motion::{
     KINDS, Param, SHAPES, kind_name, param_value, sized_kind, with_input, with_param,
 };
-use super::data_read::{DataReads, MOD_SLOTS, mod_reader, mod_slot};
 use super::number::NumberField;
 use super::scene_properties::SceneDraft;
 use crate::store::Collection;
@@ -256,17 +256,27 @@ pub fn CameraMoves(
                 .collect::<Vec<_>>()
         })
     };
-    let has_channels =
-        move || studio.collection.with(|c| c.as_ref().is_some_and(|c| !c.channels.is_empty()));
+    let has_channels = move || {
+        studio
+            .collection
+            .with(|c| c.as_ref().is_some_and(|c| !c.channels.is_empty()))
+    };
     // The Mods the draft's camera and the channels already read, and the channel a new
     // Channel move follows.
     let taken = move || {
         let mut mods: Vec<u8> = draft.with_untracked(|d| {
-            d.camera_motion.iter().filter_map(|m| mod_slot(&m.kind)).collect()
+            d.camera_motion
+                .iter()
+                .filter_map(|m| mod_slot(&m.kind))
+                .collect()
         });
         studio.collection.with_untracked(|c| {
             if let Some(c) = c.as_ref() {
-                mods.extend(c.channels.iter().flat_map(|ch| ch.inputs.iter().filter_map(mod_slot)));
+                mods.extend(
+                    c.channels
+                        .iter()
+                        .flat_map(|ch| ch.inputs.iter().filter_map(mod_slot)),
+                );
             }
         });
         let channel = untrack(move || channel_options(scene.get_value()))
@@ -355,13 +365,14 @@ pub fn CameraMoves(
                             prop:value=move || at().map_or("", |m| kind_name(&m.kind))
                             on:change=move |event| {
                                 let name = event_target_value(&event);
+                                // Read before the draft is borrowed to change it.
+                                let (mods, channel) = taken();
                                 change(n, &|m| {
                                     if kind_name(&m.kind) == name {
                                         return false;
                                     }
                                     let size = param_value(&m.kind, Param::Amplitude)
                                         .map_or_else(|| gentle(m.property), |v| v as f32);
-                                    let (mods, channel) = taken();
                                     match camera_kind(&name, m.property, size, &mods, channel.as_deref()) {
                                         Some(kind) => {
                                             m.kind = kind;
@@ -608,10 +619,12 @@ mod tests {
             ["Wiggle", "Oscillate", "Drift", "Shake", "MIDI", "DAW data"]
         );
         assert_eq!(camera_kinds(true).last(), Some(&"Channel"));
-        let fov = camera_kind("DAW data", CameraProperty::Fov, 0.5, &[1, 2, 4], None)
-            .expect("data");
+        let fov =
+            camera_kind("DAW data", CameraProperty::Fov, 0.5, &[1, 2, 4], None).expect("data");
         assert_eq!(mod_slot(&fov), Some(3));
-        assert!(matches!(fov, MotionKind::Data { from, to, .. } if from.get() == 0.0 && to.get() == -20.0));
+        assert!(
+            matches!(fov, MotionKind::Data { from, to, .. } if from.get() == 0.0 && to.get() == -20.0)
+        );
         let roll = camera_kind("Channel", CameraProperty::Roll, 0.5, &[], Some("cam_roll"))
             .expect("channel");
         assert!(matches!(
@@ -635,10 +648,7 @@ mod tests {
             Ok(())
         );
         assert_eq!(Param::From.label_for(&list[1].kind), "At 0 %");
-        assert_eq!(
-            param_value(&list[1].kind, Param::Smoothing),
-            Some(50.0)
-        );
+        assert_eq!(param_value(&list[1].kind, Param::Smoothing), Some(50.0));
         let slower = with_param(&list[1].kind, Param::Smoothing, 300.0).expect("smoothing");
         assert_eq!(param_value(&slower, Param::Smoothing), Some(300.0));
     }
