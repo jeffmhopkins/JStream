@@ -90,7 +90,13 @@ pub(crate) enum Hearing {
 /// What `modifier` hears, when it is an audio one. A source overrides a bus, as for the
 /// `spectrum` kind.
 pub(crate) fn hearing(modifier: &MotionModifier) -> Option<Hearing> {
-    match &modifier.kind {
+    hearing_of(&modifier.kind)
+}
+
+/// What an `audio` reader of kind `kind` hears, on a motion modifier, a channel's input
+/// or a value binding (ADR-0206).
+pub(crate) fn hearing_of(kind: &MotionKind) -> Option<Hearing> {
+    match kind {
         MotionKind::Audio {
             audio,
             audio_source,

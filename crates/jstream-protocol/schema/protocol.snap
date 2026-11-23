@@ -3857,7 +3857,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         },
         "inputs": {
-          "description": "What sets it: at most 8 readers, each a `midi`, `data` or `channel` modifier's kind\nand parameters, whose `from` and `to` map the reading onto the channel's 0 to 1.\nA `channel` input can't lead back to this channel. Default none.",
+          "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
           "items": {
             "$ref": "#/$defs/MotionKind"
           },
@@ -18999,5 +18999,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.172"
+  "title": "JStream protocol 0.178"
 }

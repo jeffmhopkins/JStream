@@ -1,9 +1,11 @@
 //! Value bindings as the engine applies them
 //! ([ADR-0178](../../../docs/adr/0178-value-bindings-drive-any-number.md)).
 //!
-//! A value binding reads a MIDI control, a live-data field or a channel as a `midi`,
-//! `data` or `channel` motion modifier reads it (the readers in `channels.rs`), follows it
-//! with the same one-pole [`Smoothing`] and maps it with the same [`Midi`] parameters.
+//! A value binding reads a MIDI control, a live-data field, a channel or an audio level as
+//! a `midi`, `data`, `channel` or `audio` motion modifier reads it (the readers in
+//! `channels.rs`; an audio level is measured on each tick and follows its attack and
+//! release, ADR-0206), follows it with the same one-pole [`Smoothing`] and maps it with
+//! the same [`Midi`] parameters.
 //! The engine's `jstream-values` thread ticks the [`ValueDriver`] about 30 times a
 //! second while the collection holds a binding, and about 60 while a value is still
 //! moving (ADR-0190). Each tick turns every moved binding's
@@ -34,6 +36,8 @@ use jstream_anim::{Midi, Smoothing};
 use jstream_graph::Graph;
 use jstream_protocol::{Edit, ValueBinding};
 use jstream_sources::{LiveData, MidiInputs};
+
+use crate::reactive::HeardScopes;
 
 /// How often the engine ticks the driver while the collection holds a binding: about
 /// 30 times a second, the rate a gesture's `live.changed` events go out at.
@@ -79,15 +83,17 @@ impl ValueDriver {
         graph: &Graph,
         midi: Option<&MidiInputs>,
         data: &LiveData,
+        heard: &HeardScopes,
         now: Instant,
     ) -> bool {
         let dt_s = self.last.map_or(0.0, |last| {
             now.saturating_duration_since(last).as_secs_f32()
         });
         self.last = Some(now);
-        self.keep(graph, midi, data);
+        self.keep(graph, midi, data, heard);
         let mut edits = Vec::with_capacity(self.driven.len());
         for driven in self.driven.values_mut() {
+            driven.reader.sample(dt_s, now);
             let raw = driven.reader.read();
             if !driven.moved {
                 if raw == driven.rest {
@@ -121,19 +127,29 @@ impl ValueDriver {
 
     /// Follows each of `graph`'s bindings it doesn't yet, afresh for one whose input
     /// changed, and lets go of the ones `graph` no longer holds.
-    fn keep(&mut self, graph: &Graph, midi: Option<&MidiInputs>, data: &LiveData) {
+    fn keep(
+        &mut self,
+        graph: &Graph,
+        midi: Option<&MidiInputs>,
+        data: &LiveData,
+        heard: &HeardScopes,
+    ) {
         self.driven
             .retain(|id, _| graph.value_bindings().any(|b| &b.binding_id == id));
         for binding in graph.value_bindings() {
             match self.driven.get_mut(&binding.binding_id) {
-                Some(driven) if driven.binding == *binding && !driven.unresolved => {}
+                Some(driven)
+                    if driven.binding == *binding
+                        && !driven.unresolved
+                        && driven.reader.hears_current(&binding.input, heard) => {}
                 // The same control with another target, amount or smoothing time: it keeps
                 // following, so a moved control goes on driving.
                 Some(driven)
                     if crate::channels::same_but_smoothing(
                         &driven.binding.input,
                         &binding.input,
-                    ) && !driven.unresolved =>
+                    ) && !driven.unresolved
+                        && driven.reader.hears_current(&binding.input, heard) =>
                 {
                     if let Some(params) = crate::channels::mapping(&binding.input) {
                         driven.midi = params;
@@ -142,7 +158,7 @@ impl ValueDriver {
                     driven.binding = binding.clone();
                 }
                 _ => {
-                    let driven = follow(binding, midi, data);
+                    let driven = follow(binding, midi, data, heard);
                     match driven {
                         Some(driven) => {
                             self.driven.insert(binding.binding_id.clone(), driven);
@@ -159,9 +175,14 @@ impl ValueDriver {
 
 /// `binding` as the driver follows it, or `None` when it reads MIDI and the engine has
 /// no MIDI inputs, or reads something this version can't.
-fn follow(binding: &ValueBinding, midi: Option<&MidiInputs>, data: &LiveData) -> Option<Driven> {
+fn follow(
+    binding: &ValueBinding,
+    midi: Option<&MidiInputs>,
+    data: &LiveData,
+    heard: &HeardScopes,
+) -> Option<Driven> {
     let params = crate::channels::mapping(&binding.input)?;
-    let (reader, unresolved) = crate::channels::reader(&binding.input, midi, data)?;
+    let (reader, unresolved) = crate::channels::reader(&binding.input, midi, data, heard)?;
     let rest = reader.read();
     Some(Driven {
         binding: binding.clone(),
@@ -228,13 +249,25 @@ mod tests {
         let (midi, data) = (MidiInputs::new(), LiveData::new());
         let mut driver = ValueDriver::default();
         let t0 = Instant::now();
-        assert!(!driver.tick(&graph, Some(&midi), &data, t0));
+        assert!(!driver.tick(&graph, Some(&midi), &data, &Default::default(), t0));
         assert!(driver.edits().is_empty(), "at rest: nothing drives");
         midi.push("Pad", 0, &cc(7, 127));
-        assert!(driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(33)));
+        assert!(driver.tick(
+            &graph,
+            Some(&midi),
+            &data,
+            &Default::default(),
+            t0 + Duration::from_millis(33)
+        ));
         assert_eq!(gain(driver.edits()), Some(0.0), "the first step lands");
         midi.push("Pad", 1, &cc(7, 0));
-        driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(133));
+        driver.tick(
+            &graph,
+            Some(&midi),
+            &data,
+            &Default::default(),
+            t0 + Duration::from_millis(133),
+        );
         let after = gain(driver.edits()).expect("a fader");
         // One time constant: about two thirds of the way down.
         assert!((after + 63.2).abs() < 0.5, "{after}");
@@ -251,7 +284,13 @@ mod tests {
                 None,
             )
             .expect("rebinds");
-        driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(166));
+        driver.tick(
+            &graph,
+            Some(&midi),
+            &data,
+            &Default::default(),
+            t0 + Duration::from_millis(166),
+        );
         assert!(matches!(
             driver.edits(),
             [Edit::BusSetFader { bus_id, .. }] if bus_id.as_str() == "fx"
@@ -259,12 +298,24 @@ mod tests {
         // A new smoothing time keeps the moved control driving, from where it is.
         let before = gain(driver.edits()).expect("a fader");
         graph.apply(&[bound(20, 7, "fx")], None).expect("rebinds");
-        driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(183));
+        driver.tick(
+            &graph,
+            Some(&midi),
+            &data,
+            &Default::default(),
+            t0 + Duration::from_millis(183),
+        );
         let kept = gain(driver.edits()).expect("still driving");
         assert!(kept <= before && kept > -100.0, "{before} then {kept}");
         // Another control starts afresh: at rest until it moves.
         graph.apply(&[bound(100, 8, "fx")], None).expect("rebinds");
-        assert!(driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(200)));
+        assert!(driver.tick(
+            &graph,
+            Some(&midi),
+            &data,
+            &Default::default(),
+            t0 + Duration::from_millis(200)
+        ));
         assert!(driver.edits().is_empty());
         graph
             .apply(
@@ -274,6 +325,12 @@ mod tests {
                 None,
             )
             .expect("clears");
-        assert!(!driver.tick(&graph, Some(&midi), &data, t0 + Duration::from_millis(233)));
+        assert!(!driver.tick(
+            &graph,
+            Some(&midi),
+            &data,
+            &Default::default(),
+            t0 + Duration::from_millis(233)
+        ));
     }
 }

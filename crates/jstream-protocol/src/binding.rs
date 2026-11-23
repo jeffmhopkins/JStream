@@ -305,8 +305,8 @@ pub struct ValueBinding {
     /// Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII
     /// letters, digits, `_` and `-`.
     pub binding_id: String,
-    /// What it reads: a `midi`, `data` or (since 0.169) `channel` modifier's kind and
-    /// parameters.
+    /// What it reads: a `midi`, `data`, (since 0.169) `channel` or (since 0.178,
+    /// ADR-0206) `audio` modifier's kind and parameters.
     #[serde(flatten)]
     pub input: MotionKind,
     /// What it drives.
@@ -328,11 +328,14 @@ impl ValueBinding {
         }
         if !matches!(
             self.input,
-            MotionKind::Midi { .. } | MotionKind::Data { .. } | MotionKind::Channel { .. }
+            MotionKind::Midi { .. }
+                | MotionKind::Data { .. }
+                | MotionKind::Channel { .. }
+                | MotionKind::Audio { .. }
         ) {
             return Some((
                 "kind".into(),
-                "a value binding reads a `midi` control, a `data` field or a `channel`".into(),
+                "a value binding reads a `midi` control, a `data` field, a `channel` or an `audio` level".into(),
             ));
         }
         if let Some(reason) = crate::motion::amount_problem(self.amount.as_deref()) {

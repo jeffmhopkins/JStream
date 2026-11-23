@@ -384,7 +384,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.172 because a scene whose `reflections` is on also reflects
+`PROTOCOL_VERSION` is 0.178 because a channel's `inputs` and a value binding's input
+may be an `audio` level, a source's, a bus's or the program mix's, followed by its
+attack and release
+([ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -1552,6 +1555,9 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
   count}` for each MIDI input that has sent a control change, for a client that learns
   one: the control whose `count` grows is the one moved.
+- A value binding's input may also be `kind` `audio` (since 0.178,
+  [ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)): an
+  audio modifier's fields, its attack and release following the level.
 - A value binding's input may also be `kind` `channel` (since 0.169), and its optional
   `amount` names a channel that scales it: its value is `from + (value - from) ×
   amount`, so a channel at 0 holds it at `from` (a missing channel scales by 1).
@@ -1561,7 +1567,8 @@ controls into one live value, 0 to 1, that anything bindable follows, listed in
 `state.get`'s `channels` by ID (at most `MAX_CHANNELS`, 256).
 - **`ChannelInfo {channel_id, name, scene_id?, default, inputs, combine, average_ms,
   rise_ms, fall_ms, curve, on, off_value}`**: up to 8 `inputs`, each the fields a `midi`,
-  `data` (without `color_from`) or `channel` modifier takes; `combine` is `latest` (the
+  `data` (without `color_from`), `channel` or (since 0.178, ADR-0206) `audio` modifier
+  takes; `combine` is `latest` (the
   input that moved last, the default), `max`, `min`, `sum`, `product` or `average`;
   then, in order, the switch (`on` false holds `off_value`), a moving average over
   `average_ms` (≤ 10,000), a linear fade up over `rise_ms` and down over `fall_ms` (each

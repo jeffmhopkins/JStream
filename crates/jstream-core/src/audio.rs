@@ -275,10 +275,11 @@ fn drawn_buses(state: &State) -> BTreeSet<BusId> {
         .collect()
 }
 
-/// What every audio motion modifier of the collection hears: on each scene's items, and
-/// in each keyframe scene's motion overrides.
+/// What every audio reader of the collection hears: each audio motion modifier on a
+/// scene's items and in a keyframe scene's motion overrides, and each `audio` input of a
+/// channel or a value binding (ADR-0206).
 pub(crate) fn heard_by_motion(state: &State) -> impl Iterator<Item = crate::reactive::Hearing> {
-    state.scenes().iter().flat_map(|scene| {
+    let motion = state.scenes().iter().flat_map(|scene| {
         let own = scene.items().iter().flat_map(|item| item.motion().iter());
         let overridden = scene
             .overrides()
@@ -286,7 +287,15 @@ pub(crate) fn heard_by_motion(state: &State) -> impl Iterator<Item = crate::reac
             .filter_map(|(_, over)| over.motion.as_ref())
             .flatten();
         own.chain(overridden).filter_map(crate::reactive::hearing)
-    })
+    });
+    let channels = state
+        .channels()
+        .flat_map(|channel| channel.inputs.iter())
+        .filter_map(crate::reactive::hearing_of);
+    let bindings = state
+        .value_bindings()
+        .filter_map(|binding| crate::reactive::hearing_of(&binding.input));
+    motion.chain(channels).chain(bindings)
 }
 
 /// Every source a scope source's `audio_source` draws (#459), and a shader source's
