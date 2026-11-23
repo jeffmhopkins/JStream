@@ -12,6 +12,8 @@
 //! Docs: docs/UI-FEATURES.md#automation, docs/adr/0178-value-bindings-drive-any-number.md
 
 use crate::live_sources::{MOD_COUNT, mod_of, mod_reader, reader_name};
+use crate::mapping_index::{self, SourceKey};
+use crate::store::{Collection, Studio};
 use jstream_control::protocol::MotionKind;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
@@ -145,9 +147,40 @@ pub fn amount_label(ends: (f32, f32), range: (f64, f64)) -> String {
 /// The Mod `by` slots along from the armed one, on the same sender, stopping at the
 /// first and the last; `None` when the armed source isn't a Mod.
 pub fn stepped(armed: &MotionKind, by: i32) -> Option<MotionKind> {
-    let (sender, slot) = mod_of(armed)?;
+    stepped_in(None, armed, by)
+}
+
+/// [`stepped`] with the collection's named Mods: a Mod the Mappings panel has named is a
+/// channel with that Mod as its only input, so stepping onto one arms its channel, and
+/// stepping from one goes on from its Mod.
+pub fn stepped_in(
+    collection: Option<&Collection>,
+    armed: &MotionKind,
+    by: i32,
+) -> Option<MotionKind> {
+    let (sender, slot) = match mod_of(armed) {
+        Some((sender, slot)) => (sender.map(str::to_owned), slot),
+        None => {
+            let MotionKind::Channel { channel_id, .. } = armed else {
+                return None;
+            };
+            let key = mapping_index::named_mod(collection?.channel(channel_id)?)?;
+            let slot = usize::from(mapping_index::mod_slot(&key)?.checked_sub(1)?);
+            let SourceKey::Data { input, .. } = key else {
+                return None;
+            };
+            (input, slot)
+        }
+    };
     let next = (slot as i32 + by).clamp(0, MOD_COUNT as i32 - 1) as usize;
-    Some(mod_reader(sender, next))
+    let named = collection.zip(sender.as_deref()).and_then(|(c, s)| {
+        let n = u8::try_from(next + 1).ok()?;
+        mapping_index::mod_channel(c, s, n)
+    });
+    Some(match named {
+        Some(channel) => mapping_index::channel_reader(&channel.channel_id),
+        None => mod_reader(sender.as_deref(), next),
+    })
 }
 
 /// The setting a pointer event landed on, by its control button's `data-learn`: the
@@ -226,6 +259,7 @@ fn in_bar(event: &web_sys::Event) -> bool {
 #[component]
 pub fn MappingBar() -> impl IntoView {
     let mode = expect_context::<MappingMode>();
+    let studio = expect_context::<Studio>();
     // Where the pointer was last, and how far it has gone in all, during a drag.
     let last = StoredValue::new(None::<(f64, f64)>);
     let listeners = StoredValue::new_local(Vec::<Captured>::new());
@@ -312,9 +346,12 @@ pub fn MappingBar() -> impl IntoView {
                 "]" if !typing => 1,
                 _ => return,
             };
-            let next = mode
-                .armed
-                .with_untracked(|a| a.as_ref().and_then(|a| stepped(&a.reader, step)));
+            let next = mode.armed.with_untracked(|a| {
+                let a = a.as_ref()?;
+                studio
+                    .collection
+                    .with_untracked(|c| stepped_in(c.as_ref(), &a.reader, step))
+            });
             if let Some(reader) = next {
                 e.prevent_default();
                 e.stop_propagation();
@@ -424,5 +461,29 @@ mod tests {
             "",
         );
         assert_eq!(stepped(&midi, 1), None);
+    }
+
+    #[test]
+    fn the_brackets_step_onto_and_from_a_named_mod_as_its_channel() {
+        let mut c = Collection::default();
+        let edits =
+            mapping_index::name_mod_edits(&c, "Bitwig", 21, "Zoom", mod_reader(Some("Bitwig"), 20));
+        let Some(jstream_control::protocol::Edit::ChannelSet { channel }) = edits.first() else {
+            panic!("naming a Mod makes its channel");
+        };
+        c.channels.push(channel.clone());
+        let zoom = mapping_index::channel_reader(&channel.channel_id);
+        let twentieth = mod_reader(Some("Bitwig"), 19);
+        assert_eq!(stepped_in(Some(&c), &twentieth, 1), Some(zoom.clone()));
+        assert_eq!(
+            stepped_in(Some(&c), &zoom, 1),
+            Some(mod_reader(Some("Bitwig"), 21))
+        );
+        assert_eq!(stepped_in(Some(&c), &zoom, -1), Some(twentieth));
+        assert_eq!(
+            stepped_in(None, &zoom, 1),
+            None,
+            "a channel alone isn't a Mod"
+        );
     }
 }

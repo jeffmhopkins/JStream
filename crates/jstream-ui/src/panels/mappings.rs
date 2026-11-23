@@ -19,13 +19,15 @@ use crate::app::SessionContext;
 use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::live_sources::{self, LiveSources as Feed};
-use crate::mapping_index::{self, Filter, Mode, Reader, Row, Setter, SourceKey, SourceKind};
+use crate::mapping_index::{
+    self, Filter, Mode, Reader, Row, Setter, SourceKey, SourceKind, channel_reader,
+};
 use crate::panels::channels::live_values;
 use crate::panels::mapping_mode::MappingMode;
 use crate::panels::number::NumberField;
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
-use jstream_control::protocol::{ChannelValueInfo, Edit, Finite32, MotionCurve, MotionKind};
+use jstream_control::protocol::{ChannelValueInfo, Edit, MotionCurve, MotionKind};
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -224,17 +226,6 @@ fn key_label(collection: &Collection, key: &SourceKey) -> String {
             },
         ),
         _ => mapping_index::source_name(collection, key),
-    }
-}
-
-/// A reader of a channel over 0 to 1, as a new mapping from it starts.
-fn channel_reader(channel_id: &str) -> MotionKind {
-    MotionKind::Channel {
-        channel_id: channel_id.to_owned(),
-        smoothing_ms: 50,
-        curve: MotionCurve::Linear,
-        from: Finite32::ZERO,
-        to: Finite32::ONE,
     }
 }
 
@@ -775,11 +766,6 @@ fn mod_armed(collection: &Collection, sender: &str, slot: u8) -> Pick {
     }
 }
 
-/// The Mod slot an armed source is, for a sender, if it is one of its Mods.
-fn armed_slot(collection: &Collection, sender: &str, armed: &SourceKey) -> Option<u8> {
-    (1..=MOD_SLOTS).find(|n| &mod_armed(collection, sender, *n).key == armed)
-}
-
 /// The Sources tab: each sender's 32 Mods to name and arm, what the armed source drives,
 /// and the other sources.
 #[component]
@@ -790,7 +776,6 @@ fn SourcesTab(
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
     mode: Armed,
 ) -> impl IntoView {
-    let studio = expect_context::<Studio>();
     // The sender names, so the grids redraw only when the senders change.
     let senders = Memo::new(move |_| {
         feed.with(|f| {
@@ -800,44 +785,6 @@ fn SourcesTab(
                 .collect::<Vec<_>>()
         })
     });
-    // The app's mapping bar steps a Mod reader with [ and ]; a named Mod is armed as its
-    // channel, so the panel steps from one, with the arrow keys too while no field or
-    // slider has the focus.
-    let keys = window_event_listener(leptos::ev::keydown, move |event| {
-        if event.default_prevented() || crate::hotkeys::overlay_open() {
-            return;
-        }
-        let typing = crate::hotkeys::typed_in_field(&event);
-        let step: i16 = match event.key().as_str() {
-            "[" if !typing => -1,
-            "]" if !typing => 1,
-            "ArrowLeft" | "ArrowUp" if !typing => -1,
-            "ArrowRight" | "ArrowDown" if !typing => 1,
-            _ => return,
-        };
-        let Some(key) = mode.key_untracked() else {
-            return;
-        };
-        if matches!(key, SourceKey::Data { .. }) && matches!(event.key().as_str(), "[" | "]") {
-            // A Mod reader: the bar steps it.
-            return;
-        }
-        let next = studio.collection.with_untracked(|c| {
-            let c = c.as_ref()?;
-            senders.with_untracked(|list| {
-                list.iter().find_map(|(sender, _)| {
-                    let slot = armed_slot(c, sender, &key)?;
-                    let n = (i16::from(slot) - 1 + step).rem_euclid(i16::from(MOD_SLOTS)) as u8 + 1;
-                    Some(mod_armed(c, sender, n))
-                })
-            })
-        });
-        if let Some(next) = next {
-            event.prevent_default();
-            mode.arm(&next);
-        }
-    });
-    on_cleanup(move || keys.remove());
     let grids = move || {
         let list = senders.get();
         if list.is_empty() {
@@ -1106,7 +1053,7 @@ fn ArmedTargets(mode: Armed, filter: RwSignal<Filter>, tab: RwSignal<Tab>) -> im
             <div class="mp-armed">
                 {rows.into_iter().map(|r| view! { <TargetRow reader=r /> }).collect_view()}
             </div>
-            <p class="hint chan-help">"Drag on any setting to map it. [ and ] arm the previous or next Mod, as the arrow keys do while no field has the focus. Escape or Done in the bar disarms."</p>
+            <p class="hint chan-help">"Drag on any setting to map it. [ and ] arm the previous or next Mod; Escape or Done in the bar disarms."</p>
         }
         .into_any()
     };

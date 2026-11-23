@@ -840,7 +840,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   control, `dragged` turns pointer travel into the amount (200 px the whole range, a
   tenth as fast with Shift), letting go after less than 3 px is a click that maps
   nothing, the click that follows a press is swallowed, Escape cancels the drag or
-  disarms, and `[` and `]` step the armed Mod (`stepped`). The body carries
+  disarms, and `[` and `]` step the armed Mod (`stepped_in`: a Mod named in the Mappings panel is armed as its channel, and stepping goes on from it). The body carries
   `mapping-mode` for the styles. The setting's control button (`learn.rs`) watches
   `drag` for its own ID: it shows `amount_label` of `ends_after` while the drag runs, and
   on `done` writes one `binding.set_value` reading the armed source from where the
@@ -883,8 +883,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   that names it; at most 40 bytes, shown while typing; Enter goes to the next, Escape
   restores, several pasted lines fill the Mods after it), what it drives and its live
   bar; the rest of a cell arms it in the Shell's `MappingMode` (`mapping_mode.rs`), whose
-  bar shows it, takes the drags, steps a Mod reader with `[` and `]` and disarms on
-  Escape; a named Mod is armed as its channel, so the panel steps from it itself). Beside the grid, the armed source's targets, then the other sources (MIDI
+  bar shows it, takes the drags, steps the armed Mod with `[` and `]` and disarms on
+  Escape; a named Mod is armed as its channel). Beside the grid, the armed source's targets, then the other sources (MIDI
   controls seen, channels, keys that switch one), which arm the same way. The panel reads
   what is arriving through `live_sources()` (below) while it lives.
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).

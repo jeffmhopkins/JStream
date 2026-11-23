@@ -1011,6 +1011,17 @@ pub fn named_mod(channel: &jstream_control::protocol::ChannelInfo) -> Option<Sou
     mod_slot(&key).map(|_| key)
 }
 
+/// A reader of a channel over 0 to 1, as a new mapping from it starts.
+pub fn channel_reader(channel_id: &str) -> MotionKind {
+    MotionKind::Channel {
+        channel_id: channel_id.to_owned(),
+        smoothing_ms: 50,
+        curve: jstream_control::protocol::MotionCurve::Linear,
+        from: jstream_control::protocol::Finite32::ZERO,
+        to: jstream_control::protocol::Finite32::ONE,
+    }
+}
+
 /// The channel that names Mod `slot` of `sender`, if one does.
 pub fn mod_channel<'a>(
     collection: &'a Collection,
