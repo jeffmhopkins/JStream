@@ -12,8 +12,8 @@
 use crate::store::Collection;
 use jstream_control::protocol::{
     Action, CameraMotionModifier, CameraProperty, Chord, Edit, ItemId, MotionKind,
-    MotionMidiControl, MotionModifier, MotionProperty, SceneId, TimelineId, TimelineTrigger,
-    Trigger, ValueTarget,
+    MotionMidiControl, MotionModifier, MotionProperty, SceneId, TimelineId, TimelineInfo,
+    TimelineTrigger, Trigger, ValueTarget,
 };
 
 /// Where a reader is held, so a change to it can be written back there.
@@ -1202,75 +1202,76 @@ fn camera_motion(collection: &Collection, scene_id: &SceneId) -> Option<Vec<Came
     collection.scene(scene_id).map(|s| s.camera_motion.clone())
 }
 
-/// What fires a row of the Triggers tab.
+/// One of a sequence's starts or stops, as the Triggers tab lists it beside the keys
+/// and MIDI triggers (which [`crate::bindings`] models).
 #[derive(Clone, Debug, PartialEq)]
-pub enum When {
-    /// A key chord.
-    Key(Chord),
-    /// A MIDI message.
-    Midi(Trigger),
-    /// One of a sequence's starts or stops, by its index there.
-    Sequence {
-        /// The sequence.
-        timeline_id: TimelineId,
-        /// Whether it is one of its stops.
-        stops: bool,
-        /// Its index in `starts` or `stops`.
-        index: usize,
-        /// The trigger.
-        trigger: TimelineTrigger,
-    },
+pub struct SequenceTrigger {
+    /// The sequence.
+    pub timeline_id: TimelineId,
+    /// Its name, or its ID when it has none.
+    pub name: String,
+    /// Whether it is one of its stops.
+    pub stops: bool,
+    /// Its index in `starts` or `stops`.
+    pub index: usize,
+    /// The trigger.
+    pub trigger: TimelineTrigger,
 }
 
-/// One row of the Triggers tab: what fires it and what it does.
-#[derive(Clone, Debug, PartialEq)]
-pub struct TriggerRow {
-    /// What fires it.
-    pub when: When,
-    /// What it does: the action a key or MIDI message runs, or the sequence's play or
-    /// stop. `None` for an action this version doesn't know.
-    pub does: Option<Action>,
-}
-
-/// Every trigger: the keys (by chord), the MIDI bindings (by trigger), then each
-/// sequence's starts and stops.
-pub fn triggers(collection: &Collection) -> Vec<TriggerRow> {
-    let mut out: Vec<TriggerRow> = collection
-        .hotkeys
-        .iter()
-        .map(|h| TriggerRow {
-            when: When::Key(h.chord.clone()),
-            does: h.action(),
+/// What starts and stops `timeline`, starts first.
+pub fn triggers_of(timeline: &TimelineInfo) -> Vec<SequenceTrigger> {
+    let name = if timeline.name.is_empty() {
+        timeline.timeline_id.as_str().to_owned()
+    } else {
+        timeline.name.clone()
+    };
+    [(false, &timeline.starts), (true, &timeline.stops)]
+        .into_iter()
+        .flat_map(|(stops, list)| {
+            let name = name.clone();
+            list.iter()
+                .enumerate()
+                .map(move |(index, trigger)| SequenceTrigger {
+                    timeline_id: timeline.timeline_id.clone(),
+                    name: name.clone(),
+                    stops,
+                    index,
+                    trigger: trigger.clone(),
+                })
         })
-        .collect();
-    out.extend(collection.bindings.iter().map(|b| TriggerRow {
-        when: When::Midi(b.trigger.clone()),
-        does: b.action(),
-    }));
-    for t in collection.scenes.iter().flat_map(|s| &s.timelines) {
-        for (stops, list) in [(false, &t.starts), (true, &t.stops)] {
-            for (index, trigger) in list.iter().enumerate() {
-                let timeline_id = t.timeline_id.clone();
-                out.push(TriggerRow {
-                    when: When::Sequence {
-                        timeline_id: timeline_id.clone(),
-                        stops,
-                        index,
-                        trigger: trigger.clone(),
-                    },
-                    does: Some(if stops {
-                        Action::TimelineStop { timeline_id }
-                    } else {
-                        Action::TimelinePlay {
-                            timeline_id,
-                            delay_ms: None,
-                        }
-                    }),
-                });
-            }
-        }
-    }
-    out
+        .collect()
+}
+
+/// Every sequence's starts and stops, scene by scene.
+pub fn sequence_triggers(collection: &Collection) -> Vec<SequenceTrigger> {
+    collection
+        .scenes
+        .iter()
+        .flat_map(|s| &s.timelines)
+        .flat_map(triggers_of)
+        .collect()
+}
+
+/// `timeline` without `row`'s trigger; `None` if the trigger at its index is another
+/// now (another client changed the list since the row was drawn).
+pub fn without_trigger(timeline: &TimelineInfo, row: &SequenceTrigger) -> Option<TimelineInfo> {
+    let mut timeline = timeline.clone();
+    let list = if row.stops {
+        &mut timeline.stops
+    } else {
+        &mut timeline.starts
+    };
+    (list.get(row.index) == Some(&row.trigger)).then(|| list.remove(row.index))?;
+    Some(timeline)
+}
+
+/// The edit that removes `row`'s trigger from its sequence; `None` if it is gone.
+pub fn remove_sequence_trigger(collection: &Collection, row: &SequenceTrigger) -> Option<Edit> {
+    let (scene, t) = collection.timeline(&row.timeline_id)?;
+    Some(Edit::TimelineSet {
+        scene_id: scene.scene_id.clone(),
+        timeline: without_trigger(t, row)?,
+    })
 }
 
 /// A MIDI trigger as a chip says it: "Note 36 · Pads", "CC 64 ch 10 · any input".
@@ -1287,60 +1288,6 @@ pub fn midi_text(trigger: &Trigger) -> String {
         .input()
         .map_or(" · any input".to_owned(), |i| format!(" · {i}"));
     format!("{what} {n}{on}{input}")
-}
-
-/// What fires a trigger row, as the When column says it.
-pub fn when_text(collection: &Collection, when: &When) -> String {
-    match when {
-        When::Key(chord) => format!("Key {}", crate::hotkeys::label(chord)),
-        When::Midi(trigger) => midi_text(trigger),
-        When::Sequence { trigger, .. } => {
-            crate::panels::sequence::trigger_text(collection, trigger)
-        }
-    }
-}
-
-/// The edit that removes a trigger row; `None` if it is gone.
-pub fn remove_trigger(collection: &Collection, when: &When) -> Option<Edit> {
-    match when {
-        When::Key(chord) => collection
-            .hotkeys
-            .iter()
-            .any(|h| &h.chord == chord)
-            .then(|| Edit::HotkeyClear {
-                chord: chord.clone(),
-                action: None,
-            }),
-        When::Midi(trigger) => collection
-            .bindings
-            .iter()
-            .any(|b| &b.trigger == trigger)
-            .then(|| Edit::BindingClear {
-                trigger: trigger.clone(),
-                action: None,
-            }),
-        When::Sequence {
-            timeline_id,
-            stops,
-            index,
-            trigger,
-        } => {
-            let (scene, t) = collection.timeline(timeline_id)?;
-            let mut timeline = t.clone();
-            let list = if *stops {
-                &mut timeline.stops
-            } else {
-                &mut timeline.starts
-            };
-            // Only the trigger the row was drawn from: another client may have changed
-            // the list since.
-            (list.get(*index) == Some(trigger)).then(|| list.remove(*index))?;
-            Some(Edit::TimelineSet {
-                scene_id: scene.scene_id.clone(),
-                timeline,
-            })
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1651,18 +1598,35 @@ mod tests {
     }
 
     #[test]
-    fn triggers_list_keys_midi_and_sequences() {
-        let c = studio();
-        let rows = triggers(&c);
-        assert_eq!(rows.len(), 1);
-        assert_eq!(when_text(&c, &rows[0].when), "Key F5");
-        assert_eq!(
-            remove_trigger(&c, &rows[0].when),
-            Some(Edit::HotkeyClear {
-                chord: Chord::new("F5"),
-                action: None,
-            })
-        );
+    fn a_sequence_lists_its_starts_and_stops_and_loses_one() {
+        let rises = TimelineTrigger::Channel {
+            channel_id: "power".into(),
+            edge: jstream_control::protocol::ChannelEdge::Rises,
+            level: None,
+            delay_ms: 0,
+        };
+        let falls = TimelineTrigger::Channel {
+            channel_id: "power".into(),
+            edge: jstream_control::protocol::ChannelEdge::Falls,
+            level: None,
+            delay_ms: 0,
+        };
+        let mut t: TimelineInfo = serde_json::from_value(serde_json::json!({
+            "timeline_id": "seq_1",
+            "duration_ms": 4000,
+        }))
+        .expect("a timeline");
+        t.starts = vec![rises.clone()];
+        t.stops = vec![falls.clone()];
+        let rows = triggers_of(&t);
+        assert_eq!(rows.len(), 2);
+        assert_eq!((rows[0].stops, rows[0].name.as_str()), (false, "seq_1"));
+        assert_eq!((rows[1].stops, &rows[1].trigger), (true, &falls));
+        let left = without_trigger(&t, &rows[0]).expect("still there");
+        assert!(left.starts.is_empty());
+        assert_eq!(left.stops, vec![falls]);
+        assert_eq!(without_trigger(&left, &rows[0]), None, "already gone");
+        assert!(sequence_triggers(&studio()).is_empty());
         assert_eq!(
             midi_text(&Trigger::MidiNote {
                 note: 36,

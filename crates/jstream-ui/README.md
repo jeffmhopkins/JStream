@@ -220,11 +220,11 @@ Contents ([Design](#design) explains the choices):
   binding are tested natively), the Channels panel (`channels.rs`: `Channels`, the channel
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
-  the Mappings panel (`mappings.rs`: `Mappings`, its Mappings and Sources tabs over
+  the Mappings panel (`mappings.rs`: `Mappings`, its Mappings, Sources and Triggers tabs over
   `live_sources`, arming through the Shell's `MappingMode`, with a source's live value,
   what moved and a Mod's reader tested natively, over `mapping_index.rs`, every
   reader grouped by source with the edits that write one back, bypass it, name a Mod and
-  remove a trigger, tested natively),
+  list and remove what starts and stops a sequence, tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path and each trigger's sentence tested natively), its
   Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
@@ -899,7 +899,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   bar; the rest of a cell arms it in the Shell's `MappingMode` (`mapping_mode.rs`), whose
   bar shows it, takes the drags, steps the armed Mod with `[` and `]` and disarms on
   Escape; a named Mod is armed as its channel). Beside the grid, the armed source's targets, then the other sources (MIDI
-  controls seen, channels, keys that switch one), which arm the same way. The panel reads
+  controls seen, channels, keys that switch one), which arm the same way. The **Triggers**
+  tab is `triggers::KeysAndMidi` (every key and MIDI trigger with each action it runs),
+  then each sequence's starts and stops (`mapping_index::sequence_triggers`), with Edit,
+  which opens the Sequence panel on it, and Remove (`remove_sequence_trigger`, only the
+  trigger the row was drawn from). The panel reads
   what is arriving through `live_sources()` (below) while it lives.
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).
   The Sequence panel (`PanelId::Sequence`, in the bottom dock from the View menu) edits a

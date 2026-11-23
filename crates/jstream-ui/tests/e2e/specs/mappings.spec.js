@@ -1,5 +1,5 @@
 // The Mappings panel (UI-FEATURES MP-01, MP-02): a channel shows as a group in the
-// Mappings tab, opening it from there shows its card, and the Sources tab says where a
+// Mappings tab, opening it from there shows its card, the Sources tab says where a
 // sender's Mods come from while none is sending.
 import { test, expect, connect, rev, liveSources } from '../fixtures.js';
 
@@ -69,4 +69,23 @@ test('naming a Mod makes its channel, and the Mappings tab shows it by name', as
   const group = panel.locator('.mp-group', { hasText: 'Camera roll (Mod 20)' });
   await expect(group).toBeVisible();
   await expect(group.locator('.mp-live')).toContainText('0.62');
+});
+
+test('the Triggers tab binds a key and lists what starts sequences', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await showFromView(page, 'Mappings');
+  const panel = page.locator('.mp-panel');
+  await panel.getByRole('tab', { name: 'Triggers' }).click();
+  await expect(panel.getByText('No key or MIDI trigger runs anything yet.')).toBeVisible();
+  await expect(panel.getByText('No sequence starts or stops by itself.', { exact: false })).toBeVisible();
+
+  await panel.getByRole('button', { name: '+ Key' }).click();
+  await page.keyboard.press('F8');
+  const fresh = panel.getByRole('group', { name: 'Add an action to F8' });
+  await fresh.getByRole('combobox', { name: 'Action' }).selectOption('scene_switch');
+  await fresh.getByRole('combobox', { name: 'On', exact: true }).selectOption({ label: 'Intro' });
+  await fresh.getByRole('button', { name: 'Add' }).click();
+  await expect(panel.locator('.trigger-row', { hasText: 'F8' }).locator('.trigger-action'))
+    .toHaveText(['Switch to Intro✕']);
+  await page.screenshot({ path: test.info().outputPath('triggers-tab.png') });
 });

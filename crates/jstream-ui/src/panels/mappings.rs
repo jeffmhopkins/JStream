@@ -155,6 +155,7 @@ pub fn mapping_mode() -> Armed {
 enum Tab {
     Mappings,
     Sources,
+    Triggers,
 }
 
 /// The Mappings panel.
@@ -184,10 +185,12 @@ pub fn Mappings() -> impl IntoView {
             <div class="segmented mp-tabs" role="tablist" aria-label="Mappings">
                 {tab_button(Tab::Mappings, "Mappings")}
                 {tab_button(Tab::Sources, "Sources")}
+                {tab_button(Tab::Triggers, "Triggers")}
             </div>
             {move || match tab.get() {
                 Tab::Mappings => view! { <MappingsTab filter=filter feed=feed values=values mode=mode /> }.into_any(),
                 Tab::Sources => view! { <SourcesTab filter=filter tab=tab feed=feed values=values mode=mode /> }.into_any(),
+                Tab::Triggers => view! { <TriggersTab /> }.into_any(),
             }}
         </section>
     }
@@ -1008,6 +1011,95 @@ fn ModGrid(sender: String, has_mods: bool, feed: RwSignal<Feed>, mode: Armed) ->
                 "Type a name to label a Mod: the DAW shows it. The rest of a cell arms it. Enter or Tab goes to the next name, Escape restores; pasting several lines names this Mod and the ones after it."
             </p>
         </div>
+    }
+}
+
+/// The Triggers tab: every key and MIDI trigger with each action it runs (the Settings
+/// page's list, ADR-0208), then what starts and stops each sequence.
+#[component]
+fn TriggersTab() -> impl IntoView {
+    view! {
+        <div class="mp-triggers">
+            <crate::panels::triggers::KeysAndMidi />
+            <SequenceTriggers />
+        </div>
+    }
+}
+
+/// Each sequence's starts and stops as a trigger row: the sentence, what it does, Edit
+/// (the Sequence panel on that sequence) and Remove.
+#[component]
+fn SequenceTriggers() -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let session = expect_context::<SessionContext>();
+    let dock = use_context::<DockState>();
+    let rows = move || {
+        studio.collection.with(|c| {
+            c.as_ref().map_or_else(Vec::new, |c| {
+                mapping_index::sequence_triggers(c)
+                    .into_iter()
+                    .map(|row| {
+                        let text = crate::panels::sequence::trigger_text(c, &row.trigger);
+                        let scene = c
+                            .timeline(&row.timeline_id)
+                            .map(|(s, _)| s.scene_id.clone());
+                        (row, text, scene)
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+    };
+    let list = move || {
+        let rows = rows();
+        if rows.is_empty() {
+            return view! {
+                <p class="placeholder">"No sequence starts or stops by itself. A sequence's “+ Trigger” in the Sequence panel adds one."</p>
+            }
+            .into_any();
+        }
+        view! {
+            <ul class="trigger-list">
+                {rows.into_iter().map(|(row, text, scene)| {
+                    let does = format!("{} {}", if row.stops { "Stops" } else { "Starts" }, row.name);
+                    let aria = format!("Remove “{text}” from {}", row.name);
+                    let timeline = row.timeline_id.clone();
+                    let edit = move |_| {
+                        if let Some(scene) = scene.clone() {
+                            studio.select_scene(scene);
+                        }
+                        studio.sequence.set(Some(timeline.clone()));
+                        if let Some(dock) = dock {
+                            dock.0.update(|d| d.show(PanelId::Sequence));
+                        }
+                    };
+                    let remove = move |_| {
+                        let edit = studio.collection.with_untracked(|c| {
+                            c.as_ref().and_then(|c| mapping_index::remove_sequence_trigger(c, &row))
+                        });
+                        if let (Some(edit), Some(s)) = (edit, session.get()) {
+                            studio.apply(&s, vec![edit]);
+                        }
+                    };
+                    view! {
+                        <li class="trigger-row" data-kind="sequence">
+                            <span class="trigger-when">{text}</span>
+                            <ul class="trigger-does"><li class="trigger-action"><span>{does}</span></li></ul>
+                            <span class="trigger-buttons">
+                                <button type="button" on:click=edit>"Edit"</button>
+                                <button type="button" aria-label=aria on:click=remove>"Remove"</button>
+                            </span>
+                        </li>
+                    }
+                }).collect_view()}
+            </ul>
+        }
+        .into_any()
+    };
+    view! {
+        <section class="prop-section">
+            <div class="section-head"><span class="eyebrow">"Sequences"</span></div>
+            {list}
+        </section>
     }
 }
 

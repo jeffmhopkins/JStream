@@ -2761,6 +2761,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .mp-armed .mp-target { grid-template-columns: minmax(120px, 1fr) 130px 0 0 0 64px; }
 .mp-armed .mp-mode, .mp-armed .mp-smooth, .mp-armed .mp-curve { visibility: hidden; }
 .mp-other-bar { flex: 0 0 48px; }
+.mp-triggers { display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
 .chan-row.armed { background: var(--selected); }
 
 /* The Map control dialog (UI-FEATURES VC-03): a source picker over a mapping's range,

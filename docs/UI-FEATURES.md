@@ -71,9 +71,9 @@ real UI shows the engine's real state instead.
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat and agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Channels and sequences](#automation) | 8 | 1 | 7 | 0 | 0 | 0 |
-| [Mappings](#mappings) | 2 | 0 | 2 | 0 | 0 | 0 |
+| [Mappings](#mappings) | 3 | 0 | 3 | 0 | 0 | 0 |
 | [Keyboard](#keyboard) | 8 | 7 | 0 | 0 | 0 | 1 |
-| **Total** | **155** | **132** | **14** | **0** | **5** | **4** |
+| **Total** | **156** | **132** | **15** | **0** | **5** | **4** |
 <!-- @generated end ui-summary -->
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
@@ -524,6 +524,7 @@ for alpha.12 (sources, channels and targets, with mapping mode).
 |---|---|---|---|---|
 | MP-01 | Mappings tab | Every mapping grouped by source, with its live value and each target's amount, mode, smoothing, curve and bypass edited in place; search, on program now, source kind and find by moving a control; "+ Target…". | 🟡 | A dockable Mappings panel, by default in the bottom dock. Each channel lists what sets it under its name (inputs, keys, MIDI, sequences); a named Mod reads "Camera roll (Mod 20)". Amount is one-sided ("+15°"), centred ("±20°") or, for a value binding, which replaces the value, "0 → 6.5". Smoothing through a channel stays at 20 ms or more. Bypass works on item and camera motion. "+ Target…" arms the source for mapping mode. Not built yet: Offset or Override and Bypass on value bindings (they need the engine's mapping mode), "+ Mapping" (the Map control dialog), and the mapping-mode drag on item and camera motion (the drag on a setting is [VC-04](#automation)). |
 | MP-02 | Sources tab | Each JTunnel sender's 32 Mods to name and arm, what the armed source drives, and the other sources. | 🟡 | Four columns by eight rows: number, name box, target count and live bar. Naming a Mod makes it a channel with the Mod as its only input, moving the Mod's direct mappings onto it in one undo step; renaming renames the channel. Enter and Tab go to the next name, Escape restores, pasted lines fill the following Mods, and names are capped at the 40 bytes a DAW shows. A cell, a MIDI control seen, a channel or a key that switches one arms it; `[` and `]` step the armed Mod, a named one as its channel, and Escape disarms (the arrow keys don't, since they nudge items on the canvas). Not built yet: "Move these mappings to another sender", and audio levels as sources. Arming is app-wide: the mapping bar ([VC-04](#automation)) shows the armed source and maps it by a drag on a setting. |
+| MP-03 | Triggers tab | Each key, MIDI trigger, DAW event, audio level crossing and channel crossing with every action it runs, and "+ Action". | 🟡 | The keys and MIDI triggers are the Keys & MIDI list from Settings ([KB-07](#keyboard)): "+ Key", "+ MIDI trigger", a filter, each action a chip with ✕, "+ Action" and Remove. Under it, Sequences lists every sequence's starts and stops as sentences ("Stage power rises" → "Starts Sequence 1"), with Edit (the Sequence panel on that sequence) and Remove. Not built yet: DAW events (scene launched, track selected) and audio level crossings, which need the engine's data triggers and audio reader. |
 
 <a id="keyboard"></a>
 ## Keyboard
