@@ -3211,7 +3211,10 @@ that size, and with the scene's captures as well as the program's. Monitored sce
 draw after every mix, so the program never waits for one: one not begun within the
 tick's period (`MixFrame::deadline`) is skipped, its layers kept, nothing pushed, and
 counted as a frame not read back in `render_ticks`. A scene not planned yet waits; one
-deleted ends its stream as before.
+deleted ends its stream as before. A monitored scene, and the program at a size only
+preview streams take, also give way while the GPU is behind and an output has a
+picture to draw, so an open preview costs a stream no frame: its own rate falls, to
+about two pictures a second at the least ([Runtime](#runtime)).
 
 The **warm scenes'** captures (ADR-0117 §7) run beside the program's, so a switch to
 one, or a transition toward it, finds its webcam open and its display already
@@ -4632,7 +4635,18 @@ behind: a mix that only feeds readbacks skips that tick's composite (its layers 
 as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
 ticks and frames that land behind a repeat are counted in `render_ticks`, and so is a monitored scene a preview stream
 shows (*Preview*), drawn after every mix, when the tick's period ran out before it
-began. The first tick is drawn at once; later ones fall
+began. A picture only this machine sees gives way to the outputs' before any of that:
+a monitored scene, or the program at a size only preview streams take
+(`MixFrame::local`, from `VideoTap::local`, never a frame an output's session or a
+virtual camera also takes). The draw counts each tick it drew anything out and back in
+as it does the conversions, and while the GPU has not finished the tick before, a tick
+that has an output's picture to draw skips the local ones (their layers kept, nothing
+pushed, counted in `render_ticks`), so a preview's work never queues ahead of a
+stream's frame and the preview's rate falls instead. After `LOCAL_YIELD_TICKS` (15) due
+ticks in a row a local picture is drawn anyway, so a preview under a GPU that never
+catches up still shows about two pictures a second at 30
+(`a_local_picture_gives_way_while_the_gpu_is_behind`,
+`only_preview_streams_make_a_picture_local`). The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
 (`on_frame_grid`), where the live sources' thread plans for them (*Live sources*). Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
