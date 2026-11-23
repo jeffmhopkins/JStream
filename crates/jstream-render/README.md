@@ -801,7 +801,8 @@ shadow taps and the sky), and a model seen from inside, such as a room or a cock
 several surfaces behind most pixels. The clip position is `@invariant`, so both draws
 place a fragment at the same depth. The shading draws the primitives last to first:
 where two lie in one plane both pass the equal test and the later draw replaces the
-earlier, so that order shows the first of them, as before
+earlier, so that order shows the first of them, as before (inside one primitive the
+triangles still draw in index order, so of two of its own in one plane the later shows)
 (`golden_model_opaque_primitives_show_the_nearest_in_any_order_and_the_first_in_a_plane`).
 Blended primitives follow, far to near by their centres, testing without writing. There
 is no cull: a mirrored map (`Solid::mirrored`) swaps which face is the front, so the

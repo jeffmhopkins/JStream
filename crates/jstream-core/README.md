@@ -2724,7 +2724,7 @@ or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
 snapshot, or before it to prime a collection's scenes (*Priming* above). It owns the
-compositor, serves requests in order, and stops when the
+compositor, serves requests in order (a scene to prime after any request waiting), and stops when the
 engine goes away. The compositor opens on its first job, on the engine's GPU
 context when it has one, so it draws the browser pages painted there
 ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), and otherwise on a

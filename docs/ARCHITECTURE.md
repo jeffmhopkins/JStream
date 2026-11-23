@@ -1351,7 +1351,8 @@ model-to-clip map is composed in `f64` relative to the camera, so a far camera d
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)
 gets the scene's view depth: one more draw of its cards, and each model's depth layer
-copied in (the one its layer carries, so a model's triangles aren't drawn again), into
+copied in (the one its layer carries, so a model's triangles aren't drawn again; none
+for a model under half opacity), into
 a half-float canvas layer holding `1 / w` of the nearest thing, the larger value
 winning, drawn only for such a filter.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
