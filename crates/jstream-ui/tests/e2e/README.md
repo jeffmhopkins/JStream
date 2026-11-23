@@ -141,19 +141,20 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   shows its host and encoder, the plain-rtmp ⚠ with the warning on hover, and why it
   can't start; a double-click opens its settings); adding a stream and a recording
   through the add-output dialog, a stream added with its key starting at once; a stream can't start or go live until its key is set
-  in its settings; the key never appears in the page, and a set key reads masked;
+  in its settings; the key never appears in the page, and a set key reads "Saved" with
+  Replace…; a new output's Name field starting at output-1 and Stream picked;
   go live and end stream, with the target and Delete off while live; Remove taking the
-  key on OK; Delete asking first, and Cancel keeping it; the header's Record starts and
+  key on Save; Delete asking first, and Cancel keeping it; the header's Record starts and
   stops a recording; a settings edit dropped on Cancel; the server URL and an encoder
-  profile sent on Apply, both read back by a fresh page; a recording's Audio select
-  moving it to another bus on OK, read back by a fresh page; in the Encoders & mixes
+  profile sent on Save (there is no Apply), both read back by a fresh page; a recording's Bus select
+  moving it to another bus on Save, read back by a fresh page; in the Encoders & mixes
   dialog's list and editor, a new profile named "Default H.264", making an AV1 VBR
   encoder profile (a peak under the average is named in the form, which stays open; once
   saved the editor stays on it, with its short summary in the list and the whole in the
   editor) and a vertical video mix, a recording using both (neither can then be
   deleted, the title naming the recording), both read back by a fresh page, the mix
   resized from Edit mix… over the settings dialog ("Saved."), Edit encoder… opening on
-  the recording's profile, off for the engine's default, and New… on a new one, and the
+  the recording's profile, gone for the engine's default, and New encoder… on a new one, and the
   mix deleted once the recording is back on the program; Start all starting both
   recordings but not a stream without its key (then off), Stop all beside it while they
   run, with a running row's stats

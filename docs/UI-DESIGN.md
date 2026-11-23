@@ -52,7 +52,9 @@ covers = ["crates/jstream-ui/style.css"]
 - **Danger** (`.danger.secondary`): a secondary button with red text, for an action that
   deletes. **Danger confirm** (`.danger`): solid red, only on the button that confirms a
   delete.
-- **Ghost and link**: no fill, for light actions such as "Clear" or "+ Add filter".
+- **Ghost and link**: no fill, for light actions such as "Clear" or "+ Add filter". In a
+  dialog, `button.link` is link-coloured text beside a field ("Edit…", "New…"), shown
+  only when it can act rather than drawn disabled.
 - **Small** (`button.sm`): 24 px tall with 12 px text, for a row of actions inside a
   panel (the Arrange panel's Fit, Match, Rotate and Crop rows, Set key). Its label can be
   short when a heading above says the rest ("Width" under Match); its tooltip and

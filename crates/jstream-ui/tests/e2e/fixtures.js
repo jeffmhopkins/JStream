@@ -97,7 +97,8 @@ export function outputRow(page, id) {
 export async function addOutput(page, kind, target) {
   await page.getByRole('button', { name: '+ Add output' }).click();
   const dialog = page.getByRole('dialog', { name: 'Output settings' });
-  await dialog.getByLabel('Kind').selectOption(kind);
+  const kinds = { rtmp: 'Stream', record: 'Record', virtual_cam: 'Virtual camera' };
+  await dialog.getByRole('group', { name: 'Kind' }).getByRole('button', { name: kinds[kind], exact: true }).click();
   if (target !== undefined) {
     await dialog.getByLabel(kind === 'record' ? 'File path' : 'Server URL').fill(target);
   }

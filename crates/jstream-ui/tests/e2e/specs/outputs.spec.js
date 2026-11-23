@@ -1,7 +1,7 @@
 // The Outputs panel and the header: adding outputs through the settings dialog, the
 // write-only stream key, start and stop on each row, Start all and a running row's stats
 // line, Go Live and Record in the header, the encoder profile, the audio bus and the
-// video mix applied on OK, editing encoder profiles and video mixes in their
+// video mix applied on Save, editing encoder profiles and video mixes in their
 // list-and-editor dialog and from an output's Edit encoder… and Edit mix…, Duplicate, an
 // open dialog following another client, and deleting after a confirmation, through a
 // real browser and the WebSocket API.
@@ -68,14 +68,15 @@ test('a stream goes live once its key is set, and the key is never shown', async
   const key = 'live_e2e_9f3a7c21-secret';
   let dialog = await openOutputSettings(page, 'output-1');
   await dialog.getByLabel('Stream key').fill(`${key}\n`);
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(stream.locator('.output-row-note')).toHaveCount(0);
   expect(await page.content()).not.toContain(key);
 
-  // A set key reads as masked, with Change… and Remove.
+  // A set key reads as Saved, with Replace… and Remove.
   dialog = await openOutputSettings(page, 'output-1');
-  await expect(dialog.locator('.key-mask')).toHaveText('••••••••');
+  await expect(dialog.locator('.key-mask')).toHaveText('Saved');
+  await expect(dialog.getByRole('button', { name: 'Replace…' })).toBeVisible();
   await expect(dialog.locator('input[type="password"]')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 
@@ -92,11 +93,11 @@ test('a stream goes live once its key is set, and the key is never shown', async
   await page.getByRole('button', { name: 'End stream' }).click();
   await expect(stream.locator('.badge')).toHaveText('Stopped');
 
-  // Remove applies on OK, like every other field.
+  // Remove applies on Save, like every other field.
   dialog = await openOutputSettings(page, 'output-1');
   await dialog.getByRole('button', { name: 'Remove' }).click();
-  await expect(dialog.locator('.key-mask')).toHaveText('Removed on OK');
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog.locator('.key-mask')).toHaveText('Removed on Save');
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(stream.locator('.output-row-note')).toHaveText('Set a stream key first.');
 
@@ -113,7 +114,9 @@ test('a stream added with its key can start at once', async ({ page, daemon }) =
   await openOutputs(page, daemon);
   await page.getByRole('button', { name: '+ Add output' }).click();
   const dialog = page.getByRole('dialog', { name: 'Output settings' });
-  await expect(dialog.locator('.modal-sub')).toHaveText('It will be output-1');
+  // Its name starts as the first ID free, in a field (C16), and Settings shows it.
+  await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('output-1');
+  await expect(dialog.getByRole('group', { name: 'Kind' }).getByRole('button', { name: 'Stream' })).toHaveAttribute('aria-pressed', 'true');
   await expect(dialog.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
   await dialog.getByLabel('Server URL').fill('rtmps://127.0.0.1/app');
   await dialog.getByLabel('Stream key').fill('live_e2e_added-with-key');
@@ -162,19 +165,19 @@ test('a server URL edit and an encoder choice reach the engine on OK, and Cancel
 
   dialog = await openOutputSettings(page, 'output-1');
   await dialog.getByLabel('Server URL').fill('rtmps://127.0.0.1/app');
-  await dialog.getByLabel('Encoder').selectOption({ label: 'High quality' });
-  // Apply keeps the dialog open.
-  await dialog.getByRole('button', { name: 'Apply' }).click();
+  await dialog.getByLabel('Encoder', { exact: true }).selectOption({ label: 'High quality' });
+  // Save sends both and closes; there is no Apply (C16).
+  await expect(dialog.getByRole('button', { name: 'Apply' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toHaveCount(0);
   await expect(stream.locator('.output-row-main')).toHaveAttribute('title', 'Stream to rtmps://127.0.0.1/app');
   await expect(stream.locator('.output-row-target')).toContainText('127.0.0.1 · High quality');
-  await dialog.getByRole('button', { name: 'OK' }).click();
-  await expect(dialog).toHaveCount(0);
 
   // A fresh page reads both back from the engine.
   await openOutputs(page, daemon);
   await expect(stream.locator('.output-row-main')).toHaveAttribute('title', 'Stream to rtmps://127.0.0.1/app');
   dialog = await openOutputSettings(page, 'output-1');
-  await expect(dialog.getByLabel('Encoder')).toHaveValue('hq');
+  await expect(dialog.getByLabel('Encoder', { exact: true })).toHaveValue('hq');
 });
 
 test('an output carries the bus its Audio select picks', async ({ page, daemon }) => {
@@ -189,15 +192,15 @@ test('an output carries the bus its Audio select picks', async ({ page, daemon }
   await showPanel(page, 'Outputs');
   await addOutput(page, 'record', '/tmp/a.mp4');
   let dialog = await openOutputSettings(page, 'output-1');
-  const audio = dialog.getByLabel('Audio');
+  const audio = dialog.getByLabel('Bus');
   await expect(audio.locator('option:checked')).toHaveText('Master');
   await audio.selectOption({ label: 'Stream' });
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toHaveCount(0);
   // A fresh page reads it back from the engine.
   await openOutputs(page, daemon);
   dialog = await openOutputSettings(page, 'output-1');
-  await expect(dialog.getByLabel('Audio').locator('option:checked')).toHaveText('Stream');
+  await expect(dialog.getByLabel('Bus').locator('option:checked')).toHaveText('Stream');
 });
 
 test('an encoder profile and a vertical video mix are made, used and kept', async ({ page, daemon }) => {
@@ -247,9 +250,9 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await expect(library).toHaveCount(0);
 
   let dialog = await openOutputSettings(page, 'output-1');
-  await dialog.getByLabel('Encoder').selectOption({ label: 'AV1 archive' });
-  await dialog.getByLabel('Video').selectOption({ label: 'Vertical' });
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await dialog.getByLabel('Encoder', { exact: true }).selectOption({ label: 'AV1 archive' });
+  await dialog.getByLabel('Shows').selectOption({ label: 'Vertical' });
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('a.mkv · AV1 archive');
   // In use, neither can be deleted.
@@ -263,8 +266,8 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   // A fresh page reads it all back from the engine, and an edit keeps the mix's ID.
   await openOutputs(page, daemon);
   dialog = await openOutputSettings(page, 'output-1');
-  await expect(dialog.getByLabel('Encoder').locator('option:checked')).toHaveText('AV1 archive');
-  await expect(dialog.getByLabel('Video').locator('option:checked')).toHaveText('Vertical');
+  await expect(dialog.getByLabel('Encoder', { exact: true }).locator('option:checked')).toHaveText('AV1 archive');
+  await expect(dialog.getByLabel('Shows').locator('option:checked')).toHaveText('Vertical');
   // Edit mix… opens the library over the settings, on that mix.
   await dialog.getByRole('button', { name: 'Edit mix…' }).click();
   library = page.getByRole('dialog', { name: 'Encoders & mixes' });
@@ -275,21 +278,22 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await expect(edit.getByRole('status')).toHaveText('Saved.');
   await expect(vertical).toContainText('720 × 1280 · Program');
   await library.getByRole('button', { name: 'Close', exact: true }).last().click();
-  await expect(dialog.getByLabel('Video').locator('option:checked')).toHaveText('Vertical');
+  await expect(dialog.getByLabel('Shows').locator('option:checked')).toHaveText('Vertical');
   // Edit encoder… opens it on the output's encoder; the engine's default has none.
   await dialog.getByRole('button', { name: 'Edit encoder…' }).click();
   await expect(library.getByRole('form', { name: 'Edit encoder' }).getByLabel('Encoder name')).toHaveValue('AV1 archive');
   await library.getByRole('button', { name: 'Close', exact: true }).last().click();
-  await dialog.getByLabel('Encoder').selectOption({ label: 'Engine default' });
-  await expect(dialog.getByRole('button', { name: 'Edit encoder…' })).toBeDisabled();
-  await dialog.getByRole('button', { name: 'New…', exact: true }).click();
+  await dialog.getByLabel('Encoder', { exact: true }).selectOption({ label: 'Engine default' });
+  // The engine's default has nothing to edit, so Edit… goes (C16).
+  await expect(dialog.getByRole('button', { name: 'Edit encoder…' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'New encoder…' }).click();
   await expect(library.getByRole('form', { name: 'New encoder' })).toBeVisible();
   await library.getByRole('button', { name: 'Close', exact: true }).last().click();
 
   // Back on the program, the mix can go.
-  await dialog.getByLabel('Video').selectOption({ label: 'Program (canvas size)' });
-  await expect(dialog.getByRole('button', { name: 'Edit mix…' })).toBeDisabled();
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await dialog.getByLabel('Shows').selectOption({ label: 'Program (canvas size)' });
+  await expect(dialog.getByRole('button', { name: 'Edit mix…' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toHaveCount(0);
   library = await openEncoders(page);
   await vertical.click();
@@ -341,7 +345,7 @@ test('Duplicate adds a copy without the stream key, a recording\'s under a free 
   await addOutput(page, 'rtmp', 'rtmps://live.example.com/app');
   let dialog = await openOutputSettings(page, 'output-1');
   await dialog.getByRole('textbox', { name: 'Stream key' }).fill('abcd-1234');
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(outputRow(page, 'output-1').locator('.output-row-note')).toHaveCount(0);
 
@@ -378,7 +382,7 @@ test('an open dialog follows another client\'s change to a field it left alone',
   const change = async (to) => {
     const theirs = await openOutputSettings(other, 'output-1');
     await theirs.getByLabel('File path').fill(to);
-    await theirs.getByRole('button', { name: 'OK' }).click();
+    await theirs.getByRole('button', { name: 'Save' }).click();
     await expect(theirs).toHaveCount(0);
   };
   await change('/tmp/b.mp4');
@@ -388,7 +392,7 @@ test('an open dialog follows another client\'s change to a field it left alone',
   await change('/tmp/c.mp4');
   await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('c.mp4');
   await expect(path).toHaveValue('/tmp/mine.mp4');
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(outputRow(other, 'output-1').locator('.output-row-target')).toContainText('mine.mp4');
 });
 
