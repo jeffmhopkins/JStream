@@ -1161,9 +1161,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   one (Edit encoder…), each only while a mix or profile is picked, and New… (New
   encoder…), which open the Encoders & mixes dialog
   (`encoders.rs`) on that mix or profile or on a new one (`LibraryPick`). That dialog
-  lists the profiles and mixes on the left, each with a short summary
-  (`encoder_short`, `mix_short`), and edits the one picked on the right with the whole
-  of it (`encoder_summary`, `mix_summary`). Save makes one (`encoder.create`,
+  lists the profiles and mixes in a rail on the left, each row with a short summary
+  (`encoder_short`, `mix_short`), an icon + per group (New encoder, New video mix) and an
+  empty text for a group with none, and edits the one picked on the right under its name
+  and the whole of it (`encoder_summary`, `mix_summary`), as property-grid rows; the
+  form's Delete, Cancel and Save are the dialog's sticky footer, so the libraries
+  footer's Close shows only while no form is open (`form_open`: nothing picked, or a
+  pick the engine doesn't list, deleted or still saving). Save makes one (`encoder.create`,
   `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits it
   (`encoder.update`, `video_mix.update`), and waits for the engine's answer (`SendEdit`):
   "Saving…", then "Saved." and, for a new one, picks it, or the refusal under the form
@@ -1179,8 +1183,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), over the
   encoder editor or when nothing is picked: on Linux, Cisco's OpenH264, when it isn't
   installed and the machine has no hardware encoder for H.264 or a profile asks for
-  software H.264, and the encoder form offers it under the hardware choice while the
-  draft would need it. Each offer says why, that JStream downloads Cisco's own copy from
+  software H.264, and the encoder form offers it under its title while the draft would
+  need it and the dialog's own offer doesn't already show it (`offer_reason`), so it
+  shows once. Each offer says why, that JStream downloads Cisco's own copy from
   Cisco only when asked, and shows Cisco's notice ("OpenH264 Video Codec provided by
   Cisco Systems, Inc.") with a link to Cisco's licence and a folded "Licence terms"
   holding the licence's full text (`license_text`, which Cisco's condition 4 asks the
