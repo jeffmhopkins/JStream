@@ -216,7 +216,10 @@ The property grid, as OBS's Properties lay a source's settings out:
   that follows a channel shows the channel's name as a `--selected` chip in `--link`
   instead. In mapping mode the button shows the armed source's amount on that setting
   (`+15 %`) in `--accent`, and a bar under the header in `--selected` with an `--accent`
-  edge names the armed source.
+  edge names the armed source. An Inspector number that takes mappings has no button:
+  its mappings' offset is a 10 px `--accent` tag on a `--selected` pill over the
+  field's top right corner, its border turns `--accent`, and a right-click on the number
+  opens its menu.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for

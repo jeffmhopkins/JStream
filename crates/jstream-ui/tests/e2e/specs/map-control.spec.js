@@ -126,3 +126,52 @@ test('mapping mode maps the armed source by the amount dragged on a setting', as
   await expect(bar).toBeHidden();
   await expect(button).toContainText('Mod 20');
 });
+
+test('an item property is mapped by offsets, one per source, from the Inspector', async ({ page, daemon }) => {
+  const live = await liveSources(page);
+  live({ senders: { Bitwig: { params: mods({ 20: 0.62 }) } } });
+  await connect(page, daemon);
+  await page.locator('.sources-panel li.row').first().click();
+  const inspector = page.locator('.panel-inspector');
+  const tag = (property) => inspector.locator(`[data-map="item:box:${property}"] .stepper`);
+  const rotation = inspector.getByRole('textbox', { name: 'Rotation' });
+  await expect(rotation).toBeVisible();
+  const before = await rev(page);
+
+  // A right-click on the number opens the property's menu, not the browser's.
+  await rotation.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Map control…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Map control' });
+  await expect(dialog).toContainText('Map control: Rotation');
+  await dialog.getByRole('button', { name: /^Mod 20/ }).click();
+  await dialog.getByRole('button', { name: 'Map by dragging' }).click();
+  expect(await rev(page)).toBe(before);
+
+  // 50 px up is a quarter of a turn, added to the rotation the item keeps.
+  const box = await rotation.boundingBox();
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y - 50, { steps: 5 });
+  await expect(tag('rotation')).toHaveAttribute('data-map-amount', '+90°');
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  await expect(rotation).toHaveValue('0.0');
+
+  // The same source maps a second property while it stays armed.
+  const across = await inspector.getByRole('textbox', { name: 'X' }).boundingBox();
+  await page.mouse.move(across.x + 20, across.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(across.x + 20, across.y + 40, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(before + 2);
+  await expect(tag('x')).toHaveAttribute('data-map-amount', '-150 px');
+  await page.keyboard.press('Escape');
+  await expect(tag('rotation')).toHaveAttribute('data-map-amount', '+90°');
+
+  // The property's menu removes a mapping.
+  await rotation.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: /^Remove Mod 20/ }).click();
+  await expect.poll(() => rev(page)).toBe(before + 3);
+  await expect(tag('rotation')).not.toHaveAttribute('data-map-amount');
+});

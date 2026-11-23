@@ -150,10 +150,15 @@ pub fn stepped(armed: &MotionKind, by: i32) -> Option<MotionKind> {
     Some(mod_reader(sender, next))
 }
 
-/// The setting a pointer event landed on, by its control button's `data-learn`: the
-/// nearest element around it that holds exactly one control button as its own child,
-/// looked for no further out than the panel or dialog.
+/// The setting a pointer event landed on: the field around it that carries `data-map`,
+/// else, by its control button's `data-learn`, the nearest element around it that holds
+/// exactly one control button as its own child, looked for no further out than the
+/// panel or dialog.
 pub fn setting_at(mut el: web_sys::Element) -> Option<String> {
+    // A field marked as a target names itself.
+    if let Ok(Some(marked)) = el.closest("[data-map]") {
+        return marked.get_attribute("data-map");
+    }
     loop {
         if let Ok(buttons) = el.query_selector_all(":scope > button.learn") {
             match buttons.length() {

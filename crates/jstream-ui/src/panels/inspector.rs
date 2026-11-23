@@ -1032,6 +1032,8 @@ fn Placement(
             studio.apply(&s, vec![edit]);
         }
     };
+    // The fields a control can be mapped onto, and their menu.
+    let mapper = crate::panels::item_map::ItemMapper::new(scene.clone(), item.clone());
     let ids = StoredValue::new((item, scene));
 
     // W % or H %: the size as a % of the source's own, blank while that isn't known.
@@ -1103,9 +1105,16 @@ fn Placement(
         // Rotation is a row of its own, its label in the row's label column; the rest
         // are an axis row's fields, each captioned inside its box.
         let inline = param != Param::Rotation;
+        let map = mapper.mark(match param {
+            Param::X => jstream_protocol::MotionProperty::X,
+            Param::Y => jstream_protocol::MotionProperty::Y,
+            Param::W => jstream_protocol::MotionProperty::Width,
+            Param::H => jstream_protocol::MotionProperty::Height,
+            Param::Rotation => jstream_protocol::MotionProperty::Rotation,
+        });
         view! {
             <NumberField label unit value step decimals fixed inline=inline min=f64::from(min)
-                max=f64::from(max) send=commit />
+                max=f64::from(max) map send=commit />
         }
     };
 
@@ -1445,6 +1454,7 @@ fn Placement(
     view! {
         <div class="tab-panel" role="tabpanel" aria-label="Transform"
             hidden=move || tab.get() != Tab::Transform>
+        {mapper.menu()}
         <Fold title="Position and size" open=true>
             <Show when=move || geometry.get().is_none()>
                 <p class="note">
@@ -1524,7 +1534,7 @@ fn Placement(
                         />
                         <NumberField named=Signal::stored("Opacity".to_owned()) unit="%"
                             value=opacity step=1.0 decimals=0 min=0.0 max=400.0
-                            send=send_opacity />
+                            map=mapper.mark(jstream_protocol::MotionProperty::Opacity) send=send_opacity />
                     </div>
                 </div>
             </div>

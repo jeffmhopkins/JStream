@@ -494,7 +494,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   after it opened, as one edit; and mapping mode from the dialog's "Map by dragging":
   the bar naming the armed Mod, a click on a setting mapping nothing, a 20 px drag up
   showing "+10 %" and sending one edit when let go, a second drag moving the far end
-  as one more edit, and Escape leaving the mode.
+  as one more edit, and Escape leaving the mode; and an item's properties from the
+  Inspector: a right-click on Rotation opening its menu and the dialog on it, a 50 px
+  drag tagging the field "+90°" and sending one edit while the field keeps its stored
+  value, the same armed Mod mapping X as one more edit, and the menu's Remove taking the
+  rotation mapping off.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
