@@ -206,9 +206,9 @@ Contents ([Design](#design) explains the choices):
   binding are tested natively), the Channels panel (`channels.rs`: `Channels`, the channel
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
-  the Mappings panel (`mappings.rs`: `Mappings`, its Mappings and Sources tabs, the live
-  sources `feed` reads and the armed source `MappingMode` holds, with a sender's `params`,
-  a source's live value and what moved tested natively, over `mapping_index.rs`, every
+  the Mappings panel (`mappings.rs`: `Mappings`, its Mappings and Sources tabs over
+  `live_sources`, and the armed source `MappingMode` holds, with a source's live value,
+  what moved and a Mod's reader tested natively, over `mapping_index.rs`, every
   reader grouped by source with the edits that write one back, bypass it, name a Mod and
   remove a trigger, tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
@@ -854,13 +854,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   control or data field read directly, all of its readers under it. A channel whose only
   input is one Mod (`named_mod`) is that Mod's name and is shown once, as "Camera roll
   (Mod 20)". The **Mappings** tab draws them as a table: the source, its live value
-  (`channel.values`, or `feed`), and per target its Amount (one-sided "+15°", centred
+  (`channel.values`, or `live_sources` for a named Mod and a direct source), and per target its Amount (one-sided "+15°", centred
   "±20°", or "0 → 6.5" for a value binding, which replaces the value), Mode, Smoothing (at
   least `MIN_CHANNEL_SMOOTHING_MS` through a channel), Curve and Bypass (a motion row's
   `enabled`), each edited in place as one edit of the list that holds it
   (`write_all`, so two readers in one list change together), and ×. A search, "On
   program now" (the program scene), the kind of source and "Find by moving a control"
-  (the first control or Mod that moves, `Feed::moved`) narrow it; "+ Target…" arms the
+  (the first control or Mod that moves, `live_sources::moved`) narrow it; "+ Target…" arms the
   group's source. The **Sources** tab shows each sender's 32 Mods four by eight: a name
   box (`name_mods_edits`: a new channel with the Mod as its only input at 0 ms, the
   mappings that read the Mod directly moved onto it, one batch; a rename of the channel
@@ -868,9 +868,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   restores, several pasted lines fill the Mods after it), what it drives and its live
   bar; the rest of a cell arms it (`MappingMode`, which `[` and `]` step and Escape
   clears). Beside the grid, the armed source's targets, then the other sources (MIDI
-  controls seen, channels, keys that switch one), which arm the same way. `feed` reads
-  `midi.last_controls`, `data.list` and each sender's `params` with `data.get` every
-  100 ms while the panel lives.
+  controls seen, channels, keys that switch one), which arm the same way. The panel reads
+  what is arriving through `live_sources()` (below) while it lives.
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).
   The Sequence panel (`PanelId::Sequence`, in the bottom dock from the View menu) edits a
   timeline with lanes of the selected scene (a keyframe's parent): the one in

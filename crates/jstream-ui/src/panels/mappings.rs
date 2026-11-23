@@ -139,8 +139,8 @@ pub fn Mappings() -> impl IntoView {
         }
     };
     view! {
-        <section class="panel map-panel">
-            <div class="segmented map-tabs" role="tablist" aria-label="Mappings">
+        <section class="panel mp-panel">
+            <div class="segmented mp-tabs" role="tablist" aria-label="Mappings">
                 {tab_button(Tab::Mappings, "Mappings")}
                 {tab_button(Tab::Sources, "Sources")}
             </div>
@@ -268,7 +268,7 @@ fn MappingsTab(
                 .unwrap_or_default()
         });
         Some(view! {
-            <span class="map-caught">
+            <span class="mp-caught">
                 {format!("Moved: {name}")}
                 <button type="button" class="chan-x" aria-label="Show every source" title="Show every source"
                     on:click=move |_| filter.update(|f| f.source = None)>"×"</button>
@@ -296,8 +296,8 @@ fn MappingsTab(
             .into_any()
     };
     view! {
-        <div class="map-tools">
-            <div class="tree-search map-search">
+        <div class="mp-tools">
+            <div class="tree-search mp-search">
                 <Icon name="search" size=13 />
                 <input
                     type="search"
@@ -307,7 +307,7 @@ fn MappingsTab(
                     on:input=move |e| filter.update(|f| f.text = event_target_value(&e))
                 />
             </div>
-            <button type="button" class="map-toggle" aria-pressed=move || on_program.get().to_string()
+            <button type="button" class="mp-toggle" aria-pressed=move || on_program.get().to_string()
                 title="Only what drives something in the program scene"
                 on:click=move |_| on_program.update(|on| *on = !*on)>
                 "On program now"
@@ -318,16 +318,16 @@ fn MappingsTab(
                     .map(|(v, label, k)| view! { <option value=v selected=move || filter.with(|f| f.kind == k)>{label}</option> })
                     .collect_view()}
             </select>
-            <button type="button" class="chan-add map-find" class:learning=move || finding.with(Option::is_some) on:click=find>
+            <button type="button" class="chan-add mp-find" class:learning=move || finding.with(Option::is_some) on:click=find>
                 {move || if finding.with(Option::is_some) { "Move a control…" } else { "Find by moving a control" }}
             </button>
             {caught}
         </div>
-        <div class="map-table" role="table" aria-label="Mappings">
-            <div class="map-head" role="row">
+        <div class="mp-table" role="table" aria-label="Mappings">
+            <div class="mp-head" role="row">
                 <span role="columnheader">"Source"</span>
                 <span role="columnheader">"Live"</span>
-                <span class="map-head-targets">
+                <span class="mp-head-targets">
                     <span role="columnheader">"Target"</span>
                     <span role="columnheader">"Amount"</span>
                     <span role="columnheader">"Mode"</span>
@@ -346,9 +346,9 @@ fn live_bar(level: Option<f32>) -> impl IntoView {
     let width = level.map_or(0.0, |v| v.clamp(0.0, 1.0) * 100.0);
     let text = level.map_or_else(|| "not seen".to_owned(), |v| format!("{v:.2}"));
     view! {
-        <span class="map-live">
-            <span class="meter-bar"><span class="map-fill" style:width=format!("{width:.0}%")></span></span>
-            <span class="mono hint" class:map-unseen=level.is_none()>{text}</span>
+        <span class="mp-live">
+            <span class="meter-bar"><span class="mp-fill" style:width=format!("{width:.0}%")></span></span>
+            <span class="mono hint" class:mp-unseen=level.is_none()>{text}</span>
         </span>
     }
 }
@@ -395,7 +395,7 @@ fn MapGroup(
         )
     });
     let chip = |text: String, kind: &'static str| {
-        view! { <span class=format!("map-chip small {kind}")>{text}</span> }
+        view! { <span class=format!("mp-chip small {kind}")>{text}</span> }
     };
     let (main, subs, level, targets) = match row {
         Row::Channel {
@@ -448,9 +448,9 @@ fn MapGroup(
                 }
             };
             let class = if named {
-                "map-chip data link"
+                "mp-chip data link"
             } else {
-                "map-chip channel link"
+                "mp-chip channel link"
             };
             let main = view! {
                 <button type="button" class=class title="Open this channel" on:click=open>
@@ -461,7 +461,7 @@ fn MapGroup(
             (main, subs, level, followers)
         }
         Row::Direct { source, readers } => {
-            let main = view! { <span class=format!("map-chip {}", kind_class(&source))>{label.clone()}</span> }
+            let main = view! { <span class=format!("mp-chip {}", kind_class(&source))>{label.clone()}</span> }
                 .into_any();
             let key = source.clone();
             let level = Signal::derive(move || {
@@ -490,15 +490,15 @@ fn MapGroup(
         });
     };
     view! {
-        <div class="map-group" role="rowgroup" class:armed=is_armed>
-            <div class="map-source">
+        <div class="mp-group" role="rowgroup" class:armed=is_armed>
+            <div class="mp-source">
                 {main}
-                {(!subs.is_empty()).then(|| view! { <div class="map-subs">{subs}</div> })}
+                {(!subs.is_empty()).then(|| view! { <div class="mp-subs">{subs}</div> })}
             </div>
-            <div class="map-level">{move || live_bar(level.get())}</div>
-            <div class="map-targets">
+            <div class="mp-level">{move || live_bar(level.get())}</div>
+            <div class="mp-targets">
                 {target_rows}
-                <button type="button" class="map-add" aria-pressed=move || is_armed.get().to_string()
+                <button type="button" class="mp-add" aria-pressed=move || is_armed.get().to_string()
                     title="Arm this source, then drag on any parameter to map it"
                     on:click=arm>
                     {move || if is_armed.get() { "Armed: drag on a parameter…" } else { "+ Target…" }}
@@ -580,7 +580,7 @@ fn TargetRow(reader: Reader) -> impl IntoView {
                 )
             };
             view! {
-                <span class="map-amount" role="cell" title=move || if centred() { "Centred: the stored value sits at the source's middle" } else { "How far it moves the target across the source's travel" }>
+                <span class="mp-amount" role="cell" title=move || if centred() { "Centred: the stored value sits at the source's middle" } else { "How far it moves the target across the source's travel" }>
                     {move || centred().then_some("±")}
                     <NumberField named=Signal::derive(|| "Amount".to_owned()) unit=unit value=value step=0.1 decimals=2 send=set />
                 </span>
@@ -606,7 +606,7 @@ fn TargetRow(reader: Reader) -> impl IntoView {
                 }))
             };
             view! {
-                <span class="map-amount map-range" role="cell" title="The value at the source's 0 and at its 1">
+                <span class="mp-amount mp-range" role="cell" title="The value at the source's 0 and at its 1">
                     <NumberField named=Signal::derive(|| "From".to_owned()) value=end(|r| r.0) step=0.01 decimals=2 send=send_from />
                     <span class="hint">"→"</span>
                     <NumberField named=Signal::derive(|| "To".to_owned()) value=end(|r| r.1) step=0.01 decimals=2 send=send_to />
@@ -671,8 +671,8 @@ fn TargetRow(reader: Reader) -> impl IntoView {
     };
     let title = name.clone();
     view! {
-        <div class="map-target" role="row" class:bypassed=move || enabled() == Some(false)>
-            <span class="map-target-name" role="cell" title=title>
+        <div class="mp-target" role="row" class:bypassed=move || enabled() == Some(false)>
+            <span class="mp-target-name" role="cell" title=title>
                 <span class="hint">"→ "</span>
                 {name}
                 {note.map(|n| view! { <span class="hint">{format!(" ({n})")}</span> })}
@@ -680,11 +680,11 @@ fn TargetRow(reader: Reader) -> impl IntoView {
             {if reads {
                 view! {
                     {amount_field}
-                    <span class="map-mode hint" role="cell" title="Offset adds to the stored value; Override replaces it; Input sets a channel">{mode_text}</span>
-                    <span class="map-smooth" role="cell">
+                    <span class="mp-mode hint" role="cell" title="Offset adds to the stored value; Override replaces it; Input sets a channel">{mode_text}</span>
+                    <span class="mp-smooth" role="cell">
                         <NumberField named=Signal::derive(|| "Smoothing".to_owned()) unit="ms" value=smoothing step=10.0 decimals=0 min=f64::from(floor) max=10000.0 send=send_smoothing />
                     </span>
-                    <span class="map-curve" role="cell">
+                    <span class="mp-curve" role="cell">
                         <select class="chan-select" aria-label="Curve" on:change=set_curve>
                             {crate::panels::motion::CURVES
                                 .into_iter()
@@ -695,11 +695,11 @@ fn TargetRow(reader: Reader) -> impl IntoView {
                 }
                 .into_any()
             } else {
-                view! { <span class="map-span-rest hint" role="cell">{mode_text}</span> }.into_any()
+                view! { <span class="mp-span-rest hint" role="cell">{mode_text}</span> }.into_any()
             }}
-            <span class="map-end" role="cell">
+            <span class="mp-end" role="cell">
                 {move || enabled().map(|on| view! {
-                    <button type="button" class="map-bypass" aria-pressed=(!on).to_string()
+                    <button type="button" class="mp-bypass" aria-pressed=(!on).to_string()
                         title="Bypass: keep the mapping but stop it applying" on:click=bypass>
                         "Bypass"
                     </button>
@@ -809,9 +809,9 @@ fn SourcesTab(
             .into_any()
     };
     view! {
-        <div class="map-sources-tab">
-            <div class="map-grids">{grids}</div>
-            <div class="map-side">
+        <div class="mp-sources-tab">
+            <div class="mp-grids">{grids}</div>
+            <div class="mp-side">
                 <ArmedTargets mode=mode filter=filter tab=tab />
                 <OtherSources feed=feed values=values mode=mode />
             </div>
@@ -988,10 +988,10 @@ fn ModGrid(
             name(names);
         };
         view! {
-            <div class="map-mod" class:armed=armed class:named=move || !given().is_empty() on:click=arm>
-                <button type="button" class="map-mod-n mono" tabindex="-1" aria-label=format!("Arm Mod {slot}")>{slot}</button>
+            <div class="mp-mod" class:armed=armed class:named=move || !given().is_empty() on:click=arm>
+                <button type="button" class="mp-mod-n mono" tabindex="-1" aria-label=format!("Arm Mod {slot}")>{slot}</button>
                 <input
-                    class="map-mod-name"
+                    class="mp-mod-name"
                     data-slot=slot
                     placeholder="Name"
                     aria-label=format!("Name of Mod {slot}")
@@ -1002,25 +1002,25 @@ fn ModGrid(
                     on:keydown=keydown
                     on:paste=paste
                 />
-                <span class="map-mod-count hint mono" class:over=move || bytes().is_some_and(|b| b > mapping_index::MAX_MOD_NAME)>
+                <span class="mp-mod-count hint mono" class:over=move || bytes().is_some_and(|b| b > mapping_index::MAX_MOD_NAME)>
                     {move || match bytes() {
                         Some(b) => format!("{b}/{}", mapping_index::MAX_MOD_NAME),
                         None => match count() { 0 => String::new(), n => n.to_string() },
                     }}
                 </span>
-                <span class="meter-bar map-mod-bar"><span class="map-fill" style:width=move || format!("{:.0}%", level().unwrap_or(0.0) * 100.0)></span></span>
+                <span class="meter-bar mp-mod-bar"><span class="mp-fill" style:width=move || format!("{:.0}%", level().unwrap_or(0.0) * 100.0)></span></span>
             </div>
         }
     };
     let title = sender.get_value();
     view! {
-        <div class="map-sender">
+        <div class="mp-sender">
             <div class="section-head chan-head">
                 <span class="eyebrow">{title}</span>
                 <span class="hint">"JTunnel · state on"</span>
             </div>
             {if has_mods {
-                view! { <div class="map-mods" node_ref=grid>{(1..=MOD_SLOTS).map(cell).collect_view()}</div> }.into_any()
+                view! { <div class="mp-mods" node_ref=grid>{(1..=MOD_SLOTS).map(cell).collect_view()}</div> }.into_any()
             } else {
                 view! { <p class="hint chan-help">"This sender sends no Mods."</p> }.into_any()
             }}
@@ -1067,14 +1067,14 @@ fn ArmedTargets(mode: MappingMode, filter: RwSignal<Filter>, tab: RwSignal<Tab>)
                 <span class="eyebrow">{format!("Armed: {}", armed.label)}</span>
                 <button type="button" class="chan-add" on:click=show>"Show in Mappings"</button>
             </div>
-            <div class="map-armed">
+            <div class="mp-armed">
                 {rows.into_iter().map(|r| view! { <TargetRow reader=r /> }).collect_view()}
             </div>
             <p class="hint chan-help">"Drag on any tinted parameter to add one. [ and ] arm the previous or next Mod, as the arrow keys do while no field has the focus. Escape disarms."</p>
         }
         .into_any()
     };
-    view! { <div class="map-armed-box">{body}</div> }
+    view! { <div class="mp-armed-box">{body}</div> }
 }
 
 /// The sources besides Mods: each MIDI control seen, each channel that isn't a named
@@ -1109,9 +1109,9 @@ fn OtherSources(
         };
         view! {
             <li class="chan-row link" class:armed=on on:click=pick>
-                <span class=format!("map-dot {kind}")></span>
+                <span class=format!("mp-dot {kind}")></span>
                 <span class="chan-row-name">{label}{extra.map(|e| view! { <span class="hint">{format!(" {e}")}</span> })}</span>
-                {level.map(|v| view! { <span class="meter-bar map-other-bar"><span class="map-fill" style:width=format!("{:.0}%", v * 100.0)></span></span> })}
+                {level.map(|v| view! { <span class="meter-bar mp-other-bar"><span class="mp-fill" style:width=format!("{:.0}%", v * 100.0)></span></span> })}
                 <span class="hint mono">{if count == 0 { String::new() } else { count.to_string() }}</span>
             </li>
         }

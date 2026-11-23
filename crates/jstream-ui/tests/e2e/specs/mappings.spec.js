@@ -13,7 +13,7 @@ async function showFromView(page, name) {
 test('the Mappings panel lists a channel and opens it', async ({ page, daemon }) => {
   await connect(page, daemon);
   await showFromView(page, 'Mappings');
-  const panel = page.locator('.map-panel');
+  const panel = page.locator('.mp-panel');
   await expect(panel.getByText('Nothing is mapped yet')).toBeVisible();
 
   await showFromView(page, 'Channels');
@@ -24,7 +24,7 @@ test('the Mappings panel lists a channel and opens it', async ({ page, daemon })
   await expect.poll(() => rev(page)).toBe(before + 1);
   await channels.getByRole('button', { name: '‹ All channels' }).click();
 
-  const group = panel.locator('.map-group', { hasText: 'Key light' });
+  const group = panel.locator('.mp-group', { hasText: 'Key light' });
   await expect(group).toBeVisible();
   await expect(group.getByRole('button', { name: '+ Target…' })).toBeVisible();
   await panel.getByLabel('Search mappings').fill('nothing like it');
@@ -48,7 +48,7 @@ test('naming a Mod makes its channel, and the Mappings tab shows it by name', as
   send({ senders: { DAW: { params: { values, names: [] } } } });
   await connect(page, daemon);
   await showFromView(page, 'Mappings');
-  const panel = page.locator('.map-panel');
+  const panel = page.locator('.mp-panel');
   await panel.getByRole('tab', { name: 'Sources' }).click();
   const twenty = panel.getByRole('textbox', { name: 'Name of Mod 20', exact: true });
   await expect(twenty).toBeVisible();
@@ -66,7 +66,7 @@ test('naming a Mod makes its channel, and the Mappings tab shows it by name', as
   await expect(panel.getByText('Armed: Mod 21 · DAW')).toBeVisible();
 
   await panel.getByRole('tab', { name: 'Mappings' }).click();
-  const group = panel.locator('.map-group', { hasText: 'Camera roll (Mod 20)' });
+  const group = panel.locator('.mp-group', { hasText: 'Camera roll (Mod 20)' });
   await expect(group).toBeVisible();
-  await expect(group.locator('.map-live')).toContainText('0.62');
+  await expect(group.locator('.mp-live')).toContainText('0.62');
 });
