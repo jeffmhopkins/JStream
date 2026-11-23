@@ -345,3 +345,28 @@ test('a filter picked in the dialog shows its settings there, and Cancel puts th
   await again.getByRole('tab', { name: /^Filters/ }).click();
   await expect(again.getByRole('list', { name: 'Video filters' }).getByRole('listitem').first().locator('.filter-summary')).toHaveText('0.20');
 });
+
+// #1607, #1652: Escape reaches the topmost dialog wherever the focus is, as it is before
+// a just-opened dialog has focused its first field.
+test('Escape closes the topmost dialog wherever the focus is', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  let dialog = await openProperties(page);
+  // The focus is outside the dialog (the menu item it was opened from is gone).
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  // Add filter over Properties, the focus still on Properties underneath: Escape
+  // closes Add filter only.
+  dialog = await openProperties(page);
+  await dialog.getByRole('tab', { name: /^Filters/ }).click();
+  await dialog.getByRole('button', { name: '+ Add filter…' }).click();
+  const add = page.getByRole('dialog', { name: 'Add filter' });
+  await expect(add).toBeVisible();
+  await dialog.getByRole('tab', { name: /^Filters/ }).focus();
+  await page.keyboard.press('Escape');
+  await expect(add).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+});

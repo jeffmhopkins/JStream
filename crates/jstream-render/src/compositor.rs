@@ -2567,12 +2567,16 @@ impl Compositor {
             let vertices = draw.first_vertex..draw.first_vertex + draw.vertex_count;
             // `prepare` checked every item's mode.
             let encoded = self.blending == Blending::Srgb;
-            let model_depth = scene.items[draw.index].depth;
+            let item = &scene.items[draw.index];
+            let model_depth = item.depth;
             // With a depth target, a model's own layer draws untested and every other
-            // item tests against the models drawn before it (ADR-0107 decision 7).
+            // item seen through a camera tests against the models drawn before it
+            // (ADR-0107 decision 7). An item on the screen itself (no camera) isn't in
+            // the models' space, so a near model never hides it.
+            let untested = model_depth.is_some() || item.camera.is_none();
             let depths = self.depth_pipelines.as_ref().filter(|_| self.depth_on);
             let blends = match depths {
-                Some(depths) if model_depth.is_some() => &depths.untested[usize::from(encoded)],
+                Some(depths) if untested => &depths.untested[usize::from(encoded)],
                 Some(depths) => &depths.tested[usize::from(encoded)],
                 None if encoded => &self.encoded_blends,
                 None => &self.blends,
