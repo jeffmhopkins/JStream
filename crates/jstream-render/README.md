@@ -1555,24 +1555,36 @@ it out; `filter::testing` reads both lists.
   `jstream_protocol::SCREEN_SPACE_STEPS`, default 16; another count takes the one
   below). It reads `ViewDepth::surface` too (`DepthSurface`, which
   `video_filter_reads_surface(kind)` asks the engine for), the scene's surface buffer
-  (see Design). One draw (`screen/screen.wgsl`, through
-  `Ctx::draw_program` for its five textures) leaves a pixel as it is unless its surface
+  (see Design). It is two draws, each through `Ctx::draw_program`
+  ([ADR-0189](../../docs/adr/0189-screen-space-reflections-march-at-half-size.md)).
+  **The march** (`screen/trace.wgsl`, five textures) is drawn into a scratch layer half
+  the picture's width and height, rounded up. Each texel stands for a block of two by
+  two pixels and marches one of them (`chosen`): one corner of the block, the other
+  corner on every other texel. It writes nothing unless that pixel's surface
   is marked replaceable, rougher than 0.6 is not, and nothing nearer covers it (the view
   depth there more than 0.2% nearer than the surface's own `1 / w`: a card in front).
   It rebuilds the pixel's point and view direction in the viewing frame from the
   surface's `1 / w`, reflects the view about the normal, and follows the ray across the
   screen from its point to as far again as the point is, cut at the frame's edges and
-  short of the viewer's plane, in `steps` steps from a per-pixel offset, `1 / w`
+  short of the viewer's plane, in `steps` steps from a per-texel offset, `1 / w`
   running linearly along its image. The first step that is behind the view depth there
-  by less than one and a half steps' depth is a hit, and five halvings refine it. What
-  the picture shows there, over a disc of 12 taps as wide as the ray travelled times
-  the roughness squared (at most 32 px), its luma capped at 8, replaces the
-  environment's reflection the surface added: `c + k (hit · brdf − hit.a · reflected)`,
-  `k` falling to 0 within 8% of the frame's shorter side of an edge, by half toward the
-  hit's thickness, for rays turned toward the viewer, and from roughness 0.4 to 0.6.
-  Without a view, a surface buffer or images of the input's size it copies its input
-  (`a_floor_reflects_the_wall_behind_it`,
-  `a_hit_replaces_the_environments_reflection`).
+  by less than one and a half steps' depth is a hit, and five halvings refine it. It
+  writes what the picture shows there, over a disc of 12 taps as wide as the ray
+  travelled times the roughness squared (at most 32 px), its luma capped at 8, times
+  `k`, premultiplied: `k` falls to 0 within 8% of the frame's shorter side of an edge,
+  by half toward the hit's thickness, for rays turned toward the viewer, and from
+  roughness 0.4 to 0.6. **The resolve** (`screen/resolve.wgsl`, those five textures and
+  the march) is drawn at the picture's size. It leaves a pixel as it is by the march's
+  own three tests. Any other takes the marched pixels of the four nearest blocks, each
+  weighed by how near it is on screen (falling to nothing three pixels away on either
+  axis), by how close its point lies to the pixel's own plane (nothing at 2% of the
+  pixel's distance off it), and by the fourth power of the cosine between the normals;
+  their weighted mean `m` replaces the environment's reflection the surface added,
+  `c + m.rgb · brdf − m.a · reflected`. With no weight at all the pixel is left as it
+  is. Without a view, a surface buffer or images of the input's size the pass copies
+  its input (`a_floor_reflects_the_wall_behind_it`,
+  `a_hit_replaces_the_environments_reflection`,
+  `the_march_is_half_the_size_and_keeps_to_its_surface`).
 - `volumetric_fog` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 6, `depth/volumetric.rs`): `color` (with alpha, default `#c8ccd2ff`),
   `density` (0 to 20 per 1000 px, default 0.5), `base_y_px` (default 1080) and
