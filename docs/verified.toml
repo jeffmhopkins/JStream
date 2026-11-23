@@ -2061,7 +2061,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:ec1ed777500dd729", by = "agent:claude", note = "JTunnel receiver paragraph gains the names packet (ADR-0181): readers of params values.N, labels, state-on senders only, keepalive cadence, clearing rounds; re-read after merging main | kept from the merged side: live.rs now hands out each running source's probe (with_probe, #1609) and model (LiveSources::model, for model upload's warm models), and snapshot.rs gained #1609's probes, gpu-stack's priming, #1631's camera bindings and the hologram follow-up's 3D-family Moves; the Snapshot bullet points to snapshot/probes.rs and Priming and nothing it says is contradicted." }
+stamp = { hash = "b3:6473b431ab728a10", by = "agent:claude", note = "Re-read the JTunnel names paragraph: it now lists a channel's data input (ADR-0183), named by the channel's name or else its ID, as names.rs's channel_label does." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:ff5e2c24579293a0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2079,7 +2079,7 @@ stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "merge:
 stamp = { hash = "b3:14b9314542c7686f", by = "agent:claude", note = "JTunnel receiver paragraph gains the names packet (ADR-0181): readers of params values.N, labels, state-on senders only, keepalive cadence, clearing rounds; checked against jtunnel/mod.rs and names.rs" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/names.rs"]
-stamp = { hash = "b3:1674a5f101285700", by = "agent:claude", note = "names.rs: a shared slot's joined name goes through fit again so it never starts with a space; the section's description of names (cut to 40 bytes, +N) still holds" }
+stamp = { hash = "b3:b342909d9c4e6a77", by = "agent:claude", note = "Re-read the JTunnel names paragraph: it now lists a channel's data input (ADR-0183), named by the channel's name or else its ID, as names.rs's channel_label does. | kept from the merged side: names.rs: a shared slot's joined name goes through fit again so it never starts with a space; the section's description of names (cut to 40 bytes, +N) still holds" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/tests.rs"]
 stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and edited: Jeff asked for Use this sender's state on by default once a sender is accepted; AcceptedSender::new now sets state on, and the text says on by default for an accepted sender, counted as state_off and dropped while off." }
@@ -2118,7 +2118,7 @@ stamp = { hash = "b3:56821bd9ccce764b", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:1f503152ce8ea35d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:39158645972d0762", by = "agent:release-alpha9", note = "merge: #1636's audio.rs test what_reads_a_senders_params_names_them_on_the_sender joins #1640's tests; its MotionModifier, CameraMotionModifier and ValueBinding literals take #1640's amount: None in the merge; the bullet describes the test as it runs | kept from the merged side: audio.rs JTunnel list gains what_reads_a_senders_params_names_them_on_the_sender (ADR-0181) | kept from the merged side: named a_jtunnel_setting_applies_live_with_no_restart and what it covers; checked tests/audio.rs" }
+stamp = { hash = "b3:f72e0ad2ad95ec3c", by = "agent:claude", note = "Re-read: tests/audio.rs is still listed; its JTunnel names test now also checks two channels reading Mods 8 and 10 and their removal. | kept from the merged side: audio.rs JTunnel list gains what_reads_a_senders_params_names_them_on_the_sender (ADR-0181) | kept from the merged side: named a_jtunnel_setting_applies_live_with_no_restart and what it covers; checked tests/audio.rs" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:1dcbe24c87fbdbcc", by = "agent:smooth-paths", note = "keyframes.rs gains path, refusal and orbit tests under the keyframe scenes it already lists; the rest are constructor fields" }
@@ -8355,7 +8355,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:0f0dfcf2e50428c6", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:95f28b59356d0034", by = "agent:claude", note = "controls list the names packet (ADR-0181): accepted, state-on senders only, bound names only, 40 bytes, cadence; Accepted adds what a sender learns" }
+stamp = { hash = "b3:240f932aeebece9a", by = "agent:claude", note = "Re-read the names packet bullet and the residual-risk paragraph: both now include channel names, the one new thing param_names sends; the receivers, gating by state switch, 40-byte cap and clearing are unchanged." }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
@@ -8367,7 +8367,7 @@ stamp = { hash = "b3:566e43a3335da375", by = "agent:claude", note = "New section
 stamp = { hash = "b3:14b9314542c7686f", by = "agent:claude", note = "controls list the names packet (ADR-0181): accepted, state-on senders only, bound names only, 40 bytes, cadence; Accepted adds what a sender learns" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/names.rs"]
-stamp = { hash = "b3:1674a5f101285700", by = "agent:claude", note = "names.rs fix only makes every sent name pass is_mod_name; the packet's bounds as described are unchanged" }
+stamp = { hash = "b3:b342909d9c4e6a77", by = "agent:claude", note = "Re-read the names packet bullet and the residual-risk paragraph: both now include channel names, the one new thing param_names sends; the receivers, gating by state switch, 40-byte cap and clearing are unchanged. | kept from the merged side: names.rs fix only makes every sent name pass is_mod_name; the packet's bounds as described are unchanged" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/tests.rs"]
 stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and edited: Jeff asked for Use this sender's state on by default once a sender is accepted; state is taken only from accepted senders and is on by default for them, the person's acceptance being the consent; --jtunnel-no-state or the unticked checkbox drops it; bounds unchanged." }
