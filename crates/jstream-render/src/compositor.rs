@@ -121,7 +121,7 @@ pub struct Compositor {
     sampler: wgpu::Sampler,
     image_layout: wgpu::BindGroupLayout,
     blends: BlendPipelines,
-    /// Adds a model's view depth layer to a scene's view depth ([`Item::depth`]).
+    /// Adds a model's view depth layer to a scene's view depth ([`crate::Item::depth`]).
     depth_copier: wgpu::RenderPipeline,
     /// The same, drawing into an sRGB-encoded target (ADR-0126 §3).
     encoded_blends: BlendPipelines,
@@ -631,7 +631,7 @@ impl Compositor {
     /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
     /// its alpha, with its opacity and its sharp edge, is at least one half; the larger
     /// value wins, so draw order doesn't matter. A [`Placement::Layer`] (a model's
-    /// layer) that carries the model's depth ([`Item::depth`]) writes that depth where
+    /// layer) that carries the model's depth ([`crate::Item::depth`]) writes that depth where
     /// the model covers, as a scene's pass tests against it, so the model isn't drawn
     /// again; one without writes nothing here, and [`Self::draw_model_depth`] adds its
     /// model's depth.
