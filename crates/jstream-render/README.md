@@ -188,9 +188,10 @@ and calls this crate.
   premultiplied sRGB-encoded colour while the items draw: each item encodes its colour
   (the shader's `ENCODED` override), the same blend states then give a browser's
   composite, and the backdrop modes mix the encoded values as they are. One decode pass
-  after the last item (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of the target,
-  or over a transparent background of the box the items reached alone) leaves
-  premultiplied linear light, so a canvas or a layer is linear either way.
+  after the last item of a layer (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of
+  the target, or over a transparent background of the box the items reached alone) leaves
+  premultiplied linear light, so a layer is linear either way; a frame's own target is
+  decoded by its resolve instead.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
@@ -534,7 +535,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    cleared rather than wiped then), the model's layer (or the model, where its item
    carries its draw, ADR-0191) draws untested and then
    `fs_write_depth` writes `NEAR_W` times its depth image's `1 / w` where that isn't 0,
-   loaded texel for texel, and every other item tests its own `NEAR_W / w` (the vertex
+   loaded texel for texel, and every other item seen through a camera (an item with no
+   camera is on the screen, outside the models' space, and draws untested) tests its own `NEAR_W / w` (the vertex
    shader's clip z, `min(NEAR_W, w)`) against it without writing
    (`golden_model_a_card_behind_a_model_is_hidden_by_its_depth`). Otherwise
    stacking order is draw order, except that `prepare` sorts each run of consecutive
@@ -547,9 +549,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    the background premultiplied without the transfer, each fragment's premultiplied
    linear colour is encoded straight and premultiplied again (pipelines built with the
    `ENCODED` override), and the backdrop modes mix the encoded colours directly. After
-   the last item the whole target is copied into the backdrop and one fullscreen draw
-   (`resolve.wgsl`'s `fs_decode`) writes it back as premultiplied linear, so steps 4 and
-   on, and a layer's reader, see linear light. Over a transparent background the copy
+   the last item of a layer (`render_into`, `render_image`) the whole target is copied
+   into the backdrop and one fullscreen draw (`resolve.wgsl`'s `fs_decode`) writes it
+   back as premultiplied linear, so a layer's reader sees linear light. `render`'s own
+   target is left encoded, and step 4 decodes it. Over a transparent background the copy
    and the draw cover only the box the items could reach (the one a layer keeps as its
    content, #1070), and a pass that drew nothing has neither: every other texel is zero,
    which is zero in both spaces (`a_browser_style_layer_is_decoded_only_where_it_drew`). The curves are written so that 1 encodes
@@ -557,7 +560,11 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It samples the FP16 texel at its centre with a nearest sampler (the
    value a `textureLoad` gives, at about half the cost on llvmpipe, #1449),
-   un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
+   un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. With
+   `Blending::Srgb` the texel is premultiplied sRGB-encoded colour, as step 3 left it,
+   and the pass (`fs_encoded`) decodes the un-premultiplied colour before it writes it:
+   the decode and the resolve in one, with no copy of the target and no linear pass
+   between (`a_browser_style_frame_is_resolved_from_its_encoded_target`). The sRGB format encodes RGB on store;
    alpha is stored as-is. The triangle writes every texel, so a GPU starts the pass
    cleared (cheap there, and a tiled GPU then reads nothing in), and a software
    adapter starts it loaded, sparing a clear that costs about 0.5 ms a 1080p frame on
@@ -588,6 +595,30 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    compositor's, the canvas size, and not placed by the scene being drawn into it,
    or the call is `RenderError::Invalid` before any GPU work. Submits that placed the
    layer earlier are ordered before the redraw, so they keep the old contents.
+   A layer that still holds the very draw it is asked for is left as it is
+   ([ADR-0194](../../docs/adr/0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md)):
+   the layer keeps what its last `render_into` drew (`Drawn`: the vertices byte for
+   byte, each drawn image with its count of writes, its blend mode, mip chain and
+   backdrop box, the background and the blending space), and when the scene readied
+   for a redraw matches that, and nothing has written to the layer since
+   (`Compositor::holds`), nothing is recorded or submitted and the layer is not marked
+   as changed, so a scene that places it matches too. A scene with a model's depth is
+   always drawn. So every write into an image's texels has to mark it
+   (`Image::mark_changed`), as mip chains already needed
+   (`a_layer_is_drawn_again_only_when_what_it_draws_has_changed`,
+   `a_parent_is_kept_while_the_layers_it_places_are`).
+   When the scene does not match but the layer still holds its last draw, over a
+   transparent background in the same space with as many draws, only what changed is
+   drawn (`Compositor::changed`,
+   [ADR-0201](../../docs/adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)): each draw that differs
+   from the one last drawn in its place (its vertices' bytes, its image and that
+   image's count of writes, its mode or mip chain) gives the box it could touch then
+   and the one it can touch now, boxes that share a texel are joined, and
+   `record_patches` makes each box transparent, draws every draw that reaches it
+   clipped to it, and decodes it in `srgb`. More than 8 boxes, boxes over more than
+   half the layer, a draw that reads its backdrop, a model's depth, a draw added or
+   removed or a background draw the layer whole. The pixels are a whole redraw's bit
+   for bit (`a_layer_is_redrawn_only_where_its_items_changed`).
    A layer drawn over a transparent background also keeps what its scene could have
    drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current
@@ -682,7 +713,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 |---|---|
 | Device, queue, pipelines, sampler, layouts | Compositor |
 | The blend, depth, model, sky, sky bake and filter pipelines, once made | Every compositor on the device holds its own clone; the device's shared pipelines keep one too (`pipelines.rs`, in the `GpuContext`, or with the compositor for a device of its own), up to 1024, so a later compositor makes none of them again ([Scope](#purpose)) |
-| FP16 target, sRGB target, resolve bind group | Recreated when the canvas size changes |
+| FP16 target, sRGB target, resolve bind group | One set for each size `render` is given. The set of the size last rendered at is used again; those of up to 3 other sizes are kept aside for 240 renders after their last, so a tick that renders an output's picture and a preview's of another size makes no texture (`renders_at_alternating_sizes_keep_their_targets`). A 1920 × 1080 set is about 25 MB |
 | Vertex buffer | Grown when the scene needs more vertices, never shrunk; `queue.write_buffer` otherwise |
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |

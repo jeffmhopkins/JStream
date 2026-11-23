@@ -1439,10 +1439,11 @@ target under the item. The collection's blending space picks where they mix
 overlay, difference and exclusion mix sRGB-encoded values. In `srgb`, a new
 collection's, the target holds premultiplied sRGB-encoded colour while the items draw,
 so every mode mixes as a browser does with the same blend states, and one decode pass
-after the last item turns it back into linear light: over a transparent background only
+after a layer's last item turns it back into linear light: over a transparent background only
 over the box the items reached, and not at all when they reached nothing, since a zero
-texel decodes to itself. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
-resolve pass un-premultiplies into
+texel decodes to itself. A layer's composite leaves premultiplied linear light in `Rgba16Float`; a frame's
+resolve pass un-premultiplies its target (decoding it first in `srgb`, where the
+frame's own target is left encoded) into
 `Rgba8UnormSrgb`, which a snapshot can read back. A frame that is one finished layer over
 the whole canvas (a scene's or an output's filter chain's result) is resolved straight
 from that layer in one pass, with no composite of it first. The device is the platform `GpuContext`
@@ -1451,7 +1452,10 @@ first (D3D12 first on Windows); the software adapter is the fallback, so a machi
 no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays
 on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
-a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
+a layer the caller keeps, so a frame allocates no texture for it, and leaves it as it is
+when it still holds the same draw of unchanged images, so a scene in which nothing moved
+costs no GPU time ([ADR-0194](adr/0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md)), and one in which a few items changed is drawn again only over their
+boxes ([ADR-0201](adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)). A layer drawn over a
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
 group of a few small items doesn't shade the whole canvas twice. A model's layer is

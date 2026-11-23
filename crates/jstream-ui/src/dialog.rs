@@ -1,5 +1,6 @@
 //! The modal dialog frame: a dialog centred over a dim backdrop. A press on the
-//! backdrop or Escape cancels it, and Enter presses its primary button (one marked
+//! backdrop or Escape cancels it. Escape reaches the topmost dialog wherever the focus
+//! is, even pressed before the dialog has taken the focus, and Enter presses its primary button (one marked
 //! `data-primary`) unless the key was meant for a text area, a button or a select.
 //! A press on the dialog's own header drags it, and that place is remembered for the
 //! page. `Info` is a setting's (i), with the details behind it (UI-DESIGN › Copy).
@@ -158,6 +159,63 @@ fn header_drag(dialog: &leptos::web_sys::Element, target: &leptos::web_sys::Elem
     )
 }
 
+/// Whether `dialog` is the topmost open modal: the last one in document order. A dialog
+/// opened over another is drawn either inside it or after it, so it comes later.
+fn is_topmost(dialog: &leptos::web_sys::Element) -> bool {
+    let Ok(open) = document().query_selector_all(".modal[aria-modal='true']") else {
+        return false;
+    };
+    open.length()
+        .checked_sub(1)
+        .and_then(|last| open.item(last))
+        .is_some_and(|last| last.is_same_node(Some(dialog)))
+}
+
+/// Whether an Escape that started at `target` is the topmost dialog's to take before
+/// anything else sees it. One pressed inside the dialog goes through it as usual, so a
+/// field or a menu there acts on it first. One pressed while a menu is open closes the
+/// menu. Any other (the focus still on what opened the dialog, on the page under it,
+/// on a dialog below, or on nothing) cancels the dialog, so an Escape pressed before
+/// the dialog's first field takes the focus is not lost or sent to what lies under it.
+fn escape_is_ours(
+    dialog: &leptos::web_sys::Element,
+    target: Option<&leptos::web_sys::Node>,
+) -> bool {
+    if target.is_some_and(|t| dialog.contains(Some(t))) {
+        return false;
+    }
+    let menu_open = matches!(document().query_selector("[role='menu']"), Ok(Some(_)));
+    !menu_open && is_topmost(dialog)
+}
+
+/// A `keydown` listener on the window's capture phase, until [`CaptureKeys::remove`].
+#[derive(Clone, Copy)]
+struct CaptureKeys(StoredValue<leptos::wasm_bindgen::JsValue, leptos::prelude::LocalStorage>);
+
+impl CaptureKeys {
+    fn add(on_key: impl Fn(leptos::web_sys::KeyboardEvent) + 'static) -> Self {
+        use leptos::wasm_bindgen::closure::Closure;
+        let callback =
+            Closure::<dyn Fn(leptos::web_sys::KeyboardEvent)>::new(on_key).into_js_value();
+        let _ = window().add_event_listener_with_callback_and_bool(
+            "keydown",
+            callback.unchecked_ref(),
+            true,
+        );
+        Self(StoredValue::new_local(callback))
+    }
+
+    fn remove(self) {
+        self.0.with_value(|callback| {
+            let _ = window().remove_event_listener_with_callback_and_bool(
+                "keydown",
+                callback.unchecked_ref(),
+                true,
+            );
+        });
+    }
+}
+
 /// The point a pointer event names.
 fn at_pointer(event: &ev::PointerEvent) -> (f64, f64) {
     (f64::from(event.client_x()), f64::from(event.client_y()))
@@ -219,6 +277,33 @@ pub fn Modal(
             }
         }
     });
+    // Escape from outside the dialog: see `escape_is_ours`. The capture phase runs
+    // before any handler on the page under the dialog, which would otherwise take it.
+    // The listener runs outside the reactive tree, so `cancel` runs under the dialog's
+    // owner, as the handlers in its view do: a cancel may read context.
+    let owner = Owner::current();
+    let escape = CaptureKeys::add(move |event| {
+        if event.key() != "Escape" || event.default_prevented() {
+            return;
+        }
+        let Some(dialog) = dialog.get_untracked() else {
+            return;
+        };
+        let target = event
+            .target()
+            .and_then(|t| t.dyn_into::<leptos::web_sys::Node>().ok());
+        if escape_is_ours(&dialog, target.as_ref()) {
+            event.prevent_default();
+            // Immediate: a dialog below this one, whose listener may run after, must
+            // not see it once this one has closed and it is the topmost.
+            event.stop_immediate_propagation();
+            match &owner {
+                Some(owner) => owner.with(cancel),
+                None => cancel(),
+            }
+        }
+    });
+    on_cleanup(move || escape.remove());
     let follow = move |event: &ev::PointerEvent| {
         let Some(state) = drag.get_value() else {
             return;

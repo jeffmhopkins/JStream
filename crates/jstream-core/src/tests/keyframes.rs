@@ -2768,3 +2768,175 @@ fn a_data_modifier_sets_an_effect_colour_from_a_palette() {
     follower.follow(shot.shot().audio(), secs(1.1));
     assert_eq!(color(1.1), own, "not listed: its own colour again");
 }
+
+/// A builtin source `id` of `kind` with `settings`.
+fn builtin(id: &str, kind: &str, settings: &[(&str, serde_json::Value)]) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: id.into(),
+        kind: SourceKind::Builtin { kind: kind.into() },
+        settings: Settings(
+            settings
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                .collect(),
+        ),
+        duplicated_from: None,
+    }
+}
+
+/// The framing camera for the default canvas, moved `dx` across.
+fn framing_across(dx: f32) -> jstream_protocol::SceneCamera {
+    let mut camera = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas::DEFAULT);
+    camera.position.x = Finite32::new(camera.position.x.get() + dx).expect("finite");
+    camera.target.x = Finite32::new(camera.target.x.get() + dx).expect("finite");
+    camera
+}
+
+/// A 3D scene `s` placing a scene-lit model, a point light and an environment light
+/// whose sky is the scene's backdrop, seen through a camera 300 px left of framing, and
+/// its keyframe scene `k`, which differs only in its camera, 300 px right.
+fn model_family(engine: &Engine) -> crate::InProcessControl {
+    let control = connected(engine);
+    apply(
+        &control,
+        vec![
+            create("s"),
+            builtin("cube", "model", &[("shape", json!("cube"))]),
+            builtin("lamp", "light", &[("type", json!("point"))]),
+            builtin(
+                "sky",
+                "light",
+                &[("type", json!("environment")), ("backdrop", json!(true))],
+            ),
+            add("s", "m", "cube"),
+            add("s", "l", "lamp"),
+            add("s", "e", "sky"),
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("s"),
+                camera: Some(framing_across(-300.0)),
+            },
+            variant("k", "s"),
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(framing_across(300.0)),
+            },
+            move_preset(),
+        ],
+    );
+    assert!(engine.settle_sources(), "the sources were built in time");
+    control
+}
+
+/// A Move between two keyframes of a 3D scene that holds a model, lights and a sky
+/// backdrop, and differs only in its camera, moves the camera straight from one to the
+/// other: every track, and the sky, is seen through the camera on that line.
+#[test]
+fn a_move_between_two_views_of_a_model_scene_keeps_to_the_line() {
+    let engine = Engine::new();
+    let control = model_family(&engine);
+    let (from, to) = (framing_across(-300.0), framing_across(300.0));
+    switch(&control, "s", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    for (ms, k) in [(0.0, 0.0), (200.0, 0.5), (400.0, 1.0)] {
+        let want = jstream_render::transition::lerp_camera(&from, &to, k);
+        let cameras = shot.track_cameras(ms).expect("a transition runs");
+        assert!(!cameras.is_empty(), "the model is a track");
+        assert!(
+            cameras.iter().all(|camera| *camera == Some(want)),
+            "at {ms} ms: {cameras:?}, want {want:?}"
+        );
+        assert_eq!(
+            shot.sky_cameras(ms),
+            Some((Some(want), Some(want))),
+            "at {ms} ms"
+        );
+    }
+}
+
+/// [`model_family`] with the scene drawn as one picture through its chain, `z`, a 2D
+/// scene, on program, then a Fade onto `s` and, `fade_ms` later, a Move to `k`. The clock
+/// is held (ADR-0172), so no plan lets the Fade go when it ends.
+fn move_after_a_fade_onto_the_model_scene(fade_ms: u32) -> Engine {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(FakeClock::new(Timebase::MICROS)));
+    let control = model_family(&engine);
+    let call = |action: Action| {
+        block_on(control.call(Call::Action { action })).expect("action");
+    };
+    apply(
+        &control,
+        vec![
+            create("z"),
+            sharpen(
+                jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("s"),
+                },
+                "look",
+            ),
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ],
+    );
+    call(Action::ClockHold);
+    switch(&control, "z", None);
+    switch(&control, "s", Some("fade"));
+    call(Action::ClockStep { ms: fade_ms });
+    switch(&control, "k", Some("move"));
+    engine
+}
+
+/// #1598: a Move between two views of a 3D scene, started once the Fade onto it has
+/// ended but before a plan let that go, moves straight from the scene's camera to the
+/// keyframe's, item by item, as from the scene at rest: not from the framing camera, as
+/// if what the ended Fade left on screen were 2D.
+#[test]
+fn a_move_after_an_ended_fade_starts_from_the_scenes_camera() {
+    let engine = move_after_a_fade_onto_the_model_scene(600);
+    let (from, to) = (framing_across(-300.0), framing_across(300.0));
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    for (ms, k) in [(0.0, 0.0), (100.0, 0.25), (400.0, 1.0)] {
+        let want = jstream_render::transition::lerp_camera(&from, &to, k);
+        let cameras = shot.track_cameras(ms).expect("a transition runs");
+        assert!(!cameras.is_empty(), "the model is a track");
+        assert!(
+            cameras.iter().all(|camera| *camera == Some(want)),
+            "at {ms} ms, every item through the moving camera: {cameras:?}, want {want:?}"
+        );
+        assert_eq!(
+            shot.sky_cameras(ms),
+            Some((Some(want), Some(want))),
+            "at {ms} ms"
+        );
+    }
+}
+
+/// #1598: a Move between two views of a 3D scene that cuts short a Fade onto it, which
+/// shows the scene as one picture, moves from the camera that picture was seen through,
+/// the scene's own, not from the framing camera, as if the picture were 2D.
+#[test]
+fn a_move_cutting_short_a_fade_onto_a_3d_scene_starts_from_its_camera() {
+    let engine = move_after_a_fade_onto_the_model_scene(200);
+    let from = framing_across(-300.0);
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    let cameras = shot.track_cameras(0.0).expect("a transition runs");
+    // The scene's picture leaves flat; the keyframe's items glide in.
+    let moving: Vec<_> = cameras.iter().flatten().collect();
+    assert!(!moving.is_empty(), "{cameras:?}");
+    assert!(
+        moving.iter().all(|camera| **camera == from),
+        "from the scene's camera: {cameras:?}, want {from:?}"
+    );
+}

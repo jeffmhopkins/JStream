@@ -598,6 +598,66 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
     }
 }
 
+/// ADR-0107 decision 7 (#1601): a card seen through the camera, drawn after a nearer
+/// model, is hidden where the model is. An item on the screen itself (no camera) is not
+/// in the model's space and is never hidden by it.
+#[test]
+fn golden_model_depth_hides_a_camera_card_but_not_a_screen_item() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = SceneCamera::framing(canvas());
+    let white = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
+    let mut geometry = boxed(80.0, 50.0, 30.0);
+    geometry.depth_px = finite(40.0);
+    let draw = ModelDraw {
+        model: &cube,
+        geometry,
+        camera: Some(camera),
+        lighting: Lighting::Unlit,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let own_depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(&draw, &layer)
+        .expect("the model draws");
+    compositor
+        .draw_model_depth(&draw, &own_depth)
+        .expect("the model's depth draws");
+    for (card_camera, want) in [(Some(camera), FRONT), (None, [255, 255, 255])] {
+        let items = [
+            Item {
+                camera: Some(camera),
+                depth: Some(&own_depth),
+                ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+            },
+            Item {
+                camera: card_camera,
+                ..crate::tests::item(
+                    &white,
+                    Placement::Geometry(boxed(80.0, 50.0, 60.0)),
+                    Crop::NONE,
+                    1.0,
+                )
+            },
+        ];
+        let shot = render(compositor, &items);
+        assert_near(rgb(&shot, 80, 50), want, (80, 50));
+    }
+}
+
 /// A model drawn by one compositor is refused by another.
 #[test]
 fn a_model_from_another_compositor_is_refused() {
@@ -3280,4 +3340,61 @@ fn a_model_in_the_pass_is_refused_where_it_needs_its_layer() {
         ..carried(&prepared)
     }];
     assert_eq!(count(&render(compositor, &hidden), [0, 0, 0]), 16_000);
+}
+
+/// ADR-0191 with ADR-0194 and ADR-0201: a layer whose scene carries a model's draw is
+/// drawn whole each time, though its items, their images, their vertices and the box
+/// they reach are what they were: what the model shows is in its draw, which no image
+/// of the scene holds.
+#[test]
+fn a_layer_that_carries_a_model_is_drawn_each_time() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let white = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
+    let placed = boxed(80.0, 50.0, 40.0);
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    // The cube at rest, then turned half way round in the same box.
+    for (turn, face) in [(0.0, FRONT), (180.0, BACK)] {
+        let draw = ModelDraw {
+            model: &cube,
+            geometry: ItemGeometry {
+                turn_deg: finite(turn),
+                ..placed
+            },
+            camera: None,
+            lighting: Lighting::Unlit,
+            lights: None,
+            shadows: &[],
+            environment: None,
+            floor: None,
+            texture: None,
+            reflection: None,
+            probe: None,
+            materials: &[],
+        };
+        let prepared = compositor
+            .prepare_model(&draw, (WIDTH, HEIGHT), None, None)
+            .expect("the model is made ready")
+            .expect("nothing needs a layer");
+        // The same item both times: only the draw it carries differs.
+        let items = [Item {
+            model: Some(&prepared),
+            ..crate::tests::item(&white, Placement::Layer(placed), Crop::NONE, 1.0)
+        }];
+        let scene = Scene {
+            canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+            background: Color::TRANSPARENT,
+            items: &items,
+        };
+        compositor
+            .render_into(&scene, &layer)
+            .expect("the layer draws");
+        let shown = read_layer(compositor, &layer);
+        assert_eq!(count(&shown, face), 1_600, "the face towards us at {turn}");
+    }
 }

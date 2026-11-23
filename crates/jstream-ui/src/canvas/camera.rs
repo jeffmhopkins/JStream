@@ -95,15 +95,15 @@ pub fn view(camera: Option<SceneCamera>, canvas: Canvas) -> Option<CameraView> {
 /// rectangle is.
 ///
 /// For an item that shows a model (`solid`), the outline of the model's bounds as the
-/// item places them: the hull of their eight corners, `None` when one is behind the
-/// camera.
+/// item places them: the hull of their eight corners. When one of those corners is behind
+/// the camera (the model reaches past the near plane), its card box clipped as above
+/// instead, so the model keeps an outline and stays selectable (#1601).
 pub fn polygon(
     geometry: &ItemGeometry,
     solid: Option<SolidBounds>,
     view: &CameraView,
 ) -> Option<Vec<Point>> {
-    if let Some(bounds) = solid {
-        let hull = geometry.solid_outline(bounds, Some(view))?;
+    if let Some(hull) = solid.and_then(|bounds| geometry.solid_outline(bounds, Some(view))) {
         return Some(
             hull.into_iter()
                 .map(|at| Point { x: at.x, y: at.y })
@@ -993,5 +993,22 @@ mod tests {
         let bounds = screen_box(&g, None, &seen).expect("in front");
         assert!((bounds.center.x.get() - 500.0).abs() < 0.05);
         assert!((bounds.size.width.get() - 400.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn a_model_reaching_past_the_near_plane_keeps_its_card_outline() {
+        let seen = framing();
+        let g = item(960.0, 540.0, 400.0, 400.0, 0.0);
+        // A hundred times deeper than wide: its near corners land behind the camera.
+        let deep = SolidBounds::of_size(1.0, 1.0, 100.0);
+        assert!(g.solid_outline(deep, Some(&seen)).is_none());
+        let card = polygon(&g, None, &seen).expect("the card box is in front");
+        assert_eq!(polygon(&g, Some(deep), &seen), Some(card));
+        assert!(contains(
+            &g,
+            Some(deep),
+            &seen,
+            Point { x: 960.0, y: 540.0 }
+        ));
     }
 }

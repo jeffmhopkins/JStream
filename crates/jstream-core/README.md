@@ -384,14 +384,22 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   that shares a 3D scene's space
   ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md),
   `snapshot/groups.rs`) has no layer there: `Planner::collect` plans each of its
-  children (nested sharing groups in turn, up to `MAX_NESTING`) into the scene's own
-  pass, in the group item's place in stacking order, with its boxes and lights keyed by
-  that scene and the chain of group items (`GroupLink`s) it is placed through. As each
-  frame is drawn, every link is resolved as any item is (live values, then motion) and
-  the child's own resolved geometry is placed through them with
-  `jstream_protocol::GroupPose`, its opacity multiplied by theirs, so the scene's sort,
-  lights, models and focus take it as an item of the scene. A transition's ends place
-  each child through the links as planned, so it glides as a track of its own. A
+  children (nested sharing groups in turn, while fewer than `MAX_NESTING` groups hold
+  it) into the scene's own pass, in the group item's place in stacking order, with its
+  boxes and lights keyed by that scene and the chain of group items (`GroupLink`s) it is
+  placed through. A group shares a scene's space once: a second item of the scene
+  placing the same group draws it flat. As each frame is drawn, every link is resolved
+  as any item is (live values, then motion) and the child's own resolved geometry is
+  placed through them with `jstream_protocol::GroupPose`, its opacity multiplied by
+  theirs, so the scene's sort, lights, models and focus take it as an item of the
+  scene. A child with a legacy transform is placed as the box its transform draws for
+  its image (`groups::legacy_box`), as a transition's ends take it. A transition splits
+  the same groups as the pass (`Planner::visuals_into`, once per scene, the same nesting
+  count) and each child is a track of its own: its ends keep its place in its group's
+  space (`TrackGroups`), and each frame `sample_track` places them through the links as
+  they are then, with the child's own motion in its group's space
+  (`groups::resolved_track`), so the group's live values and motion move it while the
+  transition runs (`a_3d_groups_motion_moves_its_children_during_a_transition`). A
   scene whose family anchors its camera to such a group item (`PassCamera.anchor`) has
   its camera, after camera motion and the live aim, placed through that item the same
   way; `placed_camera` is that camera as committed, where a transition from the scene
@@ -521,8 +529,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
   with the new scene's items, one `jstream-render` `Track` per item (`plan`), and for
   a group that moves as one item within a family its children's tracks inside its
-  layer (`Inside`, ADR-0049 §3). A 3D group's children are tracks of their own, at
-  their placed geometries, and an end's camera is placed through its anchor
+  layer (`Inside`, ADR-0049 §3). A 3D group's children are tracks of their own, each
+  end placed through its groups as they are each frame (`Visual::groups`, paired as
+  `Visual::motion` is), and an end's camera is placed through its anchor
   (`camera_of`, ADR-0164); `check_via` checks a switch's path through keyframes
   (ADR-0166 decision 2), and `Run::orbit` is a `move` preset's `camera_path` of
   `orbit` (decision 3).
@@ -770,9 +779,13 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   bound, cycles) and its pixels through two levels in `snapshot.rs`, 3D groups drawn
   through `video.snapshot` (a sharing group's child sorting in front of a scene item a
   flat group sits under, moving and fading with the group item, a camera anchored to
-  the group riding with it, its children staying in its space through a Move, and an
+  the group riding with it, its children staying in its space through a Move, also one
+  started after a Fade onto the scene ended but before a plan let it go, and an
   item shown with a Fade on a filtered 3D keyframe drawn through its camera, and an
-  effect setting changed after the first frame reaching a 3D card, in
+  effect setting changed after the first frame reaching a 3D card, a legacy-transform
+  child placed through its group; and, from the planned shot, a group's motion and a
+  child's own moving it in the group's space during a Move, and a Move splitting the
+  groups the pass splits, once per scene and as deep, in
   `src/tests/groups3d.rs`), the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
@@ -1577,7 +1590,11 @@ and a switch back shows them again (`restart_on_show`) and they rest meanwhile, 
 nothing else asks for a plan before it (#1185). A switch while a transition runs samples it at the switch time
 (`snapshot::on_screen`, the function the render thread draws with) and starts the new
 one from those items, so nothing jumps
-([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A switch to the scene already on program, even
+([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A transition that has ended
+though no plan has let it go yet (the clock held, [ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)) isn't sampled:
+`snapshot::still_on_screen` finds it ended, and the switch, `set_keyframe` and
+`item.show` start from the program scene at rest, as after the plan that lets it go
+(#1598, #1632). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
 
 A `stinger` pairs nothing: what is on screen shows until its `cut_ms` (at most the
@@ -1648,7 +1665,9 @@ own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
 `TrackCameras.overlay_run`), so they sort among themselves and stay over the scenes
 under them and over a stinger they cut short. A switch that cuts a transition short takes what is on screen with the
 camera each item was seen through and the depth run it sorted in (`Seen::Held`): it
-leaves through that camera, a stinger's items still over what they covered, and only a
+leaves through that camera, a stinger's items still over what they covered (a whole
+scene's picture, drawn flat, holds its scene's own camera, which drew it, so a Move
+from it starts there and not at the framing camera of a 2D side), and only a
 screen seen through one camera (a Move cut short) moves it toward the new scene's, for
 every track; one seen through several (a Fade or stinger between cameras) makes the
 switch a Fade (`transition::shared_camera`).
@@ -2443,11 +2462,13 @@ with the `additive` or `screen` blend, which only adds light (`casts_shadow`,
 [ADR-0179](../../docs/adr/0179-cards-that-only-add-light-cast-no-shadow.md)). A spot
 light looks from where it is along its aim, through its cone and a tenth more; a
 directional light from far back along its aim, at the sphere around what the pass places
-(`caster_bounds`), through a 30° view that holds it, which stands in for an orthographic
-view. Before drawing them it makes every model the pass shows ready to cast
-(`ready_casting_models`: its upload and its layer), so a model drawn after the first, or
-not yet drawn by this compositor, casts in that frame too
-(`the_first_frame_shadows_with_every_model`). More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
+(`caster_bounds`, casting models included), through a 30° view that holds it, which stands
+in for an orthographic view. Before drawing them it uploads every model the pass shows
+(`ready_casting_models`), and a model is posed from its item (`layer_pose`) without
+waiting for its layer, so a model drawn after the first, not yet drawn by this
+compositor, or whose layer is its effects' output, casts in that frame too
+(`the_first_frame_shadows_with_every_model`,
+`the_first_frame_shadows_with_a_model_with_effects`). More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
 the maps for that run (`shadows_of`), and every receiving model of the scene draws with
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).
@@ -3243,7 +3264,11 @@ program or of a scene, in H.264, JPEG or PNG, isn't drawn by the hub: once the e
 program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
 under the start lock but never waiting for a start, asking again 200 ms later while an
 output is starting and 5 s later after a stage that failed to open) and holds it while
-such a stream is open. It opens the stream's encoder session (as above) and hands its
+such a stream is open. It opens the stream's encoder session (as above, but for NV12
+input at an even picture size, `staged_format`, so the render thread converts the
+picture on the GPU and reads back the planes, as it does for an output's session, and
+the encoder converts nothing; RGBA8 at an odd one,
+`a_staged_preview_encodes_nv12_at_an_even_size`) and hands its
 input to the stage (`Program::attach_preview`). The stage's render thread then draws
 the program at the stream's picture size, on every `base / fps`th base tick (at least
 every tick), on the stage's compositor, with the stage's captures. The encoder is opened
@@ -3314,10 +3339,11 @@ reports each scene's estimate and whether it is cold (`WarmCaptures::report`, re
 under the collection lock after the profile is built).
 
 A JPEG or PNG stream gets a picture queue instead of an encoder session
-(`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read
-back into it, at most two waiting (one beyond is dropped without a copy), and its
+(`Program::attach_pictures`, `picture_queue`): the render thread queues each frame read
+back in it, as the mix's own buffer shared and not a copy (*Runtime*), at most two
+waiting (one beyond is dropped), and its
 `jstream-preview-send` thread encodes and sends a picture when it differs from the last
-one sent, a keyframe was asked for (the request is that thread's to take, never the
+one sent (a repeated frame is the same buffer, so that costs no compare), a keyframe was asked for (the request is that thread's to take, never the
 hub's), or 2 s passed, and only while the stream's queue has room. A staged stream's
 `pts_us` go on from the hub's own across stages and sizes (`StreamClock`): its first
 picture on a stage is timed by how long the stream has been open, later ones by their
@@ -4064,9 +4090,10 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 
 The render thread keeps each capture's latest CPU frame as it was delivered, with no
 copy of its own, and reuses its composite targets, each mix's readback ring, and its GPU
-textures through the cache. Each tick allocates, for every mix it draws, one
-frame-sized buffer per encoder session on the CPU path fed from that mix, the frame the
-session takes ownership of (`VideoInput::push` cannot hand buffers back), and the item
+textures through the cache. Each tick allocates, for every mix it draws, the small
+handle of the frame it shows and of each encoder session's frame on the CPU path fed
+from that mix (the frame's pixels are the mix's own buffer, shared with the session,
+which holds it until it has encoded or dropped the frame; see *Runtime*), and the item
 list `compose` fills for that mix; a session on the GPU path gets a handle to an encode
 target, and the NV12 pass binds each target once. Then once per tick it allocates the
 cache key of each capture that names a
@@ -4691,7 +4718,7 @@ session, whose reference frames are those readbacks (ADR-0145), and a readback m
 only for the probe that falls behind is no dropped frame, so it is never counted in
 the drops (`MixFrame::probe_only`); a mix none of them is fed is not read back.
 Outputs' sessions open in NV12, so when every consumer of a mix is one of them (no
-camera, no picture queue, no session opened in RGBA8 such as a preview's H.264, no
+camera, no picture queue, no session opened in RGBA8 such as a preview's H.264 at an odd size, no
 armed probe, nothing held, and an even size) the mix is converted by `Nv12Converter`
 into planes and read back as NV12 (ADR-0117 §4), and the CPU draw converts its frame
 with `rgb_to_nv12`; otherwise it is read back as RGBA8, which an NV12 session converts
@@ -4704,7 +4731,14 @@ records it into the mix's `ReadbackRing` of three map-read buffers, kept with th
 compositor, and collects whichever earlier ones have mapped, polling without a wait.
 The copy out of a mapped buffer is the draw's `jstream-readback` thread's (`Copier`),
 whose frame the draw swaps into the mix's, so the render thread copies no pixels; should
-the OS refuse that thread, the render thread copies, as before. A
+the OS refuse that thread, the render thread copies, as before. The frame a mix shows is
+then shared with its readers, not copied for each: an encoder session's frame is planes
+over the buffer (`push_shared_frame`) and a picture stream's picture is the buffer itself,
+so the render thread still copies no pixels however many take the mix (a virtual camera
+and an armed probe still take a copy of their own). A buffer a reader holds is not read
+into again; the mix keeps up to eight such buffers and takes one back once only it holds
+it (`MixFrame::retire`), so a steady run allocates nothing, and past eight the oldest goes
+to the collector. A
 frame read back goes out a few ticks after it was drawn, with the time it was drawn
 for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
 nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)

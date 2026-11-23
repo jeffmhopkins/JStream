@@ -60,8 +60,8 @@ mod groups;
 mod probes;
 
 pub(crate) use direct::DirectModels;
-pub(crate) use groups::placed_camera;
-use groups::{GroupLink, Groups};
+use groups::{GroupEnd, GroupLink, Groups};
+pub(crate) use groups::{TrackGroups, placed_camera};
 pub(crate) use probes::{ProbeRun, ProbeState};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
@@ -849,9 +849,9 @@ struct ModelMaps {
 #[derive(Debug, PartialEq)]
 struct Transitioning {
     start: MediaTime,
-    /// Each track with the camera its visual is seen through, and its motion modifiers
-    /// (ADR-0099).
-    tracks: Vec<(GpuKey, Track, Seen, TrackMotion)>,
+    /// Each track with the camera its visual is seen through, its motion modifiers
+    /// (ADR-0099), and the 3D groups its ends are placed through (ADR-0164 §4).
+    tracks: Vec<(GpuKey, Track, Seen, TrackMotion, TrackGroups)>,
     /// The backgrounds it fades between, from the scene it leaves to the one it shows,
     /// over `end_ms`.
     backgrounds: (Color, Color),
@@ -1311,7 +1311,7 @@ impl Shot {
             .chain(self.mix_passes.values().flatten())
             .chain(chain_passes)
             .flat_map(|pass| &pass.layers)
-            .any(|layer| !layer.motion.is_still())
+            .any(|layer| !layer.motion.is_still() || links_move(layer.groups.as_deref()))
             || self.boxes.values().any(|boxed| !boxed.motion.is_empty())
             // A light or model whose source settings its motion drives (ADR-0171).
             || !self.sourced.is_empty()
@@ -1319,7 +1319,13 @@ impl Shot {
                 .transition
                 .iter()
                 .flat_map(|t| &t.tracks)
-                .any(|(_, _, _, motion)| !motion.is_still())
+                .any(|(_, _, _, motion, groups)| {
+                    !motion.is_still()
+                        || [&groups.from, &groups.to]
+                            .into_iter()
+                            .flatten()
+                            .any(|end| links_move(Some(&end.links)))
+                })
             || self.cameras_move()
     }
 
@@ -1366,11 +1372,18 @@ impl Shot {
                         .flat_map(|links| links.iter().map(|link| &link.item)),
                 )
             });
-        let tracks = self
-            .transition
-            .iter()
-            .flat_map(|t| &t.tracks)
-            .flat_map(|(_, _, _, motion)| [&motion.from.0, &motion.to.0]);
+        let tracks =
+            self.transition
+                .iter()
+                .flat_map(|t| &t.tracks)
+                .flat_map(|(_, _, _, motion, groups)| {
+                    // A 3D group's item is drawn through its children's tracks too.
+                    let links = [&groups.from, &groups.to]
+                        .into_iter()
+                        .flatten()
+                        .flat_map(|end| end.links.iter().map(|link| &link.item));
+                    [&motion.from.0, &motion.to.0].into_iter().chain(links)
+                });
         layers
             .chain(tracks)
             .filter(|item| !item.as_str().is_empty())
@@ -1602,8 +1615,26 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(key, track, seen, _)| t.camera(&t.cameras, (key, track, *seen), elapsed_ms))
+                .map(|(key, track, seen, _, _)| {
+                    t.camera(&t.cameras, (key, track, *seen), elapsed_ms)
+                })
                 .collect()
+        })
+    }
+
+    /// The cameras the sky backdrops of the running transition's ends, the scene it
+    /// leaves's first, are seen through `elapsed_ms` into it, or `None` without one, for
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn sky_cameras(
+        &self,
+        elapsed_ms: f32,
+    ) -> Option<(Option<SceneCamera>, Option<SceneCamera>)> {
+        self.transition.as_ref().map(|t| {
+            (
+                t.cameras.sky_camera(true, elapsed_ms),
+                t.cameras.sky_camera(false, elapsed_ms),
+            )
         })
     }
 
@@ -1631,7 +1662,7 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, seen, _)| t.cameras.depth_run(track, *seen))
+                .map(|(_, track, seen, _, _)| t.cameras.depth_run(track, *seen))
                 .collect()
         })
     }
@@ -1643,7 +1674,7 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, _, _)| track.clone())
+                .map(|(_, track, _, _, _)| track.clone())
                 .collect()
         })
     }
@@ -1708,7 +1739,8 @@ impl Shot {
     }
 
     /// The running transition's tracks sampled `elapsed_ms` into it at `at`, with their
-    /// motion (ADR-0099), in drawing order, or `None` without one, for tests.
+    /// motion (ADR-0099) and their 3D groups' (ADR-0164 §4), in drawing order, or `None`
+    /// without one, for tests.
     #[cfg(test)]
     pub(crate) fn tracks_moved_at(
         &self,
@@ -1716,15 +1748,18 @@ impl Shot {
         at: MediaTime,
     ) -> Option<Vec<Option<jstream_render::transition::Endpoint>>> {
         let canvas = canvas_size(self.canvas);
+        let live = LiveParams::default();
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(key, track, _, moved)| {
-                    let by =
-                        moved.offsets(track, elapsed_ms, |item, m| self.motion_at(item, m, at));
-                    track
-                        .sample(elapsed_ms, canvas)
-                        .map(|end| moved_track(self.is_canvas_box(key), &by, end))
+                .map(|(key, track, _, moved, groups)| {
+                    sample_track(
+                        self,
+                        (key, track, moved, groups),
+                        (elapsed_ms, canvas),
+                        at,
+                        &live,
+                    )
                 })
                 .collect()
         })
@@ -2041,7 +2076,13 @@ fn plan_inner(
                 .tracks
                 .into_iter()
                 .map(|(visual, track)| {
-                    (key(&visual.image, &shot), track, visual.seen, visual.motion)
+                    (
+                        key(&visual.image, &shot),
+                        track,
+                        visual.seen,
+                        visual.motion,
+                        visual.groups,
+                    )
                 })
                 .collect();
             let to = planner
@@ -2130,15 +2171,10 @@ fn plan_inner(
         .collect();
     shot.captures = match &shot.transition {
         Some(transition) => placed_captures(shot.passes.iter())
-            .chain(
-                transition
-                    .tracks
-                    .iter()
-                    .filter_map(|(key, _, _, _)| match key {
-                        GpuKey::Capture(spec) => Some(spec.clone()),
-                        _ => None,
-                    }),
-            )
+            .chain(transition.tracks.iter().filter_map(|(key, ..)| match key {
+                GpuKey::Capture(spec) => Some(spec.clone()),
+                _ => None,
+            }))
             .collect(),
         None => captures(&shot.passes),
     };
@@ -2241,6 +2277,32 @@ pub(crate) fn on_screen(
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Vec<Visual> {
+    on_screen_until_end(graph, running, now, look, assets, false).unwrap_or_default()
+}
+
+/// [`on_screen`] while `running` still runs at `now`; `None` once it has ended, though
+/// no plan has let it go yet ([`Planning::finished`]). A switch then starts from the
+/// program scene itself, which is all that is on screen: what an ended transition
+/// leaves is the scene at rest, and taken from the screen it would be its tracks, a
+/// whole scene's picture among them, seen through no camera (#1598, #1632).
+pub(crate) fn still_on_screen(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Option<Vec<Visual>> {
+    on_screen_until_end(graph, running, now, look, assets, true)
+}
+
+fn on_screen_until_end(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+    until_end: bool,
+) -> Option<Vec<Visual>> {
     let state = graph.state();
     let mut shot = Shot {
         canvas: state.canvas(),
@@ -2254,17 +2316,30 @@ pub(crate) fn on_screen(
         quiet: false,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
+    // Ended as [`plan_with`] finds it.
+    if until_end && end_time(running.start, planned.end_ms).is_none_or(|end| now >= end) {
+        return None;
+    }
     let cameras = planner.track_cameras(running, pairs);
     let elapsed_ms = running.elapsed_ms(now);
-    planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
-        Seen::Held {
-            // A whole scene's picture was drawn flat.
-            camera: (!visual.is_whole_scene())
-                .then(|| cameras.camera(track, visual.seen, elapsed_ms))
-                .flatten(),
-            depth_run: cameras.depth_run(track, visual.seen),
-        }
-    })
+    let planner = &planner;
+    Some(
+        planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
+            let camera = match &visual.image {
+                // A whole scene's picture is drawn flat, already seen through its own
+                // scene's camera (ADR-0180 decision 2): what a Move from it moves
+                // from, not the framing camera of a 2D side.
+                SourceRef::Scene(scene) if visual.is_whole_scene() => planner
+                    .camera(scene)
+                    .and_then(|camera| camera.placed(state.canvas())),
+                _ => cameras.camera(track, visual.seen, elapsed_ms),
+            };
+            Seen::Held {
+                camera,
+                depth_run: cameras.depth_run(track, visual.seen),
+            }
+        }),
+    )
 }
 
 fn canvas_size(canvas: Canvas) -> [f32; 2] {
@@ -2359,7 +2434,7 @@ fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
     let mut passes = Vec::new();
     let mut done = BTreeSet::new();
     let mut path = BTreeSet::new();
-    for (key, _, _, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
+    for (key, ..) in shot.transition.iter().flat_map(|t| &t.tracks) {
         if let GpuKey::Layer(scene, depth) = key {
             visit(shot, scene, *depth, &mut path, &mut done, &mut passes);
         }
@@ -3042,6 +3117,7 @@ impl<'a> Planner<'a, '_> {
             inside: None,
             seen: Seen::AsPlanned,
             motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
+            groups: TrackGroups::default(),
         }]
     }
 
@@ -3313,20 +3389,30 @@ impl<'a> Planner<'a, '_> {
     fn visuals(&mut self, id: &SceneId, flatten: bool, out: &mut Shot) -> Vec<Visual> {
         let mut visuals = Vec::new();
         let mut path = BTreeSet::new();
-        self.visuals_into((id, None), flatten, 0, (&mut path, out), &mut visuals);
+        self.visuals_into(
+            (id, None),
+            flatten,
+            0,
+            (&mut path, &mut BTreeSet::new(), out),
+            &mut visuals,
+        );
         visuals
     }
 
     /// [`Self::visuals`] of `id`, or, with `within`, of a 3D group's children: the 3D
     /// scene they are placed in and the group items they are placed through, each child
-    /// a visual of its own at the geometry its groups place it at as planned (ADR-0164
-    /// §4).
+    /// a visual of its own at the geometry its groups place it at as planned, which keeps
+    /// its place in its group's space for the transition to place it each frame
+    /// ([`TrackGroups`], ADR-0164 §4). A group splits into its children here exactly
+    /// when the scene's own pass splits it ([`Self::place_items`]): once per scene, in
+    /// `shared`, and while fewer than [`MAX_NESTING`] groups hold it; `depth` counts the
+    /// nested scenes flattened into their parent, which a group's children don't add to.
     fn visuals_into(
         &mut self,
         (id, within): (&SceneId, Option<(&SceneId, &[GroupLink])>),
         flatten: bool,
         depth: usize,
-        (path, out): (&mut BTreeSet<SceneId>, &mut Shot),
+        (path, shared, out): (&mut BTreeSet<SceneId>, &mut BTreeSet<SceneId>, &mut Shot),
         visuals: &mut Vec<Visual>,
     ) {
         let state = self.state;
@@ -3354,24 +3440,34 @@ impl<'a> Planner<'a, '_> {
             let Some(source) = state.source(item.source_id()) else {
                 continue;
             };
-            // A 3D group's children are visuals of the 3D scene (ADR-0164 §4).
+            // A 3D group's children are visuals of the 3D scene (ADR-0164 §4), as the
+            // scene's pass places them.
             if three_d
-                && depth + 1 < MAX_NESTING
+                && links.len() + 1 < MAX_NESTING
                 && let Some((group, link)) = GroupLink::of(
                     state,
                     item,
                     keyframe.and_then(|keyframe| Through::of(keyframe, item.id())),
                 )
                 && !path.contains(&group)
+                && shared.insert(group.clone())
             {
                 let nested = self.nested(keyframe, &group);
                 let mut inner = links.to_vec();
                 inner.push(link);
+                // Its audio bindings move its children while the transition runs.
+                out.audio.record(
+                    item.id(),
+                    item.motion(),
+                    self.assets.motion_heard(),
+                    self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+                    self.assets.data(),
+                );
                 self.visuals_into(
                     (&nested, Some((scene, &inner))),
                     flatten,
-                    depth + 1,
-                    (path, out),
+                    depth,
+                    (path, shared, out),
                     visuals,
                 );
                 continue;
@@ -3403,11 +3499,13 @@ impl<'a> Planner<'a, '_> {
                         // A group that moves on its own is one picture (ADR-0099).
                         && item.motion().is_empty()
                     {
+                        // Its own pass would place its items: groups share once
+                        // per scene there.
                         self.visuals_into(
                             (scene_id, within),
                             flatten,
                             depth + 1,
-                            (path, out),
+                            (path, &mut BTreeSet::new(), out),
                             visuals,
                         );
                         continue;
@@ -3476,13 +3574,27 @@ impl<'a> Planner<'a, '_> {
                 }
                 None => (image, geometry, crop(item.crop()), size, Vec::new()),
             };
-            // A 3D group's child, where its groups place it (ADR-0164 §4).
-            let (geometry, opacity) = match &pose {
-                Some((pose, theirs)) => match pose.place(geometry) {
-                    Ok(placed) => (placed, item.opacity().get() * theirs),
+            // A 3D group's child, where its groups place it (ADR-0164 §4); its place in
+            // its group's space is kept for the transition to place it each frame.
+            let own = Endpoint {
+                geometry,
+                crop: cut,
+                opacity: item.opacity().get(),
+                blend: item.blend(),
+            };
+            let (geometry, opacity, ends) = match (&pose, &groups) {
+                (Some((pose, theirs)), Some(links)) => match pose.place(geometry) {
+                    Ok(placed) => (
+                        placed,
+                        own.opacity * theirs,
+                        TrackGroups::same(GroupEnd {
+                            links: Arc::clone(links),
+                            at: own,
+                        }),
+                    ),
                     Err(_) => continue,
                 },
-                None => (geometry, item.opacity().get()),
+                _ => (geometry, own.opacity, TrackGroups::default()),
             };
             visuals.push(Visual {
                 image,
@@ -3501,6 +3613,7 @@ impl<'a> Planner<'a, '_> {
                 inside: None,
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
+                groups: ends,
             });
             out.audio.record(
                 item.id(),
@@ -7154,7 +7267,7 @@ fn track_camera(
     let ChainOwner::Item(scene, item) = owner else {
         return None;
     };
-    let (key, track, seen, _) = transition
+    let (key, track, seen, ..) = transition
         .tracks
         .iter()
         .find(|(key, ..)| key.boxed_item() == Some((scene, item)))?;
@@ -7505,7 +7618,7 @@ fn light_scene(
     if receives && !shadowed.is_empty() && chains.shadows_of(scene_id).is_none() {
         // The first model drawn draws the maps of every model that casts, so the
         // models drawn after it this frame are made ready for that first.
-        ready_casting_models(compositor, (&mut *cache, &mut *chains), shot, scene_id);
+        ready_casting_models(compositor, &mut *chains, shot, scene_id);
         let maps = draw_shadows(
             compositor,
             (&mut *cache, &mut *chains),
@@ -7525,14 +7638,17 @@ fn light_scene(
 
 /// Makes ready, for the shadow maps the first model drawn in scene `scene_id` draws
 /// this frame (ADR-0151 decision 3), every model the scene's pass shows: its upload
-/// ([`Chains::upload_model`]) and its layer, which [`depth_models`] reads its
-/// placement through. Without this a model drawn later in the frame, or not drawn
-/// before, casts no shadow in that frame: the first frame of a scene with two models
-/// would be lit as if only the first one drawn were there. An upload that fails or is
-/// still coming leaves its model out, as its own draw reports.
+/// ([`Chains::upload_model`]), which [`depth_models`] draws. Its pose doesn't need its
+/// layer ([`layer_pose`]), so a model whose layer is its effects' output, made only
+/// when its chain runs, casts too (#1674). Without this a model drawn later in the
+/// frame, or not drawn before, casts no shadow in that frame: the first frame of a scene
+/// with two models would be lit as if only the first one drawn were there. An upload
+/// that fails or is still coming leaves its model out, as its own draw reports. The
+/// upload is marked used this frame, which keeps nothing alive that wouldn't be: the
+/// model is in this frame's pass, so its own draw uses it too.
 fn ready_casting_models(
     compositor: &mut Compositor,
-    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    chains: &mut Chains,
     shot: &Shot,
     scene_id: &SceneId,
 ) {
@@ -7543,7 +7659,8 @@ fn ready_casting_models(
         if !layer.boxed.is_some_and(|boxed| boxed.model) {
             continue;
         }
-        let GpuKey::ItemBox(scene, item) = &layer.image else {
+        // A model's layer, or its effects' output over it: either is posed as the model.
+        let Some((scene, item)) = layer.image.boxed_item() else {
             continue;
         };
         let Some(boxed) = shot
@@ -7562,16 +7679,8 @@ fn ready_casting_models(
         else {
             continue;
         };
-        if chains
-            .upload_model(compositor, source, &shown.model)
-            .is_err()
-        {
-            continue;
-        }
-        let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
-        if let Err(error) = cache.layer(compositor, &layer.image, width, height) {
-            tracing::debug!(%scene, %item, %error, "a model's layer isn't ready for the shadow maps");
-        }
+        // A failed upload is logged where the model's own draw reports it.
+        let _ = chains.upload_model(compositor, source, &shown.model);
     }
 }
 
@@ -7722,7 +7831,6 @@ fn draw_shadows(
     };
     // A card that only adds light blocks none (ADR-0179).
     items.retain(casts_shadow);
-    let bounds = caster_bounds(&items);
     // What the maps would be drawn of. A map kept from an earlier frame that was drawn
     // of the same things through the same light, and not written since, is left alone.
     let casters = casters_of(
@@ -7732,6 +7840,7 @@ fn draw_shadows(
         (at, canvas, camera),
         live,
     );
+    let bounds = caster_bounds(&items, &casters);
     let kept = chains
         .shadow_maps
         .remove(scene_id)
@@ -8055,15 +8164,21 @@ fn casts_shadow(item: &Item<'_>) -> bool {
         || !matches!(item.blend, BlendMode::Additive | BlendMode::Screen)
 }
 
-/// The sphere around what `items` place in the scene's space, as a centre and radius:
-/// each box's centre at its depth, out to its corners and as deep.
-fn caster_bounds(items: &[Item<'_>]) -> Option<([f64; 3], f64)> {
+/// The sphere around what `items` and the models of `casters` place in the scene's
+/// space, as a centre and radius: each box's centre at its depth, out to its corners and
+/// as deep. A casting model counts whether or not its layer is there yet (#1674).
+fn caster_bounds(items: &[Item<'_>], casters: &[Caster]) -> Option<([f64; 3], f64)> {
     let mut min = [f64::INFINITY; 3];
     let mut max = [f64::NEG_INFINITY; 3];
-    for item in items {
-        let (Placement::Geometry(g) | Placement::Layer(g)) = item.placement else {
-            continue;
-        };
+    let placed = items.iter().filter_map(|item| match item.placement {
+        Placement::Geometry(g) | Placement::Layer(g) => Some(g),
+        Placement::Legacy(_) => None,
+    });
+    let models = casters.iter().filter_map(|caster| match caster {
+        Caster::Model { geometry, .. } => Some(*geometry),
+        Caster::Card { .. } => None,
+    });
+    for g in placed.chain(models) {
         let reach = f64::from(g.size.width.get().hypot(g.size.height.get())) * 0.5;
         let centre = [g.center.x.get(), g.center.y.get(), g.depth_px.get()].map(f64::from);
         for axis in 0..3 {
@@ -8933,74 +9048,118 @@ fn layer_item<'a>(
     live: &LiveParams,
     camera: Option<SceneCamera>,
 ) -> Option<Item<'a>> {
-    {
-        if chains.failed(&layer.image) {
-            return None;
-        }
-        if let Some((start, track)) = &layer.moving {
-            let elapsed = transition::elapsed_ms(*start, at);
-            let by = layer
-                .motion
-                .offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
-            let sampled = moved_track(
-                shot.is_canvas_box(&layer.image),
-                &by,
-                track.sample(elapsed, size)?,
-            );
-            return Some(Item {
-                image: cache.get(&layer.image)?,
-                placement: track_placement(shot, &layer.image, sampled.geometry),
-                crop: sampled.crop,
-                opacity: sampled.opacity,
-                blend: sampled.blend,
-                visible: true,
-                camera,
-                depth_run: 0,
-                depth: None,
-                model: None,
-            });
-        }
-        let (placement, crop) = live.apply(layer);
-        // Its motion moves it on top of its live values (ADR-0099).
-        let (item, modifiers) = &layer.motion.to;
-        let by = shot.motion_at(item, modifiers, at);
-        let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
-        // A model's own depth, in a 3D scene, when it is at least half opaque, as the
-        // view depth takes it (ADR-0107 decision 7).
-        let depth = match (&layer.boxed, layer.image.boxed_item(), camera) {
-            (Some(boxed), Some((scene, item)), Some(_)) if boxed.model && opacity >= 0.5 => {
-                cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
-            }
-            _ => None,
-        };
-        let (placement, crop) = match &layer.boxed {
-            // A model's layer is in the canvas's pixels; it sorts by the model's pose.
-            Some(boxed) if boxed.model => match placement {
-                Placement::Geometry(geometry) => (Placement::Layer(geometry), Crop::NONE),
-                _ => return None,
-            },
-            Some(boxed) => {
-                let geometry = boxed.geometry_of(placement, crop)?;
-                (Placement::Geometry(boxed.around(&geometry)?), Crop::NONE)
-            }
-            None => (placement, crop),
-        };
-        // A 3D group's child is placed through its groups as they are now (ADR-0164).
-        let (placement, opacity) =
-            groups::place_placement(&layer.groups, (placement, opacity), shot, at, live)?;
-        Some(Item {
-            image: cache.get(&layer.image)?,
-            placement,
-            crop,
-            opacity,
-            blend: layer.blend,
-            visible: true,
-            camera,
-            depth_run: 0,
-            depth,
-            model: None,
-        })
+    let image = cache.get(&layer.image)?;
+    let posed = layer_pose(
+        layer,
+        (cache, chains),
+        shot,
+        (at, size),
+        (live, Some(image.extent())),
+        camera,
+    )?;
+    Some(Item {
+        image,
+        placement: posed.placement,
+        crop: posed.crop,
+        opacity: posed.opacity,
+        blend: posed.blend,
+        visible: true,
+        camera,
+        depth_run: 0,
+        depth: posed.depth,
+        model: None,
+    })
+}
+
+/// Where [`layer_item`] places `layer` at `at`, through `camera`, whether or not its
+/// layer image is there yet: the shadow maps a frame's first model draws read a model's
+/// pose through this, before a model with effects has its effects' output (#1674).
+struct LayerPose<'a> {
+    /// Where it is placed.
+    placement: Placement,
+    /// What of it is shown.
+    crop: Crop,
+    /// How opaque it is.
+    opacity: f32,
+    /// How it blends.
+    blend: BlendMode,
+    /// A model's own depth layer, as [`Item::depth`] carries it.
+    depth: Option<&'a jstream_render::Image>,
+}
+
+/// [`LayerPose`] of `layer`; `None` for a layer that draws nothing at `at`. `extent` is
+/// its image's ([`jstream_render::Image::extent`]) when known, which a 3D group's child
+/// with a legacy transform is boxed by ([`groups::legacy_box`]); without it such a child
+/// has no pose.
+fn layer_pose<'a>(
+    layer: &Layer,
+    (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
+    shot: &Shot,
+    (at, size): (MediaTime, [f32; 2]),
+    (live, extent): (&LiveParams, Option<(u32, u32)>),
+    camera: Option<SceneCamera>,
+) -> Option<LayerPose<'a>> {
+    if chains.failed(&layer.image) {
+        return None;
     }
+    if let Some((start, track)) = &layer.moving {
+        let elapsed = transition::elapsed_ms(*start, at);
+        let by = layer
+            .motion
+            .offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
+        let sampled = moved_track(
+            shot.is_canvas_box(&layer.image),
+            &by,
+            track.sample(elapsed, size)?,
+        );
+        return Some(LayerPose {
+            placement: track_placement(shot, &layer.image, sampled.geometry),
+            crop: sampled.crop,
+            opacity: sampled.opacity,
+            blend: sampled.blend,
+            depth: None,
+        });
+    }
+    let (placement, crop) = live.apply(layer);
+    // Its motion moves it on top of its live values (ADR-0099).
+    let (item, modifiers) = &layer.motion.to;
+    let by = shot.motion_at(item, modifiers, at);
+    let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
+    // A model's own depth, in a 3D scene, when it is at least half opaque, as the
+    // view depth takes it (ADR-0107 decision 7).
+    let depth = match (&layer.boxed, layer.image.boxed_item(), camera) {
+        (Some(boxed), Some((scene, item)), Some(_)) if boxed.model && opacity >= 0.5 => {
+            cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
+        }
+        _ => None,
+    };
+    let (placement, crop) = match &layer.boxed {
+        // A model's layer is in the canvas's pixels; it sorts by the model's pose.
+        Some(boxed) if boxed.model => match placement {
+            Placement::Geometry(geometry) => (Placement::Layer(geometry), Crop::NONE),
+            _ => return None,
+        },
+        Some(boxed) => {
+            let geometry = boxed.geometry_of(placement, crop)?;
+            (Placement::Geometry(boxed.around(&geometry)?), Crop::NONE)
+        }
+        None => (placement, crop),
+    };
+    // A 3D group's child is placed through its groups as they are now (ADR-0164), one
+    // with a legacy transform as the box it draws.
+    let placement = match extent {
+        Some(extent) => groups::legacy_box(&layer.groups, placement, crop, extent),
+        None => placement,
+    };
+    let (placement, opacity) =
+        groups::place_placement(&layer.groups, (placement, opacity), shot, at, live)?;
+    Some(LayerPose {
+        placement,
+        crop,
+        opacity,
+        blend: layer.blend,
+        depth,
+    })
 }
 
 /// Another camera a scene's view depth is drawn through, as a shadow map or the mirrored
@@ -9221,9 +9380,17 @@ fn depth_models<'a>(
             continue;
         };
         // A model under half opaque leaves the depth to what is behind it, as a card
-        // does; one whose layer isn't drawn this frame has none.
-        let Some(item) = layer_item(layer, (cache, chains), shot, (at, size), live, Some(camera))
-        else {
+        // does. Its pose doesn't wait for its layer: a model with effects has its
+        // effects' output only once its chain has run, after the first model of the
+        // frame drew the shadow maps (#1674).
+        let Some(item) = layer_pose(
+            layer,
+            (cache, chains),
+            shot,
+            (at, size),
+            (live, None),
+            Some(camera),
+        ) else {
             continue;
         };
         let Placement::Layer(geometry) = item.placement else {
@@ -9384,6 +9551,41 @@ fn moved_track(canvas_box: bool, by: &jstream_anim::Offsets, sampled: Endpoint) 
     }
 }
 
+/// `track`, drawing `key`, sampled `elapsed_ms` into its transition at `at` on a canvas
+/// of `size`, moved by its motion modifiers (ADR-0099): an end that is a 3D group's child
+/// is placed as the child is now, through its groups' live values and motion, with its
+/// own modifiers in its group's space ([`groups::resolved_track`], ADR-0164 §4); any
+/// other end's modifiers move the sampled box. `None` when it draws nothing then.
+fn sample_track(
+    shot: &Shot,
+    (key, track, moved, ends): (&GpuKey, &Track, &TrackMotion, &TrackGroups),
+    (elapsed_ms, size): (f32, [f32; 2]),
+    at: MediaTime,
+    live: &LiveParams,
+) -> Option<jstream_render::transition::Endpoint> {
+    let canvas_box = shot.is_canvas_box(key);
+    let resolved;
+    let track = if ends.is_none() {
+        track
+    } else {
+        resolved = groups::resolved_track(track, (ends, moved), canvas_box, shot, at, live)?;
+        &resolved
+    };
+    let by = moved.offsets_on(track, elapsed_ms, ends.ungrouped(), |item, m| {
+        shot.motion_at(item, m, at)
+    });
+    Some(moved_track(
+        canvas_box,
+        &by,
+        track.sample(elapsed_ms, size)?,
+    ))
+}
+
+/// Whether any of `links` has motion modifiers, which move its children each frame.
+fn links_move(links: Option<&[GroupLink]>) -> bool {
+    links.is_some_and(|links| links.iter().any(|link| !link.motion.is_still()))
+}
+
 /// Replaces `items` with `transition`'s tracks sampled at `at`, in drawing order. A
 /// track that draws nothing then, or whose image is not cached, is left out.
 fn fill_tracks<'a>(
@@ -9402,13 +9604,12 @@ fn fill_tracks<'a>(
         transition
             .tracks
             .iter()
-            .filter_map(|(key, track, seen, moved)| {
+            .filter_map(|(key, track, seen, moved, groups)| {
                 if chains.failed(key) {
                     return None;
                 }
-                let by = moved.offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
                 let sampled =
-                    moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
+                    sample_track(shot, (key, track, moved, groups), (elapsed, size), at, live)?;
                 Some(Item {
                     image: cache.get(key)?,
                     placement: track_placement(shot, key, sampled.geometry),

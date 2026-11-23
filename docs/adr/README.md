@@ -206,7 +206,9 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0191](0191-a-model-is-drawn-in-its-scenes-pass.md) | A model is drawn in its scene's pass when nothing reads its layer | accepted | agent |  |
 | [ADR-0192](0192-cheaper-sampling-in-3d-scenes.md) | Cheaper sampling in 3D scenes: fewer reads where they change little | accepted | agent |  |
 | [ADR-0193](0193-depth-of-field-on-models-gathers-at-half-size.md) | Depth of field on models gathers at half the layer's size | accepted | agent |  |
+| [ADR-0194](0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md) | A layer is drawn again only when what it draws has changed | accepted | agent |  |
 | [ADR-0195](0195-the-engine-runs-at-top-priority.md) | The engine runs at top priority: the highest GPU scheduling class and a high CPU priority class by default | accepted | agent |  |
 | [ADR-0197](0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md) | 3D models draw with fewer pixels while the GPU is short of time | accepted | agent |  |
 | [ADR-0198](0198-an-arrival-can-be-a-planet-with-its-sun.md) | An arrival can be several pictures pinned around one another, the last lighting the scene | accepted | agent |  |
+| [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
 <!-- @generated end adr-index -->

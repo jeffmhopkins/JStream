@@ -2279,3 +2279,46 @@ fn a_compositor_keeping_its_own_errors_neither_takes_nor_leaks_them() {
     );
     draw(&mut stage, 4, 3, Color::BLACK, &[]);
 }
+
+/// Renders that alternate between sizes, as an output's picture and a preview's do
+/// every tick, each reuse the targets of their size; a size no render uses any more
+/// is let go.
+#[test]
+fn renders_at_alternating_sizes_keep_their_targets() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let red = solid(compositor, 2, 2, [255, 0, 0, 255]);
+    let items = [item(&red, Placement::IDENTITY, Crop::NONE, 1.0)];
+    for _ in 0..4 {
+        for (width, height) in [(16, 8), (8, 4), (6, 6)] {
+            let snapshot = draw(compositor, width, height, Color::BLACK, &items);
+            assert_eq!((snapshot.width(), snapshot.height()), (width, height));
+            near(&snapshot, 1, 1, [255, 0, 0, 255], 0);
+            near(&snapshot, 5, 3, [0, 0, 0, 255], 0);
+        }
+    }
+    // One set for each size, made once, and the two not rendered into last kept aside.
+    assert_eq!(compositor.targets_kept(), (3, 2));
+    // One more size than are kept aside still rotates without making any.
+    for _ in 0..3 {
+        for (width, height) in [(16, 8), (8, 4), (6, 6), (4, 4)] {
+            draw(compositor, width, height, Color::BLACK, &items);
+        }
+    }
+    assert_eq!(compositor.targets_kept(), (4, 3));
+    // More sizes than that: the oldest goes.
+    for size in 20..25 {
+        draw(compositor, size, size, Color::BLACK, &items);
+    }
+    assert_eq!(
+        compositor.targets_kept(),
+        (9, crate::compositor::SPARE_TARGETS)
+    );
+    // A size not rendered at for a while is let go.
+    for _ in 0..=crate::compositor::SPARE_RENDERS {
+        draw(compositor, 16, 8, Color::BLACK, &items);
+    }
+    assert_eq!(compositor.targets_kept().1, 0);
+}
