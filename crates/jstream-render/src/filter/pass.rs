@@ -19,6 +19,7 @@ use crate::filter::FilterClock;
 use crate::gpu::Gpu;
 use crate::image::{self, Image, LAYER_FORMAT, Maker, Owner};
 use crate::mips::Region;
+use crate::pipelines::Key;
 use crate::wipe::{self, Wipe};
 
 /// The WGSL every filter shader starts with: the vertex stage, the bindings and the colour
@@ -348,14 +349,14 @@ impl Runtime {
     /// refusal is kept too, so the shader is not recompiled every frame.
     fn pipeline(
         &mut self,
-        device: &wgpu::Device,
+        gpu: &Gpu,
         shader: ShaderRef<'_>,
     ) -> Result<&wgpu::RenderPipeline, RenderError> {
         cached(
             &mut self.pipelines,
-            device,
+            gpu,
             shader,
-            &self.pipeline_layout,
+            (&self.pipeline_layout, &"filter"),
             PRELUDE,
         )
     }
@@ -363,11 +364,11 @@ impl Runtime {
     /// [`Self::pipeline`] for a shader-source pass reading `inputs` textures.
     fn program_pipeline(
         &mut self,
-        device: &wgpu::Device,
+        gpu: &Gpu,
         shader: ShaderRef<'_>,
         inputs: usize,
     ) -> Result<&wgpu::RenderPipeline, RenderError> {
-        self.program_layouts(device, inputs);
+        self.program_layouts(&gpu.device, inputs);
         let Some(Some((_, layout))) = self.programs.layouts.get(inputs) else {
             return Err(RenderError::Invalid {
                 what: "shader source",
@@ -376,9 +377,9 @@ impl Runtime {
         };
         cached(
             &mut self.programs.pipelines,
-            device,
+            gpu,
             shader,
-            layout,
+            (layout, &("program", inputs)),
             super::program::PROGRAM_PRELUDE,
         )
     }
@@ -387,12 +388,14 @@ impl Runtime {
 /// The pipeline for `shader` in `pipelines`, built with `layout` after `prelude` on first
 /// use of its label and source. A shader wgpu refuses is an error, not a panic: a pack's
 /// WGSL arrives at run time. The refusal is kept too, so the shader is not recompiled
-/// every frame.
+/// every frame. `layout` comes with what tells it apart from the other layouts a filter's
+/// pipeline can have: a pipeline another compositor on the device built from the same
+/// source and layout is taken, not built again (`pipelines.rs`).
 fn cached<'a>(
     pipelines: &'a mut HashMap<String, Vec<Cached>>,
-    device: &wgpu::Device,
+    gpu: &Gpu,
     shader: ShaderRef<'_>,
-    layout: &wgpu::PipelineLayout,
+    layout: (&wgpu::PipelineLayout, &dyn std::fmt::Debug),
     prelude: &str,
 ) -> Result<&'a wgpu::RenderPipeline, RenderError> {
     // A known label is looked up without allocating its key (`entry` would allocate
@@ -409,22 +412,13 @@ fn cached<'a>(
     let index = match entries.iter().position(|c| c.source == shader.source) {
         Some(index) => index,
         None => {
-            // Validation errors (wgpu's own checks) and internal ones (a backend
-            // compiler refusing naga's output) both go to wgpu's panicking default
-            // handler unless a scope catches them.
-            let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
-            let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
-            let pipeline = build(layout, device, shader, prelude);
-            let error = ready(validation.pop()).or_else(|| ready(internal.pop()));
+            let built = build(layout, gpu, shader, prelude);
             if entries.len() >= SOURCES_PER_LABEL {
                 entries.remove(0);
             }
             entries.push(Cached {
                 source: shader.source.to_owned(),
-                built: match error {
-                    None => Ok(pipeline),
-                    Some(error) => Err(error.to_string()),
-                },
+                built,
             });
             entries.len() - 1
         }
@@ -439,20 +433,43 @@ fn cached<'a>(
 }
 
 fn build(
-    pipeline_layout: &wgpu::PipelineLayout,
-    device: &wgpu::Device,
+    (pipeline_layout, layout): (&wgpu::PipelineLayout, &dyn std::fmt::Debug),
+    gpu: &Gpu,
     shader: ShaderRef<'_>,
     prelude: &str,
-) -> wgpu::RenderPipeline {
-    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(shader.label),
-        source: wgpu::ShaderSource::Wgsl(format!("{prelude}\n{}", shader.source).into()),
-    });
+) -> Result<wgpu::RenderPipeline, String> {
+    let device = &gpu.device;
+    // Validation errors (wgpu's own checks) and internal ones (a backend compiler
+    // refusing naga's output) both go to wgpu's panicking default handler unless a
+    // scope catches them.
+    let caught = |make: &mut dyn FnMut() -> Option<wgpu::RenderPipeline>| {
+        let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
+        let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let made = make();
+        match ready(validation.pop()).or_else(|| ready(internal.pop())) {
+            None => Ok(made),
+            Some(error) => Err(error.to_string()),
+        }
+    };
+    let source = format!("{prelude}\n{}", shader.source);
+    // The module is this compositor's own, so a source wgpu can't read is refused
+    // here, whether or not another compositor tried it.
+    let mut module = None;
+    caught(&mut || {
+        module = Some(device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(shader.label),
+            source: wgpu::ShaderSource::Wgsl(source.as_str().into()),
+        }));
+        None
+    })?;
+    let Some(module) = module else {
+        return Err("no shader module".into());
+    };
     let blend = match shader.blend {
         Blend::Replace => None,
         Blend::Over => Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
     };
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+    let desc = wgpu::RenderPipelineDescriptor {
         label: Some(shader.label),
         layout: Some(pipeline_layout),
         vertex: wgpu::VertexState {
@@ -476,6 +493,12 @@ fn build(
         multisample: wgpu::MultisampleState::default(),
         multiview_mask: None,
         cache: None,
+    };
+    // The scopes are the making thread's, so a refusal is kept with the pipeline's key
+    // for every compositor that asks after.
+    gpu.built.get(Key::of(&source, layout, &desc), || {
+        caught(&mut || Some(device.create_render_pipeline(&desc)))?
+            .ok_or_else(|| "no pipeline".to_owned())
     })
 }
 
@@ -863,7 +886,7 @@ impl Ctx<'_> {
             return Ok(());
         }
         let size = (draw.target.width(), draw.target.height());
-        let pipeline = self.runtime.pipeline(&self.gpu.device, shader)?;
+        let pipeline = self.runtime.pipeline(self.gpu, shader)?;
         let mut pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(shader.label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -991,7 +1014,7 @@ impl Ctx<'_> {
             });
         let pipeline = self
             .runtime
-            .program_pipeline(&self.gpu.device, shader, inputs.len())?;
+            .program_pipeline(self.gpu, shader, inputs.len())?;
         let mut pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(shader.label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {

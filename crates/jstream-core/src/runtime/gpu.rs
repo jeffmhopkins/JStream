@@ -58,6 +58,12 @@ impl SharedGpu {
         *lock(&self.current) = None;
     }
 
+    /// Whether the engine has an interop to open contexts through. Without one every
+    /// holder opens a device of its own.
+    pub(crate) fn lends(&self) -> bool {
+        lock(&self.inner).is_some()
+    }
+
     /// The context, opened now if none is held or the one held was lost. `None`, logged
     /// at `debug`, when the engine has no interop or it opens no device: the holder then
     /// opens a device of its own, as without interop.

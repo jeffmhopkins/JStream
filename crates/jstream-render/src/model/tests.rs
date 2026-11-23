@@ -2165,3 +2165,66 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         assert_near(rgb(&shot, 120, 50), [255, 255, 255], (120, 50));
     }
 }
+
+/// Every compositor on a device shares the pipelines made on it (`pipelines.rs`): a
+/// second one, as each output start opens, compiles nothing the first compiled, and
+/// draws a model and a sky as the first did, with its own layouts and bind groups.
+#[test]
+fn a_second_compositor_on_the_device_makes_no_pipeline_again() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let camera = SceneCamera::framing(canvas());
+    let shoot = |compositor: &mut Compositor| {
+        let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        let sky = crate::sky::SkyDraw {
+            environment: super::Environment {
+                sky: Color::rgb(0.0, 0.0, 1.0),
+                horizon: Color::rgb(1.0, 1.0, 1.0),
+                ground: Color::rgb(0.0, 1.0, 0.0),
+                intensity: 1.0,
+                turn_deg: 0.0,
+                image: None,
+            },
+            camera,
+            stars: 0.0,
+            star_brightness: 1.0,
+            opacity: 1.0,
+            deep: crate::sky::DeepSky::NONE,
+            warp: 0.0,
+            travel: 0.0,
+            dropping: 0.0,
+        };
+        compositor.draw_sky(&sky, &layer).expect("the sky draws");
+        let sky = render(
+            compositor,
+            &[crate::tests::item(
+                &layer,
+                Placement::Legacy(crate::LegacyTransform::IDENTITY),
+                Crop::NONE,
+                1.0,
+            )],
+        );
+        let cube = draw(
+            compositor,
+            &coloured_cube(),
+            boxed(80.0, 50.0, 40.0),
+            Some(camera),
+            Lighting::Studio,
+        );
+        (sky, cube)
+    };
+    let first = shoot(&mut opened.compositor);
+    let made = opened.compositor.pipelines_made();
+    assert!(made > 0, "the first compositor made its pipelines");
+    let mut other = opened.compositor.sibling();
+    let second = shoot(&mut other);
+    assert_eq!(
+        opened.compositor.pipelines_made(),
+        made,
+        "the second compositor found every pipeline made"
+    );
+    assert_eq!(first.0.rgba(), second.0.rgba(), "the same sky");
+    assert_eq!(first.1.rgba(), second.1.rgba(), "the same cube");
+    assert!(count(&first.1, FRONT) > 100, "the cube shows");
+}

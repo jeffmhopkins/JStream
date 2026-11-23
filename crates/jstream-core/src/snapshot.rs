@@ -4843,6 +4843,8 @@ enum Work {
     },
     /// A frame sheet's pictures (#1061).
     Sheet(Box<Sheet>),
+    /// A scene planned alone, drawn once and thrown away ([`SnapshotWorker::prime`]).
+    Prime { shot: Box<Shot>, at: MediaTime },
 }
 
 /// The `jstream-snapshot` thread, started on the first `video.snapshot`. It owns the
@@ -4892,6 +4894,25 @@ impl SnapshotWorker {
             reply,
         );
         answer
+    }
+
+    /// Queues `shot`, a scene planned alone, to be drawn once as it is at `at` and thrown
+    /// away, so the pipelines it draws with are made before it goes on air. Making a
+    /// pipeline compiles its shaders, for seconds on Direct3D 12 for a 3D scene, and
+    /// every compositor on the engine's context shares the ones made
+    /// (`jstream-render`'s `pipelines.rs`): made here, on this thread, the program
+    /// stage finds them and its first frame of the scene doesn't wait for them. It is
+    /// drawn small, with no captures, so it opens no device and shows no source.
+    pub(crate) fn prime(&self, shot: Shot, at: MediaTime) {
+        // Nobody waits for it.
+        let (reply, _) = reply_pair();
+        self.enqueue(
+            Work::Prime {
+                shot: Box::new(shot),
+                at,
+            },
+            reply,
+        );
     }
 
     /// Queues a frame sheet's samples, answering through `reply` once they are drawn.
@@ -4965,7 +4986,6 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         };
-        let shown = captures.prepare(&work, capture);
         // A compositor whose device is gone draws nothing again: it reopens, on the
         // engine's context as it is now.
         if let Some((compositor, ..)) = &gpu
@@ -4973,6 +4993,24 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
         {
             gpu = None;
         }
+        if let Work::Prime { shot, at } = &work {
+            let primed = panic::catch_unwind(AssertUnwindSafe(|| {
+                let (compositor, ..) = open(&mut gpu, &mut backoff, shared)?;
+                prime(shot, *at, compositor);
+                Ok::<(), ProtocolError>(())
+            }));
+            match primed {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => tracing::debug!(%error, "a scene was not primed"),
+                Err(_) => {
+                    tracing::error!("the snapshot compositor panicked priming a scene");
+                    gpu = None;
+                }
+            }
+            drop(reply);
+            continue;
+        }
+        let shown = captures.prepare(&work, capture);
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
             let (compositor, cache, chains) = open(&mut gpu, &mut backoff, shared)?;
             match &work {
@@ -4992,6 +5030,9 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
                 )
                 .map(|result| CallResult::Query { result }),
                 Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains), shown),
+                Work::Prime { .. } => Err(ProtocolError::Internal {
+                    reason: "a primed scene answers nothing".into(),
+                }),
             }
         }));
         let result = result.unwrap_or_else(|_| {
@@ -5041,6 +5082,8 @@ impl SnapshotCaptures {
                     .collect(),
                 sheet.start,
             ),
+            // Drawn with no captures.
+            Work::Prime { .. } => return &NoCaptures,
         };
         if wanted.is_empty() {
             return &NoCaptures;
@@ -5220,6 +5263,49 @@ fn draw(
         height,
         png: base64(&png),
     })
+}
+
+/// The longer side a primed scene is drawn at: its pipelines are the same at any size.
+const PRIME_SIDE: u32 = 256;
+
+/// Draws `shot` once as it is at `at`, small and without reading it back, with images
+/// and filters of its own that are dropped after it, so the snapshots' own stay as they
+/// were and a scene nobody looks at holds no GPU memory here. A 3D scene's own pipelines
+/// are made first, whether or not anything in it draws yet (a model still loading draws
+/// nothing). A scene that fails to draw is only logged: it fails the same way on air.
+fn prime(shot: &Shot, at: MediaTime, compositor: &mut Compositor) {
+    if !shot.cameras.is_empty() {
+        compositor.warm_3d();
+    }
+    let Ok(canvas) = shot.canvas() else { return };
+    let (width, height) = (canvas.width(), canvas.height());
+    let longer = width.max(height).max(1);
+    let scaled = |side: u32| {
+        let side = u64::from(side) * u64::from(PRIME_SIDE.min(longer)) / u64::from(longer);
+        u32::try_from(side).unwrap_or(PRIME_SIDE).max(1)
+    };
+    let Ok(size) = FrameSize::new(scaled(width), scaled(height)) else {
+        return;
+    };
+    let mut cache = ResourceCache::new();
+    let mut chains = Chains::default();
+    cache.begin_frame();
+    let drawn = compose(
+        compositor,
+        (&mut cache, &mut chains),
+        (shot, at),
+        View::default(),
+        &LiveParams::default(),
+        &NoCaptures,
+        DrawAt {
+            size,
+            readback: false,
+        },
+    );
+    drop(cache.end_frame(compositor));
+    if let Err(error) = drawn {
+        tracing::debug!(%error, "a primed scene did not draw");
+    }
 }
 
 /// Draws each of a frame sheet's samples at its own time, scales it to a tile and

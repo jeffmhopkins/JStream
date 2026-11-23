@@ -20,6 +20,7 @@ mod image;
 mod ingest;
 mod mips;
 mod model;
+mod pipelines;
 mod place;
 mod readback;
 mod scene;

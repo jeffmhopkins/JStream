@@ -584,16 +584,14 @@ impl ModelRuntime {
             }],
         });
         let rest_pose = pose_bind(gpu, &pose_layout, &[IDENTITY_MAT4]).1;
+        // The filters' colour helpers, so a picture decodes as every pass decodes it.
+        const SOURCE: &str = concat!(
+            include_str!("../filter/colour.wgsl"),
+            include_str!("model.wgsl")
+        );
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
-            // The filters' colour helpers, so a picture decodes as every pass decodes it.
-            source: wgpu::ShaderSource::Wgsl(
-                concat!(
-                    include_str!("../filter/colour.wgsl"),
-                    include_str!("model.wgsl")
-                )
-                .into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream-render-model"),
@@ -613,7 +611,7 @@ impl ModelRuntime {
             Blended,
         }
         let pipeline = |kind: Kind| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            let desc = wgpu::RenderPipelineDescriptor {
                 label: Some(match kind {
                     Kind::Prepass => "jstream-render-model-prepass",
                     Kind::Opaque => "jstream-render-model-opaque",
@@ -682,7 +680,8 @@ impl ModelRuntime {
                 }),
                 multiview_mask: None,
                 cache: None,
-            })
+            };
+            gpu.built.render(device, SOURCE, &(), &desc)
         };
         let prepass = pipeline(Kind::Prepass);
         let opaque = pipeline(Kind::Opaque);
@@ -692,7 +691,7 @@ impl ModelRuntime {
             dst_factor: wgpu::BlendFactor::One,
             operation: wgpu::BlendOperation::Max,
         };
-        let depth_only = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let depth_only = wgpu::RenderPipelineDescriptor {
             label: Some("jstream-render-model-view-depth"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
@@ -737,7 +736,8 @@ impl ModelRuntime {
             }),
             multiview_mask: None,
             cache: None,
-        });
+        };
+        let depth_only = gpu.built.render(device, SOURCE, &(), &depth_only);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-model-sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,

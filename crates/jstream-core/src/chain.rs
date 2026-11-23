@@ -4795,6 +4795,96 @@ mod tests {
         assert_ne!(moved, first, "and its shadow with it");
     }
 
+    /// A scene primed on the snapshot thread leaves the program stage nothing to compile
+    /// (`SnapshotWorker::prime`): a compositor opened on the same context afterwards, as
+    /// an output start opens one, draws the scene, its model, shadow map and filter,
+    /// and makes no pipeline. What a 3D scene alone draws with is made too, whether or
+    /// not the scene shows it yet.
+    #[test]
+    fn a_primed_scene_leaves_the_stage_no_pipeline_to_make() {
+        use crate::runtime::SharedGpu;
+        use jstream_platform::{AdapterId, GpuContext, GpuFrame, GpuInterop, PlatformError};
+
+        /// Lends the context it was made with.
+        struct Lent(GpuContext);
+        impl GpuInterop for Lent {
+            fn open_device(&self) -> Result<GpuContext, PlatformError> {
+                Ok(self.0.clone())
+            }
+            fn encode_target(
+                &self,
+                _: &GpuContext,
+                _: FrameSize,
+            ) -> Result<GpuFrame, PlatformError> {
+                Err(PlatformError::Unsupported {
+                    what: "encode targets".into(),
+                })
+            }
+        }
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(opened) = gpu() else { return };
+        let context = GpuContext::new(
+            opened.adapter().clone(),
+            opened.device().clone(),
+            opened.queue().clone(),
+            AdapterId {
+                luid: None,
+                vendor: 0,
+            },
+            None,
+        );
+        drop(opened);
+        let mut graph = shadow_wall(0.0);
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("card"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: [("multiply".to_owned(), serde_json::json!("#ffffff"))]
+                    .into_iter()
+                    .collect(),
+                enabled: None,
+                index: None,
+            }],
+        );
+        let card = Frame::new(1, 1, &[255; 4], 4).expect("1x1 RGBA8");
+        let shot = || {
+            shadow_wall_shot(
+                &graph,
+                shadow_wall_model(true),
+                shadow_wall_light(true),
+                &card,
+            )
+        };
+        let shared = Arc::new(SharedGpu::default());
+        shared.set_interop(Arc::new(Lent(context.clone())));
+        let worker = snapshot::SnapshotWorker::new(Arc::clone(&shared));
+        worker.prime(shot(), MediaTime::zero(Timebase::MILLIS));
+        // Dropping the worker joins its thread once the scene is drawn.
+        drop(worker);
+
+        let mut stage = Compositor::on_context(&context);
+        let made = stage.pipelines_made();
+        assert!(made > 0, "priming made the scene's pipelines");
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        for _ in 0..2 {
+            draw_points(
+                &mut stage,
+                (&mut cache, &mut chains),
+                (&shot(), &LiveParams::default()),
+                &[(22, 18)],
+            );
+        }
+        stage.warm_3d();
+        assert_eq!(stage.pipelines_made(), made, "the stage made none");
+    }
+
     /// A card whose picture comes out of a filter chain casts the shadow of what the
     /// filter drew this frame: the chain's output layer is one image for as long as it
     /// lives, and each run of the filter counts as a change of it, so the kept map is

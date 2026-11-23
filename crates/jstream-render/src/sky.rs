@@ -227,15 +227,13 @@ const FACES: [[[f32; 3]; 3]; 6] = [
 impl Baker {
     fn new(gpu: &Gpu) -> Self {
         let device = &gpu.device;
+        const SOURCE: &str = concat!(
+            include_str!("sky_common.wgsl"),
+            include_str!("sky_deep.wgsl")
+        );
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-sky-bake"),
-            source: wgpu::ShaderSource::Wgsl(
-                concat!(
-                    include_str!("sky_common.wgsl"),
-                    include_str!("sky_deep.wgsl")
-                )
-                .into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
         });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("jstream-render-sky-bake"),
@@ -262,7 +260,7 @@ impl Baker {
                 write_mask: wgpu::ColorWrites::ALL,
             })
         };
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline = wgpu::RenderPipelineDescriptor {
             label: Some("jstream-render-sky-bake"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -286,7 +284,8 @@ impl Baker {
             }),
             multiview_mask: None,
             cache: None,
-        });
+        };
+        let pipeline = gpu.built.render(device, SOURCE, &(), &pipeline);
         Self { pipeline, layout }
     }
 
@@ -401,16 +400,14 @@ impl Baker {
 impl SkyRuntime {
     pub(crate) fn new(gpu: &Gpu) -> Self {
         let device = &gpu.device;
+        const SOURCE: &str = concat!(
+            include_str!("filter/colour.wgsl"),
+            include_str!("sky_common.wgsl"),
+            include_str!("sky.wgsl")
+        );
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-sky"),
-            source: wgpu::ShaderSource::Wgsl(
-                concat!(
-                    include_str!("filter/colour.wgsl"),
-                    include_str!("sky_common.wgsl"),
-                    include_str!("sky.wgsl")
-                )
-                .into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
         });
         let cube = |binding| wgpu::BindGroupLayoutEntry {
             binding,
@@ -466,7 +463,7 @@ impl SkyRuntime {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline = wgpu::RenderPipelineDescriptor {
             label: Some("jstream-render-sky"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -494,7 +491,8 @@ impl SkyRuntime {
             }),
             multiview_mask: None,
             cache: None,
-        });
+        };
+        let pipeline = gpu.built.render(device, SOURCE, &(), &pipeline);
         // The panorama wraps around left to right; it is read at its own size.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-sky"),
@@ -560,6 +558,11 @@ impl SkyRuntime {
             #[cfg(test)]
             baked: 0,
         }
+    }
+
+    /// Makes the bake's pipeline now, not at the first sky with nebulae or a band.
+    pub(crate) fn warm(&mut self, gpu: &Gpu) {
+        self.baker.get_or_insert_with(|| Baker::new(gpu));
     }
 
     /// The place in [`Self::bakes`] of `seed`'s bake, made now if no kept one is its:

@@ -1459,6 +1459,8 @@ impl Engine {
         // and snapshots open on it, and the browser engine paints on it.
         self.shared.gpu.set_interop(backends.gpu);
         backends.gpu = Arc::clone(&self.shared.gpu) as Arc<dyn jstream_platform::GpuInterop>;
+        // The collection the engine was made with is compiled now, off this thread.
+        lock(&self.shared.state).prime_scenes();
         // A context that replaces a lost one goes to the browser engine, whichever
         // holder saw the loss.
         {
@@ -5183,6 +5185,7 @@ impl State {
             // `changed` reported no move: the new collection has no scene.
             self.emit_studio(client_id, request_id, None, wake);
         }
+        self.prime_scenes();
     }
 
     /// Keeps `graph`, the same collection saved as another file, in this one's place
@@ -6526,6 +6529,36 @@ impl State {
             &assets,
         );
         Some(planning.shot)
+    }
+
+    /// Has every scene of the collection drawn once on the snapshot thread, planned alone
+    /// as [`Self::plan_scene_alone`] plans it, so what each draws with is compiled before
+    /// it goes on air ([`SnapshotWorker::prime`](crate::snapshot::SnapshotWorker::prime)):
+    /// a switch to a scene the program never showed, a 3D one above all, then waits for
+    /// no shader. Called when a collection is opened and when the engine gets its
+    /// backends; a scene made or changed after that is compiled where it is first
+    /// drawn, which while it is edited is its preview. Nothing without a GPU context:
+    /// a device of the snapshot thread's own shares no pipelines with the stage.
+    fn prime_scenes(&mut self) {
+        let Some(shared) = self.shared.upgrade() else {
+            return;
+        };
+        if !shared.gpu.lends() {
+            return;
+        }
+        let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
+        let scenes: Vec<SceneId> = graph
+            .state()
+            .scenes()
+            .iter()
+            .map(|scene| scene.id().clone())
+            .collect();
+        let now = self.live.now();
+        for scene_id in scenes {
+            if let Some(shot) = self.plan_scene_alone(&scene_id) {
+                shared.snapshots.prime(shot, now);
+            }
+        }
     }
 
     /// Re-plans the program mix and the scene each video mix shows at the current time,

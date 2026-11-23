@@ -49,6 +49,8 @@ pub(crate) struct Layouts<'a> {
     pub(crate) shader: &'a wgpu::ShaderModule,
     /// Whether the target holds sRGB-encoded colour: the shader's `ENCODED`.
     pub(crate) encoded: bool,
+    /// The pipelines made on the device already (`pipelines.rs`).
+    pub(crate) built: &'a crate::pipelines::Built,
 }
 
 /// The depth format of a scene pass with a model's depth (ADR-0107 decision 7): reversed,
@@ -271,7 +273,7 @@ fn pipeline_with(
         bind_group_layouts: &groups,
         immediate_size: 0,
     });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+    let desc = wgpu::RenderPipelineDescriptor {
         label: Some(label),
         layout: Some(&layout),
         vertex: wgpu::VertexState {
@@ -308,7 +310,11 @@ fn pipeline_with(
         }),
         multiview_mask: None,
         cache: None,
-    })
+    };
+    // The layout follows from `blend`, which the descriptor holds.
+    layouts
+        .built
+        .render(device, crate::compositor::COMPOSITE_SOURCE, &(), &desc)
 }
 
 #[cfg(test)]
