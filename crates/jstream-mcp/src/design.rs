@@ -370,7 +370,7 @@ for the whole message) with `data.list` and `data.get`. A number maps from `rang
 level 0 to 1 from `states`, such as `{\"recording\": 1, \"playing\": 0.5}`, and any other \
 text 0. It glides over `smoothing_ms` (default 50; 0 jumps, which suits a switch), and \
 rests at `from` while the field is absent. On `opacity`, `from` -1 and `to` 0 shows an \
-item only while the field reads 1. A camera takes no `data` modifier. \
+item only while the field reads 1. A scene camera takes `data` modifiers too. \
 To make an effect itself pulse (a border's `width`, a glow's `radius` or `strength`, a \
 blur's `radius`), give the item a modifier with `property` `effect` and \
 `effect: {filter_id, param}` naming one of its own effects and a number or colour \

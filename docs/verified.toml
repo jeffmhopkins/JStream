@@ -633,7 +633,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:9adc3422fe905dd7", by = "agent:claude", note = "Re-read against round 2 of ADR-0176 (0.167: SceneCamera.autofocus, CameraProperty autofocus, MAX_MOTION_MODIFIERS 32): design.rs guidance names autofocus, blur_px as the aperture, and 32 modifiers; tools.snap regenerated." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:c1e0e005c2b01224", by = "agent:claude", note = "Re-read against round 2 of ADR-0176 (0.167: SceneCamera.autofocus, CameraProperty autofocus, MAX_MOTION_MODIFIERS 32): design.rs guidance names autofocus, blur_px as the aperture, and 32 modifiers; tools.snap regenerated." }
+stamp = { hash = "b3:2d73d6475f9467b4", by = "agent:claude", note = "Re-read against the one-line guidance fix: the data-modifier paragraph no longer says a camera takes none, which ADR-0176 changed; the section's summary of the guidance still holds." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3165,7 +3165,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:c1e0e005c2b01224", by = "agent:claude", note = "Re-read against round 2 of ADR-0176 (0.167: SceneCamera.autofocus, CameraProperty autofocus, MAX_MOTION_MODIFIERS 32): guidance covers autofocus, aperture and the 32-modifier cap." }
+stamp = { hash = "b3:2d73d6475f9467b4", by = "agent:claude", note = "Re-read against the one-line guidance fix: the data-modifier paragraph no longer says a camera takes none, which ADR-0176 changed; the section's summary of the guidance still holds." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3198,7 +3198,7 @@ stamp = { hash = "b3:af5c949db44560d1", by = "agent:ptz-builder", note = "OPEN_W
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:c1e0e005c2b01224", by = "agent:claude", note = "Re-read against round 2 of ADR-0176 (0.167: SceneCamera.autofocus, CameraProperty autofocus, MAX_MOTION_MODIFIERS 32): purpose unchanged." }
+stamp = { hash = "b3:2d73d6475f9467b4", by = "agent:claude", note = "Re-read against the one-line guidance fix: the data-modifier paragraph no longer says a camera takes none, which ADR-0176 changed; the section's summary of the guidance still holds." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
