@@ -203,7 +203,13 @@ Contents ([Design](#design) explains the choices):
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
   `looks` table in `looks.rs`), the control button beside a live setting, a fader or a send
   (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
-  binding are tested natively), the Channels panel (`channels.rs`: `Channels`, the channel
+  binding are tested natively), the Map control dialog and the Learn popover its menu
+  opens (`map_control.rs`, with a mapping's ends, the sources it compares and a key's
+  edits tested natively), mapping mode (`mapping_mode.rs`: `MappingMode` and
+  `MappingBar`, with a drag's amount, the ends it writes and its label tested natively),
+  what is arriving for them (`live_sources.rs`, outside `panels/`: `live_sources` and
+  `Listening`, with a sender's Mods, what moved and a message's fields tested natively),
+  the Channels panel (`channels.rs`: `Channels`, the channel
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the

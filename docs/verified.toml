@@ -6801,7 +6801,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:bc8683e0a05127ad", by = "agent:release-alpha11", note = "dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652) | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; Escape reaches the topmost dialog, near-plane outline fallback; holds beside #1662's restyle and #1657's smoothing | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; re-read the canvas paragraph beside #1679's near-plane fallback (merged in #1686 itself), #1685's group sharing and #1662's restyle, holds | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section" }
+stamp = { hash = "b3:a9c1a3936fd0d5db", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652) | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; Escape reaches the topmost dialog, near-plane outline fallback; holds beside #1662's restyle and #1657's smoothing | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; re-read the canvas paragraph beside #1679's near-plane fallback (merged in #1686 itself), #1685's group sharing and #1662's restyle, holds | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed. | merge: #1645 (screen-space reflections, 1f65ffa) merged: the rendering page's new switch and steps, beside the train's control button and panels; holds | kept from the merged side: Checked the scene dialog's Reflections paragraph: updated it to say the info tip also covers models reflecting what is on screen and the Settings switch, as scene_properties.rs's tip now reads; the rest holds against the control design." }
@@ -6816,7 +6816,7 @@ stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: the store bullet names notify_with, and the shell bullet says a toast with buttons stays 10 s and a button hides it; matches store.rs, app.rs and style.css." }
+stamp = { hash = "b3:20c44f735b82a602", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
@@ -6864,7 +6864,7 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652)" }
+stamp = { hash = "b3:85b36852fbff2ccf", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652)" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
@@ -6888,7 +6888,10 @@ stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:d8b85b4ad317ad23", by = "agent:release-alpha8", note = "replaced the restart text: a saved change applies at once; checked jtunnel.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:7e24b64e9e659820", by = "agent:claude", note = "Re-verified after the style.css mute colour change and lib.rs Docs line." }
+stamp = { hash = "b3:abf70af7415e77b2", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/live_sources.rs"]
+stamp = { hash = "b3:ebda66bc50983247", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -6948,16 +6951,22 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty lanes/starts/stops and delay_ms None in literals." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:f92cba49cd54d28a", by = "agent:claude", note = "Control button bullet: a learned MIDI control's Smoothing field first in the menu; Channels bullet: each input shows its smoothing_ms set with learn::set_smoothing; style.css adds .control-menu-row and .chan-row-smooth." }
+stamp = { hash = "b3:1216f42f70cfbd8a", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code | kept from the merged side: Control button bullet: a learned MIDI control's Smoothing field first in the menu; Channels bullet: each input shows its smoothing_ms set with learn::set_smoothing; style.css adds .control-menu-row and .chan-row-smooth." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch: looks.rs's table in the settings form, small buttons, duplicate states refused, bytes; README's looks paragraph matches; the merge brought #1606's settings pages and pairing dialog CSS, separate from the .looks rules" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/map_control.rs"]
+stamp = { hash = "b3:bc840946aeca3c6b", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mapping_mode.rs"]
+stamp = { hash = "b3:89836de0a13c6203", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mixer.rs"]
 stamp = { hash = "b3:1c139dc118fb27f1", by = "agent:claude", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:db7850897408fba3", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
+stamp = { hash = "b3:7c4e9471f2007a3d", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:7fee3677c4dd7fd9", by = "agent:claude", note = "motion.rs: the Palette problem now says bytes; the design's Palette line (saying which pair it left out) still holds" }
@@ -7044,10 +7053,10 @@ stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:14de1eb3aacb9945", by = "agent:claude", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs | merge: wave 2: #1662's outputs rows, mixer master icons and ⋯ menu, transitions preset toolbar and agent activity runs by time; re-read beside #1657's smoothing rows and #1653's keyboard text, holds" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; rewrote the Controller learn entry for the new menu and right-click, and added What is arriving, Map control and Mapping mode entries checked against the code | kept from the merged side: Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs | merge: wave 2: #1662's outputs rows, mixer master icons and ⋯ menu, transitions preset toolbar and agent activity runs by time; re-read beside #1657's smoothing rows and #1653's keyboard text, holds" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:3779976698d318ef", by = "agent:release-alpha10", note = "C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds | merge: wave 2: #1662's panels restyled on the design language; the purpose holds" }
+stamp = { hash = "b3:0cd727ba3a599e59", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff | kept from the merged side: C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds | merge: wave 2: #1662's panels restyled on the design language; the purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -7059,7 +7068,7 @@ stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "C20-C22 (ou
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: screenshot.rs's entry now says the desktop app saves in Downloads with a toast naming the place and Open/Show in folder (host::save_screenshot, host::open_saved); matches screenshot.rs and host.rs." }
+stamp = { hash = "b3:20c44f735b82a602", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
@@ -7107,7 +7116,7 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Re-read against the Escape capture listener in dialog.rs and camera.rs's Shape (3D group outline) plus the near-plane model fallback; the purpose summary still holds | kept from the merged side: Re-read against the Escape capture listener in dialog.rs and the solid outline fallback in canvas/camera.rs; the purpose summary still holds" }
+stamp = { hash = "b3:85b36852fbff2ccf", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff | kept from the merged side: Merged #1679 into #1596's canvas branch. Re-read against the Escape capture listener in dialog.rs and camera.rs's Shape (3D group outline) plus the near-plane model fallback; the purpose summary still holds | kept from the merged side: Re-read against the Escape capture listener in dialog.rs and the solid outline fallback in canvas/camera.rs; the purpose summary still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
@@ -7131,7 +7140,10 @@ stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:d8b85b4ad317ad23", by = "agent:release-alpha8", note = "jtunnel.rs only drops the restart note; purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:7e24b64e9e659820", by = "agent:claude", note = "lib.rs Docs line now names UI-FEATURES#automation; module list unchanged." }
+stamp = { hash = "b3:abf70af7415e77b2", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/live_sources.rs"]
+stamp = { hash = "b3:ebda66bc50983247", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -7191,16 +7203,22 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty fields in literals." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:f92cba49cd54d28a", by = "agent:claude", note = "learn.rs gains smoothing_of/set_smoothing and the control menu's Smoothing field; channels.rs shows each input's smoothing; the purpose list still names them right." }
+stamp = { hash = "b3:1216f42f70cfbd8a", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff | kept from the merged side: learn.rs gains smoothing_of/set_smoothing and the control menu's Smoothing field; channels.rs shows each input's smoothing; the purpose list still names them right." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch adds looks.rs, the grid's Looks table (rows, Own colour, brightness, blink, add/remove, the clip launcher preset), which now refuses duplicate states and counts bytes, as the README says; the merge brought #1606's Video and Audio settings pages and Pair a device dialog, which the purpose already covers" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/map_control.rs"]
+stamp = { hash = "b3:bc840946aeca3c6b", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mapping_mode.rs"]
+stamp = { hash = "b3:89836de0a13c6203", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mixer.rs"]
 stamp = { hash = "b3:1c139dc118fb27f1", by = "agent:claude", note = "C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:db7850897408fba3", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
+stamp = { hash = "b3:7c4e9471f2007a3d", by = "agent:claude-mapping-ui", note = "Mapping work added the right-click control menu, the Map control dialog, the Learn popover, live_sources and mapping mode; added map_control.rs, mapping_mode.rs and live_sources.rs to the contents list and re-read the rest of the list against the diff" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:7fee3677c4dd7fd9", by = "agent:claude", note = "motion.rs: the Palette problem now says bytes, which is what it counts; the purpose section names no unit" }
@@ -7299,10 +7317,10 @@ stamp = { hash = "b3:cb9ccbe7df38b064", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "new section: each count's source checked against views.rs, screen.rs, the canvas's run_preview/resubscribe and projector Picture; labels as built by views::label" }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
-stamp = { hash = "b3:57e95c0f06b82238", by = "agent:release-thread", note = "openAddSource now waits for the Sources panel's scene caption before its right-click; added that to the section's openAddSource description. The rest of the harness list is unchanged." }
+stamp = { hash = "b3:1cbdb19b50c5d140", by = "agent:claude-mapping-ui", note = "Added the liveSources fixture to the routes list and checked it against fixtures.js" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/fixtures.js"]
-stamp = { hash = "b3:b9d2a69f538913c3", by = "agent:claude", note = "addOutput now picks the kind on the Kind segmented control; openOutputSettings is unchanged." }
+stamp = { hash = "b3:ad375e53924387e6", by = "agent:claude-mapping-ui", note = "Added the liveSources fixture to the routes list and checked it against fixtures.js" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/global-setup.js"]
 stamp = { hash = "b3:cd1222001aad0cda" }
@@ -7379,6 +7397,9 @@ stamp = { hash = "b3:20b6435bb10e0c51", by = "agent:claude", note = "Re-read aga
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/labels.spec.js"]
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, so the harness holds." }
 
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/map-control.spec.js"]
+stamp = { hash = "b3:32f763eb2e5453d9", by = "agent:claude-mapping-ui", note = "Added the liveSources fixture to the routes list and checked it against fixtures.js" }
+
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
 stamp = { hash = "b3:74a909007ca3d6e3", by = "agent:claude", note = "Re-read: filters.spec.js and menus.spec.js add assertions only (the Settings chips, no Add as group or Name field for Color); the fixtures are unchanged." }
 
@@ -7452,7 +7473,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:ecdbdd3aeed34a7c", by = "agent:release-alpha11", note = "Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds" }
+stamp = { hash = "b3:1895e756e1a87372", by = "agent:claude-mapping-ui", note = "Added the Map control entry and checked each sentence against map-control.spec.js | kept from the merged side: Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7513,6 +7534,9 @@ stamp = { hash = "b3:20b6435bb10e0c51", by = "agent:claude", note = "Updated the
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/labels.spec.js"]
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
+
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/map-control.spec.js"]
+stamp = { hash = "b3:32f763eb2e5453d9", by = "agent:claude-mapping-ui", note = "Added the Map control entry and checked each sentence against map-control.spec.js" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
 stamp = { hash = "b3:74a909007ca3d6e3", by = "agent:claude", note = "The Menus and Add source entry says Color shows neither New | Existing nor a Name field, and the Filters entry that the picked kind's settings are chips." }
@@ -8010,7 +8034,7 @@ stamp = { hash = "b3:741d1e68f59f3ed4", by = "agent:release-alpha8", note = "The
 stamp = { hash = "b3:7e72b670187e720e", by = "agent:issues-thread", note = "Re-read: the 3D scene paragraph says a drag slides an item on its depth plane, which still holds for a 3D group's item; the new CV-15 text on group outlines needs no getting-started step" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
-stamp = { hash = "b3:58f92aed22ff4a94", by = "agent:release-alpha11", note = "UI-FEATURES dialogs only gained the Escape-reaches-the-topmost-dialog sentence; this walkthrough's dialog steps don't depend on it and still hold | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once in UI-FEATURES DL-03 only; the scene walkthrough holds | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; holds | kept from the merged side: UI-FEATURES DL-03 only adds the once-per-scene sentence to the Share the 3D space note; this walkthrough doesn't describe 3D groups or that note; holds | kept from the merged side: Merged #1679 into #1596's canvas branch. UI-FEATURES dialogs and canvas changed (Escape, 3D group outline); this walkthrough's steps don't depend on them" }
+stamp = { hash = "b3:40d24664c66ffe1a", by = "agent:claude-mapping-ui", note = "Re-read the section: it describes no learn button, control menu or mapping, so the Inspector and mixer wording changes leave it true | kept from the merged side: UI-FEATURES dialogs only gained the Escape-reaches-the-topmost-dialog sentence; this walkthrough's dialog steps don't depend on it and still hold | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once in UI-FEATURES DL-03 only; the scene walkthrough holds | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; holds | kept from the merged side: UI-FEATURES DL-03 only adds the once-per-scene sentence to the Share the 3D space note; this walkthrough doesn't describe 3D groups or that note; holds | kept from the merged side: Merged #1679 into #1596's canvas branch. UI-FEATURES dialogs and canvas changed (Escape, 3D group outline); this walkthrough's steps don't depend on them" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#docking"]
 stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
@@ -8019,13 +8043,13 @@ stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 n
 stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
-stamp = { hash = "b3:3f0a4004877ab302", by = "agent:claude", note = "UI-FEATURES inspector and mixer now describe the control menu; this walkthrough doesn't mention the learn button, so it holds" }
+stamp = { hash = "b3:c2b91241c1a9d7e8", by = "agent:claude-mapping-ui", note = "Re-read the section: it describes no learn button, control menu or mapping, so the Inspector and mixer wording changes leave it true" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#menus"]
 stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited: File › Video settings… opens Settings on Video with Save, and Check for updates is a desktop-app item; checked against header.rs and settings.rs." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#mixer"]
-stamp = { hash = "b3:b61a62ba1ceebc14", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:aac68145f3924edc", by = "agent:claude-mapping-ui", note = "Re-read the section: it describes no learn button, control menu or mapping, so the Inspector and mixer wording changes leave it true | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#objects"]
 stamp = { hash = "b3:dafbc926c88dc4ba", by = "agent:claude-daw", note = "Re-read: the section says nothing of the Page API badge; OB-11's tooltip wording change doesn't affect it." }
@@ -8658,46 +8682,46 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:7fa4b50c629a54e7", by = "agent:claude", note = "Added the Icon button rule (28 px, borderless, muted, link-coloured while on, a funnel's count, ⋯ opens what the icons don't show) for C20-C22" }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "Added the Icon button rule (28 px, borderless, muted, link-coloured while on, a funnel's count, ⋯ opens what the icons don't show) for C20-C22 | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: Added the Icon button rule (28 px, borderless, muted, link-coloured while on, a funnel's count, ⋯ opens what the icons don't show) for C20-C22 | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:1fdba0e3b5a5b18c", by = "agent:claude", note = "added: a sequence's own mark is --code-type (Scenes row icon, event chip edge); the playing badge is teal, not the on-air red; checked style.css" }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22)" }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. dialog.rs's Info component unchanged | kept from the merged side: dialog.rs's Info component is unchanged; the copy rules still hold" }
+stamp = { hash = "b3:85b36852fbff2ccf", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs's Info component unchanged | kept from the merged side: dialog.rs's Info component is unchanged; the copy rules still hold" }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Dialog layout rules unchanged by the Escape listener | kept from the merged side: The dialog layout rules are unchanged by the Escape listener; this section doesn't describe keys" }
+stamp = { hash = "b3:85b36852fbff2ccf", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: Merged #1679 into #1596's canvas branch. Dialog layout rules unchanged by the Escape listener | kept from the merged side: The dialog layout rules are unchanged by the Escape listener; this section doesn't describe keys" }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#forms"."body"]
-stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
+stamp = { hash = "b3:d1bb0a92afd3faaa", by = "agent:claude-mapping-ui", note = "Rewrote the learn-button bullet for the new menu, the right-click, Mod names and the mapping-mode amount, and re-read the other bullets" }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Rewrote the learn-button bullet for the new menu, the right-click, Mod names and the mapping-mode amount, and re-read the other bullets | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8706,22 +8730,22 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Re-read: menu.rs gains keys/focus_first/asks_for_menu so panel-drawn menus take the same keys; the menu style rules here are unchanged." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "A context menu's danger line is now red text on the menu, not button.danger's solid red, which matches 'reads red' here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: A context menu's danger line is now red text on the menu, not button.danger's solid red, which matches 'reads red' here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "Re-read against the style.css additions (map- dialog rules, mapping- bar, button.learn.amount) and dialog.rs handing a right-click to a setting row: they use only the listed tokens and existing button, segmented and dialog patterns, so the section holds | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-FEATURES#automation"."body"]
-stamp = { hash = "b3:fed62ddf1b5177ec", by = "agent:claude", note = "Only the ADR number and link changed, 0188 to 0190." }
+stamp = { hash = "b3:84353f807b6afbdd", by = "agent:claude-mapping-ui", note = "Rewrote VC-01 for the new menu and added VC-03 Map control and VC-04 Mapping mode, each sentence checked against learn.rs, map_control.rs and mapping_mode.rs and the browser tests | kept from the merged side: Only the ADR number and link changed, 0188 to 0190." }
 
 ["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/channels.rs"]
 stamp = { hash = "b3:5ebd7fc23c2a4cb5", by = "agent:claude", note = "VC-01: the Smoothing field for a learned MIDI control and the 60 fps updates while moving (ADR-0188); VC-02: each input's Smoothing in ms." }
@@ -8793,10 +8817,10 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "store.rs gains channels, the open channel and sequence, and the playing timelines; nothing the canvas rows describe changed." }
 
 ["UI-FEATURES#dialogs"."body"]
-stamp = { hash = "b3:58f92aed22ff4a94", by = "agent:release-alpha11", note = "DL-01 now says Escape closes the topmost dialog wherever the focus is (#1607, #1652) | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once: DL-03 says a scene shares a group once; re-read beside #1679's Escape text, holds | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; DL rows unchanged, holds | kept from the merged side: DL-03 now says the Share the 3D space note adds that a scene shares a group once, a second placement being a flat card, as scene_properties.rs shows | kept from the merged side: Merged #1679 into #1596's canvas branch. DL-01 says Escape closes the topmost dialog wherever the focus is (#1607, #1652)" }
+stamp = { hash = "b3:40d24664c66ffe1a", by = "agent:claude-mapping-ui", note = "Added to DL-01 that a right-click on a live setting's row in a dialog opens its control menu, matching dialog.rs; searched the other rows for right-click and learn wording | kept from the merged side: DL-01 now says Escape closes the topmost dialog wherever the focus is (#1607, #1652) | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once: DL-03 says a scene shares a group once; re-read beside #1679's Escape text, holds | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; DL rows unchanged, holds | kept from the merged side: DL-03 now says the Share the 3D space note adds that a scene shares a group once, a second placement being a flat card, as scene_properties.rs shows | kept from the merged side: Merged #1679 into #1596's canvas branch. DL-01 says Escape closes the topmost dialog wherever the focus is (#1607, #1652)" }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. DL-01 says Escape closes the topmost dialog wherever the focus is (#1607, #1652) | kept from the merged side: DL-01 now says Escape closes the topmost dialog wherever the focus is (#1607, #1652)" }
+stamp = { hash = "b3:85b36852fbff2ccf", by = "agent:claude-mapping-ui", note = "Added to DL-01 that a right-click on a live setting's row in a dialog opens its control menu, matching dialog.rs; searched the other rows for right-click and learn wording | kept from the merged side: Merged #1679 into #1596's canvas branch. DL-01 says Escape closes the topmost dialog wherever the focus is (#1607, #1652) | kept from the merged side: DL-01 now says Escape closes the topmost dialog wherever the focus is (#1607, #1652)" }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/add_source.rs"]
 stamp = { hash = "b3:beb5beb8909eae52", by = "agent:release-alpha8", note = "DL-03 has #1609's Reflections check and #1631's Autofocus and Aperture (blur) with Pan and Tilt in camera motion, matching scene_properties.rs and camera_moves.rs; DL-06 lists the fog card bundle's Fog card after Backdrop and #1609's Reflection probe after Light, as the 20-kind ORDER has them." }
@@ -8814,7 +8838,7 @@ stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Re-read: so
 stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "The panel list, DK-02 (second tab level is a segmented control), DK-07 and DK-08 now name Arrange; checked against dock.rs titles and the Editing layout." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read against app.rs's Toast component change: docking is unaffected." }
+stamp = { hash = "b3:20c44f735b82a602", by = "agent:claude-mapping-ui", note = "app.rs changes are the mapping contexts, the dialog host and the bar; the dock, zones and layouts are untouched" }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:3dc880e12495601b", by = "agent:claude", note = "dock.rs adds Channels (right) and Sequence (bottom) to the View menu; workspace.rs maps them to their panels. Docking rows still hold." }
@@ -8841,7 +8865,7 @@ stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "HD-10's Abo
 stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read against app.rs (Toast with buttons, WS-08 row updated): the header rows hold." }
+stamp = { hash = "b3:20c44f735b82a602", by = "agent:claude-mapping-ui", note = "app.rs gained the ControlMenuAt, MapControlDialog and MappingMode contexts, the Map control host and the mapping bar under the header; no header row describes those, searched the section for right-click, learn and under-the-header text" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:6c3b60e3f9d78afd", by = "agent:claude", note = "C18: HD-12 now says each project dialog's Location is a property-grid row and that Open project… lists recent projects (name, folder; click fills, double-click opens) besides the menu's Open recent; HD-01 still holds." }
@@ -8862,7 +8886,7 @@ stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1
 stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#inspector"."body"]
-stamp = { hash = "b3:3f0a4004877ab302", by = "agent:claude", note = "learn button paragraph now describes the control menu (learn, make or follow a channel, remove) and the bound button's label" }
+stamp = { hash = "b3:c2b91241c1a9d7e8", by = "agent:claude-mapping-ui", note = "Rewrote the learn button sentences for the new menu (Map control, Learn, edit or unmap) and Mod names" }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:07c779d3c72ccfd4", by = "agent:ui-design", note = "IN-01 kind falls back to its ID with a capital; IN-02 Position and size with the 88 px label column; IN-04 the 20 px chain between W and H; IN-06 crop two by two; IN-07 the opacity slider; IN-11 the segmented control. Checked against inspector.rs, number.rs and style.css." }
@@ -8892,7 +8916,7 @@ stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited CM-0
 stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Re-read: CM-01's keyboard navigation still holds; menu.rs only adds helpers for panel-drawn menus (VC-01, SQ-02 say so)." }
 
 ["UI-FEATURES#mixer"."body"]
-stamp = { hash = "b3:b61a62ba1ceebc14", by = "agent:claude", note = "MX-01 rewritten for C20: Master over Program output and the count, headphones, funnel and ⋯ (Hear by name, reset loudness), gradient bars for loudness and true peak, the note shown only over 0 dBTP" }
+stamp = { hash = "b3:aac68145f3924edc", by = "agent:claude-mapping-ui", note = "Rewrote the fader learn sentence: Learn takes a MIDI control or a Mod, Map control chooses any other source | kept from the merged side: MX-01 rewritten for C20: Master over Program output and the count, headphones, funnel and ⋯ (Hear by name, reset loudness), gradient bars for loudness and true peak, the note shown only over 0 dBTP" }
 
 ["UI-FEATURES#mixer"."file:crates/jstream-ui/src/panels/mixer.rs"]
 stamp = { hash = "b3:1c139dc118fb27f1", by = "agent:claude", note = "MX-01 rewritten for C20: Master over Program output and the count, headphones, funnel and ⋯ (Hear by name, reset loudness), gradient bars for loudness and true peak, the note shown only over 0 dBTP" }
@@ -8940,7 +8964,7 @@ stamp = { hash = "b3:f6309095a048ad27", by = "agent:claude", note = "WS-04 names
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "WS-04 names the new headphones icon and the funnels and empty states that use icons (C20, C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold; theme tokens unchanged" }
+stamp = { hash = "b3:827a369d8324c3da", by = "agent:claude-mapping-ui", note = "style.css only gained the Map control and mapping-mode rules; searched the section for anything they touch and found the palette, fonts and shared controls rows unaffected | kept from the merged side: WS-04 names the new headphones icon and the funnels and empty states that use icons (C20, C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold; theme tokens unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
