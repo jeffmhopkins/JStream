@@ -30,7 +30,9 @@ pub(crate) use pipeline::{DeviceLoss, GpuEvent};
 #[cfg(test)]
 pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 #[cfg(test)]
-pub(crate) use pipeline::{DrawHook, MixFrame, gpu_draw_with};
+pub(crate) use pipeline::{
+    DrawHook, EncodeFlights, FRAMES_IN_FLIGHT, MixFrame, gpu_draw_flying, gpu_draw_with,
+};
 pub(crate) use pipeline::{
     EncodeKey, Encoders, Gate, MediaHost, MixKey, OpenDraw, OutputEncode, Pending, PipelineEvent,
     Program, Release, Running, StartError, cpu_draw, frame_budget, frame_period, launch,

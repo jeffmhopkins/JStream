@@ -768,9 +768,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   could take GPU frames, encoding the readback with every output staying up, an output
   surviving a lost device (its own, reopened on a new one; the context's, left at once) and failing at the third loss in a minute, and
   an output whose encoder takes GPU frames getting NV12 encode targets with no
-  readback, riding out 20 composite errors in a row with no fallback, and failing at
+  readback, getting no more of them while the GPU has not finished two earlier ticks'
+  and those ticks counted as dropped, riding out 20 composite errors in a row with no
+  fallback, and failing at
   once when the context's device is lost, on a software device that stands in for the
-  platform's (`src/tests/gpu_capture.rs`; the last three skip without
+  platform's (`src/tests/gpu_capture.rs`; the last four skip without
   `TEXTURE_FORMAT_NV12`), an effect-pack filter that runs too long on the GPU being
   quarantined with no device loss (the same file; it skips on a GPU without timestamp
   queries), a page's
@@ -3143,7 +3145,7 @@ What each stage contributes:
 | Render loop | ticks skipped to catch up with the media clock, published by the render thread | `render_ticks` |
 | Mixer input | overrun and late frames, each input while it records | `audio_frames` |
 | Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
-| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, one per such session, published by the render thread | `encode_frames` |
+| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, or because the GPU has not finished the conversions of two earlier ticks, one per such session, published by the render thread | `encode_frames` |
 | Video encode session | input drops (`dropped_queue_full` + `dropped_encoder_busy`) | `encode_frames` |
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
@@ -4336,6 +4338,18 @@ read or dropped. When frames still hold every target (the encoder has fallen beh
 the tick's frame is dropped for that mix's GPU sessions and counted in
 `encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
+Nothing else would hold these composites back: an encoder lets go of a target once its
+copy is queued, and a full session queue drops a frame already drawn. So the draw
+counts each tick's conversions out, and back in when wgpu reports their submit done
+(`EncodeFlights`, on the draw's poll each tick), and while the GPU has not finished
+those of two earlier ticks (`FRAMES_IN_FLIGHT`,
+[ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §1) the tick converts
+nothing: the frame is dropped for the GPU sessions and counted in `encode_frames`, and
+a mix nothing else reads skips its composite, as a mix whose ring has no free target
+does. A GPU slower than the frame rate then encodes at the rate it can draw, a frame
+or two behind, where before every tick queued behind the last and each frame reached
+the encoder later than the one before
+(`a_gpu_that_is_behind_is_handed_no_more_encode_targets`).
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back, as do JPEG and PNG preview streams'
 picture queues (*Preview streams*), and virtual cameras the program; a mix with a
@@ -4595,8 +4609,8 @@ render thread sends under the collection lock and announces the sources it chang
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
 the render thread. It also joins `jstream-device-losses`, which hands each lost device
 the render thread sends to the engine (the lost-device paragraph above). The render loop counts each tick it composites into the render hub
-(`stats.tick`'s `program_frames`), and publishes capture drops and the frames an encode ring drops
-(`encode_frames`), and a tick that falls a
+(`stats.tick`'s `program_frames`), and publishes capture drops and the frames an encode ring
+or a GPU that is behind drops (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
 too; a tick that fails part-way is discarded), which allocates nothing in a steady
