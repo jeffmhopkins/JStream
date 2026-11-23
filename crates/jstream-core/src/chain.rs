@@ -3171,12 +3171,21 @@ mod tests {
     /// cell: `.` black, `W` white, `B` blue, `?` anything more than a few levels from
     /// all three. `None` where the machine has no adapter.
     fn golden(shot: &Shot) -> Option<String> {
+        golden_at(shot, 100).map(|(grid, _)| grid)
+    }
+
+    /// [`golden`], with 3D models drawn at `percent` of the canvas's width and of its
+    /// height (ADR-0197), and the size in pixels and the extent of `cam`'s layer.
+    fn golden_at(shot: &Shot, percent: u32) -> Option<(String, Option<[(u32, u32); 2]>)> {
         const PALETTE: [(char, [u8; 3]); 3] =
             [('.', [0, 0, 0]), ('W', [255, 255, 255]), ('B', [0, 0, 255])];
         let _gpu = crate::tests::one_gpu_test_at_a_time();
         let mut compositor = gpu()?;
         let mut cache = ResourceCache::new();
-        let mut chains = Chains::default();
+        let mut chains = Chains {
+            model_percent: crate::resolution::Percent::of(percent),
+            ..Chains::default()
+        };
         let (width, height) = CANVAS;
         let points: Vec<_> = (0..height / 4)
             .flat_map(|y| (0..width / 4).map(move |x| (x * 4 + 2, y * 4 + 2)))
@@ -3198,7 +3207,10 @@ mod tests {
             }
             out.push('\n');
         }
-        Some(out)
+        let layer = cache
+            .get(&GpuKey::ItemBox(SceneId::new("main"), ItemId::new("cam")))
+            .map(|layer| [(layer.width(), layer.height()), layer.extent()]);
+        Some((out, layer))
     }
 
     /// Asserts `shot`'s [`golden`] is `expected`, a grid written one row per line,
@@ -5735,7 +5747,7 @@ mod tests {
             .with_model(model.model());
         let red =
             Frame::new(16, 9, &[255, 0, 0, 255].repeat(16 * 9), 3).expect("invariant: 16x9 RGBA8");
-        let under = |graph: &Graph, features: jstream_protocol::RenderFeatures| {
+        let under_at = |graph: &Graph, features: jstream_protocol::RenderFeatures, percent| {
             let assets = FilterAssets::default().with_features(features);
             let shot = snapshot::plan_with(
                 graph,
@@ -5757,7 +5769,10 @@ mod tests {
             let _gpu = crate::tests::one_gpu_test_at_a_time();
             let mut compositor = gpu()?;
             let mut cache = ResourceCache::new();
-            let mut chains = Chains::default();
+            let mut chains = Chains {
+                model_percent: crate::resolution::Percent::of(percent),
+                ..Chains::default()
+            };
             let point = draw_points(
                 &mut compositor,
                 (&mut cache, &mut chains),
@@ -5766,6 +5781,7 @@ mod tests {
             )[0];
             Some((point, !chains.surfaced.is_empty()))
         };
+        let under = |graph: &Graph, features| under_at(graph, features, 100);
         let all = jstream_protocol::RenderFeatures::ALL;
         let Some((reflected, surfaced)) = under(&graph, all) else {
             return;
@@ -5784,6 +5800,15 @@ mod tests {
             u16::from(reflected[0]) > u16::from(plain[0]) + 40
                 && u16::from(reflected[0]) > u16::from(reflected[1]) + 40,
             "the red card is reflected in the floor under it: {reflected:?} (without: {plain:?})"
+        );
+        // The floor drawn with half the pixels each way (ADR-0197): its surface is still
+        // drawn with its layer, spread over the scene's buffer, and reflects the card.
+        let (half, surfaced) = under_at(&graph, all, 50).expect("an adapter");
+        assert!(surfaced, "the smaller surface is merged, not drawn again");
+        assert!(
+            u16::from(half[0]) > u16::from(plain[0]) + 40
+                && u16::from(half[0]) > u16::from(half[1]) + 40,
+            "the red card is reflected in the floor drawn smaller: {half:?} (without: {plain:?})"
         );
         apply(&mut graph, vec![reflective(false)]);
         let (unreflective, _) = under(&graph, all).expect("an adapter");
@@ -6477,6 +6502,31 @@ mod tests {
             expected,
             "turned 60°, the plane is about half as wide, its near edge the longer",
         );
+        // Drawn with half the pixels each way (ADR-0197), its layer is half the canvas's
+        // size, stands for the whole canvas, and shows the plane in the same place: only
+        // the cells its edge crosses (`?`) differ, softened by the enlarging.
+        if let Some((half, layer)) = golden_at(&model_shot(&graph, "plane"), 50) {
+            assert_eq!(
+                layer,
+                Some([(CANVAS.0 / 2, CANVAS.1 / 2), CANVAS]),
+                "the layer's pixels and the canvas it is placed over"
+            );
+            let full: String = expected
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .flat_map(|line| line.chars().chain(['\n']))
+                .collect();
+            assert!(
+                half.len() == full.len()
+                    && half.chars().zip(full.chars()).all(|(h, f)| h == f || h == '?'),
+                "at half the pixels the plane covers the same cells\nhalf:\n{half}"
+            );
+            assert!(
+                half.chars().filter(|c| *c == 'W').count() >= 24,
+                "and its inside is as white\nhalf:\n{half}"
+            );
+        }
         // A flat item in the same pose covers the same pixels.
         apply(
             &mut graph,

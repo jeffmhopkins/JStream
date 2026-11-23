@@ -50,6 +50,12 @@ impl Default for Percent {
 }
 
 impl Percent {
+    /// `percent`, held to 1 to 100.
+    #[cfg(test)]
+    pub(crate) fn of(percent: u32) -> Self {
+        Self(percent.clamp(1, 100))
+    }
+
     /// The percentage, 1 to 100.
     pub(crate) fn get(self) -> u32 {
         self.0
