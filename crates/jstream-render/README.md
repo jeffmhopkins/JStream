@@ -603,7 +603,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    for a redraw matches that, and nothing has written to the layer since
    (`Compositor::holds`), nothing is recorded or submitted and the layer is not marked
    as changed, so a scene that places it matches too. A scene with a model's depth is
-   always drawn. So every write into an image's texels has to mark it
+   always drawn, and so is one with an item that carries a model's draw (ADR-0191),
+   whose picture is in no image. So every write into an image's texels has to mark it
    (`Image::mark_changed`), as mip chains already needed
    (`a_layer_is_drawn_again_only_when_what_it_draws_has_changed`,
    `a_parent_is_kept_while_the_layers_it_places_are`).
@@ -612,10 +613,13 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    drawn (`Compositor::changed`,
    [ADR-0201](../../docs/adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)): each draw that differs
    from the one last drawn in its place (its vertices' bytes, its image and that
-   image's count of writes, its mode or mip chain) gives the box it could touch then
+   image's count of writes, its mode or mip chain; a model's draw, ADR-0191, always
+   differs) gives the box it could touch then
    and the one it can touch now, boxes that share a texel are joined, and
    `record_patches` makes each box transparent, draws every draw that reaches it
-   clipped to it, and decodes it in `srgb`. More than 8 boxes, boxes over more than
+   clipped to it (a model's draw in passes of its own, at its place in the order: all
+   it can reach is in the one box its reach was joined into), and decodes it in `srgb`
+   (`a_layer_that_carries_a_model_is_drawn_each_time`). More than 8 boxes, boxes over more than
    half the layer, a draw that reads its backdrop, a model's depth, a draw added or
    removed or a background draw the layer whole. The pixels are a whole redraw's bit
    for bit (`a_layer_is_redrawn_only_where_its_items_changed`).

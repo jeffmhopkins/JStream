@@ -144,6 +144,12 @@ exactly as before.
 - Where encoded colour is mixed, a model with a see-through material keeps the cost of
   its layer. Drawing such a model's blended primitives into a small layer of their own
   would lift that.
+- A layer that carries a model's draw is never kept as it was
+  ([ADR-0194](0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md)):
+  the model's picture is in its draw, not in an image the layer could compare. It is
+  drawn again over the model's box alone
+  ([ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)),
+  as it was when the model's layer changed each frame.
 - Two paths draw a model, and decision 3 is what keeps them one picture. The render
   crate tests them against each other for lit, unlit, blended, camera and surface
   draws; a new feature of the model's draw has to hold in both.

@@ -86,6 +86,9 @@ struct DrawnDraw {
     blend: BlendMode,
     rect: Option<Rect>,
     reach: Option<Rect>,
+    /// Whether the item carried a model's draw (ADR-0191): what it showed is in no
+    /// image, so it never matches a later draw.
+    model: bool,
 }
 
 /// A mip chain remembered without keeping it, equal only to itself.
@@ -110,12 +113,16 @@ impl DrawnDraw {
             blend: draw.blend,
             rect: draw.rect,
             reach: draw.reach,
+            model: draw.model,
         }
     }
 
-    /// Whether it draws what `other` does, wherever in the vertex buffer each is.
+    /// Whether it draws what `other` does, wherever in the vertex buffer each is. A
+    /// model's draw (ADR-0191) is never what another showed.
     fn shows(&self, other: &Self) -> bool {
-        self.image == other.image
+        !self.model
+            && !other.model
+            && self.image == other.image
             && self.mips == other.mips
             && self.blend == other.blend
             && self.rect == other.rect
@@ -2682,13 +2689,13 @@ impl Compositor {
     /// change (ADR-0201), or leaves it empty when the whole layer is to be
     /// drawn. They are the boxes, before and now, of each draw that is not what the
     /// layer's last [`Self::render_into`] drew in its place: other vertices, another
-    /// image or mode, or an image whose texels changed. Boxes that meet are joined, so
+    /// image or mode, an image whose texels changed, or a model's draw (ADR-0191),
+    /// which is new each time. Boxes that meet are joined, so
     /// no texel is in two.
     ///
     /// The whole layer is drawn instead when the layer does not hold that last draw any
     /// more, the background is not transparent or the space changed, a draw was added
-    /// or removed, a draw reads its backdrop, the scene has a model's depth or an item
-    /// carries a model's draw (ADR-0191), there are
+    /// or removed, a draw reads its backdrop or the scene has a model's depth, there are
     /// more than [`MAX_PATCHES`] boxes, or they cover more than half the layer.
     fn changed(&self, scene: &Scene<'_>, target: &Image, patches: &mut Vec<Rect>) {
         patches.clear();
@@ -2708,7 +2715,7 @@ impl Compositor {
         for (was, draw) in drawn.draws.iter().zip(&self.draws) {
             let item = &scene.items[draw.index];
             let now = DrawnDraw::of(draw, item);
-            if item.depth.is_some() || draw.model || was.rect.is_some() || now.rect.is_some() {
+            if item.depth.is_some() || was.rect.is_some() || now.rect.is_some() {
                 patches.clear();
                 return;
             }
@@ -2743,56 +2750,78 @@ impl Compositor {
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
         scene: &Scene<'_>,
     ) {
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("jstream-render-composite-patches"),
-                color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            let size = (scene.canvas.width(), scene.canvas.height());
-            for patch in &self.patches {
-                let region = Region {
-                    x: patch.x,
-                    y: patch.y,
-                    width: patch.width,
-                    height: patch.height,
-                };
-                self.wipe.record(&mut pass, region, size, false);
-                pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
-                pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                let encoded = self.blending == Blending::Srgb;
-                let blends = if encoded {
-                    &self.encoded_blends
-                } else {
-                    &self.blends
-                };
-                for draw in &self.draws {
-                    if !draw.reach.is_some_and(|reach| reach.meets(*patch)) {
-                        continue;
-                    }
-                    // `changed` let no draw through that reads its backdrop.
-                    let Ok(Steps::Fixed(pipelines)) = blends.steps(draw.blend) else {
-                        continue;
-                    };
-                    let bind_group = match &draw.mips {
-                        Some(mips) => &mips.bind_group,
-                        None => scene.items[draw.index].image.bind_group(),
-                    };
-                    for pipeline in pipelines {
-                        pass.set_pipeline(pipeline);
-                        pass.set_bind_group(0, bind_group, &[]);
-                        pass.draw(
-                            draw.first_vertex..draw.first_vertex + draw.vertex_count,
-                            0..1,
+        let size = (scene.canvas.width(), scene.canvas.height());
+        let encoded = self.blending == Blending::Srgb;
+        let blends = if encoded {
+            &self.encoded_blends
+        } else {
+            &self.blends
+        };
+        let open = |encoder: &mut wgpu::CommandEncoder| {
+            encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("jstream-render-composite-patches"),
+                    color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                })
+                .forget_lifetime()
+        };
+        let mut pass = open(encoder);
+        for patch in &self.patches {
+            let region = Region {
+                x: patch.x,
+                y: patch.y,
+                width: patch.width,
+                height: patch.height,
+            };
+            self.wipe.record(&mut pass, region, size, false);
+            pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
+            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            for draw in &self.draws {
+                if !draw.reach.is_some_and(|reach| reach.meets(*patch)) {
+                    continue;
+                }
+                if draw.model {
+                    // A model's draw is recorded in passes of its own (ADR-0191), at
+                    // its place in the order. All it can reach is in this box, which
+                    // its own reach was joined into.
+                    if let Some(model) = scene.items[draw.index].model {
+                        drop(pass);
+                        self.models.record_prepared(
+                            &self.gpu,
+                            encoder,
+                            model,
+                            (view, wgpu::LoadOp::Load, encoded),
                         );
+                        pass = open(encoder);
+                        pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
+                        pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
                     }
+                    continue;
+                }
+                // `changed` let no draw through that reads its backdrop.
+                let Ok(Steps::Fixed(pipelines)) = blends.steps(draw.blend) else {
+                    continue;
+                };
+                let bind_group = match &draw.mips {
+                    Some(mips) => &mips.bind_group,
+                    None => scene.items[draw.index].image.bind_group(),
+                };
+                for pipeline in pipelines {
+                    pass.set_pipeline(pipeline);
+                    pass.set_bind_group(0, bind_group, &[]);
+                    pass.draw(
+                        draw.first_vertex..draw.first_vertex + draw.vertex_count,
+                        0..1,
+                    );
                 }
             }
         }
-        if self.blending == Blending::Srgb {
+        drop(pass);
+        if encoded {
             for patch in &self.patches {
                 self.record_decode(encoder, (view, texture), *patch);
             }

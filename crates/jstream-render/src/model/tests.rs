@@ -3397,9 +3397,10 @@ fn a_model_in_the_pass_is_refused_where_it_needs_its_layer() {
 }
 
 /// ADR-0191 with ADR-0194 and ADR-0201: a layer whose scene carries a model's draw is
-/// drawn whole each time, though its items, their images, their vertices and the box
+/// drawn again each time, though its items, their images, their vertices and the box
 /// they reach are what they were: what the model shows is in its draw, which no image
-/// of the scene holds.
+/// of the scene holds. Only the model's box is drawn again, with the cards under and
+/// over it there, and the layer is what a whole draw makes it, in either space.
 #[test]
 fn a_layer_that_carries_a_model_is_drawn_each_time() {
     let Some(mut opened) = open() else {
@@ -3409,46 +3410,83 @@ fn a_layer_that_carries_a_model_is_drawn_each_time() {
     let white = compositor
         .upload_rgba8(1, 1, &[255, 255, 255, 255])
         .expect("a pixel uploads");
+    let blue = compositor
+        .upload_rgba8(1, 1, &[0, 0, 255, 255])
+        .expect("a pixel uploads");
     let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
     let placed = boxed(80.0, 50.0, 40.0);
-    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
-    // The cube at rest, then turned half way round in the same box.
-    for (turn, face) in [(0.0, FRONT), (180.0, BACK)] {
-        let draw = ModelDraw {
-            model: &cube,
-            geometry: ItemGeometry {
-                turn_deg: finite(turn),
-                ..placed
-            },
-            camera: None,
-            lighting: Lighting::Unlit,
-            lights: None,
-            shadows: &[],
-            environment: None,
-            floor: None,
-            texture: None,
-            reflection: None,
-            probe: None,
-            materials: &[],
-        };
-        let prepared = compositor
-            .prepare_model(&draw, (WIDTH, HEIGHT), None, None)
-            .expect("the model is made ready")
-            .expect("nothing needs a layer");
-        // The same item both times: only the draw it carries differs.
-        let items = [Item {
-            model: Some(&prepared),
-            ..crate::tests::item(&white, Placement::Layer(placed), Crop::NONE, 1.0)
-        }];
-        let scene = Scene {
-            canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
-            background: Color::TRANSPARENT,
-            items: &items,
-        };
-        compositor
-            .render_into(&scene, &layer)
-            .expect("the layer draws");
-        let shown = read_layer(compositor, &layer);
-        assert_eq!(count(&shown, face), 1_600, "the face towards us at {turn}");
+    for blending in [Blending::Linear, Blending::Srgb] {
+        compositor.set_blending(blending);
+        let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        // The cube at rest, then turned half way round in the same box.
+        for (turn, face) in [(0.0, FRONT), (180.0, BACK)] {
+            let draw = ModelDraw {
+                model: &cube,
+                geometry: ItemGeometry {
+                    turn_deg: finite(turn),
+                    ..placed
+                },
+                camera: None,
+                lighting: Lighting::Unlit,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                texture: None,
+                reflection: None,
+                probe: None,
+                materials: &[],
+            };
+            let prepared = compositor
+                .prepare_model(&draw, (WIDTH, HEIGHT), None, None)
+                .expect("the model is made ready")
+                .expect("nothing needs a layer");
+            // The same items both times: only the draw the second carries differs. A
+            // card far from the model, one under its left edge and one, half opaque,
+            // over its right.
+            let card = |image, x, size, opacity| {
+                crate::tests::item(
+                    image,
+                    Placement::Geometry(boxed(x, 50.0, size)),
+                    Crop::NONE,
+                    opacity,
+                )
+            };
+            let items = [
+                card(&white, 15.0, 10.0, 1.0),
+                card(&blue, 60.0, 30.0, 1.0),
+                Item {
+                    model: Some(&prepared),
+                    ..crate::tests::item(&white, Placement::Layer(placed), Crop::NONE, 1.0)
+                },
+                card(&white, 100.0, 20.0, 0.5),
+            ];
+            let scene = Scene {
+                canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+                background: Color::TRANSPARENT,
+                items: &items,
+            };
+            compositor
+                .render_into(&scene, &layer)
+                .expect("the layer draws");
+            let patched = compositor.patched_texels();
+            let shown = read_layer(compositor, &layer);
+            let whole = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+            compositor
+                .render_into(&scene, &whole)
+                .expect("the layer draws");
+            let (far, at) = furthest(&shown, &read_layer(compositor, &whole));
+            assert_eq!(
+                far, 0,
+                "{blending:?} at {turn}: not a whole draw's at {at:?}"
+            );
+            assert!(count(&shown, face) > 600, "the face towards us at {turn}");
+            if turn > 0.0 {
+                assert!(
+                    (1_600..4_000).contains(&patched),
+                    "only the model's box is drawn again: {patched} texels"
+                );
+            }
+        }
     }
 }
