@@ -1882,6 +1882,16 @@ rotations), and the sky
 it cross-fades from for half a second after a warp starts, which `draw_sky_of` draws,
 still, into a `GpuKey::SkyLeaving` layer that `sky_layers` puts under the `GpuKey::Sky`
 one (`a_warp_aimed_ahead_cross_fades_the_backdrop_to_straight_ahead`).
+With arrival pictures
+([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
+planning puts the frames of the visible items of the light's `sky_pictures` scene in the
+shot (`Shot::sky_pictures`, by the light's source), and the state keeps the picture shown
+and where it is pinned (`Arrival`), none from a quarter warp up and another, at random,
+once the warp is still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
+`draw_sky_of` passes it to the backdrop, the upload loop takes each picture's average
+colour once per version (`note_picture_mean`, kept in `Chains::picture_means`), and
+`light_scene` adds a directional light from it in that colour (`arrival_light`,
+`an_arrival_picture_shows_ahead_and_lights_the_scene`).
 Its stars, star brightness, nebula, galaxy band and colours are drawn as those
 modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,

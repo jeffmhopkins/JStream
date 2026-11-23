@@ -698,6 +698,54 @@ pub(crate) struct SkyState {
     /// The cache frame that last drew the sky it cross-fades from, as a scene places
     /// its [`crate::snapshot::GpuKey::SkyLeaving`] layer only in the frame that drew it.
     pub(crate) left: Option<u64>,
+    /// The arrival picture it shows (ADR-0188), if any.
+    pub(crate) arrival: Option<Arrival>,
+    /// How many arrival pictures it has picked, which seeds the next pick.
+    pub(crate) arrivals: u32,
+    /// Which picture it showed last, so the next pick is another.
+    pub(crate) last_arrival: Option<u32>,
+}
+
+/// The arrival picture a backdrop shows (ADR-0188): which of its scene's pictures, and
+/// where it is pinned in the sky's layout.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Arrival {
+    /// Which picture, bottom first; read modulo how many there are now.
+    pub(crate) index: u32,
+    /// Its centre's direction in the sky's layout (x right, y down, z toward the viewer),
+    /// unit length: near straight ahead.
+    pub(crate) direction: [f64; 3],
+}
+
+/// How far from the sky's straight ahead an arrival picture is pinned, at most, in
+/// degrees across and up (ADR-0188): off centre, but in view as a warp ends.
+const ARRIVAL_SPREAD_DEG: [f64; 2] = [9.0, 6.0];
+
+/// The warp at and above which the deep sky, and an arrival picture, is gone (ADR-0167
+/// decision 5, `sky.wgsl`'s `deep`).
+const DEEP_GONE_AT: f32 = 0.25;
+
+/// A hash of `a` and `b`, spread over 32 bits.
+fn hash(a: u32, b: u32) -> u32 {
+    let mut x = a.wrapping_mul(0x9e37_79b9) ^ b.wrapping_add(0x7f4a_7c15).rotate_left(13);
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x85eb_ca6b);
+    x ^= x >> 13;
+    x = x.wrapping_mul(0xc2b2_ae35);
+    x ^ (x >> 16)
+}
+
+/// How much the deep sky, and an arrival picture, shows at `warp` while dropping by
+/// `dropping`, 0 to 1, as `sky.wgsl` fades it.
+pub(crate) fn deep_shown(warp: f32, dropping: f32) -> f32 {
+    let smooth = |a: f32, b: f32, x: f32| {
+        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let rising = 1.0 - smooth(0.0, DEEP_GONE_AT, warp);
+    let falling = 1.0 - smooth(0.15, 0.55, warp);
+    let dropping = dropping.clamp(0.0, 1.0);
+    rising + (falling - rising) * dropping
 }
 
 /// The sky a backdrop cross-fades from as a warp aimed ahead starts (ADR-0187): as it
@@ -711,6 +759,8 @@ pub(crate) struct LeavingSky {
     pub(crate) travel: f64,
     /// The media time the cross-fade began, in seconds.
     pub(crate) since: f64,
+    /// The arrival picture it showed (ADR-0188).
+    pub(crate) arrival: Option<Arrival>,
 }
 
 /// How long a backdrop takes to cross-fade to the sky a warp aimed ahead lays out, in
@@ -748,6 +798,7 @@ impl SkyState {
         at_s: f64,
         (target, ramp_s): (f32, f32),
         aiming: WarpAiming,
+        (pictures, seed): (usize, u32),
     ) {
         let still = self.warp <= 0.0;
         let first = self.stepped.is_none();
@@ -783,7 +834,49 @@ impl SkyState {
             ((self.warp - target) / 0.15).min(1.0)
         };
         self.aim_at(at_s, aiming, (still, first), shown);
+        self.arrive(pictures, seed);
         self.stepped = Some((frame, at_s));
+    }
+
+    /// Stops showing the arrival picture, remembering which it was.
+    fn drop_arrival(&mut self) {
+        if let Some(arrival) = self.arrival.take() {
+            self.last_arrival = Some(arrival.index);
+        }
+    }
+
+    /// Picks the arrival picture after a step (ADR-0188): of `pictures`, none while the
+    /// warp is past where the deep sky is gone, and a new one at random by `seed` once
+    /// none shows and the warp is still or dropping, pinned near straight ahead.
+    fn arrive(&mut self, pictures: usize, seed: u32) {
+        if pictures == 0 {
+            self.drop_arrival();
+            return;
+        }
+        if self.warp >= DEEP_GONE_AT {
+            self.drop_arrival();
+        }
+        if self.arrival.is_some() || (self.warp > 0.0 && self.dropping <= 0.0) {
+            return;
+        }
+        let count = u32::try_from(pictures).unwrap_or(u32::MAX);
+        let before = self.last_arrival;
+        self.arrivals = self.arrivals.wrapping_add(1);
+        let roll = hash(seed, self.arrivals);
+        let mut index = roll % count;
+        // Not the one it just left, when there is another.
+        if count > 1 && before.is_some_and(|before| before % count == index) {
+            index = (index + 1) % count;
+        }
+        let spread = |bits: u32, most: f64| {
+            (f64::from(bits & 0xffff) / 65535.0 * 2.0 - 1.0) * most.to_radians()
+        };
+        let across = spread(roll >> 8, ARRIVAL_SPREAD_DEG[0]);
+        let up = spread(hash(roll, seed), ARRIVAL_SPREAD_DEG[1]);
+        self.arrival = Some(Arrival {
+            index,
+            direction: [across.sin() * up.cos(), -up.sin(), -across.cos() * up.cos()],
+        });
     }
 
     /// Lays the sky out for the warp's aim after a step ([`Self::step`]): `still`
@@ -814,7 +907,10 @@ impl SkyState {
                 angles: shown,
                 travel: self.travel,
                 since: at_s,
+                arrival: self.arrival,
             });
+            // The picture it showed is left behind with the sky it was pinned in.
+            self.drop_arrival();
         } else if let (true, Some(aim)) = (self.warp > 0.0, self.aim) {
             // At warp: hold the travel within its limit, letting the slack go.
             let laid = multiply(&item, &aim);
@@ -905,6 +1001,9 @@ pub(crate) struct Chains {
     /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it, and how
     /// far its stars have travelled at warp.
     pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyState>>,
+    /// The average colour of each arrival picture (ADR-0188), straight sRGB, with the
+    /// version of the frame it was taken from: the colour its light shines in.
+    pub(crate) picture_means: BTreeMap<SourceId, (u64, [f32; 3])>,
     /// Each 3D scene's view depth (ADR-0143 decision 4), as its composite last drew it,
     /// with the frame of the chains' run that drew it: a scene's depth-reading filters
     /// read it only in that run. Kept, like a scene layer a filter reads, to tell when
@@ -4098,6 +4197,9 @@ mod tests {
                 warp_ramp_s: 0.0,
                 warp_aim: jstream_sources::WarpAim::Sky,
                 warp_look_deg: 10.0,
+                sky_pictures: None,
+                sky_picture_deg: 30.0,
+                sky_picture_light: 1.0,
             }),
         };
         let Some(tinted) = lit_centre(&graph, sky(None)) else {
@@ -4168,63 +4270,63 @@ mod tests {
     fn a_sky_travels_at_its_rate_once_a_frame() {
         let rate = jstream_render::SkyDraw::travel_rate;
         let mut sky = crate::chain::SkyState::default();
-        sky.step(1, 10.0, (1.0, 0.0), SKY_AIM);
+        sky.step(1, 10.0, (1.0, 0.0), SKY_AIM, (0, 0));
         assert_eq!(
             (sky.travel, sky.warp),
             (0.0, 1.0),
             "the first frame starts at its warp"
         );
-        sky.step(2, 10.5, (1.0, 0.0), SKY_AIM);
+        sky.step(2, 10.5, (1.0, 0.0), SKY_AIM, (0, 0));
         assert!((sky.travel - rate(1.0) * 0.5).abs() < 1e-9);
-        sky.step(2, 10.9, (1.0, 0.0), SKY_AIM);
+        sky.step(2, 10.9, (1.0, 0.0), SKY_AIM, (0, 0));
         assert!(
             (sky.travel - rate(1.0) * 0.5).abs() < 1e-9,
             "once per frame"
         );
         let before = sky.travel;
-        sky.step(3, 30.0, (0.0, 2.0), SKY_AIM);
+        sky.step(3, 30.0, (0.0, 2.0), SKY_AIM, (0, 0));
         assert_eq!(
             (sky.travel, sky.warp),
             (before, 0.0),
             "a jump moves nothing"
         );
         // Ramping from 0 toward 1 over 2 s: half a second in, the warp is a quarter.
-        sky.step(4, 30.5, (1.0, 2.0), SKY_AIM);
+        sky.step(4, 30.5, (1.0, 2.0), SKY_AIM, (0, 0));
         assert!((sky.warp - 0.25).abs() < 1e-6, "{}", sky.warp);
         let ramped = before + (rate(0.0) + rate(0.25)) * 0.5 * 0.5;
         assert!((sky.travel - ramped).abs() < 1e-6);
-        sky.step(5, 29.0, (1.0, 2.0), SKY_AIM);
+        sky.step(5, 29.0, (1.0, 2.0), SKY_AIM, (0, 0));
         assert!(
             (sky.travel - ramped).abs() < 1e-6,
             "back in time moves nothing"
         );
         // A held clock: frames at one time keep the warp where it is.
-        sky.step(50, 40.0, (0.0, 0.0), SKY_AIM);
-        sky.step(51, 40.0, (1.0, 2.0), SKY_AIM);
-        sky.step(52, 40.0, (1.0, 2.0), SKY_AIM);
+        sky.step(50, 40.0, (0.0, 0.0), SKY_AIM, (0, 0));
+        sky.step(51, 40.0, (1.0, 2.0), SKY_AIM, (0, 0));
+        sky.step(52, 40.0, (1.0, 2.0), SKY_AIM, (0, 0));
         assert_eq!(sky.warp, 0.0, "no time, no ramp and no jump");
-        sky.step(53, 40.5, (1.0, 2.0), SKY_AIM);
+        sky.step(53, 40.5, (1.0, 2.0), SKY_AIM, (0, 0));
         assert!((sky.warp - 0.25).abs() < 1e-6, "{}", sky.warp);
-        sky.step(5, 29.0, (1.0, 2.0), SKY_AIM);
+        sky.step(5, 29.0, (1.0, 2.0), SKY_AIM, (0, 0));
         assert_eq!(sky.dropping, 0.0, "at its setting, it isn't dropping");
         // Setting it lower: dropping until the warp gets there.
-        sky.step(6, 29.5, (0.0, 2.0), SKY_AIM);
+        sky.step(6, 29.5, (0.0, 2.0), SKY_AIM, (0, 0));
         assert!(
             sky.dropping == 1.0 && (sky.warp - 0.75).abs() < 1e-6,
             "{}",
             sky.warp
         );
-        sky.step(7, 30.5, (0.0, 2.0), SKY_AIM);
+        sky.step(7, 30.5, (0.0, 2.0), SKY_AIM, (0, 0));
         assert!((sky.warp - 0.25).abs() < 1e-6 && sky.dropping == 1.0);
-        sky.step(8, 31.0, (0.0, 2.0), SKY_AIM);
+        sky.step(8, 31.0, (0.0, 2.0), SKY_AIM, (0, 0));
         assert!(sky.warp == 0.0 && sky.dropping == 0.0, "it arrives");
         // Toward a cruise above 0 it eases out over the last 0.15.
-        sky.step(9, 31.5, (1.0, 0.0), SKY_AIM);
-        sky.step(10, 32.0, (0.1, 4.0), SKY_AIM);
+        sky.step(9, 31.5, (1.0, 0.0), SKY_AIM, (0, 0));
+        sky.step(10, 32.0, (0.1, 4.0), SKY_AIM, (0, 0));
         assert!((sky.dropping - 1.0).abs() < 1e-6);
-        sky.step(11, 33.0, (0.1, 4.0), SKY_AIM);
-        sky.step(12, 34.0, (0.1, 4.0), SKY_AIM);
-        sky.step(13, 34.9, (0.1, 4.0), SKY_AIM);
+        sky.step(11, 33.0, (0.1, 4.0), SKY_AIM, (0, 0));
+        sky.step(12, 34.0, (0.1, 4.0), SKY_AIM, (0, 0));
+        sky.step(13, 34.9, (0.1, 4.0), SKY_AIM, (0, 0));
         assert!(
             (sky.warp - 0.15).abs() < 1e-5 && (sky.dropping - 1.0 / 3.0).abs() < 1e-4,
             "{}",
@@ -4261,38 +4363,38 @@ mod tests {
         };
         let mut sky = crate::chain::SkyState::default();
         // Still, the sky is as its item turns it.
-        sky.step(1, 10.0, (0.0, 1.0), aimed(60.0));
+        sky.step(1, 10.0, (0.0, 1.0), aimed(60.0), (0, 0));
         assert!(sky.aim.is_none() && sky.leaving.is_none());
         assert!(close(sky.angles(aimed(60.0)), [60.0, 0.0, 0.0]));
         // The warp starts: the sky is laid out around straight ahead, fading in from
         // the one before.
-        sky.step(2, 10.1, (1.0, 1.0), aimed(60.0));
+        sky.step(2, 10.1, (1.0, 1.0), aimed(60.0), (0, 0));
         assert!(close(sky.angles(aimed(60.0)), [0.0; 3]), "travelling ahead");
         let leaving = sky.leaving.expect("cross-fading");
         assert!(close(leaving.angles, [60.0, 0.0, 0.0]));
         assert!((sky.faded_in(10.1 + AIM_FADE_S / 2.0) - 0.5).abs() < 1e-6);
         // A turn of 5 degrees swings the travel by 5; one of 40 by only 10.
-        sky.step(3, 10.2, (1.0, 1.0), aimed(65.0));
+        sky.step(3, 10.2, (1.0, 1.0), aimed(65.0), (0, 0));
         assert!(close(sky.angles(aimed(65.0)), [5.0, 0.0, 0.0]));
-        sky.step(4, 10.3, (1.0, 1.0), aimed(100.0));
+        sky.step(4, 10.3, (1.0, 1.0), aimed(100.0), (0, 0));
         assert!(close(sky.angles(aimed(100.0)), [10.0, 0.0, 0.0]));
         // The fade is over.
-        sky.step(5, 10.3 + AIM_FADE_S, (1.0, 1.0), aimed(100.0));
+        sky.step(5, 10.3 + AIM_FADE_S, (1.0, 1.0), aimed(100.0), (0, 0));
         assert!(sky.leaving.is_none());
         // Turning back moves it at once.
-        sky.step(6, 11.0, (1.0, 1.0), aimed(95.0));
+        sky.step(6, 11.0, (1.0, 1.0), aimed(95.0), (0, 0));
         assert!(close(sky.angles(aimed(95.0)), [5.0, 0.0, 0.0]));
         // Out of warp, the sky stays and a turn turns it from there.
-        sky.step(7, 11.5, (0.0, 0.0), aimed(95.0));
+        sky.step(7, 11.5, (0.0, 0.0), aimed(95.0), (0, 0));
         assert_eq!(sky.warp, 0.0);
         assert!(close(sky.angles(aimed(95.0)), [5.0, 0.0, 0.0]));
-        sky.step(8, 12.0, (0.0, 0.0), aimed(125.0));
+        sky.step(8, 12.0, (0.0, 0.0), aimed(125.0), (0, 0));
         assert!(
             close(sky.angles(aimed(125.0)), [35.0, 0.0, 0.0]),
             "no limit"
         );
         // Aimed at the sky again, the item turns it as before.
-        sky.step(9, 12.5, (0.0, 0.0), SKY_AIM);
+        sky.step(9, 12.5, (0.0, 0.0), SKY_AIM, (0, 0));
         assert!(sky.aim.is_none());
         // A first frame at warp lays it out at once, with nothing to fade from, however
         // the item is turned and tilted; a pitch past the limit is held to it too.
@@ -4301,9 +4403,9 @@ mod tests {
             ahead: Some(10.0),
         };
         let mut sky = crate::chain::SkyState::default();
-        sky.step(1, 10.0, (1.0, 1.0), pitched(20.0));
+        sky.step(1, 10.0, (1.0, 1.0), pitched(20.0), (0, 0));
         assert!(close(sky.angles(pitched(20.0)), [0.0; 3]) && sky.leaving.is_none());
-        sky.step(2, 10.1, (1.0, 1.0), pitched(50.0));
+        sky.step(2, 10.1, (1.0, 1.0), pitched(50.0), (0, 0));
         let held = crate::warp_aim::from_angles(sky.angles(pitched(50.0)));
         // The cosine of the travel's angle from straight ahead: `-z` turned, read on `-z`.
         let ahead = held[2][2];
@@ -4352,6 +4454,9 @@ mod tests {
                 warp_ramp_s: 0.0,
                 warp_aim: jstream_sources::WarpAim::Sky,
                 warp_look_deg: 10.0,
+                sky_pictures: None,
+                sky_picture_deg: 30.0,
+                sky_picture_light: 1.0,
             }),
         };
         let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");
@@ -4431,6 +4536,182 @@ mod tests {
         assert_eq!(switching[1], [255, 255, 255, 255], "{switching:?}");
     }
 
+    /// ADR-0188: a backdrop with arrival pictures shows one from its first frame, near
+    /// straight ahead; none once the warp is past where the deep sky is gone; and another
+    /// as the warp drops out. A warp aimed ahead leaves the one it showed with the sky it
+    /// cross-fades from.
+    #[test]
+    fn a_backdrop_arrives_at_another_picture_after_each_warp() {
+        let mut sky = crate::chain::SkyState::default();
+        sky.step(1, 10.0, (0.0, 1.0), SKY_AIM, (3, 7));
+        let first = sky.arrival.expect("a picture from the start");
+        assert!(first.index < 3);
+        let ahead = -first.direction[2];
+        assert!(ahead > 9.0_f64.to_radians().cos() * 6.0_f64.to_radians().cos() - 1e-9);
+        // Into warp: it stays until the deep sky is gone, then none.
+        sky.step(2, 10.1, (1.0, 1.0), SKY_AIM, (3, 7));
+        assert_eq!(sky.arrival, Some(first), "still there at a little warp");
+        sky.step(3, 10.5, (1.0, 1.0), SKY_AIM, (3, 7));
+        assert!(sky.arrival.is_none(), "gone at warp {}", sky.warp);
+        sky.step(4, 11.5, (1.0, 1.0), SKY_AIM, (3, 7));
+        assert!(sky.arrival.is_none(), "none at full warp");
+        // Dropping out: another picture, not the one it left.
+        sky.step(5, 11.6, (0.0, 1.0), SKY_AIM, (3, 7));
+        let next = sky.arrival.expect("a new picture as it drops");
+        assert_ne!(next.index, first.index);
+        // Without pictures, none.
+        sky.step(6, 11.7, (0.0, 1.0), SKY_AIM, (0, 7));
+        assert!(sky.arrival.is_none());
+        // Aimed ahead, the picture goes with the sky it cross-fades from.
+        let aimed = crate::chain::WarpAiming {
+            angles: [40.0, 0.0, 0.0],
+            ahead: Some(10.0),
+        };
+        let mut sky = crate::chain::SkyState::default();
+        sky.step(1, 10.0, (0.0, 1.0), aimed, (2, 7));
+        let shown = sky.arrival.expect("a picture");
+        sky.step(2, 10.1, (1.0, 1.0), aimed, (2, 7));
+        assert!(sky.arrival.is_none(), "not in the sky laid out ahead");
+        assert_eq!(sky.leaving.and_then(|leaving| leaving.arrival), Some(shown));
+        // The shown amount follows the warp as the shader's does.
+        assert!((crate::chain::deep_shown(0.0, 0.0) - 1.0).abs() < 1e-6);
+        assert!(crate::chain::deep_shown(0.25, 0.0).abs() < 1e-6);
+        assert!(crate::chain::deep_shown(0.3, 1.0) > 0.0);
+    }
+
+    /// ADR-0188: an environment backdrop shows its arrival picture ahead, over the sky,
+    /// and lights the scene from there in the picture's colour.
+    #[test]
+    fn an_arrival_picture_shows_ahead_and_lights_the_scene() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut graph = placed(&[("cam", (4.0, 4.0), (2.0, 2.0), 0.0)]);
+        let main = SceneId::new("main");
+        let arrivals = SceneId::new("arrivals");
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetCamera {
+                    scene_id: main.clone(),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+                Edit::SceneCreate {
+                    scene_id: arrivals.clone(),
+                    name: "Arrivals".into(),
+                    role: None,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("planet"),
+                    name: "planet".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: arrivals.clone(),
+                    item_id: ItemId::new("planet"),
+                    source_id: SourceId::new("planet"),
+                    transform: None,
+                    geometry: None,
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let sky = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Environment,
+            color: [1.0; 3],
+            intensity: 1.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
+            environment: Some(jstream_sources::ShownEnvironment {
+                sky: [0.0; 3],
+                horizon: [0.0; 3],
+                ground: [0.0; 3],
+                image: None,
+                backdrop: true,
+                stars: 0.0,
+                star_brightness: 1.0,
+                nebula: 0.0,
+                nebula_colors: [[0.0; 3]; 2],
+                galaxy: 0.0,
+                sky_seed: 0,
+                warp: 0.0,
+                warp_ramp_s: 1.0,
+                warp_aim: jstream_sources::WarpAim::Sky,
+                warp_look_deg: 10.0,
+                sky_pictures: Some(arrivals.clone()),
+                sky_picture_deg: 60.0,
+                sky_picture_light: 2.0,
+            }),
+        };
+        let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");
+        let red = Frame::new(4, 4, &[255, 0, 0, 255].repeat(16), 4).expect("invariant: 4x4 RGBA8");
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(sky));
+        let shot = snapshot::plan_with(
+            &graph,
+            Some(&main),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    match id.as_str() {
+                        "cam" => white.clone(),
+                        "planet" => red.clone(),
+                        _ => lamp.clone(),
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        assert_eq!(
+            shot.sky_pictures.get(&SourceId::new("logo")),
+            Some(&vec![SourceId::new("planet")]),
+            "the light's arrival pictures are planned"
+        );
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let centre = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&shot, &LiveParams::default()),
+            &[(CANVAS.0 / 2, CANVAS.1 / 2)],
+        )[0];
+        assert!(
+            centre[0] > 200 && centre[1] < 30 && centre[2] < 30,
+            "the picture ahead: {centre:?}"
+        );
+        let light = snapshot::arrival_light(
+            (&shot, &cache, &chains),
+            &main,
+            MediaTime::zero(Timebase::MILLIS),
+            &LiveParams::default(),
+        )
+        .expect("it lights the scene");
+        assert_eq!(light.kind, jstream_render::LightKind::Directional);
+        assert!((light.intensity - 2.0).abs() < 1e-6);
+        assert!(
+            light.color.r > 0.99 && light.color.g < 0.01,
+            "{:?}",
+            light.color
+        );
+        // It shines from ahead, back toward the viewer.
+        assert!(light.aim[2] > 0.9, "{:?}", light.aim);
+    }
+
     /// ADR-0187: as a warp aimed ahead starts, the backdrop cross-fades from the sky its
     /// item turned to one laid out around straight ahead: an item tilted to show the
     /// sky's zenith ahead shows its horizon ahead once the fade is over, and a mix of
@@ -4492,6 +4773,9 @@ mod tests {
                 warp_ramp_s: 10.0,
                 warp_aim: jstream_sources::WarpAim::Ahead,
                 warp_look_deg: 10.0,
+                sky_pictures: None,
+                sky_picture_deg: 30.0,
+                sky_picture_light: 1.0,
             }),
         };
         let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");

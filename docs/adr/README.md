@@ -199,4 +199,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0184](0184-sequences-lanes-and-triggers.md) | Sequences: lanes on timelines, and what starts them | accepted | agent |  |
 | [ADR-0185](0185-how-reflections-landed-off-by-default.md) | How reflection probes and screen-space reflections landed, off by default | accepted | agent |  |
 | [ADR-0187](0187-a-warp-can-travel-straight-ahead.md) | A backdrop's warp can travel straight ahead of the scene, wherever its sky is turned | accepted | agent |  |
+| [ADR-0188](0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md) | A backdrop arrives at a picture pinned in its sky after each warp, which lights the scene | accepted | agent |  |
 <!-- @generated end adr-index -->

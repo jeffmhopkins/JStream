@@ -9,8 +9,8 @@ use crate::source::setting;
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_protocol::{
-    EnumOption, KindDescriptor, Media, ParamDescriptor, ParamType, Reference, Settings, SourceId,
-    VisibleIf,
+    EnumOption, KindDescriptor, Media, ParamDescriptor, ParamType, Reference, SceneId, Settings,
+    SourceId, VisibleIf,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -36,6 +36,12 @@ const MAX_WARP_RAMP_S: f64 = 10.0;
 /// The widest a backdrop's warp aimed ahead lets its direction of travel turn from
 /// straight ahead, in degrees (ADR-0187).
 const MAX_WARP_LOOK_DEG: f64 = 180.0;
+
+/// The widest a backdrop's arrival picture is across the sky, in degrees (ADR-0188).
+const MAX_SKY_PICTURE_DEG: f64 = 120.0;
+
+/// The most an arrival picture lights the scene, before the light's intensity.
+const MAX_SKY_PICTURE_LIGHT: f64 = 8.0;
 
 /// Where a backdrop's warp travels toward (ADR-0187).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -143,6 +149,13 @@ pub struct ShownEnvironment {
     /// With the warp aimed ahead, how far its direction of travel may turn from straight
     /// ahead while at warp, in degrees, 0 to 180.
     pub warp_look_deg: f32,
+    /// The scene whose items are the pictures the backdrop arrives at, one at a time,
+    /// pinned in its sky (ADR-0188).
+    pub sky_pictures: Option<SceneId>,
+    /// How wide an arrival picture is across the sky, in degrees, 1 to 120.
+    pub sky_picture_deg: f32,
+    /// How much an arrival picture lights the scene, 0 to 8, in its average colour.
+    pub sky_picture_light: f32,
 }
 
 /// The `light` kind.
@@ -406,6 +419,34 @@ impl LightKind {
                      past that it turns no further, and turning back moves it at once. \
                      Rolling about the travel is free.",
                 )),
+                sky(p(
+                    "sky_pictures",
+                    "Arrival pictures",
+                    ParamType::Scene,
+                    json!(null),
+                    "A scene whose items are pictures the backdrop arrives at: a planet, a \
+                     nebula, anything flat. It shows one of them at a time, pinned in the \
+                     sky infinitely far away, and each warp picks another at random and \
+                     places it near where the warp ends, so it is in view as the warp \
+                     drops out. Each picture keeps its own shape; transparent parts show \
+                     the sky.",
+                )),
+                sky(p(
+                    "sky_picture_deg",
+                    "Arrival picture size",
+                    number(1.0, MAX_SKY_PICTURE_DEG, 1.0, Some("deg")),
+                    json!(30.0),
+                    "How wide an arrival picture is across the sky.",
+                )),
+                sky(p(
+                    "sky_picture_light",
+                    "Arrival picture light",
+                    number(0.0, MAX_SKY_PICTURE_LIGHT, 0.05, None),
+                    json!(1.0),
+                    "How much the arrival picture in view lights the scene, as a light \
+                     shining from it in its average colour, before the intensity; 0 \
+                     lights nothing.",
+                )),
             ],
             ..kind("light", "Light", true, false)
         })
@@ -604,6 +645,30 @@ fn environment(settings: &Settings) -> Result<ShownEnvironment, SourceError> {
                 })?,
         },
         warp_look_deg: number("warp_look_deg", MAX_WARP_LOOK_DEG as f32, 10.0)?,
+        sky_pictures: match settings.get("sky_pictures") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(value) => match Reference::from_value(value) {
+                Some(Reference::Scene { scene_id }) => Some(scene_id),
+                _ => {
+                    return Err(SourceError::Setting {
+                        param: "sky_pictures".into(),
+                        reason: "must be a scene reference, or null".into(),
+                    });
+                }
+            },
+        },
+        sky_picture_deg: match settings.get("sky_picture_deg") {
+            None => 30.0,
+            Some(value) => value
+                .as_f64()
+                .filter(|v| (1.0..=MAX_SKY_PICTURE_DEG).contains(v))
+                .map(|v| v as f32)
+                .ok_or_else(|| SourceError::Setting {
+                    param: "sky_picture_deg".into(),
+                    reason: format!("must be a number from 1 to {MAX_SKY_PICTURE_DEG}"),
+                })?,
+        },
+        sky_picture_light: number("sky_picture_light", MAX_SKY_PICTURE_LIGHT as f32, 1.0)?,
     })
 }
 

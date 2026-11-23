@@ -1402,7 +1402,9 @@ each pixel's ray from the camera, ignoring its position, into the gradient or pa
 oriented by the light's item's turn, tilt and rotation
 ([ADR-0182](adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), or laid out anew around
 the scene's straight ahead as a warp aimed there starts, cross-fading for half a second
-from the sky before ([ADR-0187](adr/0187-a-warp-can-travel-straight-ahead.md)),
+from the sky before ([ADR-0187](adr/0187-a-warp-can-travel-straight-ahead.md)), and
+showing a flat picture pinned near its straight ahead that changes as each warp ends
+([ADR-0188](adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
 with nebulae and a galaxy band baked once per seed into cube maps
 ([ADR-0174](adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md))
 and procedural stars laid out about the direction of travel,

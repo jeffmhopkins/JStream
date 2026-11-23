@@ -391,6 +391,9 @@ mod tests {
             warp_ramp_s: 1.0,
             warp_aim: jstream_sources::WarpAim::Sky,
             warp_look_deg: 10.0,
+            sky_pictures: None,
+            sky_picture_deg: 30.0,
+            sky_picture_light: 1.0,
         }
     }
 

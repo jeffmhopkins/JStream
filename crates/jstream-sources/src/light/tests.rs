@@ -213,6 +213,9 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
         "warp_ramp_s": 3.0,
         "warp_aim": "ahead",
         "warp_look_deg": 25.0,
+        "sky_pictures": {"type": "scene", "scene_id": "arrivals"},
+        "sky_picture_deg": 45.0,
+        "sky_picture_light": 2.0,
     }))
     .light()
     .and_then(|light| light.environment)
@@ -226,6 +229,13 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
     // ADR-0187: the warp's aim and how far it may look.
     assert_eq!(sky.warp_aim, crate::WarpAim::Ahead);
     assert!((sky.warp_look_deg - 25.0).abs() < 1e-6);
+    // ADR-0188: the arrival pictures.
+    assert_eq!(
+        sky.sky_pictures,
+        Some(jstream_protocol::SceneId::new("arrivals"))
+    );
+    assert!((sky.sky_picture_deg - 45.0).abs() < 1e-6);
+    assert!((sky.sky_picture_light - 2.0).abs() < 1e-6);
     let mut older = settings(json!({"type": "environment"}));
     for id in [
         "nebula",
@@ -237,6 +247,9 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
         "warp_ramp_s",
         "warp_aim",
         "warp_look_deg",
+        "sky_pictures",
+        "sky_picture_deg",
+        "sky_picture_light",
     ] {
         older.0.remove(id);
     }
@@ -253,6 +266,10 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
     assert!((sky.warp_ramp_s - 1.5).abs() < 1e-6);
     assert_eq!(sky.warp_aim, crate::WarpAim::Sky);
     assert!((sky.warp_look_deg - 10.0).abs() < 1e-6);
+    assert_eq!(sky.sky_pictures, None);
+    assert!(
+        (sky.sky_picture_deg - 30.0).abs() < 1e-6 && (sky.sky_picture_light - 1.0).abs() < 1e-6
+    );
     assert_eq!(
         sky.nebula_colors[1],
         [36.0 / 255.0, 113.0 / 255.0, 168.0 / 255.0]
@@ -262,6 +279,9 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
         json!({"type": "environment", "warp_ramp_s": 11.0}),
         json!({"type": "environment", "warp_aim": "nose"}),
         json!({"type": "environment", "warp_look_deg": 181.0}),
+        json!({"type": "environment", "sky_pictures": {"type": "source", "source_id": "a"}}),
+        json!({"type": "environment", "sky_picture_deg": 0.5}),
+        json!({"type": "environment", "sky_picture_light": 9.0}),
         json!({"type": "environment", "sky_seed": 10000}),
         json!({"type": "environment", "sky_seed": 1.5}),
         json!({"type": "environment", "nebula_color": "violet"}),

@@ -310,6 +310,11 @@ by turning its sky (the light's item or its 3D groups), `warp_aim: \"ahead\"` ma
 warp travel along the scene's straight ahead (-z) wherever the sky was turned when it \
 starts (the backdrop cross-fades to a sky laid out around that way and keeps it after), \
 and `warp_look_deg` (default 10) is how far turning can swing the travel while at warp. \
+To arrive somewhere after each warp, put flat pictures (a planet, a nebula; transparent \
+around them) as items of a scene of their own and name it in the light's `sky_pictures`: \
+the backdrop shows one, pinned in the sky near straight ahead, picks another at random as \
+each warp drops out, and lights the scene from it in its colour (`sky_picture_deg`, \
+default 30, sets its width; `sky_picture_light`, default 1, how much it lights). \
 A flat photo stretched as a panorama smears toward \
 the top and bottom, so prefer a real panorama or the procedural sky. \
 A group placed in a 3D scene is one flat card unless it shares the space: \
