@@ -3257,12 +3257,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "pan",
-          "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.164, ADR-0176): its target swings about its position.",
+          "description": "The view turned about the vertical through the camera, to the right, in degrees\n(since 0.167, ADR-0176): its target swings about its position.",
           "type": "string"
         },
         {
           "const": "tilt",
-          "description": "The view turned up, in degrees (since 0.164, ADR-0176): its target swings about\nits position, held within 89° of level.",
+          "description": "The view turned up, in degrees (since 0.167, ADR-0176): its target swings about\nits position, held within 89° of level.",
+          "type": "string"
+        },
+        {
+          "const": "autofocus",
+          "description": "Whether the camera autofocuses (since 0.167, ADR-0176 decision 5): added to 1\nwhen the camera's `autofocus` is on and 0 when off, and on while the sum is at\nleast one half. A `midi` modifier from 0 to 1 turns it on with a button or a\nfader past its middle; from 0 to -1 turns it off.",
           "type": "string"
         }
       ]
@@ -5843,7 +5848,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "motion": {
               "default": [],
-              "description": "The new list, at most 8. Empty removes every modifier.",
+              "description": "The new list, at most 32. Empty removes every modifier.",
               "items": {
                 "$ref": "#/$defs/CameraMotionModifier"
               },
@@ -14725,6 +14730,10 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SceneCamera": {
       "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
       "properties": {
+        "autofocus": {
+          "description": "Whether the focus follows whatever is at the centre of the frame (since 0.167,\nADR-0176 decision 5): with a depth of field, each frame the engine measures the\nnearest item the viewing axis meets and glides `focus_px` there, holding the last\ndistance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it\nfocuses. Default `false`, which isn't written.",
+          "type": "boolean"
+        },
         "blur_px": {
           "$ref": "#/$defs/Finite32",
           "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
@@ -16861,5 +16870,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.164"
+  "title": "JStream protocol 0.167"
 }

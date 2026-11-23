@@ -903,7 +903,7 @@ pub enum Edit {
     SceneSetCameraMotion {
         /// The scene to change.
         scene_id: SceneId,
-        /// The new list, at most 8. Empty removes every modifier.
+        /// The new list, at most 32. Empty removes every modifier.
         #[serde(default)]
         motion: Vec<CameraMotionModifier>,
     },

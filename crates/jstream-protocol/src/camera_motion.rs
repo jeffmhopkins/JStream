@@ -4,7 +4,7 @@
 //! A scene with a camera may also hold `camera_motion`, at most [`MAX_MOTION_MODIFIERS`]
 //! [`CameraMotionModifier`]s, which change the camera continuously as it is drawn with the
 //! same kinds and clocks as an item's ([`MotionKind`], [`MotionClock`]), less `audio`,
-//! since a camera hears nothing. Since 0.164 a camera's modifiers may be `midi`
+//! since a camera hears nothing. Since 0.167 a camera's modifiers may be `midi`
 //! (ADR-0168) or `data` (ADR-0171), so a controller or a DAW's live data drives its
 //! position, aim, pan, tilt, roll and field of view through the same follower an item's
 //! use (ADR-0176). It may also hold
@@ -57,11 +57,16 @@ pub enum CameraProperty {
     /// The blur far from focus, in canvas pixels; only a camera with a focus shows it.
     Blur,
     /// The view turned about the vertical through the camera, to the right, in degrees
-    /// (since 0.164, ADR-0176): its target swings about its position.
+    /// (since 0.167, ADR-0176): its target swings about its position.
     Pan,
-    /// The view turned up, in degrees (since 0.164, ADR-0176): its target swings about
+    /// The view turned up, in degrees (since 0.167, ADR-0176): its target swings about
     /// its position, held within 89° of level.
     Tilt,
+    /// Whether the camera autofocuses (since 0.167, ADR-0176 decision 5): added to 1
+    /// when the camera's `autofocus` is on and 0 when off, and on while the sum is at
+    /// least one half. A `midi` modifier from 0 to 1 turns it on with a button or a
+    /// fader past its middle; from 0 to -1 turns it off.
+    Autofocus,
     /// A property this version of the protocol doesn't know, from a newer server. Never
     /// sent; an edit carrying one is refused, and a stored one draws as still.
     #[serde(other)]
@@ -71,7 +76,7 @@ pub enum CameraProperty {
 
 impl CameraProperty {
     /// Every property, in the order above.
-    pub const ALL: [CameraProperty; 12] = [
+    pub const ALL: [CameraProperty; 13] = [
         CameraProperty::PositionX,
         CameraProperty::PositionY,
         CameraProperty::PositionZ,
@@ -84,6 +89,7 @@ impl CameraProperty {
         CameraProperty::Blur,
         CameraProperty::Pan,
         CameraProperty::Tilt,
+        CameraProperty::Autofocus,
     ];
 }
 
@@ -115,11 +121,11 @@ fn is_true(value: &bool) -> bool {
     *value
 }
 
-/// Whether a camera's motion list may be stored: at most 8 modifiers, unique well-formed
+/// Whether a camera's motion list may be stored: at most 32 modifiers, unique well-formed
 /// IDs, known properties, kinds and clocks, and each kind's parameters in range, as
 /// [`check_motion`] checks an item's. An `audio` modifier is refused: a camera hears
 /// nothing, so it would only ever sit at its `from` (ADR-0100). A `midi` or `data` one
-/// is taken since 0.164 (ADR-0176).
+/// is taken since 0.167 (ADR-0176).
 ///
 /// # Errors
 /// The first problem, naming its field (`motion` or `motion.N.<param>`).
@@ -127,7 +133,7 @@ pub fn check_camera_motion(motion: &[CameraMotionModifier]) -> Result<(), Motion
     if motion.len() > MAX_MOTION_MODIFIERS {
         return Err(MotionProblem {
             field: "motion".into(),
-            reason: "a camera holds at most 8 motion modifiers".into(),
+            reason: "a camera holds at most 32 motion modifiers".into(),
         });
     }
     if let Some(n) = motion
@@ -467,15 +473,19 @@ mod tests {
         assert_eq!(field_of(&[]), None);
         let all: Vec<_> = CameraProperty::ALL
             .iter()
-            .take(8)
             .enumerate()
             .map(|(n, p)| drift(&format!("m{n}"), *p))
             .collect();
         assert_eq!(field_of(&all), None);
-        let nine: Vec<_> = (0..9)
+        // 32 since 0.167 (ADR-0176 decision 6): a controller on every property and more.
+        let full: Vec<_> = (0..MAX_MOTION_MODIFIERS)
             .map(|n| drift(&format!("m{n}"), CameraProperty::Roll))
             .collect();
-        assert_eq!(field_of(&nine).as_deref(), Some("motion"));
+        assert_eq!(field_of(&full), None);
+        let over: Vec<_> = (0..=MAX_MOTION_MODIFIERS)
+            .map(|n| drift(&format!("m{n}"), CameraProperty::Roll))
+            .collect();
+        assert_eq!(field_of(&over).as_deref(), Some("motion"));
         assert_eq!(
             field_of(&[
                 drift("a", CameraProperty::Fov),
@@ -500,7 +510,7 @@ mod tests {
             field_of(&[drift("a", CameraProperty::Fov), heard]).as_deref(),
             Some("motion.1.kind")
         );
-        // A MIDI one follows a controller there since 0.164 (ADR-0176), and a data one
+        // A MIDI one follows a controller there since 0.167 (ADR-0176), and a data one
         // live data; each is checked as an item's is.
         let fader: CameraMotionModifier = serde_json::from_value(serde_json::json!({
             "modifier_id": "fader", "property": "fov", "kind": "midi", "controller": 1,

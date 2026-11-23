@@ -1577,6 +1577,18 @@ impl Shot {
         )
     }
 
+    /// What autofocus measures for scene family `family`'s `camera` at `at` (ADR-0176
+    /// decision 5), for tests.
+    #[cfg(test)]
+    pub(crate) fn centre_distance(
+        &self,
+        family: &SceneId,
+        camera: SceneCamera,
+        at: MediaTime,
+    ) -> Option<f64> {
+        centre_distance(self, family, camera, at)
+    }
+
     /// The running transition's tracks sampled `elapsed_ms` into it at `at`, with their
     /// motion (ADR-0099), in drawing order, or `None` without one, for tests.
     #[cfg(test)]
@@ -7166,6 +7178,7 @@ fn light_camera(
         depth_sort: false,
         focus_px: None,
         blur_px: jstream_protocol::Finite32::ZERO,
+        autofocus: false,
     };
     camera.validate().ok().map(|()| camera)
 }
@@ -7789,8 +7802,7 @@ fn moved_camera(
             shot.canvas,
             captures,
             &mut chains.cameras(),
-            live.zooms(&moves.family),
-            shot.audio(),
+            (live.zooms(&moves.family), shot.audio()),
         ),
         None => base,
     };
@@ -7800,12 +7812,57 @@ fn moved_camera(
     };
     // A camera that rides with a 3D group is turned and moved inside it, then placed
     // through the group as it is now (ADR-0164 §5).
-    Some(
-        match planned.and_then(|planned| planned.anchor.as_deref()) {
-            Some(anchor) => groups::place_camera_at(anchor, aimed, shot, at, live),
-            None => aimed,
-        },
-    )
+    let placed = match planned.and_then(|planned| planned.anchor.as_deref()) {
+        Some(anchor) => groups::place_camera_at(anchor, aimed, shot, at, live),
+        None => aimed,
+    };
+    // Then it focuses on what is at the frame's centre, when it autofocuses (ADR-0176
+    // decision 5): measured once per frame time, however many items draw through it.
+    Some(match planned {
+        Some(planned) if placed.autofocus => {
+            chains.cameras().autofocus(&planned.family, placed, at, || {
+                centre_distance(shot, &planned.family, placed, at)
+            })
+        }
+        _ => placed,
+    })
+}
+
+/// How far along `camera`'s viewing axis the nearest item that the passes of scene family
+/// `family` draw meets it, at `at` with each item's motion: what autofocus focuses on
+/// (ADR-0176 decision 5). An item placed through a 3D group, or with no opacity left, is
+/// passed over; a model is met at its box. `None` when the axis meets none.
+fn centre_distance(
+    shot: &Shot,
+    family: &SceneId,
+    camera: SceneCamera,
+    at: MediaTime,
+) -> Option<f64> {
+    let view = camera.view(shot.canvas).ok()?;
+    let (origin, forward) = (view.position(), view.axes()[2]);
+    let mut nearest: Option<f64> = None;
+    for pass in &shot.passes {
+        if pass.camera.as_ref().is_none_or(|c| c.family != *family) {
+            continue;
+        }
+        for layer in pass.layers.iter().filter(|layer| layer.groups.is_none()) {
+            let (item, modifiers) = &layer.motion.to;
+            let by = shot.motion_at(item, modifiers, at);
+            let (placement, _, opacity) =
+                motion::apply(&by, layer.placement, layer.crop, layer.opacity);
+            let (Placement::Geometry(geometry) | Placement::Layer(geometry)) = placement else {
+                continue;
+            };
+            if opacity <= 0.0 {
+                continue;
+            }
+            if let Some(t) = crate::follow::ray_meets(origin, forward, geometry.corners_in_scene())
+            {
+                nearest = Some(nearest.map_or(t, |n| n.min(t)));
+            }
+        }
+    }
+    nearest
 }
 
 /// Where a transition track of `image` is placed at `geometry`: a model's layer
@@ -7990,13 +8047,17 @@ fn moving_cameras(
                 shot.canvas,
                 captures,
                 &mut chains.cameras(),
-                live.zooms(&moves.family),
-                shot.audio(),
+                (live.zooms(&moves.family), shot.audio()),
             ),
             None => camera,
         };
         Some(match family {
-            Some(family) => live.aimed(family, camera, at),
+            // An autofocus holds what it last measured through a Move (ADR-0176
+            // decision 5): the tracks aren't a pass's items.
+            Some(family) => {
+                let aimed = live.aimed(family, camera, at);
+                chains.cameras().autofocus(family, aimed, at, || None)
+            }
             None => camera,
         })
     };

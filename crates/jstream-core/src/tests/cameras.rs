@@ -192,6 +192,76 @@ fn a_controller_drives_a_scene_camera() {
     assert_eq!(shot.audio().camera_level(&family, "zoom"), Some(1.0));
 }
 
+/// ADR-0176 decision 5: autofocus measures the item at the frame's centre, through the
+/// camera as it is, and nothing when the camera looks away from it.
+#[test]
+fn autofocus_measures_the_item_at_the_centre() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut setup = scenes();
+    setup.push(Edit::SourceCreate {
+        source_id: SourceId::new("card"),
+        name: "Card".into(),
+        kind: SourceKind::Builtin {
+            kind: "color".into(),
+        },
+        settings: jstream_protocol::Settings(
+            [
+                ("color".to_owned(), serde_json::json!("#ff0000ff")),
+                ("width".to_owned(), serde_json::json!(400)),
+                ("height".to_owned(), serde_json::json!(300)),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        duplicated_from: None,
+    });
+    setup.push(Edit::ItemAdd {
+        scene_id: SceneId::new("a"),
+        item_id: ItemId::new("card"),
+        source_id: SourceId::new("card"),
+        transform: None,
+        geometry: Some(
+            ItemGeometry::try_new(
+                Vec2::new(960.0, 540.0).expect("finite"),
+                Size::try_new(400.0, 300.0).expect("size"),
+            )
+            .expect("geometry"),
+        ),
+        opacity: None,
+        blend: None,
+    });
+    batch(&control, edits(setup)).expect("scenes");
+    block_on(control.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    }))
+    .expect("on program");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let snapshot = hub.load();
+    let shot = snapshot.shot();
+    let family = SceneId::new("a");
+    let at = jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS);
+    let met = shot
+        .centre_distance(&family, framing, at)
+        .expect("the screen is at the centre");
+    assert!(
+        (met - f64::from(framing.target_distance())).abs() < 0.5,
+        "{met}"
+    );
+    let away = SceneCamera {
+        target: jstream_protocol::Vec3::new(5000.0, 540.0, 0.0).expect("finite"),
+        ..framing
+    };
+    assert_eq!(shot.centre_distance(&family, away, at), None);
+    assert_eq!(shot.centre_distance(&SceneId::new("b"), framing, at), None);
+}
+
 /// ADR-0120: a Follow pointer filter on a capture in a 2D scene supplies the scene's
 /// camera and moves it every frame; turned off, the scene is still and 2D again.
 #[test]

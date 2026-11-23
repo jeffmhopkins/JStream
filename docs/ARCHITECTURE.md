@@ -239,7 +239,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   overrides it, and a keyframe of a 2D scene may have a camera of its own, which a Move
   into it reaches from the framing camera
   ([ADR-0128](adr/0128-moves-between-2d-and-3d-glide.md)). `motion` is the item's
-  ordered list of at most 8 motion modifiers
+  ordered list of at most 32 motion modifiers
   ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)), which the engine
   evaluates per frame on top of the stored values and never writes back. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,

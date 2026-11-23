@@ -656,7 +656,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   kind's fields, when its time starts (in step, when shown, or when fired; not for
   audio, MIDI or data), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
-  and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
+  and "+ Add motion" up to 32; each change sends `item.set_motion` with the whole list,
   in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
   (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
   picking a placement property for it drops its effect target; the section doesn't add
@@ -814,7 +814,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   an override that starts from the parent's camera, or from the framing camera when the
   parent is 2D (`camera_start`, [ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)). A note warns when items already have depth or angles
   (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
-  on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
+  on the camera's target with a 6 px blur and autofocus on, and shows an Autofocus check
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)),
+  Focus distance and Aperture (blur), and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   With a camera on, a scene's own dialog shows `CameraMoves`

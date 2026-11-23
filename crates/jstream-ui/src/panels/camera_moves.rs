@@ -36,6 +36,7 @@ pub fn property_name(property: CameraProperty) -> &'static str {
         CameraProperty::Blur => "Blur",
         CameraProperty::Pan => "Pan",
         CameraProperty::Tilt => "Tilt",
+        CameraProperty::Autofocus => "Autofocus",
         // One from a newer engine: shown, but not offered.
         _ => "Other",
     }
@@ -46,6 +47,8 @@ fn unit(property: CameraProperty) -> &'static str {
         CameraProperty::Fov | CameraProperty::Roll | CameraProperty::Pan | CameraProperty::Tilt => {
             "°"
         }
+        // On at one half or more.
+        CameraProperty::Autofocus => "",
         _ => "px",
     }
 }
@@ -66,6 +69,8 @@ pub fn camera_kind(name: &str, property: CameraProperty, size: f32) -> Option<Mo
         let to = match property {
             // A zoom in: the field of view narrows.
             CameraProperty::Fov => -20.0,
+            // A button or a fader past its middle turns autofocus on.
+            CameraProperty::Autofocus => 1.0,
             _ if unit(property) == "°" => 45.0,
             _ => 200.0,
         };

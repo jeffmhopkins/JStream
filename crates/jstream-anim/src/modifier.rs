@@ -7,8 +7,9 @@
 use crate::audio::Audio;
 use crate::midi::Midi;
 
-/// The most modifiers one item holds (ADR-0099 decision 5).
-pub const MAX_MODIFIERS: usize = 8;
+/// The most modifiers one item holds (ADR-0099 decision 5, raised to 32 by ADR-0176
+/// decision 6).
+pub const MAX_MODIFIERS: usize = 32;
 
 /// The property a modifier changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

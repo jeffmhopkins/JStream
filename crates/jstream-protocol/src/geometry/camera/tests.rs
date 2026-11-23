@@ -43,6 +43,7 @@ fn camera(position: Vec3, target: Vec3, fov: f32, roll: f32) -> SceneCamera {
         depth_sort: true,
         focus_px: None,
         blur_px: Finite32::ZERO,
+        autofocus: false,
     }
 }
 
