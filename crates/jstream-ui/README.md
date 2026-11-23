@@ -243,8 +243,8 @@ Contents ([Design](#design) explains the choices):
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (the pipeline's health and Start all in its header, then a compact row for the program
-  output and for each output with its state, Start or Stop, FX button and ⋯ menu, and a
+  (the pipeline's health and Start all in its header, then a flat row for the program
+  output and for each output with its state dot and words, Start or Stop, FX funnel and ⋯ menu, and a
   running one's stats line; Duplicate; each output's settings dialog, which creates or
   edits a stream, recording or virtual camera and its stream key, applies nothing until
   Save and follows another client's changes to untouched fields, whose drafts,
@@ -259,8 +259,9 @@ Contents ([Design](#design) explains the choices):
   under it with their meters, faders, dB fields, mutes and routing, the same as
   vertical strips, and the buses),
   also tested natively against `MockEngine`; and `studio.rs`:
-  `StudioMode`, the Transitions panel (the preset picker and editor, and each scene's
-  overrides), `StudioControls`, studio mode's Transition, Cut, preset and Swap between
+  `StudioMode`, the Transitions panel (the preset toolbar with its picker, + and ⋯
+  menu of Rename, Duplicate, Set as default and Delete…, the picked preset's editor on
+  the property grid, and each scene's overrides, over the studio-mode note), `StudioControls`, studio mode's Transition, Cut, preset and Swap between
   preview and program, and `StageLabel`, the label over each side ([Design](#design)),
   and the scene's Transition in and out submenus the menus share
   (`override_submenu`); and
@@ -1095,7 +1096,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Transform), Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
-  so it says what it waits on and is in no built-in layout. Stream stats
+  so it is an empty state that says what it waits on, and is in no built-in layout. Stream stats
   (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
   (protocol 0.57): the output picked in its menu, else the first running stream, the
   first running output, then the first stream. It reads the outputs and profiles as
@@ -1113,7 +1114,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs and the desktop app's global hotkeys, and asks again after each `state.changed`,
   `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
-  5 seconds. Its Clear button empties only the list shown: `ActivityCleared`, kept by
+  5 seconds. It shows the calls in runs under a heading of how long ago (`by_time`,
+  tested natively), each with the agent's name on the right. Its Clear button empties only the list shown: `ActivityCleared`, kept by
   the shell, marks the newest entry's `seq`, and the panel asks only after it, so the
   list stays clear across tab switches while the engine's log is untouched; the
   Live layout shows Stream stats, Outputs and it as tabs in one group. The
@@ -1438,13 +1440,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   header. The master card's button shows and hides the channels and counts them; it
   has the master's short-term loudness on a bar from −60 to +6 LUFS with a marker at
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
-  readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
-  button that resets the integrated loudness (`audio.reset_loudness`). Its Hear
-  button is the master's monitor (`bus.set_monitor`, D22): it reads "Hear: off" while
-  the master has none, a click turns one on at the default output after FX, and later
-  clicks switch it between after and before FX on the same device. Its "FX N"
-  counts the master chain's filters, from `Studio`'s collection, and shows that chain
-  in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
+  readings in its tooltip, and its true peak on a bar of the same scale, with a
+  warning over 0 dBTP ("safe" is the bar's tooltip). Both bars fill green to amber to
+  red along the whole track: `spread` sizes the fill's gradient to the track, set as
+  its `background-size` with a `style:` property. Its icon buttons (C20) are Hear,
+  the funnel and ⋯. Hear (headphones, named "Hear: off" and so on) is the master's
+  monitor (`bus.set_monitor`, D22): a click turns one on at the default output after
+  FX, and later clicks switch it between after and before FX on the same device. The
+  ⋯ menu picks Off, After FX or Before FX by name and resets the integrated loudness
+  (`audio.reset_loudness`). The funnel counts the master chain's filters, from
+  `Studio`'s collection, once it has one, and shows that chain in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has

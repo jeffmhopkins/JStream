@@ -1058,57 +1058,74 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .outputs button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
 .outputs .problem { margin: 0; }
 .outputs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.outputs-head h2 { margin: 0; }
 .outputs .health { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: default; }
 .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
 .outputs .health.idle .health-dot { background: var(--faint); }
 .outputs .health.dropping { color: var(--warn); }
 .outputs .health.dropping .health-dot { background: var(--warn); }
-.outputs-head .health { margin-left: auto; }
-.all-outputs { flex: 0 0 auto; padding: 2px 10px; font-size: 12px; }
+.outputs .health:not(.dropping):not(.idle) { color: var(--text-soft); }
+.outputs-head .health { margin-right: auto; font-size: 13px; }
+.all-outputs { flex: 0 0 auto; height: 28px; padding: 0 12px; font-size: 12px; }
 .all-outputs.stop { border-color: var(--danger); background: var(--danger); color: #fff; }
 /* The program's row and each output's (spec-panels.md U1, U2). */
 .output-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+/* Flat rows (C20): a dot for the state, the name over "target · encoder · state",
+   then icon buttons. Only a live row is tinted. */
 .output-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
+  gap: 10px;
+  min-height: 44px;
   padding: 4px 6px 4px 8px;
-  border: 1px solid var(--line);
-  border-left: 3px solid transparent;
   border-radius: 6px;
-  background: var(--raised);
 }
-.output-row.program { min-height: 32px; background: var(--menu); border-color: var(--menu); }
-.output-row.live { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--raised)); }
-.output-row.busy { border-left-color: var(--warn); }
-.output-row.failed { border-left-color: var(--problem); }
-.output-row-icon { display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--muted); }
+.output-row:hover { background: var(--raised); }
+.output-row.program { min-height: 36px; }
+.output-row.live { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.output-row-icon { display: inline-grid; place-items: center; flex: 0 0 16px; color: var(--muted); }
+.output-dot { flex: 0 0 16px; height: 8px; background: radial-gradient(circle, var(--faint) 3.5px, transparent 4px); }
+.output-dot.busy { background: radial-gradient(circle, var(--warn) 3.5px, transparent 4px); }
+.output-dot.live { background: radial-gradient(circle, var(--danger) 3.5px, transparent 4px); }
+.output-dot.failed { background: radial-gradient(circle, var(--problem) 3.5px, transparent 4px); }
+.output-row.live .output-row-state { color: var(--danger-text); }
+.output-row.failed .output-row-state { color: var(--problem); }
 .output-row-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
 .output-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .output-row-target, .output-row-note { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .output-row-note { color: var(--dim); }
 .output-row-stats { color: var(--text-soft); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .output-row-warning { margin-left: 6px; color: var(--warn); cursor: help; }
-.output-row-status { color: var(--muted); font-size: 12px; }
-.row-action { flex: 0 0 auto; width: 28px; height: 26px; padding: 0; border-radius: 5px; font-size: 12px; line-height: 1; }
-.row-action.start { border-color: var(--accent); background: var(--selected); }
-.row-action.stop { border-color: var(--danger); background: var(--danger); color: #fff; }
-.row-action.more { border-color: transparent; background: none; color: var(--muted); font-size: 16px; }
+.output-row-status { color: var(--dim); font-size: 12px; }
+.row-action { flex: 0 0 auto; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; font-size: 12px; line-height: 1; }
+.row-action.start { background: var(--button); color: var(--text); }
+.row-action.start:hover:not(:disabled) { background: var(--button-hover); }
+.row-action.stop { background: var(--danger); color: #fff; }
+.row-action.more { background: none; color: var(--muted); font-size: 16px; }
+.row-action.more:hover { background: var(--hover); color: var(--text); }
+/* An FX button is a funnel, with the filter count beside it once there is one. */
 .outputs .fx-button {
-  min-width: 44px;
-  padding: 2px 8px;
-  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
   border-radius: 5px;
   background: none;
-  color: var(--text);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 400;
 }
-.outputs .fx-button.on { background: var(--button); }
-.outputs-foot { display: flex; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.outputs .fx-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.outputs .fx-button.on, .mixer-panel .fx-button.on { color: var(--link); }
+.fx-count { font-variant-numeric: tabular-nums; }
+.outputs-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .outputs-foot button.secondary { background: none; color: var(--text-soft); }
+.outputs-foot button.link.add-output { height: 28px; color: var(--link); text-decoration: none; }
+.outputs-foot button.link.add-output:hover { color: var(--text); text-decoration: underline; }
 /* An output's settings dialog (OBS's Settings › Output). */
 .modal.output-dialog { width: var(--dialog-m); }
 .output-dialog-body { display: grid; gap: 16px; padding: 16px; overflow: auto; }
@@ -1271,7 +1288,18 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .mixer-panel .master-fold:hover:not(:disabled) { background: none; }
 .master-fold .caret { width: 10px; color: var(--dim); font-size: 10px; }
 .master-name { font-weight: 600; }
+.master-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
 .master-count { color: var(--dim); font-size: 12px; }
+.master-sub .master-count { color: inherit; }
+/* The master card's icon buttons (C20): headphones, the funnel and ⋯, borderless. */
+.mixer-panel .card-icon {
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 5px;
+  background: none; color: var(--muted); font-size: 12px;
+}
+.mixer-panel .card-icon:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.mixer-panel .card-icon.on { color: var(--link); }
+.mixer-panel .card-icon.more { font-size: 16px; line-height: 1; }
 .mixer-panel .ghost-button {
   padding: 3px 8px;
   border: 1px solid transparent;
@@ -1289,13 +1317,25 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
   color: var(--text);
   font-size: 12px;
 }
+.mixer-panel .fx-button { display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
+.mixer-panel .fx-button.card-icon { padding: 0 6px; background: none; color: var(--muted); }
+.mixer-panel .fx-button.card-icon:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.mixer-panel .fx-button.card-icon.on { color: var(--link); }
 .master-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.master-label { flex: 0 0 120px; color: var(--muted); font-size: 12px; }
-.master-note { flex: 1 1 auto; color: #7fd6a8; font-size: 12px; }
-.master-value { flex: 0 0 128px; text-align: right; font-size: 12px; }
-.master-row.over .master-note, .master-row.over .master-value { color: var(--problem); }
-.level-bar { position: relative; flex: 1 1 120px; height: 7px; border-radius: 4px; background: var(--meter-track); overflow: hidden; }
+.master-label { flex: 0 0 80px; color: var(--muted); font-size: 12px; }
+.master-note { flex: 1 0 100%; padding-left: 90px; color: var(--problem); font-size: 12px; }
+.master-note:empty { display: none; }
+.master-value { flex: 0 0 96px; text-align: right; font-size: 12px; }
+.master-card .master-unit { color: var(--dim); }
+.master-row.over .master-value { color: var(--problem); }
+.level-bar { position: relative; flex: 1 1 120px; height: 6px; border-radius: 3px; background: var(--meter-track); overflow: hidden; }
 .level-fill { height: 100%; background: var(--ok); }
+/* The master card's bars (C20): green to amber to red along the whole track, so the
+   fill's end colour says how loud; the fill sets its own background-size. */
+.master-card .level-fill {
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--ok) 0%, var(--ok) 60%, var(--warn) 85%, var(--problem) 100%) left / 100% 100% no-repeat;
+}
 .level-target { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
 .mix-channels { margin-left: 10px; padding: 4px 0 2px 12px; border-left: 2px solid var(--border); }
 .mix-channels[hidden] { display: none; }
@@ -1550,10 +1590,11 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .update-notice a { color: var(--link); }
 .update-notice button { padding: 2px 8px; background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); }
 .about-body { display: flex; flex-direction: column; align-items: center; padding: 20px 24px 18px; text-align: center; }
-.about-icon { width: 96px; height: 96px; border-radius: 20px; }
-.about-name { margin: 12px 0 2px; font-size: 20px; font-weight: 600; }
+.about-icon { width: 80px; height: 80px; border-radius: 18px; }
+.about-name { margin: 10px 0 2px; font-size: 16px; font-weight: 600; }
 .about-tagline { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
-.about-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; width: 100%; margin: 0 0 16px; font-size: 12px; text-align: left; }
+/* The facts on the property grid's columns (C22). */
+.about-facts { display: grid; grid-template-columns: 100px 1fr; gap: 8px 12px; width: 100%; margin: 0 0 16px; font-size: 12px; text-align: left; }
 .about-facts dt { color: var(--muted); }
 .about-facts dd { margin: 0; overflow-wrap: anywhere; }
 .about-dialog a { color: var(--link); text-decoration: none; }
@@ -1562,7 +1603,9 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .about-codecs-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .about-codec { display: grid; gap: 4px; }
 .about-codec-name { margin: 0; }
-.about-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: 12px; }
+.about-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; width: 100%; font-size: 12px; }
+.about-dialog .about-links a { color: var(--text-soft); }
+.about-dialog .about-links a:hover, .about-dialog .about-links a:focus-visible { color: var(--text); }
 .plugin-dialog-body { display: grid; gap: 10px; padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .plugin-dialog-body .field { display: grid; grid-template-columns: 1fr; align-items: start; gap: 0.35rem; margin: 0; }
 .plugin-dialog-body textarea { width: 100%; box-sizing: border-box; }
@@ -1591,23 +1634,30 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 }
 .studio summary { cursor: pointer; color: var(--muted); }
 .studio .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.presets { display: grid; gap: 8px; }
-.studio .presets h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
-.studio select.preset-picker { height: 30px; width: 100%; }
-.preset-editor { display: grid; gap: 8px; }
-.preset-row { display: flex; align-items: center; gap: 10px; }
-.preset-row input { width: 160px; }
-.preset-editor .segmented { display: grid; grid-template-columns: repeat(3, 1fr); }
+.presets { display: grid; gap: 12px; }
+/* The preset toolbar (C21): the picker, or the name field while renaming, then + and ⋯. */
+.preset-bar { display: flex; align-items: center; gap: 4px; }
+.studio .preset-picker { flex: 0 1 260px; min-width: 0; height: 28px; }
+.preset-bar .bar-icon {
+  display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 5px; background: none; color: var(--muted); font-size: 16px; line-height: 1;
+}
+.preset-bar .bar-icon:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.presets .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px; background: var(--menu); }
+.presets .confirm p { flex: 1 0 100%; margin: 0; font-size: 12px; }
+.preset-editor.prop-grid { row-gap: 10px; }
+.preset-editor .prop-label { padding-top: 6px; }
+.prop-control.preset-duration { flex-wrap: nowrap; }
+.preset-duration input[type="range"] { flex: 1 1 0; width: auto; min-width: 80px; }
+.preset-duration .number-field { flex: 0 0 96px; width: 96px; }
+.preset-editor .preset-wide { grid-column: 1 / -1; }
+.studio-foot { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; }
 /* A segment that is a radio (a choice of one, such as a frame rate): the input hidden,
    its focus on the segment. */
 .segment { position: relative; cursor: pointer; }
 .segment input { position: absolute; opacity: 0; pointer-events: none; }
 .segment:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
-.preset-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
-.preset-fields label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
-.preset-editor .note { margin: 0; color: var(--dim); font-size: 11px; }
-.studio button.danger-text { color: var(--problem); }
-.studio-off { padding: 4px 0; }
+.preset-editor .note { margin: 0; color: var(--dim); font-size: 12px; }
 /* A custom curve's points (ADR-0129): the drawing, then x1, y1, x2 and y2. */
 .curve-editor { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: start; }
 .curve-drawing { width: 96px; height: 96px; background: var(--line); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
@@ -1640,7 +1690,10 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 }
 .context-menu.submenu { z-index: 101; width: 250px; min-width: 0; }
 .context-menu .menuitem { justify-content: flex-start; gap: 0; padding: 0 10px 0 8px; color: var(--text); }
-.context-menu .menuitem.danger { color: var(--danger-text); }
+/* A destructive line is red text on the menu, never the solid red of a dialog's
+   Delete button (`button.danger`). */
+.context-menu .menuitem.danger { background: transparent; border-color: transparent; color: var(--danger-text); font-weight: 400; }
+.context-menu .menuitem.danger:hover:not(:disabled), .context-menu .menuitem.danger:focus-visible { background: var(--menu-hover); }
 .context-menu .menuitem:disabled { opacity: 0.4; }
 .context-menu .menuitem.on { background: var(--menu-hover); }
 .ctx-check { flex: 0 0 16px; font-size: 12px; color: var(--link); }
@@ -2202,31 +2255,29 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .stream-stats { display: flex; flex-direction: column; gap: 10px; }
 .stream-stats .problem { margin: 0; }
 .stats-status { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.stats-pill {
-  display: inline-flex; align-items: center; gap: 6px; flex: none;
-  height: 22px; padding: 0 9px; border-radius: 11px;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.6px;
-  background: var(--menu); border: 1px solid var(--border); color: var(--text);
-}
-.stats-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
-.stats-pill.live { background: color-mix(in srgb, var(--danger) 22%, transparent); border-color: var(--danger); }
-.stats-pill.live .dot { background: #ff5c63; }
+/* The status line (C22): a dot and "Ready" or "Live" in words, no pill. */
+.stats-pill { display: inline-flex; align-items: center; gap: 8px; flex: none; font-weight: 600; color: var(--text); }
+.stats-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.stats-pill.live { color: var(--danger-text); }
+.stats-pill.live .dot { background: var(--danger); }
 .stats-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-.stats-uptime { flex: none; }
+.stats-uptime { flex: none; color: var(--muted); font-size: 12px; }
 .stats-output { align-self: flex-start; }
 .stats-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .stats-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 6px; background: var(--menu); min-width: 0; }
-.stats-tile .label { font-size: 11px; color: var(--text-soft); }
-.stats-tile .value { font-size: 20px; }
+.stats-tile { gap: 4px; padding: 10px 12px; }
+.stats-tile .label { font-size: 12px; color: var(--text-soft); }
+.stats-tile .value { font-size: 20px; line-height: 24px; }
 .stats-tile .sub { font-size: 11px; color: var(--dim); }
-.stats-health { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 6px; background: var(--menu); }
-.stats-health .dot { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: var(--muted); }
+/* The health in one line (C22): a dot, "Health: Excellent", the note after it. */
+.stats-health { display: flex; gap: 8px; align-items: center; min-width: 0; margin: 0; font-size: 12px; color: var(--muted); }
+.stats-health .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
 .stats-health.good .dot { background: var(--ok); }
 .stats-health.fair .dot { background: #e8a33d; }
 .stats-health.poor .dot { background: var(--problem); }
-.stats-health .title { font-weight: 600; }
-.stats-health .note { font-size: 12px; color: var(--muted); }
-.stats-chart-head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.4px; color: var(--muted); }
+.stats-health .title { flex: none; color: var(--text-soft); }
+.stats-health .note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.stats-chart-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--dim); }
 .stats-chart { width: 100%; height: 72px; display: block; }
 .stats-chart .target { stroke: var(--border-strong); }
 .stats-chart .baseline { stroke: var(--border); }
@@ -2244,9 +2295,10 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
   font-size: 11px; color: var(--text); pointer-events: none;
 }
 .stats-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
+/* No chart yet (C22): the empty state's icon over one line, no frame. */
 .stats-nodata {
-  display: flex; align-items: center; justify-content: center; height: 72px;
-  border: 1px dashed var(--border); border-radius: 6px; color: var(--dim); font-size: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 72px;
+  color: var(--dim); font-size: 12px;
 }
 .stats-details { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 12px; }
 .stats-details dt { color: var(--muted); }
@@ -2257,13 +2309,24 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 /* A client names itself, so a long name wraps instead of widening the dialog. */
 .agent-prompt { max-width: min(480px, 100vw - 32px); }
 .agent-name { overflow-wrap: anywhere; }
-.activity-bar { display: flex; justify-content: flex-end; margin: -2px 0 4px; }
-.activity-bar button.link { border: none; background: none; padding: 2px 4px; color: var(--link); font-size: 12px; cursor: pointer; }
-.activity-bar button.link:hover { text-decoration: underline; }
-.activity-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.activity-log li { display: flex; flex-direction: column; gap: 2px; }
-.activity-meta { font-size: 12px; color: var(--dim); }
-.activity-log li.failed .activity-meta { color: var(--problem); }
+/* Runs under an eyebrow of when (C22); the first run's head holds Clear. */
+.activity-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 2px; }
+.activity-head .eyebrow { margin: 0; }
+.activity-head button.link { border: none; background: none; padding: 2px 4px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.activity-head button.link:hover { color: var(--text); text-decoration: underline; }
+.activity-log { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.activity-log li { display: flex; align-items: flex-start; gap: 10px; min-height: 28px; padding: 5px 4px; border-radius: 5px; }
+.activity-log li:hover { background: var(--raised); }
+.activity-log li > .icon { flex: none; margin-top: 2px; color: var(--muted); }
+.activity-main { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.activity-who { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 12px; }
+.activity-error { color: var(--problem); font-size: 12px; }
+.activity-log li.failed > .icon { color: var(--problem); }
+/* A panel with nothing to show (C22): an icon, a title and one line, centred. */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 32px 16px; text-align: center; color: var(--dim); }
+.empty-state > .icon { color: var(--muted); }
+.empty-state .empty-title { margin: 4px 0 0; color: var(--text-soft); font-size: 13px; }
+.empty-state .empty-note { max-width: 320px; margin: 0; font-size: 12px; line-height: 16px; }
 .label-actions { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
 .label-actions-preset { display: flex; gap: 6px; align-items: center; }
 .label-actions-preset select { flex: 1 1 auto; min-width: 0; }
