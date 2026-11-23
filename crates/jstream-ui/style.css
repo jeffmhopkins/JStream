@@ -2695,8 +2695,8 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .map-chip.small { height: 18px; padding: 0 6px; font-size: 11px; color: var(--muted); }
 .map-chip.link { cursor: pointer; }
 .map-chip.link:hover { background: var(--hover); }
-.map-chip.midi::before, .map-dot.midi { background: #b48cff; }
-.map-chip.data::before, .map-dot.data { background: #3fc7c0; }
+.map-chip.midi::before, .map-dot.midi { background: var(--code-keyword); }
+.map-chip.data::before, .map-dot.data { background: var(--code-type); }
 .map-chip.channel::before, .map-dot.channel { background: var(--accent); }
 .map-chip.key::before, .map-dot.key { background: var(--warn); }
 .map-dot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; }

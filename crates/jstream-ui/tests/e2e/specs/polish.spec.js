@@ -69,13 +69,13 @@ test('the 3D section is folded, edits the item and says when it is in use', asyn
   await expect(fold).toContainText('in use');
 });
 
-test('the View menu lists all thirteen panels, and adds one that waits on the engine', async ({ page, daemon }) => {
+test('the View menu lists all fourteen panels, and adds one that waits on the engine', async ({ page, daemon }) => {
   await connect(page, daemon);
   await page.locator('header.app-header').getByRole('button', { name: 'View' }).click();
   const view = page.getByRole('menu', { name: 'View' });
   await expect(view.getByRole('menuitemcheckbox')).toHaveText([
     /Scenes/, /Sources/, /Inspector/, /Arrange/, /Filters/, /Live chat/, /Stream stats/,
-    /Audio mixer/, /Outputs/, /Agent activity/, /Transitions/, /Channels/, /Sequence/,
+    /Audio mixer/, /Outputs/, /Agent activity/, /Transitions/, /Channels/, /Sequence/, /Mappings/,
   ]);
   const chat = view.getByRole('menuitemcheckbox', { name: /Live chat/ });
   await expect(chat).toHaveAttribute('aria-checked', 'false');

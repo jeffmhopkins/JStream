@@ -485,11 +485,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Channels** (`channels.spec.js`, [ADR-0183](../../../../docs/adr/0183-virtual-control-channels.md)):
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
+- **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
+  is mapped, then listing a channel made in the Channels panel as a group with
+  "+ Target…"; a search that matches nothing saying so; a click on the channel opening its
+  card; "+ Target…" arming it, which the Sources tab shows beside its "No JTunnel sender"
+  hint, and Escape disarming it.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
   Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
-  menu's thirteen panels, adding Live chat, which says it waits on YouTube sign-in.
+  menu's fourteen panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
