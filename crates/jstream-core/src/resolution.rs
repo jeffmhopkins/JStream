@@ -307,7 +307,11 @@ mod tests {
         for _ in 0..super::SETTLE {
             governor.tick(None, true);
         }
-        assert_eq!(governor.percent().get(), 85, "the frames in flight were the old size");
+        assert_eq!(
+            governor.percent().get(),
+            85,
+            "the frames in flight were the old size"
+        );
         governor.tick(None, true);
         assert_eq!(governor.percent().get(), 75);
     }
@@ -342,7 +346,11 @@ mod tests {
         run(&mut governor, super::SETTLE, 15.0);
         governor.tick(None, true);
         assert_eq!(governor.percent().get(), 85);
-        assert_eq!(run(&mut governor, 9 * FPS, 15.0), 85, "five seconds no longer do");
+        assert_eq!(
+            run(&mut governor, 9 * FPS, 15.0),
+            85,
+            "five seconds no longer do"
+        );
         assert_eq!(run(&mut governor, 2 * FPS, 15.0), 100, "ten do");
     }
 

@@ -2909,8 +2909,14 @@ fn golden_model_drawn_with_fewer_pixels_shows_in_the_same_place() {
     let half = draw_at(compositor, &model, geometry, camera, 50);
     let edges = |shot: &Snapshot| {
         let row = red_row(shot, 50);
-        let left = row.iter().position(|&r| r > 128).expect("the slab is drawn");
-        let right = row.iter().rposition(|&r| r > 128).expect("the slab is drawn");
+        let left = row
+            .iter()
+            .position(|&r| r > 128)
+            .expect("the slab is drawn");
+        let right = row
+            .iter()
+            .rposition(|&r| r > 128)
+            .expect("the slab is drawn");
         (left, right)
     };
     let (sharp, soft) = (edges(&full), edges(&half));

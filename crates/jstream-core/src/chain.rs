@@ -3174,9 +3174,12 @@ mod tests {
         golden_at(shot, 100).map(|(grid, _)| grid)
     }
 
+    /// A layer's size in pixels, then its extent.
+    type LayerSize = [(u32, u32); 2];
+
     /// [`golden`], with 3D models drawn at `percent` of the canvas's width and of its
     /// height (ADR-0197), and the size in pixels and the extent of `cam`'s layer.
-    fn golden_at(shot: &Shot, percent: u32) -> Option<(String, Option<[(u32, u32); 2]>)> {
+    fn golden_at(shot: &Shot, percent: u32) -> Option<(String, Option<LayerSize>)> {
         const PALETTE: [(char, [u8; 3]); 3] =
             [('.', [0, 0, 0]), ('W', [255, 255, 255]), ('B', [0, 0, 255])];
         let _gpu = crate::tests::one_gpu_test_at_a_time();
@@ -6519,7 +6522,10 @@ mod tests {
                 .collect();
             assert!(
                 half.len() == full.len()
-                    && half.chars().zip(full.chars()).all(|(h, f)| h == f || h == '?'),
+                    && half
+                        .chars()
+                        .zip(full.chars())
+                        .all(|(h, f)| h == f || h == '?'),
                 "at half the pixels the plane covers the same cells\nhalf:\n{half}"
             );
             assert!(
