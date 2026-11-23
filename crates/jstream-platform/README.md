@@ -67,7 +67,9 @@ Contents:
   `CaptureStream` (`Send`). The backend's capture thread fills a single-slot
   "latest frame" mailbox, as in
   [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading), and the render
-  thread takes from it without blocking; `None` means "repeat the last frame". Spike S1
+  thread takes from it without blocking; `None` means "repeat the last frame". The
+  render thread can hand a frame it is done with back (`CaptureStream::recycle`, which
+  drops it by default), so a backend that fills CPU frames fills its memory again. Spike S1
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
   `CaptureStats` counts captured and skipped frames, and the compressed frames a
   `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
@@ -250,7 +252,8 @@ Contents:
   buffer), and `even_size` crops an odd source. `yuv` turns a video capture device's
   raw frame bytes, rows `stride` bytes apart with the chroma planes after the luma, into
   engine frames: `copy_planar` copies NV12 and I420 (and a one-plane BGRA or RGBA
-  frame, V4L2's 32-bit RGB, row by row), `copy_planes` copies them from one
+  frame, V4L2's 32-bit RGB), writing each byte once, and `copy_planar_into` does it
+  into the buffers of a frame the caller is done with, `copy_planes` copies them from one
   buffer per plane, each with its own stride (V4L2's `NV12M` and `YUV420M`), and
   `yuy2_to_nv12` converts packed
   4:2:2, each chroma sample averaging the two rows of its block. A short buffer is an
@@ -271,7 +274,8 @@ Contents:
   (dropping it stops it; a test watches it through a `FakeVcamProbe`),
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and brightness, white balance and exposure controls, the last two automatic,
-  and a capture card with no controls; `unplug` loses a device) with `FakeCaptureDecoder`, which
+  and a capture card with no controls; `unplug` loses a device, and `recycled` counts the
+  frames handed back to its streams) with `FakeCaptureDecoder`, which
   `FakeCodecs::capture_decoder` makes for MJPEG (all-zero NV12 frames), plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
   `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA

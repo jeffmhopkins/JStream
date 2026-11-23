@@ -9,7 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 use jstream_platform::mailbox::Mailbox;
-use jstream_platform::media::{ColorInfo, FrameSize, MediaTime, VideoFrameInfo};
+use jstream_platform::media::{ColorInfo, FrameSize, MediaTime, VideoFrame, VideoFrameInfo};
 use jstream_platform::{
     CaptureDecoder, CaptureEncoding, CaptureStats, CaptureStream, CompressedFrame, MediaClock,
     PlatformError, VideoSurface,
@@ -33,6 +33,10 @@ const START_TIMEOUT: Duration = Duration::from_secs(5);
 /// State shared between the capture thread and the stream.
 struct Shared {
     mailbox: Mailbox<VideoSurface>,
+    /// A frame the engine handed back ([`CaptureStream::recycle`]), for the capture
+    /// thread to fill again: a 1080p frame is megabytes, which the heap would otherwise
+    /// take from and give back to the OS for every frame.
+    spare: Mailbox<VideoSurface>,
     /// Set once, when the capture ends; `latest` returns it from then on.
     failure: OnceLock<PlatformError>,
     captured: AtomicU64,
@@ -108,6 +112,7 @@ impl MfStream {
     pub(crate) fn start(capture: Capture) -> Result<Self, PlatformError> {
         let shared = Arc::new(Shared {
             mailbox: Mailbox::new(),
+            spare: Mailbox::new(),
             failure: OnceLock::new(),
             captured: AtomicU64::new(0),
             skipped: AtomicU64::new(0),
@@ -163,6 +168,12 @@ impl CaptureStream for MfStream {
             return Err(e.clone());
         }
         Ok(self.shared.mailbox.take())
+    }
+
+    /// Never blocks: a swap of the spare slot's pointer. A frame already waiting there
+    /// is dropped.
+    fn recycle(&mut self, surface: VideoSurface) {
+        drop(self.shared.spare.put(surface));
     }
 
     fn stats(&self) -> CaptureStats {
@@ -248,6 +259,9 @@ fn run(
         offset: None,
     };
     let mut started = Some(started);
+    // A frame to fill again: one the mailbox replaced before render took it, else one
+    // the engine handed back.
+    let mut spare: Option<VideoFrame> = None;
     while !shared.stop.load(Ordering::Relaxed) {
         let mut flags = 0u32;
         let mut timestamp = 0i64;
@@ -318,7 +332,8 @@ fn run(
         };
         let surface = match &mut deliver {
             Deliver::Raw { layout, stride } => {
-                match with_bytes(&sample, |bytes| layout.frame(bytes, *stride, info)) {
+                let again = spare.take().or_else(|| cpu_frame(shared.spare.take()));
+                match with_bytes(&sample, |bytes| layout.frame(bytes, *stride, info, again)) {
                     Ok(Ok(frame)) => VideoSurface::Cpu(frame),
                     Ok(Err(e)) | Err(e) => {
                         shared.fail(e);
@@ -349,8 +364,18 @@ fn run(
                 }
             }
         };
-        if shared.mailbox.put(surface).is_some() {
+        let replaced = shared.mailbox.put(surface);
+        if replaced.is_some() {
             shared.skipped.fetch_add(1, Ordering::Relaxed);
         }
+        spare = cpu_frame(replaced);
+    }
+}
+
+/// `surface`'s CPU frame, when it is one.
+fn cpu_frame(surface: Option<VideoSurface>) -> Option<VideoFrame> {
+    match surface {
+        Some(VideoSurface::Cpu(frame)) => Some(frame),
+        _ => None,
     }
 }

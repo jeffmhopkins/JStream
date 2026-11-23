@@ -91,6 +91,9 @@ the draw ready instead of drawing the layer, unless:
 - a chain reads the layer: the item's effects, or its source's video filters
   (ADR-0107 decision 6);
 - a transition is running, whose tracks place layers;
+- its layer has fewer pixels than the canvas
+  ([ADR-0197](0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)):
+  a pass shades at the canvas's pixels, so the smaller layer is what saves the time;
 - `prepare_model` returns nothing (decision 1);
 - more than one pass showed the model in the frame before.
 
@@ -125,6 +128,11 @@ exactly as before.
 - A model's shading is recorded in its scene's pass, so a profile counts its GPU time
   under the scene's pass, not under the item. Its depth and the making ready still count
   under the item.
+- A model is carried only at full size. When the engine lowers a model's pixels
+  (ADR-0197) a plain model goes from no layer to a smaller one, which costs a small
+  model a little more than it saves and a large one much less. The step that lowers
+  the pixels was tuned with every model in a layer; it is worth measuring again with
+  this in place.
 - Two paths draw a model, and decision 3 is what keeps them one picture. The render
   crate tests them against each other for lit, unlit, blended, camera and surface
   draws; a new feature of the model's draw has to hold in both.

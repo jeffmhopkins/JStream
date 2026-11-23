@@ -51,6 +51,10 @@ struct Draw {
     /// before this draw, which then only writes the model's depth, over its vertices
     /// when it has any.
     model: bool,
+    /// Whether it is a premultiplied linear image of the canvas's size laid over the
+    /// whole canvas texel for texel, opaque and in `normal`: a scene of that alone is
+    /// resolved straight from the image ([`Compositor::record_layer_resolve`]).
+    whole: bool,
 }
 
 /// Texels of the target: `x`, `y`, `width`, `height`, none of them past its edge.
@@ -149,6 +153,14 @@ pub struct Compositor {
     resolve: wgpu::RenderPipeline,
     /// Decodes an sRGB-encoded target back to linear light, from the backdrop.
     decode: wgpu::RenderPipeline,
+    /// Resolves a scene that is one whole layer straight from the layer (`fs_layer`),
+    /// with the background and the space it is laid over in in `over`.
+    resolve_layer: wgpu::RenderPipeline,
+    over: wgpu::Buffer,
+    over_bind: wgpu::BindGroup,
+    /// Whether the last [`Self::render`] resolved straight from a layer.
+    #[cfg(test)]
+    resolved_layer: bool,
     targets: Option<Targets>,
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
@@ -448,14 +460,30 @@ impl Compositor {
             .targets
             .as_ref()
             .expect("invariant: ensure_targets just set them");
-        self.record_mips(&mut encoder, scene);
-        self.record_composite(
-            &mut encoder,
-            (&targets.working_view, &targets.working),
-            scene,
-            None,
-        );
-        self.record_resolve(&mut encoder, targets);
+        // A scene that is one finished layer over the whole canvas (a scene's filter
+        // chain's output, a master or an output chain's) is resolved straight from the
+        // layer: no composite of it into the working target first.
+        let whole = match self.draws.as_slice() {
+            [draw] if draw.whole => Some(scene.items[draw.index].image),
+            _ => None,
+        };
+        #[cfg(test)]
+        {
+            self.resolved_layer = whole.is_some();
+        }
+        match whole {
+            Some(layer) => self.record_layer_resolve(&mut encoder, targets, scene, layer),
+            None => {
+                self.record_mips(&mut encoder, scene);
+                self.record_composite(
+                    &mut encoder,
+                    (&targets.working_view, &targets.working),
+                    scene,
+                    None,
+                );
+                self.record_resolve(&mut encoder, targets);
+            }
+        }
         if let Some(buffer) = &readback_buffer {
             encoder.copy_texture_to_buffer(
                 wgpu::TexelCopyTextureInfo {
@@ -527,10 +555,24 @@ impl Compositor {
         self.readback_wait
     }
 
+    /// Whether the last [`Self::render`] resolved its scene straight from a layer.
+    #[cfg(test)]
+    pub(crate) fn resolved_layer(&self) -> bool {
+        self.resolved_layer
+    }
+
     /// How many texels the last composite's draws could reach (#1070).
     #[cfg(test)]
     pub(crate) fn drawn_texels(&self) -> u32 {
         self.drawn.map_or(0, |rect| rect.width * rect.height)
+    }
+
+    /// How many texels the last composite's decode pass covered in a `size` target
+    /// cleared `transparent` or not, in browser-style blending.
+    #[cfg(test)]
+    pub(crate) fn decoded_texels(&self, transparent: bool, size: (u32, u32)) -> u32 {
+        self.decoded(transparent, size)
+            .map_or(0, |rect| rect.width * rect.height)
     }
 
     /// Composites `scene` into a new [`Image`] that a later scene on this compositor can
@@ -1065,7 +1107,9 @@ impl Compositor {
     ///
     /// # Errors
     /// [`RenderError::Invalid`] when a layer or target isn't a layer this compositor made,
-    /// or the six aren't one size.
+    /// or the three of either aren't one size. The layers may be smaller than the
+    /// targets, for a model drawn with fewer pixels than its canvas (ADR-0197): each of
+    /// the buffer's texels takes the layers' texel it falls in.
     pub fn merge_model_surface(
         &mut self,
         layers: [&Image; 3],
@@ -1150,10 +1194,10 @@ impl Compositor {
         live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
         surface: Option<[&Image; 3]>,
     ) -> Result<(), RenderError> {
-        let canvas = jstream_protocol::Canvas {
-            width: target.width(),
-            height: target.height(),
-        };
+        // The canvas the model is placed on, which the target may hold with fewer
+        // pixels (ADR-0197): the layers the passes read are the target's size, and stand
+        // for the same canvas.
+        let canvas = crate::model::canvas_of(target);
         let view = draw
             .camera
             .and_then(|camera| camera.view(canvas).ok())
@@ -1163,11 +1207,16 @@ impl Compositor {
                 .models
                 .draw(&self.gpu, &self.owner, draw, target, live, surface);
         };
-        let (colour, depth) = self.model_focus_layers(canvas.width, canvas.height)?;
+        let (width, height) = (target.width(), target.height());
+        let (mut colour, mut depth) = self.model_focus_layers(width, height)?;
+        if let Ok(extent) = jstream_media::FrameSize::new(canvas.width, canvas.height) {
+            colour.set_extent(extent);
+            depth.set_extent(extent);
+        }
         self.models
             .draw(&self.gpu, &self.owner, draw, &colour, live, surface)?;
         let empty = Scene {
-            canvas: jstream_media::FrameSize::new(canvas.width, canvas.height).map_err(|_| {
+            canvas: jstream_media::FrameSize::new(width, height).map_err(|_| {
                 RenderError::Invalid {
                     what: "layer",
                     detail: "the target has no pixels".into(),
@@ -1340,12 +1389,25 @@ impl Compositor {
         errors.close(image::upload_frame(&self.maker(), frame))
     }
 
-    /// Refills `image`, an upload this compositor made at `frame`'s size, with `frame`
-    /// as [`Self::upload_frame`] reads it, without allocating a texture.
+    /// [`Self::upload_frame`] into a texture of `to` texels, smaller than the frame each
+    /// way or its size, placed at the frame's size: each texel is the mean of the
+    /// frame's texels under it, in premultiplied linear light (#1139).
+    pub(crate) fn upload_frame_into(
+        &self,
+        frame: &jstream_media::VideoFrame,
+        to: (u32, u32),
+    ) -> Result<Image, RenderError> {
+        let errors = self.errors();
+        errors.close(image::upload_frame_into(&self.maker(), frame, to))
+    }
+
+    /// Refills `image`, an upload this compositor made of a frame of `frame`'s size
+    /// (whole, or held smaller), with `frame` as [`Self::upload_frame`] reads it, without
+    /// allocating a texture.
     ///
     /// # Errors
     /// As for [`Self::upload_frame`], and [`RenderError::Invalid`] when `image` is not
-    /// an upload this compositor made at the frame's size.
+    /// an upload this compositor made of a frame of that size.
     pub fn rewrite_frame(
         &self,
         image: &Image,
@@ -1607,6 +1669,12 @@ impl Compositor {
         &self.gpu.submit
     }
 
+    /// Submits `work` on [`Self::queue`], timed with the unit the drawer is timing, if
+    /// any (`Gpu::submit_work`). The caller holds [`Self::submit_lock`].
+    pub(crate) fn submit_work(&self, work: wgpu::CommandBuffer) -> wgpu::SubmissionIndex {
+        self.gpu.submit_work(work)
+    }
+
     /// The adapter the device was opened on.
     pub fn adapter(&self) -> &wgpu::Adapter {
         &self.gpu.adapter
@@ -1779,6 +1847,41 @@ impl Compositor {
             &resolve_shader,
             ("fs_decode", wgpu::TextureFormat::Rgba16Float),
         );
+        let over_layout = gpu
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("jstream-render-resolve-over"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(OVER_BYTES),
+                    },
+                    count: None,
+                }],
+            });
+        let resolve_layer = resolve_pipeline_of(
+            &gpu.device,
+            &[&image_layout, &over_layout],
+            &resolve_shader,
+            ("fs_layer", wgpu::TextureFormat::Rgba8UnormSrgb),
+        );
+        let over = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render-resolve-over"),
+            size: OVER_BYTES,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let over_bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("jstream-render-resolve-over"),
+            layout: &over_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: over.as_entire_binding(),
+            }],
+        });
         // Nearest and clamped: the resolve samples each texel's centre.
         let resolve_sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-resolve"),
@@ -1813,6 +1916,11 @@ impl Compositor {
             resolve_sampler,
             resolve,
             decode,
+            resolve_layer,
+            over,
+            over_bind,
+            #[cfg(test)]
+            resolved_layer: false,
             targets: None,
             vertices: Vec::new(),
             vertex_buffer,
@@ -1999,6 +2107,7 @@ impl Compositor {
                     blend: item.blend,
                     rect: None,
                     model: true,
+                    whole: false,
                 });
                 continue;
             }
@@ -2017,6 +2126,9 @@ impl Compositor {
             // that (#1070): the rest adds nothing in the modes that leave what is below
             // a transparent texel as it was. Not with a chain, whose levels spread the
             // drawn texels past the margin, nor in a mode that reads the backdrop.
+            // Asked before the trim, which only leaves out texels that are transparent
+            // in the image.
+            let covers = covers_whole(shape, canvas_w, canvas_h);
             if most <= MINIFIED
                 && matches!(
                     item.blend,
@@ -2069,6 +2181,14 @@ impl Compositor {
             if let Some(reach) = covered(shape, scene.canvas.width(), scene.canvas.height()) {
                 self.drawn = Some(self.drawn.map_or(reach, |drawn| drawn.union(reach)));
             }
+            let whole = mips.is_none()
+                && alpha == Alpha::Premultiplied
+                && item.opacity == 1.0
+                && item.blend == BlendMode::Normal
+                && item.depth.is_none()
+                && item.image.sync().is_none()
+                && texels == (scene.canvas.width(), scene.canvas.height())
+                && covers;
             let vertex_count = push_shape(
                 &mut self.vertices,
                 shape,
@@ -2085,6 +2205,7 @@ impl Compositor {
                 blend: item.blend,
                 rect,
                 model: false,
+                whole,
             });
         }
         let limit = self.gpu.max_texture_dimension_2d;
@@ -2499,30 +2620,46 @@ impl Compositor {
             first = end;
         }
         if encoded {
-            self.record_decode(encoder, (view, texture));
+            // Over a transparent background only what the items reached holds encoded
+            // colour: every other texel is zero, which decodes to itself. So the decode
+            // covers that box alone, and a pass that drew nothing has none.
+            let transparent = clear.r == 0.0 && clear.g == 0.0 && clear.b == 0.0 && clear.a == 0.0;
+            let reached = self.decoded(transparent, (texture.width(), texture.height()));
+            if let Some(rect) = reached {
+                self.record_decode(encoder, (view, texture), rect);
+            }
         }
     }
 
-    /// The decode pass of browser-style blending (ADR-0126 §3): the whole target is
+    /// The texels of a `size` target the decode pass covers after the prepared draws:
+    /// all of it over a background, and over a `transparent` one only what the draws
+    /// could reach, `None` when that is nothing.
+    fn decoded(&self, transparent: bool, (width, height): (u32, u32)) -> Option<Rect> {
+        let reached = if transparent {
+            self.drawn
+        } else {
+            Some(Rect {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            })
+        };
+        reached.filter(|rect| rect.width > 0 && rect.height > 0)
+    }
+
+    /// The decode pass of browser-style blending (ADR-0126 §3): `rect` of the target is
     /// copied into the backdrop, and drawn back as premultiplied linear light.
     fn record_decode(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
+        rect: Rect,
     ) {
         let Some(backdrop) = &self.backdrop else {
             return;
         };
-        self.record_backdrop_copy(
-            encoder,
-            texture,
-            Rect {
-                x: 0,
-                y: 0,
-                width: texture.width(),
-                height: texture.height(),
-            },
-        );
+        self.record_backdrop_copy(encoder, texture, rect);
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-decode"),
             color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
@@ -2531,6 +2668,7 @@ impl Compositor {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        pass.set_scissor_rect(rect.x, rect.y, rect.width, rect.height);
         pass.set_pipeline(&self.decode);
         pass.set_bind_group(0, &backdrop.bind, &[]);
         pass.draw(0..3, 0..1);
@@ -2706,6 +2844,53 @@ impl Compositor {
         pass.draw(0..3, 0..1);
     }
 
+    /// The composite of `scene`, which is `layer` alone over the whole canvas
+    /// ([`Draw::whole`]), and its resolve in one pass straight from `layer` into the
+    /// sRGB output: `fs_layer` lays it over the background in the scene's blending
+    /// space as the composite pass, its decode and the resolve would, without the
+    /// working target, the backdrop copy or their passes.
+    fn record_layer_resolve(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        targets: &Targets,
+        scene: &Scene<'_>,
+        layer: &Image,
+    ) {
+        let encoded = self.blending == Blending::Srgb;
+        let background = if encoded {
+            premultiplied_srgb(scene.background)
+        } else {
+            premultiplied_linear(scene.background)
+        };
+        let flag = if encoded { 1.0f32 } else { 0.0 };
+        let mut over = [0u8; OVER_BYTES as usize];
+        for (bytes, value) in over
+            .chunks_exact_mut(4)
+            .zip(background.into_iter().chain([flag, 0.0, 0.0, 0.0]))
+        {
+            bytes.copy_from_slice(&value.to_le_bytes());
+        }
+        // Ordered before the submit that reads it, as the vertex buffer's write is.
+        self.gpu.queue.write_buffer(&self.over, 0, &over);
+        let load = if self.gpu.software {
+            wgpu::LoadOp::Load
+        } else {
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+        };
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-resolve-layer"),
+            color_attachments: &[Some(color_attachment(&targets.output_view, load))],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.resolve_layer);
+        pass.set_bind_group(0, layer.bind_group(), &[]);
+        pass.set_bind_group(1, &self.over_bind, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
     /// Records the copy of `output`, this compositor's, into `buffer`, a
     /// [`Self::readback_buffer`] of its size, rows padded as the readback's are.
     pub(crate) fn record_copy_out(
@@ -2877,6 +3062,20 @@ fn bound_of(
 
 /// Appends one item's triangles, a fan from its first vertex, and returns how many
 /// vertices that is.
+/// Whether `shape` is a flat quad that lays its image over the whole canvas texel for
+/// texel: the four corners of the canvas, each with its own corner of the image, with
+/// no perspective, edge or blur.
+fn covers_whole(shape: &Shape, width: f32, height: f32) -> bool {
+    let corners = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+    let vertices = shape.vertices();
+    !shape.is_3d()
+        && shape.dof == [0.0; 3]
+        && vertices.len() == corners.len()
+        && vertices.iter().zip(corners).all(|(vertex, [u, v])| {
+            vertex.w == 1.0 && vertex.uv == [u, v] && vertex.canvas == [u * width, v * height]
+        })
+}
+
 fn push_shape(
     buf: &mut Vec<u8>,
     shape: &Shape,
@@ -3036,17 +3235,31 @@ fn resolve_input_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
+/// The bytes of `resolve.wgsl`'s `Over`: two `vec4<f32>`.
+const OVER_BYTES: u64 = 32;
+
 /// A full-target pass over one unfiltered FP16 texture: the resolve (`fs`, into the
 /// sRGB output) or the decode (`fs_decode`, back into an FP16 target).
 fn resolve_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     shader: &wgpu::ShaderModule,
+    entry: (&str, wgpu::TextureFormat),
+) -> wgpu::RenderPipeline {
+    resolve_pipeline_of(device, &[layout], shader, entry)
+}
+
+/// [`resolve_pipeline`] with each of `layouts` as a bind group, in order.
+fn resolve_pipeline_of(
+    device: &wgpu::Device,
+    layouts: &[&wgpu::BindGroupLayout],
+    shader: &wgpu::ShaderModule,
     (entry, format): (&str, wgpu::TextureFormat),
 ) -> wgpu::RenderPipeline {
+    let layouts: Vec<_> = layouts.iter().copied().map(Some).collect();
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("jstream-render-resolve"),
-        bind_group_layouts: &[Some(layout)],
+        bind_group_layouts: &layouts,
         immediate_size: 0,
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

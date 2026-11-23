@@ -399,7 +399,7 @@ fn capture(
     {
         return Ok(false);
     }
-    let environment = scene_environment((shot, cache), scene_id, at, live).0;
+    let environment = scene_environment((shot, cache, &*chains), scene_id, at, live).0;
     let mut lights = Vec::new();
     let mut shadowed = Vec::new();
     let mut seen: Vec<Item<'_>> = Vec::with_capacity(items.len());
@@ -421,6 +421,10 @@ fn capture(
             live,
             (&mut lights, &mut shadowed),
         );
+        // The arrival picture's light (ADR-0188), as `light_scene` adds it.
+        if let Some(light) = super::arrival_light((shot, cache, chains), scene_id, at, live) {
+            lights.push(light);
+        }
         for shown in &models {
             let Some(target) =
                 cache.get(&GpuKey::ProbeModel(shown.scene.clone(), shown.item.clone()))

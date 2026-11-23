@@ -32,6 +32,11 @@ const LIGHT_BYTES: u64 = 64;
 pub const MAX_SHADOW_MAPS: usize = 2;
 /// A shadow map's width and height, in pixels (ADR-0151 decision 3).
 pub const SHADOW_MAP_PX: u32 = 2048;
+/// Where a material's bind group holds the sampler of its normal, surface, occlusion and
+/// emissive maps, after its five textures.
+const DETAIL_SAMPLER_BINDING: u32 = 7;
+/// That sampler's anisotropy: the base colour's is 16.
+const DETAIL_ANISOTROPY: u16 = 4;
 /// Bytes of one shadow map's view in the frame uniform: four `vec4`.
 const SHADOW_BYTES: u64 = 64;
 /// Bytes of the environment in the frame uniform: six `vec4`.
@@ -94,6 +99,10 @@ const MATERIAL_BYTES: u64 = 80;
 const TEXTURE_BAND_BYTES: usize = 4 << 20;
 
 pub use jstream_media::model::Lighting;
+
+/// How many sizes of the depth buffer a model's layer is drawn with are kept
+/// (`ModelRuntime::depth_view`).
+const KEPT_DEPTHS: usize = 2;
 
 /// A model on the GPU, made by [`crate::Compositor::upload_model`]. Cheap to clone; a
 /// clone shares the buffers and textures.
@@ -614,6 +623,8 @@ pub(crate) struct ModelRuntime {
     /// Its depth, kept across the models drawn into one set of targets.
     surface_depth: Option<(u32, u32, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
+    /// The sampler of a material's normal, surface, occlusion and emissive maps.
+    detail_sampler: wgpu::Sampler,
     frame: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
     /// 1x1 stand-ins for a texture a material doesn't have: white for colour, occlusion
@@ -623,7 +634,7 @@ pub(crate) struct ModelRuntime {
     /// A live texture whose source isn't drawing: transparent, and its texture, which
     /// [`LiveBinds`] tells apart from a mip chain's.
     clear: (wgpu::Texture, wgpu::TextureView),
-    depth: Option<(u32, u32, wgpu::TextureView)>,
+    depth: Vec<(u32, u32, wgpu::TextureView)>,
     /// Blended primitives in the order they draw, kept to reuse the allocation.
     order: Vec<(f64, usize)>,
     /// The quad a lit card is shaded on ([`Self::light_card`]), once made.
@@ -696,6 +707,12 @@ impl ModelRuntime {
                 texture_entry(4),
                 texture_entry(5),
                 texture_entry(6),
+                wgpu::BindGroupLayoutEntry {
+                    binding: DETAIL_SAMPLER_BINDING,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
         let pose_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -961,6 +978,19 @@ impl ModelRuntime {
             anisotropy_clamp: 16,
             ..Default::default()
         });
+        // The maps that shape the light, not the picture: a quarter of the taps across a
+        // grazing surface, where their detail is lost in the shading anyway.
+        let detail_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("jstream-render-model-detail-sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            anisotropy_clamp: DETAIL_ANISOTROPY,
+            ..Default::default()
+        });
         let frame = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-model-frame"),
             size: FRAME_BYTES,
@@ -1015,12 +1045,13 @@ impl ModelRuntime {
             with_surface,
             surface_depth: None,
             sampler,
+            detail_sampler,
             frame,
             frame_bind,
             white,
             flat_normal,
             clear: (clear_texture, clear_view),
-            depth: None,
+            depth: Vec::with_capacity(KEPT_DEPTHS),
             order: Vec::new(),
             card: None,
             recycle: None,
@@ -1038,6 +1069,7 @@ impl ModelRuntime {
             material_layout: self.material_layout.clone(),
             pose_layout: self.pose_layout.clone(),
             sampler: self.sampler.clone(),
+            detail_sampler: self.detail_sampler.clone(),
             white: self.white.clone(),
             flat_normal: self.flat_normal.clone(),
         }
@@ -1058,6 +1090,7 @@ pub(crate) struct UploadKit {
     material_layout: wgpu::BindGroupLayout,
     pose_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    detail_sampler: wgpu::Sampler,
     white: wgpu::TextureView,
     flat_normal: wgpu::TextureView,
 }
@@ -1152,6 +1185,10 @@ impl UploadKit {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: DETAIL_SAMPLER_BINDING,
+                    resource: wgpu::BindingResource::Sampler(&self.detail_sampler),
                 },
             ];
             for (i, view) in views.iter().enumerate() {
@@ -1380,12 +1417,9 @@ impl ModelRuntime {
         let views = surface_views(owner, targets)?;
         let (width, height) = (targets[0].width(), targets[0].height());
         let sources = surface_views(owner, layers)?;
-        if (layers[0].width(), layers[0].height()) != (width, height) {
-            return Err(RenderError::Invalid {
-                what: "layer",
-                detail: "a model's surface layers are not its scene's surface buffer's size".into(),
-            });
-        }
+        // The layers' size, which is the buffer's unless the model was drawn with fewer
+        // pixels than its canvas (ADR-0197).
+        let from = (layers[0].width(), layers[0].height());
         let depth = self.surface_depth_view(gpu, width, height);
         let (layout, pipeline) = &self.with_surface.merge;
         let read = |n: usize| wgpu::BindGroupEntry {
@@ -1438,6 +1472,7 @@ impl ModelRuntime {
                     drop(submitting);
                     return Ok(());
                 }
+                let region = spread(region, from, (width, height));
                 pass.set_scissor_rect(region.x, region.y, region.width, region.height);
             }
             pass.set_pipeline(pipeline);
@@ -1496,6 +1531,10 @@ impl ModelRuntime {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: DETAIL_SAMPLER_BINDING,
+                        resource: wgpu::BindingResource::Sampler(&self.detail_sampler),
                     },
                 ];
                 for (i, own) in m.views.iter().enumerate() {
@@ -1599,6 +1638,10 @@ impl ModelRuntime {
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::Sampler(&self.sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: DETAIL_SAMPLER_BINDING,
+                resource: wgpu::BindingResource::Sampler(&self.detail_sampler),
             },
         ];
         for (i, view) in views.iter().enumerate() {
@@ -1759,7 +1802,13 @@ impl ModelRuntime {
             }
             Onto::Later(width, height) => (None, width, height),
         };
-        let canvas = Canvas { width, height };
+        // The canvas the model is placed on is the target's extent: a layer drawn with
+        // fewer pixels than its canvas (ADR-0197) holds the same picture, less sharp. A
+        // draw made ready for a pass is placed on the pass's canvas, pixel for pixel.
+        let canvas = match target {
+            Some((target, _)) => canvas_of(target),
+            None => Canvas { width, height },
+        };
         let camera = match draw.camera {
             Some(camera) => Some(camera.view(canvas).map_err(placement)?),
             None => None,
@@ -2160,8 +2209,8 @@ impl ModelRuntime {
         let model = &prepared.model.inner;
         let Some((_, _, depth)) = self
             .depth
-            .as_ref()
-            .filter(|(width, height, _)| (*width, *height) == prepared.size)
+            .iter()
+            .find(|(width, height, _)| (*width, *height) == prepared.size)
         else {
             return;
         };
@@ -2259,10 +2308,7 @@ impl ModelRuntime {
         let Some(camera) = draw.camera else {
             return Ok(());
         };
-        let canvas = Canvas {
-            width: target.width(),
-            height: target.height(),
-        };
+        let canvas = canvas_of(target);
         let camera = camera.view(canvas).map_err(placement)?;
         let solid = draw
             .geometry
@@ -2515,13 +2561,19 @@ impl ModelRuntime {
     }
 
     fn depth_view(&mut self, gpu: &Gpu, width: u32, height: u32) -> wgpu::TextureView {
-        if let Some((w, h, view)) = &self.depth
-            && (*w, *h) == (width, height)
+        if let Some(at) = self
+            .depth
+            .iter()
+            .position(|(w, h, _)| (*w, *h) == (width, height))
         {
-            return view.clone();
+            // The latest used is kept first.
+            self.depth[..=at].rotate_right(1);
+            return self.depth[0].2.clone();
         }
         // A pass's attachments must all be one size, so a layer of another size makes a
         // new one (a canvas resize, or a second canvas through the same compositor).
+        // The two sizes used last are kept: a model drawn with fewer pixels than its
+        // canvas (ADR-0197) alternates, every frame, with what is drawn at the canvas's.
         let (w, h) = (width, height);
         let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("jstream-render-model-depth"),
@@ -2538,9 +2590,43 @@ impl ModelRuntime {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.depth = Some((w, h, view.clone()));
+        self.depth.truncate(KEPT_DEPTHS - 1);
+        self.depth.insert(0, (w, h, view.clone()));
         view
     }
+}
+
+/// `region` of a layer `from` pixels in size, as the texels it covers of one `to` pixels
+/// in size that shows the same picture: itself when the two are one size, else grown to
+/// whole texels and kept inside `to`.
+fn spread(region: Region, from: (u32, u32), to: (u32, u32)) -> Region {
+    if from == to || from.0 == 0 || from.1 == 0 {
+        return region;
+    }
+    let low = |at: u32, from: u32, to: u32| {
+        (u64::from(at) * u64::from(to) / u64::from(from)).min(u64::from(to)) as u32
+    };
+    let high = |at: u32, from: u32, to: u32| {
+        (u64::from(at) * u64::from(to))
+            .div_ceil(u64::from(from))
+            .min(u64::from(to)) as u32
+    };
+    let x = low(region.x, from.0, to.0);
+    let y = low(region.y, from.1, to.1);
+    Region {
+        x,
+        y,
+        width: high(region.x.saturating_add(region.width), from.0, to.0).saturating_sub(x),
+        height: high(region.y.saturating_add(region.height), from.1, to.1).saturating_sub(y),
+    }
+}
+
+/// The canvas a model drawn into `target` is placed on: the target's extent
+/// ([`Image::extent`]), which is its size in pixels unless it stands for a larger canvas
+/// (ADR-0197).
+pub(crate) fn canvas_of(target: &Image) -> Canvas {
+    let (width, height) = target.extent();
+    Canvas { width, height }
 }
 
 /// The model pipelines that draw a layer and its surface at once, and the merge of that

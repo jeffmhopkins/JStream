@@ -60,7 +60,7 @@ test('a stream goes live once its key is set, and the key is never shown', async
   await addOutput(page, 'rtmp', 'rtmp://127.0.0.1/live');
 
   const stream = outputRow(page, 'output-1');
-  await expect(stream.locator('.badge')).toHaveText('Stopped');
+  await expect(stream.locator('.output-row-state')).toHaveText('Stopped');
   await expect(stream.locator('.output-row-main')).toHaveAttribute('title', 'Stream to rtmp://127.0.0.1/live');
   await expect(stream.getByRole('button', { name: 'Start' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Go live' })).toBeDisabled();
@@ -81,7 +81,7 @@ test('a stream goes live once its key is set, and the key is never shown', async
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 
   await page.getByRole('button', { name: 'Go live' }).click();
-  await expect(stream.locator('.badge')).toHaveText('Live');
+  await expect(stream.locator('.output-row-state')).toHaveText('Live');
   await expect(stream).toHaveClass(/\blive\b/);
   dialog = await openOutputSettings(page, 'output-1');
   await expect(dialog.getByLabel('Server URL')).toBeDisabled();
@@ -91,7 +91,7 @@ test('a stream goes live once its key is set, and the key is never shown', async
   await expect(page.getByRole('menuitem', { name: 'Delete…' })).toBeDisabled();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'End stream' }).click();
-  await expect(stream.locator('.badge')).toHaveText('Stopped');
+  await expect(stream.locator('.output-row-state')).toHaveText('Stopped');
 
   // Remove applies on Save, like every other field.
   dialog = await openOutputSettings(page, 'output-1');
@@ -141,16 +141,16 @@ test('a recording starts and stops on its own row', async ({ page, daemon }) => 
   // "Go live" is for streams only.
   await expect(page.getByRole('button', { name: 'Go live' })).toBeDisabled();
   await recording.getByRole('button', { name: 'Start' }).click();
-  await expect(recording.locator('.badge')).toHaveText('Live');
+  await expect(recording.locator('.output-row-state')).toHaveText('Live');
   await recording.getByRole('button', { name: 'Stop' }).click();
-  await expect(recording.locator('.badge')).toHaveText('Stopped');
+  await expect(recording.locator('.output-row-state')).toHaveText('Stopped');
 
   // The header's Record starts every recording, and stops them while they run.
   const header = page.locator('header.app-header');
   await header.getByRole('button', { name: 'Record', exact: true }).click();
-  await expect(recording.locator('.badge')).toHaveText('Live');
+  await expect(recording.locator('.output-row-state')).toHaveText('Live');
   await header.getByRole('button', { name: 'Stop recording' }).click();
-  await expect(recording.locator('.badge')).toHaveText('Stopped');
+  await expect(recording.locator('.output-row-state')).toHaveText('Stopped');
 });
 
 test('a server URL edit and an encoder choice reach the engine on OK, and Cancel sends nothing', async ({ page, daemon }) => {
@@ -306,8 +306,8 @@ test('Start all starts every output that can start, Stop all stops what runs, an
   const send = await statsTicks(page);
   await openOutputs(page, daemon);
   const head = page.locator('.outputs-head');
-  const all = head.getByRole('button', { name: '▶ Start all' });
-  const stopAll = head.getByRole('button', { name: '■ Stop all' });
+  const all = head.getByRole('button', { name: 'Start all' });
+  const stopAll = head.getByRole('button', { name: 'Stop all' });
   await expect(all).toBeDisabled();
   await expect(stopAll).toHaveCount(0);
   await addOutput(page, 'record', '/tmp/a.mp4');
@@ -316,9 +316,9 @@ test('Start all starts every output that can start, Stop all stops what runs, an
   await addOutput(page, 'rtmp', 'rtmps://live.example.com/app');
   await expect(all).toBeEnabled();
   await all.click();
-  await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Live');
-  await expect(outputRow(page, 'output-2').locator('.badge')).toHaveText('Live');
-  await expect(outputRow(page, 'output-3').locator('.badge')).toHaveText('Stopped');
+  await expect(outputRow(page, 'output-1').locator('.output-row-state')).toHaveText('Live');
+  await expect(outputRow(page, 'output-2').locator('.output-row-state')).toHaveText('Live');
+  await expect(outputRow(page, 'output-3').locator('.output-row-state')).toHaveText('Stopped');
   // Nothing left that can start; Stop all sits beside it while anything runs.
   await expect(all).toBeDisabled();
   await expect(stopAll).toBeVisible();
@@ -332,8 +332,8 @@ test('Start all starts every output that can start, Stop all stops what runs, an
   await expect(outputRow(page, 'output-2').locator('.output-row-stats')).toHaveCount(0);
 
   await stopAll.click();
-  await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Stopped');
-  await expect(outputRow(page, 'output-2').locator('.badge')).toHaveText('Stopped');
+  await expect(outputRow(page, 'output-1').locator('.output-row-state')).toHaveText('Stopped');
+  await expect(outputRow(page, 'output-2').locator('.output-row-state')).toHaveText('Stopped');
   // A stopped row has no stats line, even before the next tick.
   await expect(outputRow(page, 'output-1').locator('.output-row-stats')).toHaveCount(0);
   await expect(stopAll).toHaveCount(0);
@@ -404,9 +404,9 @@ test('another client sees outputs come and go', async ({ page, context, daemon }
   await addOutput(page, 'record', '/tmp/a.mp4');
   await expect(outputRow(other, 'output-1').locator('.output-row-main')).toHaveAttribute('title', 'Record to /tmp/a.mp4');
   await outputRow(other, 'output-1').getByRole('button', { name: 'Start' }).click();
-  await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Live');
+  await expect(outputRow(page, 'output-1').locator('.output-row-state')).toHaveText('Live');
   await outputRow(page, 'output-1').getByRole('button', { name: 'Stop' }).click();
-  await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Stopped');
+  await expect(outputRow(page, 'output-1').locator('.output-row-state')).toHaveText('Stopped');
   await deleteOutput(page, 'output-1');
   await expect(outputRow(other, 'output-1')).toHaveCount(0);
 });

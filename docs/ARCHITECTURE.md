@@ -1358,13 +1358,18 @@ mid-stinger leaves through the camera each item had. A camera with a depth of fi
 distance from the focus plane in the same draw: a disc of taps from the item's mips, its
 edge softened to match, with no extra pass or target. A 3D model is blurred by its own
 depth as its layer is drawn ([ADR-0165](adr/0165-depth-of-field-on-models.md)): its colour
-and view depth are drawn first, then five fullscreen passes gather each pixel's
+and view depth are drawn first, then six passes gather each pixel's
 neighbours whose circle of confusion reaches it, so a soft near part spreads over a
-sharp far one and the silhouette softens outward.
+sharp far one and the silhouette softens outward. The wide blurs are gathered at half
+the layer's size and the slight ones at its own
+([ADR-0193](adr/0193-depth-of-field-on-models-gathers-at-half-size.md)).
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version, for the
 program stage by a thread of its own, which also keeps the warm scenes' models
 uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and drawn
-per placement into a canvas-sized layer, through the scene's camera or the item's own
+per placement into a canvas-sized layer (or one with fewer pixels that stands for the
+canvas, while the program's GPU is short of time,
+[ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)),
+through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
 lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
@@ -1392,15 +1397,23 @@ bright point blurs into a soft glow. While the `screen_space_reflections` switch
 scenes start their video chain with a screen-space reflection pass, before their own
 filters: each model writes a surface (its normal,
 BRDF and the environment's reflection it added) in the same draw as its layer, the
-scene's surface buffer merges the nearest of them, and each pixel of
-a scene-lit model follows its reflected ray through the view depth, putting what the
-picture shows where it hits in place of that reflection. The layer is then placed flat
+scene's surface buffer merges the nearest of them, and one pixel in each block of two
+by two of a scene-lit model follows its reflected ray through the view depth to what the
+picture shows where it hits ([ADR-0189](adr/0189-screen-space-reflections-march-at-half-size.md));
+each of the model's pixels then takes what the marched pixels near it on the same
+surface found, in place of that reflection. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
 each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
 oriented by the light's item's turn, tilt and rotation
-([ADR-0182](adr/0182-a-sky-follows-its-items-tilt-and-roll.md)),
+([ADR-0182](adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), or laid out anew around
+the scene's straight ahead as a warp aimed there starts, cross-fading for half a second
+from the sky before ([ADR-0187](adr/0187-a-warp-can-travel-straight-ahead.md)), and
+showing flat pictures pinned in it, the first near its straight ahead, that change as
+each warp ends
+([ADR-0188](adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md),
+[ADR-0198](adr/0198-an-arrival-can-be-a-planet-with-its-sun.md)),
 with nebulae and a galaxy band baked once per seed into cube maps
 ([ADR-0174](adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md))
 and procedural stars laid out about the direction of travel,
@@ -1426,9 +1439,13 @@ target under the item. The collection's blending space picks where they mix
 overlay, difference and exclusion mix sRGB-encoded values. In `srgb`, a new
 collection's, the target holds premultiplied sRGB-encoded colour while the items draw,
 so every mode mixes as a browser does with the same blend states, and one decode pass
-after the last item turns it back into linear light. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
+after the last item turns it back into linear light: over a transparent background only
+over the box the items reached, and not at all when they reached nothing, since a zero
+texel decodes to itself. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
 resolve pass un-premultiplies into
-`Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
+`Rgba8UnormSrgb`, which a snapshot can read back. A frame that is one finished layer over
+the whole canvas (a scene's or an output's filter chain's result) is resolved straight
+from that layer in one pass, with no composite of it first. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
 first (D3D12 first on Windows); the software adapter is the fallback, so a machine with
 no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays
@@ -1454,7 +1471,8 @@ frame to frame, keyed by the caller's IDs, and hands an image back for freeing o
 after the GPU has finished the last frame that used it (see
 [Threads › State to RT threads](#threading)). The program stage's and the preview's caches hold
 a source's frame that only items draw at the size those items draw it, not the frame's
-(#1139), so a 1080p still in a small box keeps a small texture, and a still image keeps
+(#1139), so a 1080p still in a small box keeps a small texture, as does a capture's CPU
+frame (a 1080p webcam shown as a small picture), and a still image keeps
 no decoded copy once the program stage has uploaded it: the `jstream-stills` thread lets
 go of it then and decodes the file again when a draw needs it, so a render tick never
 decodes, and the program stage's cache keeps the still's texture while no mix draws it,
