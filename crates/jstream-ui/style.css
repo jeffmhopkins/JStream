@@ -2771,3 +2771,18 @@ button.map-key:hover { background: var(--hover); }
 .map-heard { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 button.map-key.on { border-color: var(--accent); background: var(--selected); color: var(--text); }
 .map-body .section-head { padding: 0; }
+
+/* Mapping mode (UI-FEATURES VC-04): a bar naming the armed source, every mappable
+   setting marked as a drag target, and a mapping's amount in the accent colour. */
+.mapping-bar {
+  display: flex; align-items: center; gap: 10px; padding: 6px 12px;
+  background: var(--selected); border-bottom: 1px solid var(--accent); font-size: 13px;
+}
+.mapping-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.mapping-bar-name { font-weight: 600; color: var(--text); }
+.mapping-bar-help { flex: 1; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.mapping-mode :has(> button.learn) { cursor: ns-resize; }
+body.mapping-mode :has(> button.learn):hover { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 4px; }
+body.mapping-mode :has(> button.learn) * { cursor: ns-resize; }
+body.mapping-mode button.learn { border-color: var(--accent); }
+button.learn.amount { color: var(--accent); border-color: var(--accent); padding: 0 6px; font-variant-numeric: tabular-nums; font-size: 12px; width: auto; }

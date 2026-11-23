@@ -21,6 +21,7 @@ use crate::icons::Icon;
 use crate::live_sources::{self, LiveSources as Feed};
 use crate::mapping_index::{self, Filter, Mode, Reader, Row, Setter, SourceKey, SourceKind};
 use crate::panels::channels::live_values;
+use crate::panels::mapping_mode::MappingMode;
 use crate::panels::number::NumberField;
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
@@ -85,28 +86,66 @@ pub fn mod_reader(sender: &str, slot: u8) -> MotionKind {
     live_sources::mod_reader(Some(sender), usize::from(slot.saturating_sub(1)))
 }
 
-/// The source armed for mapping mode: what a drag on a parameter would map.
+/// A source the panel can arm: its key, a reader of it over 0 to 1, which a new mapping
+/// starts from, and its name as the Sources tab shows it.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ArmedSource {
+pub struct Pick {
     /// The source.
     pub key: SourceKey,
-    /// A reader of it over 0 to 1, which a new mapping starts from.
+    /// A reader of it over 0 to 1.
     pub reader: MotionKind,
-    /// Its name, as the bar and the Sources tab show it.
+    /// Its name, as the Sources tab shows it.
     pub label: String,
 }
 
-/// The armed source, shared by everything that arms one or maps to it.
+/// The app-wide mapping mode (`mapping_mode::MappingMode`), as the panel arms and reads
+/// it: by source, so two readers of one source are one armed source.
 #[derive(Clone, Copy)]
-pub struct MappingMode(pub RwSignal<Option<ArmedSource>>);
+pub struct Armed(pub MappingMode);
+
+impl Armed {
+    /// The armed source, tracked.
+    fn key(self) -> Option<SourceKey> {
+        self.0.armed.with(|m| {
+            m.as_ref()
+                .and_then(|a| mapping_index::source_key(&a.reader))
+        })
+    }
+
+    /// The armed source, untracked.
+    fn key_untracked(self) -> Option<SourceKey> {
+        self.0.armed.with_untracked(|m| {
+            m.as_ref()
+                .and_then(|a| mapping_index::source_key(&a.reader))
+        })
+    }
+
+    /// Whether `key` is armed, tracked.
+    fn is(self, key: &SourceKey) -> bool {
+        self.key().as_ref() == Some(key)
+    }
+
+    /// Arms `pick`.
+    fn arm(self, pick: &Pick) {
+        self.0.arm(pick.reader.clone());
+    }
+
+    /// Arms `pick`, or disarms when it is armed already.
+    fn toggle(self, pick: Option<Pick>) {
+        match pick {
+            Some(p) if self.key_untracked().as_ref() != Some(&p.key) => self.arm(&p),
+            _ => self.0.disarm(),
+        }
+    }
+}
 
 /// The shell's mapping mode, or one for this panel when the shell has none.
-pub fn mapping_mode() -> MappingMode {
-    use_context::<MappingMode>().unwrap_or_else(|| {
-        let mode = MappingMode(RwSignal::new(None));
+pub fn mapping_mode() -> Armed {
+    Armed(use_context::<MappingMode>().unwrap_or_else(|| {
+        let mode = MappingMode::new();
         provide_context(mode);
         mode
-    })
+    }))
 }
 
 /// The panel's tabs.
@@ -171,6 +210,23 @@ pub fn group_label(collection: &Collection, row: &Row) -> String {
     }
 }
 
+/// An armed source's name: a named Mod's "Camera roll (Mod 20)", a channel's name, or
+/// the source's.
+fn key_label(collection: &Collection, key: &SourceKey) -> String {
+    match key {
+        SourceKey::Channel(id) => group_label(
+            collection,
+            &Row::Channel {
+                channel_id: id.clone(),
+                inputs: Vec::new(),
+                setters: Vec::new(),
+                followers: Vec::new(),
+            },
+        ),
+        _ => mapping_index::source_name(collection, key),
+    }
+}
+
 /// A reader of a channel over 0 to 1, as a new mapping from it starts.
 fn channel_reader(channel_id: &str) -> MotionKind {
     MotionKind::Channel {
@@ -183,15 +239,15 @@ fn channel_reader(channel_id: &str) -> MotionKind {
 }
 
 /// What arming a table group arms: its channel, or its direct source.
-fn group_armed(collection: &Collection, row: &Row) -> Option<ArmedSource> {
+fn group_armed(collection: &Collection, row: &Row) -> Option<Pick> {
     let label = group_label(collection, row);
     match row {
-        Row::Channel { channel_id, .. } => Some(ArmedSource {
+        Row::Channel { channel_id, .. } => Some(Pick {
             key: SourceKey::Channel(channel_id.clone()),
             reader: channel_reader(channel_id),
             label,
         }),
-        Row::Direct { source, readers } => Some(ArmedSource {
+        Row::Direct { source, readers } => Some(Pick {
             key: source.clone(),
             reader: mapping_index::with_range(&readers.first()?.input, 0.0, 1.0)?,
             label,
@@ -205,7 +261,7 @@ fn MappingsTab(
     filter: RwSignal<Filter>,
     feed: RwSignal<Feed>,
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
-    mode: MappingMode,
+    mode: Armed,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let finding = RwSignal::new(None::<Feed>);
@@ -384,7 +440,7 @@ fn MapGroup(
     row: Row,
     feed: RwSignal<Feed>,
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
-    mode: MappingMode,
+    mode: Armed,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let dock = use_context::<DockState>();
@@ -477,18 +533,9 @@ fn MapGroup(
         .collect_view();
     let is_armed = {
         let key = armed.as_ref().map(|a| a.key.clone());
-        Signal::derive(move || mode.0.with(|m| m.as_ref().map(|a| &a.key) == key.as_ref()))
+        Signal::derive(move || key.as_ref().is_some_and(|k| mode.is(k)))
     };
-    let arm = move |_| {
-        let next = armed.clone();
-        mode.0.update(|m| {
-            *m = if m.as_ref().map(|a| &a.key) == next.as_ref().map(|a| &a.key) {
-                None
-            } else {
-                next
-            }
-        });
-    };
+    let arm = move |_| mode.toggle(armed.clone());
     view! {
         <div class="mp-group" role="rowgroup" class:armed=is_armed>
             <div class="mp-source">
@@ -713,14 +760,14 @@ fn TargetRow(reader: Reader) -> impl IntoView {
 }
 
 /// What arming a Mod arms: the channel that names it, or the Mod itself.
-fn mod_armed(collection: &Collection, sender: &str, slot: u8) -> ArmedSource {
+fn mod_armed(collection: &Collection, sender: &str, slot: u8) -> Pick {
     match mapping_index::mod_channel(collection, sender, slot) {
-        Some(c) => ArmedSource {
+        Some(c) => Pick {
             key: SourceKey::Channel(c.channel_id.clone()),
             reader: channel_reader(&c.channel_id),
             label: format!("{} (Mod {slot})", collection.channel_name(&c.channel_id)),
         },
-        None => ArmedSource {
+        None => Pick {
             key: mod_key(Some(sender), slot),
             reader: mod_reader(sender, slot),
             label: format!("Mod {slot} · {sender}"),
@@ -729,8 +776,8 @@ fn mod_armed(collection: &Collection, sender: &str, slot: u8) -> ArmedSource {
 }
 
 /// The Mod slot an armed source is, for a sender, if it is one of its Mods.
-fn armed_slot(collection: &Collection, sender: &str, armed: &ArmedSource) -> Option<u8> {
-    (1..=MOD_SLOTS).find(|n| mod_armed(collection, sender, *n).key == armed.key)
+fn armed_slot(collection: &Collection, sender: &str, armed: &SourceKey) -> Option<u8> {
+    (1..=MOD_SLOTS).find(|n| &mod_armed(collection, sender, *n).key == armed)
 }
 
 /// The Sources tab: each sender's 32 Mods to name and arm, what the armed source drives,
@@ -741,7 +788,7 @@ fn SourcesTab(
     tab: RwSignal<Tab>,
     feed: RwSignal<Feed>,
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
-    mode: MappingMode,
+    mode: Armed,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     // The sender names, so the grids redraw only when the senders change.
@@ -753,33 +800,33 @@ fn SourcesTab(
                 .collect::<Vec<_>>()
         })
     });
-    // [ and ] arm the previous or next Mod, and so do the arrow keys while no field or
-    // slider has the focus; Escape disarms.
+    // The app's mapping bar steps a Mod reader with [ and ]; a named Mod is armed as its
+    // channel, so the panel steps from one, with the arrow keys too while no field or
+    // slider has the focus.
     let keys = window_event_listener(leptos::ev::keydown, move |event| {
         if event.default_prevented() || crate::hotkeys::overlay_open() {
             return;
         }
-        let key = event.key();
-        if key == "Escape" && mode.0.with_untracked(Option::is_some) {
-            mode.0.set(None);
-            return;
-        }
         let typing = crate::hotkeys::typed_in_field(&event);
-        let step: i16 = match key.as_str() {
+        let step: i16 = match event.key().as_str() {
             "[" if !typing => -1,
             "]" if !typing => 1,
             "ArrowLeft" | "ArrowUp" if !typing => -1,
             "ArrowRight" | "ArrowDown" if !typing => 1,
             _ => return,
         };
-        let Some(armed) = mode.0.get_untracked() else {
+        let Some(key) = mode.key_untracked() else {
             return;
         };
+        if matches!(key, SourceKey::Data { .. }) && matches!(event.key().as_str(), "[" | "]") {
+            // A Mod reader: the bar steps it.
+            return;
+        }
         let next = studio.collection.with_untracked(|c| {
             let c = c.as_ref()?;
             senders.with_untracked(|list| {
                 list.iter().find_map(|(sender, _)| {
-                    let slot = armed_slot(c, sender, &armed)?;
+                    let slot = armed_slot(c, sender, &key)?;
                     let n = (i16::from(slot) - 1 + step).rem_euclid(i16::from(MOD_SLOTS)) as u8 + 1;
                     Some(mod_armed(c, sender, n))
                 })
@@ -787,7 +834,7 @@ fn SourcesTab(
         });
         if let Some(next) = next {
             event.prevent_default();
-            mode.0.set(Some(next));
+            mode.arm(&next);
         }
     });
     on_cleanup(move || keys.remove());
@@ -823,12 +870,7 @@ fn SourcesTab(
 /// how many targets it drives and a live bar. The name box names it; the rest of the
 /// cell arms it.
 #[component]
-fn ModGrid(
-    sender: String,
-    has_mods: bool,
-    feed: RwSignal<Feed>,
-    mode: MappingMode,
-) -> impl IntoView {
+fn ModGrid(sender: String, has_mods: bool, feed: RwSignal<Feed>, mode: Armed) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let grid = NodeRef::<leptos::html::Div>::new();
@@ -910,13 +952,10 @@ fn ModGrid(
         let typed = RwSignal::new(None::<String>);
         let bytes = move || typed.get().map(|t| t.trim().len());
         let armed = move || {
-            mode.0.with(|m| {
-                m.as_ref().is_some_and(|a| {
-                    studio.collection.with(|c| {
-                        c.as_ref().is_some_and(|c| {
-                            sender.with_value(|s| mod_armed(c, s, slot).key == a.key)
-                        })
-                    })
+            mode.key().is_some_and(|k| {
+                studio.collection.with(|c| {
+                    c.as_ref()
+                        .is_some_and(|c| sender.with_value(|s| mod_armed(c, s, slot).key == k))
                 })
             })
         };
@@ -925,13 +964,7 @@ fn ModGrid(
                 c.as_ref()
                     .map(|c| sender.with_value(|s| mod_armed(c, s, slot)))
             });
-            mode.0.update(|m| {
-                *m = if m.as_ref().map(|a| &a.key) == next.as_ref().map(|a| &a.key) {
-                    None
-                } else {
-                    next
-                };
-            });
+            mode.toggle(next);
         };
         let commit = move |e: leptos::ev::Event| {
             let text = event_target_value(&e);
@@ -1033,10 +1066,10 @@ fn ModGrid(
 
 /// What the armed source drives, beside the grid.
 #[component]
-fn ArmedTargets(mode: MappingMode, filter: RwSignal<Filter>, tab: RwSignal<Tab>) -> impl IntoView {
+fn ArmedTargets(mode: Armed, filter: RwSignal<Filter>, tab: RwSignal<Tab>) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let body = move || {
-        let Some(armed) = mode.0.get() else {
+        let Some(key) = mode.key() else {
             return view! {
                 <p class="hint chan-help">"Click a Mod or another source to arm it, then drag on any parameter to map it."</p>
             }
@@ -1049,12 +1082,15 @@ fn ArmedTargets(mode: MappingMode, filter: RwSignal<Filter>, tab: RwSignal<Tab>)
                     .filter(|r| {
                         !matches!(r.holder, mapping_index::Holder::ChannelInput { .. })
                             && mapping_index::source_key(&r.input)
-                                .is_some_and(|k| mapping_index::hears(&k, &armed.key))
+                                .is_some_and(|k| mapping_index::hears(&k, &key))
                     })
                     .collect()
             })
         });
-        let key = armed.key.clone();
+        let label = studio
+            .collection
+            .with(|c| c.as_ref().map(|c| key_label(c, &key)))
+            .unwrap_or_default();
         let show = move |_| {
             filter.set(Filter {
                 source: Some(key.clone()),
@@ -1064,13 +1100,13 @@ fn ArmedTargets(mode: MappingMode, filter: RwSignal<Filter>, tab: RwSignal<Tab>)
         };
         view! {
             <div class="section-head chan-head">
-                <span class="eyebrow">{format!("Armed: {}", armed.label)}</span>
+                <span class="eyebrow">{format!("Armed: {label}")}</span>
                 <button type="button" class="chan-add" on:click=show>"Show in Mappings"</button>
             </div>
             <div class="mp-armed">
                 {rows.into_iter().map(|r| view! { <TargetRow reader=r /> }).collect_view()}
             </div>
-            <p class="hint chan-help">"Drag on any tinted parameter to add one. [ and ] arm the previous or next Mod, as the arrow keys do while no field has the focus. Escape disarms."</p>
+            <p class="hint chan-help">"Drag on any setting to map it. [ and ] arm the previous or next Mod, as the arrow keys do while no field has the focus. Escape or Done in the bar disarms."</p>
         }
         .into_any()
     };
@@ -1083,29 +1119,19 @@ fn ArmedTargets(mode: MappingMode, filter: RwSignal<Filter>, tab: RwSignal<Tab>)
 fn OtherSources(
     feed: RwSignal<Feed>,
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
-    mode: MappingMode,
+    mode: Armed,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
-    let row = move |armed: ArmedSource,
-                    kind: &'static str,
-                    extra: Option<String>,
-                    level: Option<f32>| {
+    let row = move |armed: Pick, kind: &'static str, extra: Option<String>, level: Option<f32>| {
         let count = studio.collection.with(|c| {
             c.as_ref()
                 .map_or(0, |c| mapping_index::drives(c, &armed.key).len())
         });
         let key = armed.key.clone();
-        let on = move || mode.0.with(|m| m.as_ref().map(|a| &a.key) == Some(&key));
+        let on = move || mode.is(&key);
         let label = armed.label.clone();
         let pick = move |_| {
-            let next = armed.clone();
-            mode.0.update(|m| {
-                *m = if m.as_ref().map(|a| &a.key) == Some(&next.key) {
-                    None
-                } else {
-                    Some(next)
-                }
-            });
+            mode.toggle(Some(armed.clone()));
         };
         view! {
             <li class="chan-row link" class:armed=on on:click=pick>
@@ -1131,7 +1157,7 @@ fn OtherSources(
                         .expect("invariant: a MIDI reader has a source");
                     let label = format!("{} · CC {}", control.input, control.controller);
                     row(
-                        ArmedSource { key, reader, label },
+                        Pick { key, reader, label },
                         "midi",
                         None,
                         Some(f32::from(control.value) / 127.0),
@@ -1146,7 +1172,7 @@ fn OtherSources(
                 .collect();
             channels.sort_by_key(|ch| c.channel_name(&ch.channel_id).to_lowercase());
             out.extend(channels.into_iter().map(|ch| {
-                let armed = ArmedSource {
+                let armed = Pick {
                     key: SourceKey::Channel(ch.channel_id.clone()),
                     reader: channel_reader(&ch.channel_id),
                     label: c.channel_name(&ch.channel_id),
@@ -1157,7 +1183,7 @@ fn OtherSources(
             out.extend(c.hotkeys.iter().filter_map(|h| {
                 let action = h.action()?;
                 let channel = mapping_index::action_channel(&action)?;
-                let armed = ArmedSource {
+                let armed = Pick {
                     key: SourceKey::Channel(channel.to_owned()),
                     reader: channel_reader(channel),
                     label: format!("Key {}", crate::hotkeys::label(&h.chord)),

@@ -329,7 +329,7 @@ fn keeps_own_menu(tag: &str, ty: &str) -> bool {
 /// panel or dialog. A right-click in a field of free text is left to the browser.
 pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
     use leptos::wasm_bindgen::JsCast;
-    let Some(mut el) = event
+    let Some(el) = event
         .target()
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
     else {
@@ -341,41 +341,16 @@ pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
     ) {
         return false;
     }
-    loop {
-        if let Ok(buttons) = el.query_selector_all(":scope > button.learn") {
-            match buttons.length() {
-                0 => {}
-                1 => {
-                    let id = buttons
-                        .item(0)
-                        .and_then(|n| n.dyn_into::<web_sys::Element>().ok())
-                        .and_then(|b| b.get_attribute("data-learn"));
-                    let Some(id) = id else {
-                        return false;
-                    };
-                    event.prevent_default();
-                    at.0.set(Some((
-                        id,
-                        f64::from(event.client_x()),
-                        f64::from(event.client_y()),
-                    )));
-                    return true;
-                }
-                _ => return false,
-            }
-        }
-        let class = el.class_name();
-        if class
-            .split_whitespace()
-            .any(|c| matches!(c, "panel" | "modal" | "shell"))
-        {
-            return false;
-        }
-        match el.parent_element() {
-            Some(parent) => el = parent,
-            None => return false,
-        }
-    }
+    let Some(id) = crate::panels::mapping_mode::setting_at(el) else {
+        return false;
+    };
+    event.prevent_default();
+    at.0.set(Some((
+        id,
+        f64::from(event.client_x()),
+        f64::from(event.client_y()),
+    )));
+    true
 }
 
 /// What the control menu shows.
@@ -461,6 +436,68 @@ pub fn Learn(
             MotionKind::Channel { channel_id, .. } => Some(channel_id),
             _ => None,
         })
+    };
+    // Mapping mode: a drag on this setting's row maps the armed source onto it by an
+    // amount, shown while the drag is under way and written once when it ends.
+    let mode = use_context::<crate::panels::mapping_mode::MappingMode>();
+    let preview = RwSignal::new(None::<(f32, f32)>);
+    // The ends the armed source maps this setting onto already.
+    let armed_ends = move || {
+        let armed = mode?.armed.get()?;
+        let binding = bound()?;
+        crate::panels::map_control::same_source(&binding.input, &armed.reader)
+            .then(|| crate::panels::map_control::ends(&binding.input))
+            .flatten()
+    };
+    if let Some(mode) = mode {
+        let own_id = own_id.clone();
+        Effect::new(move |_| {
+            let drag = mode.drag.get();
+            let Some(drag) = drag.filter(|d| d.setting == own_id) else {
+                preview.set(None);
+                return;
+            };
+            let Some(armed) = mode.armed.get_untracked() else {
+                return;
+            };
+            let existing = untrack(armed_ends);
+            let ends = crate::panels::mapping_mode::ends_after(
+                existing,
+                current.and_then(|c| c.get_untracked()),
+                range,
+                drag.amount,
+            );
+            if !drag.done {
+                preview.set(Some(ends));
+                return;
+            }
+            mode.drag.set(None);
+            preview.set(None);
+            // A drag that ends where it began on an unmapped setting maps nothing.
+            if existing.is_none() && ends.0 == ends.1 {
+                return;
+            }
+            if let Some(s) = session.0.get_value() {
+                let previous = untrack(bound);
+                let kept = previous.as_ref().filter(|_| existing.is_some());
+                let input = crate::panels::map_control::with_ends(
+                    crate::panels::map_control::picked(armed.reader, kept.map(|b| &b.input), range),
+                    ends.0,
+                    ends.1,
+                );
+                let amount = kept.and_then(|b| b.amount.clone());
+                let binding = target
+                    .with_value(|t| crate::panels::map_control::binding_for(t, input, amount));
+                studio.apply(&s, vec![Edit::BindingSetValue { binding }]);
+            }
+        });
+    }
+    // How far the armed source moves this setting, while there is something to show.
+    let amount_text = move || {
+        preview
+            .get()
+            .or_else(armed_ends)
+            .map(|ends| crate::panels::mapping_mode::amount_label(ends, range))
     };
     // Binds what the Learn popover heard, over the setting's whole range: a learned
     // control takes the setting over, as a knob mapped in a DAW does.
@@ -606,6 +643,7 @@ pub fn Learn(
     }
     };
     let text = move || match (learning.get(), bound()) {
+        _ if amount_text().is_some() => amount_text().unwrap_or_default(),
         (true, _) => "Move…".to_owned(),
         (false, Some(binding)) => match channel() {
             Some(id) => studio
@@ -785,6 +823,7 @@ pub fn Learn(
             node_ref=opener
             class:learning=learning
             class:bound=move || bound().is_some()
+            class:amount=move || amount_text().is_some()
             class:chip=move || channel().is_some()
             data-learn=own_id
             title=title

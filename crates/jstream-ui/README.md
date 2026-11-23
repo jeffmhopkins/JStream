@@ -207,7 +207,7 @@ Contents ([Design](#design) explains the choices):
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
   the Mappings panel (`mappings.rs`: `Mappings`, its Mappings and Sources tabs over
-  `live_sources`, and the armed source `MappingMode` holds, with a source's live value,
+  `live_sources`, arming through the Shell's `MappingMode`, with a source's live value,
   what moved and a Mod's reader tested natively, over `mapping_index.rs`, every
   reader grouped by source with the edits that write one back, bypass it, name a Mod and
   remove a trigger, tested natively),
@@ -830,6 +830,22 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the key bound to `channel.switch` `toggle`; a key that already switches a channel just
   gets the setting following that channel). `LearnPopover` takes the one source heard
   after a 900 ms pause with nothing new, or lists several to pick from.
+- **Mapping mode** (`panels/mapping_mode.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+  `MappingMode`, provided by the Shell, holds the armed source (`armed`, a reader and its
+  name; `arm` and `disarm`) and the drag under way (`drag`: the setting's `data-learn`,
+  the amount as a share of its range, and `done`). Anything that lists sources arms one
+  with `arm`. `MappingBar`, mounted once under the header, shows the armed source and,
+  while one is armed, listens on the document's capture phase: a press on a setting's row
+  (`setting_at`, the lookup a right-click uses) starts a drag and never reaches the
+  control, `dragged` turns pointer travel into the amount (200 px the whole range, a
+  tenth as fast with Shift), letting go after less than 3 px is a click that maps
+  nothing, the click that follows a press is swallowed, Escape cancels the drag or
+  disarms, and `[` and `]` step the armed Mod (`stepped`). The body carries
+  `mapping-mode` for the styles. The setting's control button (`learn.rs`) watches
+  `drag` for its own ID: it shows `amount_label` of `ends_after` while the drag runs, and
+  on `done` writes one `binding.set_value` reading the armed source from where the
+  setting is to the dragged amount, kept in range; a setting the source maps already
+  keeps its start, smoothing, curve and amount channel.
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in
@@ -866,8 +882,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   mappings that read the Mod directly moved onto it, one batch; a rename of the channel
   that names it; at most 40 bytes, shown while typing; Enter goes to the next, Escape
   restores, several pasted lines fill the Mods after it), what it drives and its live
-  bar; the rest of a cell arms it (`MappingMode`, which `[` and `]` step and Escape
-  clears). Beside the grid, the armed source's targets, then the other sources (MIDI
+  bar; the rest of a cell arms it in the Shell's `MappingMode` (`mapping_mode.rs`), whose
+  bar shows it, takes the drags, steps a Mod reader with `[` and `]` and disarms on
+  Escape; a named Mod is armed as its channel, so the panel steps from it itself). Beside the grid, the armed source's targets, then the other sources (MIDI
   controls seen, channels, keys that switch one), which arm the same way. The panel reads
   what is arriving through `live_sources()` (below) while it lives.
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).

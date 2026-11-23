@@ -324,6 +324,8 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     let control_menu = crate::panels::learn::ControlMenuAt::new();
     provide_context(control_menu);
     provide_context(crate::panels::map_control::MapControlDialog::new());
+    // Mapping mode: the armed source, and the drag on a setting that maps it.
+    provide_context(crate::panels::mapping_mode::MappingMode::new());
     view! {
         <div class="shell" on:contextmenu=move |event| { crate::panels::learn::row_context(control_menu, &event); }>
             <Header info=info disconnect=disconnect />
@@ -334,6 +336,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
                     <button on:click=move |_| studio.problem.set(None)>"Dismiss"</button>
                 </div>
             })}
+            <crate::panels::mapping_mode::MappingBar />
             <Workspace />
             <Toast />
             <Hotkeys />
