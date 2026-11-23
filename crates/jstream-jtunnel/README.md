@@ -35,10 +35,16 @@ Contents:
   64), a key `is_state_key` accepts (1 to 63 of ASCII letters, digits, `/`, `_`, `.`,
   `-`) and at most 1,200 bytes of data, with nothing after it, as JTunnel's own parser
   insists.
-  `write_subscribe` and `write_bye` are what a receiver sends; `write_audio` and
+  `write_subscribe`, `write_bye` and `write_names` are what a receiver sends. A names
+  packet (type 5, JTunnel 0.15,
+  [ADR-0181](../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md)) names a
+  sender's `MOD_SLOTS` (32) modulation params as one whole list, each name `is_mod_name`
+  (at most `MAX_MOD_NAME`, 40, bytes, no control character, no space at an end), so all
+  of them fit one packet; JStream never parses one. `write_audio` and
   `write_state` write what a sender would, for tests and fuzzing. `decode_pcm24`
   decodes 24-bit PCM at JTunnel's scale. A test checks the parser and writer against
-  bytes JTunnel's C++ writer wrote, a state piece's included.
+  bytes JTunnel's C++ writer wrote, a state piece's included, and the names packet
+  against JTunnel's layout.
 - `SysexAssembler`: joins SysEx pieces into whole messages in a buffer allocated once,
   dropping a message whole when a piece is missing or out of order, or when the caller
   abandons it after a lost frame.

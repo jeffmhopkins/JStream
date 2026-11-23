@@ -1575,6 +1575,13 @@ impl Engine {
         spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
+        // What the collection names its senders' params (ADR-0181), given to the new
+        // receiver whatever the last one was told.
+        {
+            let mut state = lock(&self.shared.state);
+            state.jtunnel_names = crate::jtunnel::names::ParamNames::new();
+            state.name_jtunnel_params();
+        }
         self.jtunnel_turned();
         if let Some(midi) = midi
             && !self.shared.tempo.swap(true, Ordering::Relaxed)
@@ -4956,6 +4963,9 @@ struct State {
     /// Whether the `jstream-values` thread is running: it ticks [`State::driver`] while
     /// the collection holds a value binding.
     values_ticking: bool,
+    /// What the collection last named the JTunnel senders' modulation params
+    /// (ADR-0181), so the receiver hears of a change only.
+    jtunnel_names: crate::jtunnel::names::ParamNames,
     /// The engine this state belongs to, for the live ticker.
     shared: Weak<Shared>,
     /// The program mixer's controls while it runs: it follows the collection's audio.
@@ -5239,6 +5249,7 @@ impl State {
         self.reconcile_timelines(wake);
         self.reconcile_keyframes(client_id, request_id, wake);
         self.refresh_shown();
+        self.name_jtunnel_params();
         {
             let drawn = self.shown.as_ref().unwrap_or(&self.graph);
             self.live.sync(drawn.state());
@@ -7017,6 +7028,20 @@ impl State {
             wake,
         );
         self.live_tick(Instant::now(), wake);
+    }
+
+    /// Names the JTunnel senders' modulation params after what the collection binds to
+    /// them (ADR-0181), when that changed: the receiver, if one runs, sends the names
+    /// from its next keepalive. A receiver started later is given them at its start.
+    fn name_jtunnel_params(&mut self) {
+        let names = crate::jtunnel::names::param_names(&self.graph);
+        if names == self.jtunnel_names {
+            return;
+        }
+        if let Some(receiver) = self.audio.wanted().jtunnel_receiver() {
+            receiver.set_names(&names);
+        }
+        self.jtunnel_names = names;
     }
 
     /// Rebuilds [`shown`](Self::shown) from the open gestures' source settings. Returns
