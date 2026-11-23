@@ -556,9 +556,11 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    step 3: one pass (`resolve.wgsl`'s `fs_layer`) reads the layer itself and writes the
    sRGB target. Per texel it does what steps 3 and 4 would: lays the texel over the
    background in the blending space (encoding first and decoding after in `srgb`),
-   then un-premultiplies. The FP16 target is not drawn, copied or decoded, which on a
-   1080p frame is a draw, a copy and two fullscreen passes fewer. The pixels match the
-   long way's within one step of 8 bits.
+   then un-premultiplies. The FP16 target is not drawn, copied or decoded: one
+   fullscreen pass fewer in `linear`, and in `srgb` two and the backdrop copy. The
+   pixels match the long way's within one step of 8 bits
+   (`a_scene_of_one_whole_layer_is_resolved_straight_from_it`,
+   `a_layer_that_is_not_the_whole_scene_is_composited`).
 
    **`render_image`** (a nested scene) stops after step 3. It composites into a new
    `Rgba16Float` texture (`RENDER_ATTACHMENT | TEXTURE_BINDING`) of the canvas size
