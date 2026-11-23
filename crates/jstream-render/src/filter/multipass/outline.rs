@@ -3,11 +3,11 @@
 //! the frame's edge is cut (ADR-0065 §5); on an item, its `max_outset_px` gives the
 //! effects layer room for the widest outside stroke past the box.
 //!
-//! Method: a jump flood ([`jfa`]) that reaches `width + 1` px gives every pixel the
-//! vector to its nearest seed: the shape's pixels (alpha at least 0.5; inside: the
-//! pixels below it). The stroke covers each pixel by `clamp(width + 1 - distance, 0, 1)`.
-//! [`MAX_WIDTH`] is 64 px: at most 8 step passes, each of 9 loads, and two scratch
-//! layers.
+//! Method: [`jfa`] gives every pixel the vector to its nearest seed within `width + 1`
+//! px: the shape's pixels (alpha at least 0.5; inside: the pixels below it). The stroke
+//! covers each pixel by `clamp(width + 1 - distance, 0, 1)`. A short stroke is two
+//! exact passes and a long one a jump flood; [`MAX_WIDTH`] is 64 px: at most 8 flood
+//! passes, each of 9 loads. Either takes two scratch layers.
 
 use jstream_protocol::{KindDescriptor, Settings};
 
@@ -177,6 +177,72 @@ mod tests {
         assert!(out.pixel(2, 2).expect("inside")[3] < 64);
         near(&out, 3, 3, WHITE, 0);
         near(&out, 0, 0, CLEAR, 0);
+    }
+
+    /// A short reach is found exactly: over scattered single pixels, every pixel's
+    /// stroke is what its distance to the nearest of them gives, for an outside stroke
+    /// and an inside one.
+    #[test]
+    fn a_short_stroke_is_exact_about_scattered_pixels() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const N: i32 = 40;
+        // Pixels picked by a fixed hash, about one in 23.
+        let seed = |x: i32, y: i32| {
+            (x as u32)
+                .wrapping_mul(73_856_093)
+                .wrapping_add((y as u32).wrapping_mul(19_349_663))
+                .is_multiple_of(23)
+        };
+        for (position, inside) in [("outside", false), ("inside", true)] {
+            // Outside: a stroke around each picked pixel. Inside: the picked pixels are
+            // holes in an opaque frame, and the stroke is drawn from each hole and from
+            // the frame's edge.
+            let shape = |x: i32, y: i32| seed(x, y) != inside;
+            let pixels: Vec<[u8; 4]> = (0..N)
+                .flat_map(|y| (0..N).map(move |x| if shape(x, y) { RED } else { CLEAR }))
+                .collect();
+            let input = image(&opened, N as u32, &pixels);
+            let width = 5.5f32;
+            let mut outline = filter("outline", json!({"width": width, "position": position}));
+            let out = run(&mut opened, &mut outline, &input, 0.0);
+            for y in 0..N {
+                for x in 0..N {
+                    if shape(x, y) != inside {
+                        continue;
+                    }
+                    // The nearest pixel the stroke is measured from, by brute force.
+                    let mut nearest = f32::MAX;
+                    for sy in 0..N {
+                        for sx in 0..N {
+                            if shape(sx, sy) != inside {
+                                let d = (((sx - x).pow(2) + (sy - y).pow(2)) as f32).sqrt();
+                                nearest = nearest.min(d);
+                            }
+                        }
+                    }
+                    if inside {
+                        let edge = (x + 1).min(y + 1).min(N - x).min(N - y);
+                        nearest = nearest.min(edge as f32);
+                    }
+                    let cover = (width + 1.0 - nearest).clamp(0.0, 1.0);
+                    // White over clear (outside) or over red (inside), in linear light.
+                    let got = out.pixel(x as u32, y as u32).expect("inside");
+                    let want = if inside {
+                        // Red loses nothing; green and blue rise with the stroke.
+                        (crate::color::linear_channel_to_srgb(cover) * 255.0).round() as u8
+                    } else {
+                        (cover * 255.0).round() as u8
+                    };
+                    let seen = if inside { got[1] } else { got[3] };
+                    assert!(
+                        seen.abs_diff(want) <= 1,
+                        "{position} ({x}, {y}): {nearest} px away, {seen} for {want}"
+                    );
+                }
+            }
+        }
     }
 
     /// ADR-0065 §5: an outside stroke past the frame's edge is cut, so an opaque frame

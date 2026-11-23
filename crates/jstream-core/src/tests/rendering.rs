@@ -39,7 +39,11 @@ fn the_switches_are_set_one_at_a_time_and_kept_in_their_file() {
         .with_cpu_compositor()
         .with_rendering_file(&file);
     let control = connected(&engine);
-    assert_eq!(rendering(&control), Some(RenderFeatures::ALL), "all on");
+    assert_eq!(
+        rendering(&control),
+        Some(RenderFeatures::DEFAULT),
+        "the defaults"
+    );
     set(
         &control,
         RenderFeaturesChange {
@@ -57,7 +61,7 @@ fn the_switches_are_set_one_at_a_time_and_kept_in_their_file() {
     let off = RenderFeatures {
         shadows: false,
         floor_reflections: false,
-        ..RenderFeatures::ALL
+        ..RenderFeatures::DEFAULT
     };
     assert_eq!(rendering(&control), Some(off), "each change keeps the rest");
     drop(control);
@@ -88,7 +92,7 @@ fn a_probe_resolution_cap_is_one_of_the_face_sizes() {
     );
     let capped = RenderFeatures {
         max_probe_resolution: 256,
-        ..RenderFeatures::ALL
+        ..RenderFeatures::DEFAULT
     };
     assert_eq!(rendering(&control), Some(capped));
     let refused = block_on(control.call(Call::Action {
@@ -105,4 +109,40 @@ fn a_probe_resolution_cap_is_one_of_the_face_sizes() {
         "{refused:?}"
     );
     assert_eq!(rendering(&control), Some(capped), "nothing changed");
+}
+
+/// The steps a screen-space reflection's ray takes (ADR-0170 decision 4) are one of
+/// the counts: another is refused and changes nothing.
+#[test]
+fn the_reflection_steps_are_one_of_the_counts() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    set(
+        &control,
+        RenderFeaturesChange {
+            screen_space_steps: Some(64),
+            screen_space_reflections: Some(false),
+            ..RenderFeaturesChange::default()
+        },
+    );
+    let set_to = RenderFeatures {
+        screen_space_steps: 64,
+        screen_space_reflections: false,
+        ..RenderFeatures::ALL
+    };
+    assert_eq!(rendering(&control), Some(set_to));
+    let refused = block_on(control.call(Call::Action {
+        action: Action::StudioSetRendering {
+            change: RenderFeaturesChange {
+                screen_space_steps: Some(20),
+                screen_space_reflections: Some(true),
+                ..RenderFeaturesChange::default()
+            },
+        },
+    }));
+    assert!(
+        matches!(&refused, Err(error) if error.to_string().contains("screen_space_steps")),
+        "{refused:?}"
+    );
+    assert_eq!(rendering(&control), Some(set_to), "nothing changed");
 }

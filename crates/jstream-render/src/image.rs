@@ -466,6 +466,30 @@ pub(crate) fn upload_unit_f16(
     height: u32,
     texels: &[[f32; 4]],
 ) -> Result<Image, RenderError> {
+    upload_f16(maker, (width, height), texels, |v| {
+        f16_bits(v.clamp(0.0, 1.0))
+    })
+}
+
+/// [`upload_unit_f16`] with each channel clamped to the half float's finite range
+/// instead: for data a test hands a pass, such as a signed normal.
+#[cfg(test)]
+pub(crate) fn upload_any_f16(
+    maker: &Maker<'_>,
+    width: u32,
+    height: u32,
+    texels: &[[f32; 4]],
+) -> Result<Image, RenderError> {
+    upload_f16(maker, (width, height), texels, f16_signed_bits)
+}
+
+/// Uploads `texels` as `Rgba16Float`, each channel's bits as `bits` makes them.
+fn upload_f16(
+    maker: &Maker<'_>,
+    (width, height): (u32, u32),
+    texels: &[[f32; 4]],
+    bits: fn(f32) -> u16,
+) -> Result<Image, RenderError> {
     if width == 0 || height == 0 || texels.len() as u64 != u64::from(width) * u64::from(height) {
         return Err(RenderError::Invalid {
             what: "image",
@@ -486,7 +510,7 @@ pub(crate) fn upload_unit_f16(
     let bytes: Vec<u8> = texels
         .iter()
         .flatten()
-        .flat_map(|v| f16_bits(v.clamp(0.0, 1.0)).to_le_bytes())
+        .flat_map(|v| bits(*v).to_le_bytes())
         .collect();
     maker.gpu.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
@@ -848,6 +872,18 @@ pub(crate) fn unit_f16_bytes(value: f32, out: &mut [u8]) {
 /// so there is no sign, overflow, infinity or NaN to handle.
 pub(crate) fn f16_bits(value: f32) -> u16 {
     debug_assert!((0.0..=1.0).contains(&value), "{value} is outside 0..=1");
+    f16_magnitude(value)
+}
+
+/// [`f16_bits`] of any finite `value` a half float holds: its sign, then its magnitude.
+#[cfg(test)]
+fn f16_signed_bits(value: f32) -> u16 {
+    let sign = if value.is_sign_negative() { 0x8000 } else { 0 };
+    sign | f16_magnitude(value.abs().min(65504.0))
+}
+
+/// The binary16 bits of `value`, finite, not negative and at most 65504.
+fn f16_magnitude(value: f32) -> u16 {
     let bits = value.to_bits();
     let exponent = ((bits >> 23) & 0xff) as i32 - 127 + 15;
     let mantissa = bits & 0x7f_ffff;

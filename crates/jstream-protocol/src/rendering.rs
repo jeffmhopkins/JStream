@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 /// A switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a
 /// scene, light or filter asks for; on, each scene gets what it asks for. No switch
 /// changes the collection, so turning one back on restores every scene as it was. Every
-/// switch is on until `studio.set_rendering` turns it off.
+/// switch but `screen_space_reflections` is on until `studio.set_rendering` changes it
+/// ([`RenderFeatures::DEFAULT`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct RenderFeatures {
     /// Shadow maps (ADR-0151 decision 3). Off, no light casts a shadow, whatever its
@@ -38,13 +39,31 @@ pub struct RenderFeatures {
     /// [`PROBE_RESOLUTIONS`] (since 0.165). A probe set larger captures at this.
     #[serde(default = "max_probe")]
     pub max_probe_resolution: u32,
+    /// Screen-space reflections (ADR-0170 decision 4, since 0.172), one extra pass over
+    /// each scene whose `reflections` is on. Off, its surfaces reflect their probes and
+    /// environment only. Off until turned on (ADR-0185), since it can cost a modest GPU
+    /// its frame rate.
+    #[serde(default)]
+    pub screen_space_reflections: bool,
+    /// How many steps a screen-space reflection's ray takes through the view depth: one
+    /// of [`SCREEN_SPACE_STEPS`] (since 0.172). More finds thinner things, at more cost.
+    #[serde(default = "screen_space_steps")]
+    pub screen_space_steps: u32,
 }
 
 /// The sizes a reflection probe's faces may be, in pixels a side (ADR-0170 decision 3).
 pub const PROBE_RESOLUTIONS: [u32; 3] = [128, 256, 512];
 
+/// The steps a screen-space reflection's ray may take (ADR-0170 decision 4): low,
+/// medium and high quality.
+pub const SCREEN_SPACE_STEPS: [u32; 3] = [16, 32, 64];
+
 fn on() -> bool {
     true
+}
+
+fn screen_space_steps() -> u32 {
+    SCREEN_SPACE_STEPS[0]
 }
 
 fn max_probe() -> u32 {
@@ -53,12 +72,20 @@ fn max_probe() -> u32 {
 
 impl Default for RenderFeatures {
     fn default() -> Self {
-        Self::ALL
+        Self::DEFAULT
     }
 }
 
 impl RenderFeatures {
-    /// Every switch on: what the engine draws until `studio.set_rendering` changes it.
+    /// What the engine draws until `studio.set_rendering` changes it: every switch on but
+    /// `screen_space_reflections`, and the largest probe faces at the fewest steps (low
+    /// quality, ADR-0185).
+    pub const DEFAULT: Self = Self {
+        screen_space_reflections: false,
+        ..Self::ALL
+    };
+
+    /// Every switch on.
     pub const ALL: Self = Self {
         shadows: true,
         ambient_occlusion: true,
@@ -66,6 +93,8 @@ impl RenderFeatures {
         floor_reflections: true,
         reflection_probes: true,
         max_probe_resolution: 512,
+        screen_space_reflections: true,
+        screen_space_steps: 16,
     };
 
     /// Whether a scene filter of `kind_id` is drawn: `false` only for a filter kind a
@@ -92,6 +121,10 @@ impl RenderFeatures {
             max_probe_resolution: change
                 .max_probe_resolution
                 .unwrap_or(self.max_probe_resolution),
+            screen_space_reflections: change
+                .screen_space_reflections
+                .unwrap_or(self.screen_space_reflections),
+            screen_space_steps: change.screen_space_steps.unwrap_or(self.screen_space_steps),
         }
     }
 
@@ -131,6 +164,14 @@ pub struct RenderFeaturesChange {
     /// to keep it (since 0.165). `studio.set_rendering` refuses any other size.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_probe_resolution: Option<u32>,
+    /// Whether screen-space reflections draw, or left out to keep it (since 0.172).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screen_space_reflections: Option<bool>,
+    /// How many steps a screen-space reflection's ray takes, one of
+    /// [`SCREEN_SPACE_STEPS`], or left out to keep it (since 0.172).
+    /// `studio.set_rendering` refuses any other count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screen_space_steps: Option<u32>,
 }
 
 #[cfg(test)]
@@ -166,15 +207,17 @@ mod tests {
     }
 
     #[test]
-    fn a_switch_an_older_server_leaves_out_reads_as_on() {
+    fn a_switch_an_older_server_leaves_out_reads_as_its_default() {
         let read: RenderFeatures = serde_json::from_str(r#"{"shadows":false}"#).expect("parses");
         assert_eq!(
             read,
             RenderFeatures {
                 shadows: false,
-                ..RenderFeatures::ALL
+                ..RenderFeatures::DEFAULT
             }
         );
         assert!(read.reflection_probes && read.max_probe_resolution == 512);
+        assert!(!read.screen_space_reflections && read.screen_space_steps == 16);
+        assert_eq!(RenderFeatures::default(), RenderFeatures::DEFAULT);
     }
 }

@@ -194,4 +194,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0179](0179-cards-that-only-add-light-cast-no-shadow.md) | Cards that only add light cast no shadow | accepted | agent |  |
 | [ADR-0180](0180-a-move-within-a-3d-family-glides-through-its-chain.md) | A Move within a 3D scene's family glides item by item, its chain paused | accepted | agent |  |
 | [ADR-0181](0181-jstream-names-a-jtunnel-senders-params.md) | JStream names a JTunnel sender's modulation params | accepted | maintainer |  |
+| [ADR-0185](0185-how-reflections-landed-off-by-default.md) | How reflection probes and screen-space reflections landed, off by default | accepted | agent |  |
 <!-- @generated end adr-index -->

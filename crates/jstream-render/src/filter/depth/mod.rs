@@ -14,7 +14,10 @@ mod bloom;
 mod fog;
 mod occlusion;
 mod reflection;
+mod screen;
 mod volumetric;
+
+pub use screen::KIND as SCREEN_REFLECTIONS_KIND;
 
 use std::sync::Arc;
 
@@ -47,6 +50,24 @@ pub struct ViewDepth {
     /// The scene drawn mirrored in its floor, for the kinds that
     /// [`reflection_floor`] names a floor for; `None` when none was drawn.
     pub reflection: Option<DepthReflection>,
+    /// What the scene's models show to a screen-space reflection, for the kinds that
+    /// [`reads_surface`]; `None` when none was drawn.
+    pub surface: Option<DepthSurface>,
+}
+
+/// A scene's surface buffer (ADR-0170 decision 4), drawn of its models with its view
+/// depth by [`crate::Compositor::draw_model_surface`], each the scene's canvas size.
+#[derive(Clone, Debug)]
+pub struct DepthSurface {
+    /// rgb: the nearest model's shading normal in its camera's viewing frame; a: its
+    /// `1 / w`. 0 where no model is.
+    pub normal: Image,
+    /// rgb: the split-sum BRDF its environment's reflection was weighed by; a: its
+    /// roughness.
+    pub brdf: Image,
+    /// rgb: that reflection as it was added; a: 1 where one found on screen may replace
+    /// it.
+    pub reflected: Image,
 }
 
 /// A scene drawn through its camera mirrored in the plane `y = floor_y` (ADR-0151
@@ -85,6 +106,7 @@ impl ViewDepth {
             lights: Arc::from([]),
             shadows: Arc::from([]),
             reflection: None,
+            surface: None,
         }
     }
 }
@@ -108,6 +130,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
         occlusion::KIND => Some(Box::new(occlusion::AmbientOcclusion::new(settings))),
         volumetric::KIND => Some(Box::new(volumetric::VolumetricFog::new(settings))),
         reflection::KIND => Some(Box::new(reflection::FloorReflection::new(settings))),
+        screen::KIND => Some(Box::new(screen::ScreenReflections::new(settings))),
         _ => None,
     }
 }
@@ -120,9 +143,22 @@ pub fn reads_depth(kind_id: &str) -> bool {
         fog::KIND,
         occlusion::KIND,
         reflection::KIND,
+        screen::KIND,
         volumetric::KIND,
     ]
     .contains(&kind_id)
+}
+
+/// Whether a filter of `kind_id` also reads its scene's surface buffer
+/// ([`DepthSurface`]), so the engine draws it with the view depth (ADR-0170 decision 4).
+pub fn reads_surface(kind_id: &str) -> bool {
+    kind_id == screen::KIND
+}
+
+/// The descriptor of the screen-space reflection pass the engine puts in a scene's
+/// chain (ADR-0170 decision 4): not among [`descriptors`], since no chain lists it.
+pub fn screen_reflections_descriptor() -> KindDescriptor {
+    screen::descriptor()
 }
 
 /// How far past its input a filter of this group's `kind_id` draws at `settings`, in
@@ -169,6 +205,10 @@ mod tests {
             assert!(super::build(id, &Settings::default()).is_some(), "{id}");
         }
         assert!(!super::reads_depth("blur"));
+        assert!(super::reads_depth(super::SCREEN_REFLECTIONS_KIND));
+        assert!(super::reads_surface(super::SCREEN_REFLECTIONS_KIND));
+        assert!(!super::reads_surface("ambient_occlusion"));
+        assert!(super::build(super::SCREEN_REFLECTIONS_KIND, &Settings::default()).is_some());
         assert!(super::reads_shadows("volumetric_fog"));
         assert!(!super::reads_shadows("depth_fog"));
         let floor = super::reflection_floor("floor_reflection", &Settings::default());

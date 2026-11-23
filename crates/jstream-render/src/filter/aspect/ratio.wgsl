@@ -58,12 +58,21 @@ fn resample(pos: vec2<f32>, radius: i32) -> vec4<f32> {
     let base = floor(t);
     let f = t - base;
     let origin = vec2<i32>(base);
+    // Each axis's six weights, worked out once: a tap's weight is its column's times its
+    // row's. A radius of 2 reads the middle four.
+    let wx = array<f32, 6>(
+        kernel(f.x + 2.0), kernel(f.x + 1.0), kernel(f.x),
+        kernel(f.x - 1.0), kernel(f.x - 2.0), kernel(f.x - 3.0),
+    );
+    let wy = array<f32, 6>(
+        kernel(f.y + 2.0), kernel(f.y + 1.0), kernel(f.y),
+        kernel(f.y - 1.0), kernel(f.y - 2.0), kernel(f.y - 3.0),
+    );
     var sum = vec4<f32>(0.0);
     var total = 0.0;
     for (var j = 1 - radius; j <= radius; j = j + 1) {
-        let wy = kernel(f.y - f32(j));
         for (var i = 1 - radius; i <= radius; i = i + 1) {
-            let w = kernel(f.x - f32(i)) * wy;
+            let w = wx[i + 2] * wy[j + 2];
             sum = sum + texel(origin + vec2<i32>(i, j)) * w;
             total = total + w;
         }
