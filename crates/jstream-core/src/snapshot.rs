@@ -6207,8 +6207,11 @@ pub(crate) fn compose_metered(
                 let items: Vec<Item<'_>> = image
                     .into_iter()
                     .map(|image| {
-                        let sx = canvas.width() as f32 * scale / image.width() as f32;
-                        let sy = canvas.height() as f32 * scale / image.height() as f32;
+                        // By its extent, the size it is placed at: its texture is
+                        // smaller when its upload is held at the size it is drawn.
+                        let (width, height) = image.extent();
+                        let sx = canvas.width() as f32 * scale / width as f32;
+                        let sy = canvas.height() as f32 * scale / height as f32;
                         Item {
                             image,
                             placement: Placement::Legacy(LegacyTransform {
@@ -10872,6 +10875,81 @@ pub(crate) mod tests {
         frame_at(&mut compositor, &mut cache, &drawn, Some(&capture), size);
         let image = cache.get(&key).expect("uploaded");
         assert_eq!((image.width(), image.height()), (1024, 512));
+        // A model that shows it on a surface, or reflects it, reads its texels too.
+        drawn.chains.clear();
+        assert_eq!(drawn.capture_need(&spec, info.size), Some(0.125));
+        for maps in [
+            super::ModelMaps {
+                texture: Some(primary()),
+                reflection: None,
+            },
+            super::ModelMaps {
+                texture: None,
+                reflection: Some(primary()),
+            },
+        ] {
+            drawn.maps.insert(SourceId::new("model"), maps);
+            assert_eq!(drawn.capture_need(&spec, info.size), None);
+        }
+        drawn.maps.clear();
+        // A capture nothing places has no planned need: its draws say what it needs.
+        let unplaced = shot(vec![("program", vec![fill("red")])]);
+        assert_eq!(unplaced.capture_need(&spec, info.size), Some(0.0));
+    }
+
+    /// With no program scene the primary capture fills the canvas, placed by its
+    /// extent: its upload is held smaller than its frame once it is drawn small (an
+    /// output much smaller than the capture, the preview), and it still fills the
+    /// output, frame after frame, rather than showing its top left corner every other
+    /// frame (#1660 B1).
+    #[test]
+    fn a_capture_held_small_still_fills_an_output_with_no_scene() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let size = FrameSize::new(320, 180).expect("invariant: non-zero");
+        let info = jstream_media::VideoFrameInfo {
+            size: FrameSize::new(1024, 512).expect("invariant: non-zero"),
+            format: jstream_media::PixelFormat::Rgba8,
+            color: jstream_media::ColorInfo::default(),
+            pts: zero(),
+        };
+        // Its left half green, its right half red.
+        let rgba = (0..1024 * 512)
+            .flat_map(|i| if i % 1024 < 512 { GREEN } else { RED })
+            .collect();
+        let display =
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 1024 * 4)])
+                .expect("invariant: a packed frame");
+        let capture = CaptureFrame {
+            version: 1,
+            image: CaptureImage::Cpu(&display),
+        };
+        let empty = shot(vec![]);
+        let key = GpuKey::Capture(CaptureKey::primary());
+        let mut widths = Vec::new();
+        for frame in 0..5 {
+            let out = frame_at(&mut compositor, &mut cache, &empty, Some(&capture), size);
+            assert_eq!(
+                out.pixel(80, 90),
+                Some(GREEN),
+                "frame {frame}: its left half"
+            );
+            assert_eq!(
+                out.pixel(240, 90),
+                Some(RED),
+                "frame {frame}: its right half"
+            );
+            let image = cache.get(&key).expect("uploaded");
+            assert_eq!(image.extent(), (1024, 512));
+            widths.push(image.width());
+        }
+        assert_eq!(
+            widths,
+            [1024, 512, 512, 512, 512],
+            "held small, and kept so"
+        );
     }
 
     /// A still image's pixels are let go of once the program stage has uploaded them,

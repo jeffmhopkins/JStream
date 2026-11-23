@@ -149,6 +149,35 @@ mod tests {
         );
     }
 
+    /// A copied layout fills a spare frame's buffers again, so the capture thread
+    /// allocates no plane for a frame the engine handed back; YUY2, which is converted,
+    /// takes none.
+    #[test]
+    fn copied_layouts_fill_a_spare_frames_buffers_again() {
+        let src: Vec<u8> = (0..12).collect();
+        for (layout, format) in [
+            (Layout::Nv12, PixelFormat::Nv12),
+            (Layout::I420, PixelFormat::I420),
+        ] {
+            let i = info(4, 2, format);
+            let first = layout.frame(&src, 4, i, None).expect("a frame");
+            let held: Vec<*const u8> = first.planes().iter().map(|p| p.data().as_ptr()).collect();
+            let next: Vec<u8> = (50..62).collect();
+            let second = layout.frame(&next, 4, i, Some(first)).expect("a frame");
+            let now: Vec<*const u8> = second.planes().iter().map(|p| p.data().as_ptr()).collect();
+            assert_eq!(now, held, "{layout:?}: no new buffer");
+            assert_eq!(second.row(0, 1), Some(&[54, 55, 56, 57][..]), "{layout:?}");
+            assert_eq!(second.info().format, format);
+        }
+        let spare = Layout::Nv12
+            .frame(&src, 4, info(4, 2, PixelFormat::Nv12), None)
+            .expect("a frame");
+        let yuy2 = Layout::Yuy2
+            .frame(&[7u8; 16], 8, info(4, 2, PixelFormat::Nv12), Some(spare))
+            .expect("yuy2");
+        assert_eq!(yuy2.row(0, 0), Some(&[7, 7, 7, 7][..]));
+    }
+
     #[test]
     fn a_short_buffer_is_reported_against_the_lock() {
         assert!(matches!(
