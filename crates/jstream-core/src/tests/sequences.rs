@@ -193,7 +193,19 @@ fn a_channel_rising_plays_a_timeline_after_its_delay() {
         ]),
     )
     .expect("sets");
-    std::thread::sleep(Duration::from_millis(100));
+    // The trigger notes where the channel sits on the values thread's first tick after
+    // the batch, and a rise needs that note to rise from. A level seen at 0.2 means that
+    // tick has run, however slow the runner.
+    act(&control, set_value("power", 0.2));
+    assert!(
+        until(|| level(&control, "power").map(|l| l.0) == Some(0.2)),
+        "the values thread ticks"
+    );
+    assert_eq!(
+        studio(&control),
+        (Vec::new(), Vec::new()),
+        "0.2 is below 0.5"
+    );
     let id = TimelineId::new("up");
     act(&control, set_value("power", 1.0));
     assert!(
@@ -286,10 +298,12 @@ fn a_seek_returns_a_lane_to_where_it_started() {
             at_ms: 0,
         },
     );
-    std::thread::sleep(Duration::from_millis(50));
-    let after = level(&control, "lights").map_or(0.0, |l| l.0);
+    // The seek takes effect on a values tick, so wait for one rather than a fixed time.
+    // Restarting from where it had got to would glide down from below 0.6, never
+    // coming back above 0.7.
     assert!(
-        after > 0.7,
-        "back near the 0.8 it started from, not where it had got to: {after}"
+        until(|| level(&control, "lights").is_some_and(|l| l.0 > 0.7)),
+        "back near the 0.8 it started from, not where it had got to: {:?}",
+        level(&control, "lights")
     );
 }
