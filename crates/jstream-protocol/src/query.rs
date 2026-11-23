@@ -718,6 +718,10 @@ pub enum QueryResult {
         /// it is now. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         timelines: Vec<PlayingTimeline>,
+        /// The timelines waiting to play after a delay (ADR-0184, since 0.170), ordered
+        /// by ID. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        waiting: Vec<crate::WaitingTimeline>,
         /// The scenes drawn through one of their keyframe scenes where they are placed
         /// (ADR-0116, since 0.88), ordered by scene. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

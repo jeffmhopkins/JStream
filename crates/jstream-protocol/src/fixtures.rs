@@ -2145,6 +2145,7 @@ pub(crate) fn actions() -> Vec<Action> {
         },
         // Timelines (ADR-0115).
         Action::TimelinePlay {
+            delay_ms: None,
             timeline_id: TimelineId::new("tl_volley"),
         },
         Action::TimelineSeek {
@@ -2198,7 +2199,102 @@ fn volley() -> TimelineInfo {
             },
         )
     };
+    let point = |at_ms: u32, value: f32, curve: crate::LaneCurve| crate::LanePoint {
+        at_ms,
+        value: Finite32::new(value).expect("finite"),
+        curve,
+    };
     TimelineInfo {
+        lanes: vec![
+            crate::TimelineLane {
+                target: crate::LaneTarget {
+                    channel: "lights".into(),
+                },
+                points: vec![
+                    point(500, 1.0, crate::LaneCurve::EaseOut),
+                    point(1500, 0.6, crate::LaneCurve::EaseIn),
+                    point(2400, 0.8, crate::LaneCurve::EaseInOut),
+                    point(3000, 0.2, crate::LaneCurve::Linear),
+                ],
+                on: true,
+            },
+            crate::TimelineLane {
+                target: crate::LaneTarget {
+                    channel: "strobe".into(),
+                },
+                points: vec![
+                    point(0, 0.0, crate::LaneCurve::Linear),
+                    point(1500, 1.0, crate::LaneCurve::Hold),
+                    point(1950, 0.0, crate::LaneCurve::Hold),
+                ],
+                on: false,
+            },
+        ],
+        starts: vec![
+            crate::TimelineTrigger::Channel {
+                channel_id: "power".into(),
+                edge: crate::ChannelEdge::Rises,
+                level: Some(Finite32::new(0.75).expect("finite")),
+                delay_ms: 0,
+            },
+            crate::TimelineTrigger::Channel {
+                channel_id: "power".into(),
+                edge: crate::ChannelEdge::On,
+                level: None,
+                delay_ms: 250,
+            },
+            crate::TimelineTrigger::Scene {
+                scene_id: SceneId::new("scn_1"),
+                edge: crate::SceneEdge::Shown,
+                delay_ms: 0,
+            },
+            crate::TimelineTrigger::Keyframe {
+                scene_id: SceneId::new("scn_1"),
+                keyframe_id: Some(SceneId::new("scn_1_wide")),
+                edge: crate::KeyframeEdge::Loads,
+                delay_ms: 500,
+            },
+            crate::TimelineTrigger::Timeline {
+                timeline_id: TimelineId::new("tl_once"),
+                edge: crate::TimelineEdge::Ends,
+                delay_ms: 0,
+            },
+            crate::TimelineTrigger::Timeline {
+                timeline_id: TimelineId::new("tl_pulse"),
+                edge: crate::TimelineEdge::Loops,
+                delay_ms: 0,
+            },
+        ],
+        stops: vec![
+            crate::TimelineTrigger::Channel {
+                channel_id: "power".into(),
+                edge: crate::ChannelEdge::Falls,
+                level: None,
+                delay_ms: 0,
+            },
+            crate::TimelineTrigger::Channel {
+                channel_id: "power".into(),
+                edge: crate::ChannelEdge::Off,
+                level: None,
+                delay_ms: 0,
+            },
+            crate::TimelineTrigger::Scene {
+                scene_id: SceneId::new("scn_1"),
+                edge: crate::SceneEdge::Hidden,
+                delay_ms: 0,
+            },
+            crate::TimelineTrigger::Keyframe {
+                scene_id: SceneId::new("scn_1"),
+                keyframe_id: None,
+                edge: crate::KeyframeEdge::Leaves,
+                delay_ms: 0,
+            },
+            crate::TimelineTrigger::Timeline {
+                timeline_id: TimelineId::new("tl_other"),
+                edge: crate::TimelineEdge::Starts,
+                delay_ms: 0,
+            },
+        ],
         labels: vec![LabelId::new("lbl_sponsor")],
         timeline_id: TimelineId::new("tl_volley"),
         name: "Volley".into(),
@@ -2240,6 +2336,7 @@ fn volley() -> TimelineInfo {
             TimelineCue::new(
                 3000,
                 &Action::TimelinePlay {
+                    delay_ms: Some(1500),
                     timeline_id: TimelineId::new("tl_other"),
                 },
             ),
@@ -2250,6 +2347,9 @@ fn volley() -> TimelineInfo {
 /// A short timeline that toggles an item, repeating as `looping` says.
 fn pulse(looping: TimelineLoop) -> TimelineInfo {
     TimelineInfo {
+        lanes: Vec::new(),
+        starts: Vec::new(),
+        stops: Vec::new(),
         labels: Vec::new(),
         timeline_id: TimelineId::new(match looping {
             TimelineLoop::Loop => "tl_pulse",
@@ -3334,6 +3434,11 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             outputs: output_infos(),
         },
         QueryResult::StudioGet {
+            waiting: vec![crate::WaitingTimeline {
+                timeline_id: TimelineId::new("tl_other"),
+                scene_id: SceneId::new("scn_1"),
+                due_in_ms: 1200,
+            }],
             program_scene: Some(SceneId::new("scn_2")),
             preview_scene: Some(SceneId::new("scn_1")),
             timelines: vec![PlayingTimeline {
@@ -3354,6 +3459,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
         },
         QueryResult::StudioGet {
+            waiting: Vec::new(),
             program_scene: None,
             preview_scene: None,
             timelines: Vec::new(),
@@ -3821,6 +3927,14 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     value: Finite32::ZERO,
                     on: false,
                     driver: None,
+                },
+                crate::ChannelValueInfo {
+                    channel_id: "strobe".into(),
+                    value: Finite32::ONE,
+                    on: true,
+                    driver: Some(crate::ChannelDriver::Sequence {
+                        timeline_id: TimelineId::new("tl_volley"),
+                    }),
                 },
             ],
         },

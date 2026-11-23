@@ -1076,6 +1076,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
           "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds, at most 60000 (ADR-0184, since\n0.170). While it waits, `studio.get` lists it in `waiting`; another play\nstarts the wait again, and `timeline.stop` cancels it. Omitted plays at once.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "timeline_id": {
               "$ref": "#/$defs/TimelineId",
               "description": "The timeline to play."
@@ -3749,6 +3758,49 @@ source: crates/jstream-protocol/src/fixtures.rs
             "by"
           ],
           "type": "object"
+        },
+        {
+          "description": "A lane of a playing (or played) sequence: a timeline's lane on this channel\n(ADR-0184, since 0.170).",
+          "properties": {
+            "by": {
+              "const": "sequence",
+              "type": "string"
+            },
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline whose lane drives it."
+            }
+          },
+          "required": [
+            "by",
+            "timeline_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ChannelEdge": {
+      "description": "Which change of a channel fires a trigger.",
+      "oneOf": [
+        {
+          "const": "rises",
+          "description": "Its value crosses the level upward.",
+          "type": "string"
+        },
+        {
+          "const": "falls",
+          "description": "Its value crosses the level downward.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "It switches on.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "It switches off.",
+          "type": "string"
         }
       ]
     },
@@ -9261,6 +9313,21 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "KeyframeEdge": {
+      "description": "Which change of a keyframe fires a trigger.",
+      "oneOf": [
+        {
+          "const": "loads",
+          "description": "The scene starts drawing through it.",
+          "type": "string"
+        },
+        {
+          "const": "leaves",
+          "description": "The scene stops drawing through it.",
+          "type": "string"
+        }
+      ]
+    },
     "KeyframeTiming": {
       "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
       "properties": {
@@ -9550,6 +9617,73 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "timeline_id",
         "scene_id"
+      ],
+      "type": "object"
+    },
+    "LaneCurve": {
+      "description": "How a lane moves into a point.",
+      "oneOf": [
+        {
+          "const": "linear",
+          "description": "A straight line.",
+          "type": "string"
+        },
+        {
+          "const": "ease_in",
+          "description": "Slow at first.",
+          "type": "string"
+        },
+        {
+          "const": "ease_out",
+          "description": "Slow at the end.",
+          "type": "string"
+        },
+        {
+          "const": "ease_in_out",
+          "description": "Slow at both ends.",
+          "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "Stays at the value before, then jumps to this point's at its time: a switch.",
+          "type": "string"
+        }
+      ]
+    },
+    "LanePoint": {
+      "description": "One point of a lane.",
+      "properties": {
+        "at_ms": {
+          "description": "When the lane reaches it, in milliseconds from the timeline's start.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "curve": {
+          "$ref": "#/$defs/LaneCurve",
+          "description": "How the lane moves from the point before (or the starting value) to this one.\nOmitted means `linear`."
+        },
+        "value": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The channel's value there, 0 to 1."
+        }
+      },
+      "required": [
+        "at_ms",
+        "value"
+      ],
+      "type": "object"
+    },
+    "LaneTarget": {
+      "description": "What a lane moves: a channel by its ID. A channel that doesn't exist is taken, and the\nlane drives nothing.",
+      "properties": {
+        "channel": {
+          "description": "The channel.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
       ],
       "type": "object"
     },
@@ -14642,6 +14776,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "const": "studio.get",
               "type": "string"
             },
+            "waiting": {
+              "description": "The timelines waiting to play after a delay (ADR-0184, since 0.170), ordered\nby ID. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/WaitingTimeline"
+              },
+              "type": "array"
+            },
             "warm_gpu_mib": {
               "description": "The limit on the warm scenes' estimated GPU memory in MiB, 0 for none, which\n`studio.set_warm` sets (ADR-0150, since 0.117). Omitted by an older server.",
               "format": "uint32",
@@ -15908,6 +16049,21 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "SceneEdge": {
+      "description": "Which change of a scene fires a trigger.",
+      "oneOf": [
+        {
+          "const": "shown",
+          "description": "It goes on program.",
+          "type": "string"
+        },
+        {
+          "const": "hidden",
+          "description": "Another scene replaces it on program.",
+          "type": "string"
+        }
+      ]
+    },
     "SceneId": {
       "description": "A scene in the collection.",
       "type": "string"
@@ -16898,6 +17054,26 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "TimelineEdge": {
+      "description": "Which change of another timeline fires a trigger.",
+      "oneOf": [
+        {
+          "const": "starts",
+          "description": "It starts, or starts again, from 0 or by a seek.",
+          "type": "string"
+        },
+        {
+          "const": "ends",
+          "description": "A `once` timeline reaches its end.",
+          "type": "string"
+        },
+        {
+          "const": "loops",
+          "description": "It starts another pass.",
+          "type": "string"
+        }
+      ]
+    },
     "TimelineId": {
       "description": "A timeline a scene holds (ADR-0115). Unique across the collection, so an action\nnames it alone.",
       "type": "string"
@@ -16926,6 +17102,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "type": "array"
         },
+        "lanes": {
+          "description": "Its lanes (ADR-0184, since 0.170): each moves one channel over time while the\ntimeline plays, as one more input of that channel. At most 32. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/TimelineLane"
+          },
+          "type": "array"
+        },
         "loop": {
           "$ref": "#/$defs/TimelineLoop",
           "default": "once",
@@ -16935,6 +17118,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its display name. Omitted means empty.",
           "type": "string"
         },
+        "starts": {
+          "description": "What plays it (ADR-0184, since 0.170): each trigger, when it fires, plays it from\nits start after the trigger's `delay_ms`. At most 16. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/TimelineTrigger"
+          },
+          "type": "array"
+        },
+        "stops": {
+          "description": "What stops it (ADR-0184, since 0.170), the same way. At most 16. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/TimelineTrigger"
+          },
+          "type": "array"
+        },
         "timeline_id": {
           "$ref": "#/$defs/TimelineId",
           "description": "Its ID, chosen by the client: 1 to 64 bytes of ASCII letters, digits, `_` and\n`-`, unique across the collection, so an action can name it alone."
@@ -16943,6 +17140,31 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "timeline_id",
         "duration_ms"
+      ],
+      "type": "object"
+    },
+    "TimelineLane": {
+      "description": "One lane: a channel moved through points while its timeline plays (ADR-0184).",
+      "properties": {
+        "on": {
+          "description": "Whether it plays. Omitted means on; a lane that is off does nothing.",
+          "type": "boolean"
+        },
+        "points": {
+          "default": [],
+          "description": "Its points, in time order: each `at_ms` at least the one before it's and at most\nthe timeline's `duration_ms`. A lane with no point at 0 starts from the channel's\nvalue when the timeline starts, and eases from there to its first point. At most\n256.",
+          "items": {
+            "$ref": "#/$defs/LanePoint"
+          },
+          "type": "array"
+        },
+        "target": {
+          "$ref": "#/$defs/LaneTarget",
+          "description": "What it moves."
+        }
+      },
+      "required": [
+        "target"
       ],
       "type": "object"
     },
@@ -16987,6 +17209,149 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "range"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "TimelineTrigger": {
+      "description": "What fires a timeline's `starts` or `stops` entry (ADR-0184), tagged by `type`. Each\nfires on a change only, never when a collection opens, and waits `delay_ms` (at most\n60000) first.",
+      "oneOf": [
+        {
+          "description": "A channel crossing `level` (default 0.5) or switching on or off.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel. One that doesn't exist never fires.",
+              "type": "string"
+            },
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/ChannelEdge",
+              "description": "Which change."
+            },
+            "level": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The level `rises` and `falls` cross, 0 to 1. Omitted means 0.5."
+            },
+            "type": {
+              "const": "channel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel_id",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene going on or off program, by any route.",
+          "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/SceneEdge",
+              "description": "Which change."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene starting or ceasing to draw through a keyframe: a keyframe scene of it\ngoing on program, or `scene.set_keyframe` placing one.",
+          "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/KeyframeEdge",
+              "description": "Which change."
+            },
+            "keyframe_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The keyframe. Omitted means any of its keyframes."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose keyframe it is."
+            },
+            "type": {
+              "const": "keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Another timeline starting, ending or looping.",
+          "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/TimelineEdge",
+              "description": "Which change."
+            },
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The other timeline."
+            },
+            "type": {
+              "const": "timeline",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id",
+            "edge"
           ],
           "type": "object"
         }
@@ -18109,6 +18474,31 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "WaitingTimeline": {
+      "description": "A timeline waiting to play, as `studio.get` reports it (ADR-0184): a `timeline.play`\nwith a `delay_ms`, or a trigger with one, not yet due.",
+      "properties": {
+        "due_in_ms": {
+          "description": "How long until it plays, in milliseconds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene that holds it."
+        },
+        "timeline_id": {
+          "$ref": "#/$defs/TimelineId",
+          "description": "The timeline."
+        }
+      },
+      "required": [
+        "timeline_id",
+        "scene_id",
+        "due_in_ms"
+      ],
+      "type": "object"
+    },
     "WarmSceneProfile": {
       "description": "A scene the warm count picked ([`ProfileInfo::warm`], ADR-0117 §7, ADR-0150).",
       "properties": {
@@ -18581,5 +18971,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.169"
+  "title": "JStream protocol 0.170"
 }

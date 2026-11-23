@@ -459,7 +459,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   before the value bindings while the collection holds a channel, and puts a scene's
   channels back to their defaults when that scene goes on program. `channel.set_value`,
   `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
-  reads the levels. A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
+  reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
+  more input (ADR-0184): it starts from the channel's value, the last timeline started
+  wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
   modifier's or camera modifier's `amount` scales its value as it applies
   (`jstream_anim::evaluate_scaled`).
 - **Camera moves** (`follow.rs`,
@@ -1624,7 +1626,7 @@ switch a Fade (`transition::shared_camera`).
 <a id="timelines"></a>
 ## Timelines
 <!-- @section
-covers = ["crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/tests/timelines.rs"]
+covers = ["crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/tests/timelines.rs", "crates/jstream-core/src/sequences.rs", "crates/jstream-core/src/tests/sequences.rs"]
 depends_on = ["crates/jstream-protocol/README.md#timelines", "docs/adr/0115-timelines-on-the-wire.md"]
 -->
 
@@ -1675,6 +1677,27 @@ preset changed in one batch that one undo takes back.
   before `at_ms` that `Timeline::seek` keeps.
 - **Removal:** after every batch, undo or redo, `changed` stops each timeline the
   collection no longer holds (`reconcile_timelines`), with `timeline.changed` `removed`.
+- **Lanes** ([ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)): when a
+  timeline plays or is sought, `ChannelDriver::lanes_start` gives each of its lanes that
+  is on its channel, from the channel's value then; each `jstream-values` tick moves
+  every playing timeline's lanes to its position on the animation clock (`lanes_at`)
+  before the channels tick, and an end sets each lane's last point. The values thread
+  ticks every 16.7 ms while a lane drives a channel. See *Channels* in
+  [Contents: motion](#contents-motion).
+- **Triggers and waits** (`sequences.rs`): `Sequences` keeps the timelines waiting on a
+  `delay_ms`, which the values tick plays when due, credited to the engine, and the
+  state of each `starts` and `stops` trigger. After the channels and value bindings each
+  tick, `check` compares the program scene, the keyframe each scene is drawn through (a
+  placement's, or a keyframe scene on program), each channel's value and switch, and the
+  timeline events `timeline_play` and `send_timeline_step` noted (`starts`, `ends`,
+  `loops`), and plays (at once, or after the trigger's delay) or stops each timeline
+  whose trigger fired. The first check after the engine starts or a collection opens
+  (`restart`) only looks. A channel trigger crosses back only past a 0.02 dead band and
+  fires at most once every 50 ms. The values thread runs while any timeline has a
+  trigger or a wait. `src/tests/sequences.rs` checks a lane gliding down from where its
+  channel was, in small steps, and holding its end, driven by the sequence; a channel
+  rising playing a timeline after its delay, listed in `waiting` meanwhile, falling
+  stopping it, and a stop cancelling a delayed play.
 - **`source.restart`** calls `LiveSources::restart` at `action_now` (the cue's time
   while a cue runs, otherwise the clock's now), which restarts the source's running
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
@@ -4176,6 +4199,8 @@ would under that lock, [Timelines](#timelines)), and sleeps without it. The
 the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
 takes the live data's lock briefly, last, to find or make its watch, as a plan does. A
+`jstream-values` tick also plays the timelines whose wait is over and those a trigger
+fired, and moves the lanes, all under the same collection lock. A
 channel's level is one atomic (`ChannelCell`); the cell map's lock is a leaf, taken
 briefly to find or make a cell, by a plan, a binding or the channel driver. A channel
 action takes the collection lock, then the channel driver's state under it. The WASM plugins' registry lock
@@ -4296,6 +4321,10 @@ request's `request_id`, or `live.ended` with no `request_id` when it expired wit
 session, plus `gesture_id`, `outcome` (`cancelled` or `expired`) and, in `edits`, the
 setters it held a value for, one per parameter, without the values. Its `rev` before
 and after are the same.
+
+A timeline that a `starts` or `stops` trigger or the end of a `delay_ms` plays or stops
+(ADR-0184) gets no entry of its own either: the call or edit that set it up has one, and
+`timeline.changed` reports the play.
 
 `values.set` gets no entry either, nor an `activity.list` line: a shared value is data
 for pages, not a change to the studio, and may be set many times a second (ADR-0102

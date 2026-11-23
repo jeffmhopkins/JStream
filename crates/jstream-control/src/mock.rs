@@ -1559,6 +1559,7 @@ impl State {
                     .collect(),
             },
             Query::StudioGet => QueryResult::StudioGet {
+                waiting: Vec::new(),
                 program_scene: self.program.clone(),
                 preview_scene: self.preview.clone(),
                 timelines: Vec::new(),

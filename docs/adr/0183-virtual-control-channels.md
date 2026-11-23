@@ -80,7 +80,9 @@ one channel can drive a light's intensity, a rotation in degrees and a fader in 
 whatever actions set it as runtime state, like the program scene: never an edit, never undone,
 never saved. A collection opens with every channel at its `default` and switched as `on` says.
 A channel with a `scene_id` returns to its `default` and its `on` each time that scene goes on
-program, so a control scoped to one scene starts fresh there. Deleting the scene leaves the
+program, so a control scoped to one scene starts fresh there. That return is immediate: it
+skips the channel's `rise_ms` and `fall_ms`, since the scene arrives with its channels as
+they start. Deleting the scene leaves the
 channel in place, unattached, as ADR-0178 decision 5 leaves a value binding.
 
 **3. Inputs.** Each input is a reader with the shape a modifier's kind has, flattened: `midi`
@@ -155,7 +157,7 @@ channel, so a knob moved meanwhile takes that channel over under `latest`. The U
 lists every channel at once: a channel is found by search and opened in an inspector, and
 the learn button beside each live number offers making or following a channel. The wire
 shape of those, and how they reuse timelines, is the follow-up's; nothing here depends on
-it.
+it. [ADR-0184](0184-sequences-lanes-and-triggers.md) decides sequences and their triggers.
 
 **9. Delivery.** This ADR's decisions 1 to 7 land in one PR, an additive minor protocol
 version (0.169) and collection schema 20, with MCP getting `channel.values` and the

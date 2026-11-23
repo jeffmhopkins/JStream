@@ -65,6 +65,7 @@ mod quality;
 mod reactive;
 mod rendering_file;
 mod runtime;
+mod sequences;
 mod session;
 mod slot;
 mod snapshot;

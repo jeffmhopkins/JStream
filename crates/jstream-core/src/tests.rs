@@ -27,6 +27,7 @@ mod preview;
 mod projects;
 mod ptz;
 mod rendering;
+mod sequences;
 mod source_sizes;
 mod sources;
 mod timelines;

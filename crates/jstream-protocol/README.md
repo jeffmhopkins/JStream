@@ -383,7 +383,14 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.169 because a channel (`channel.set` and `channel.delete`,
+`PROTOCOL_VERSION` is 0.170 because a timeline gains `lanes`, each moving a channel
+through points as it plays, starting from the channel's value where it has no point at
+0, and `starts` and `stops`, triggers that play or stop it when a channel crosses a level
+or switches, a scene goes on or off program, a keyframe loads or is left, or another
+timeline starts, ends or loops; `timeline.play` gains `delay_ms`, `studio.get` lists the
+timelines `waiting`, and `ChannelDriver` gains `sequence`
+([ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md));
+0.169 because a channel (`channel.set` and `channel.delete`,
 listed in `state.get`'s `channels`) is a named live value, 0 to 1, that MIDI controls,
 live-data fields, other channels and the `channel.set_value`, `channel.switch` and
 `channel.nudge` actions set, `channel.values` reports, and the new `channel` motion kind
@@ -1897,7 +1904,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16. Since 0.87 `timelines` lists the timelines playing, each with its
   scene, its `position_ms` and its `pass` ([Timelines](#timelines)), omitted while none
-  plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
+  plays, and since 0.170 `waiting` the timelines waiting on a `delay_ms`
+  (`WaitingTimeline`, with `due_in_ms`), omitted while none waits. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
@@ -3153,8 +3161,25 @@ Since 0.87 a scene holds timelines
   are kept ordered by ID ([Folders, labels and scene options](#organisation)).
 - **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
   `scene.set_keyframe` (since 0.88, [Keyframe tracks](#keyframe-tracks)), `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
-  `source.restart`, and `timeline.play`, `timeline.stop` and `timeline.seek`. None is an
+  `source.restart`, `timeline.play`, `timeline.stop` and `timeline.seek`, and since 0.169
+  `channel.set_value`, `channel.switch` and `channel.nudge`. None is an
   edit, so playing a timeline adds nothing to an undo history.
+- **Lanes** (since 0.170, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)):
+  a timeline with `lanes` is a sequence. Each `TimelineLane` moves one channel
+  (`target: {channel}`) through `points` (`LanePoint {at_ms, value, curve}`, at most 256,
+  in time order, each `at_ms` at most `duration_ms`, `value` 0 to 1, `LaneCurve`
+  `linear`, `ease_in`, `ease_out`, `ease_in_out` or `hold`), and `on` false mutes it; at
+  most 32 (`MAX_LANES`). `TimelineLane::value_at` is the shared shape: a lane with no
+  point at 0 eases from the value it is given (the channel's when the timeline starts)
+  to its first point, and holds its last point after it. A lane is one more input of
+  its channel ([Channels](#bindings)); the last timeline started wins a channel.
+- **Triggers** (since 0.170): `starts` and `stops`, at most 16 each (`MAX_TRIGGERS`), each
+  a `TimelineTrigger` tagged by `type`: `channel {channel_id, edge (rises, falls, on,
+  off), level?}`, `scene {scene_id, edge (shown, hidden)}`, `keyframe {scene_id,
+  keyframe_id?, edge (loads, leaves)}` or `timeline {timeline_id, edge (starts, ends,
+  loops)}`, each with a `delay_ms` of at most 60,000 (`MAX_TRIGGER_DELAY_MS`). They fire
+  on a change only. `TimelineInfo::problem` refuses a timeline naming itself and a
+  `starts` on a channel one of its own lanes drives.
 - **Edits:** `timeline.set {scene_id, timeline}` stores one whole, new or in place of
   the scene's own, and is undone by `timeline.delete` or by `timeline.set` with the old
   one. An ID another scene holds is `already_exists`. `timeline.delete {timeline_id}`
@@ -3162,8 +3187,10 @@ Since 0.87 a scene holds timelines
   are not checked: a cue naming a deleted object stays, inert, and fails when it fires.
   Plugins may not use either edit (`never`), since cues run actions the edit class
   can't.
-- **Playing** is studio state, like the program scene. `timeline.play {timeline_id}`
-  plays from the start, `timeline.seek {timeline_id, at_ms}` from `at_ms`, running at
+- **Playing** is studio state, like the program scene. `timeline.play {timeline_id,
+  delay_ms?}` plays from the start, after `delay_ms` (since 0.170, at most 60,000;
+  `studio.get` lists the wait in `waiting` as `WaitingTimeline {timeline_id, scene_id,
+  due_in_ms}`, another play starts it again and `timeline.stop` cancels it), `timeline.seek {timeline_id, at_ms}` from `at_ms`, running at
   once the last cue before it for each state it sets (`Action::cue_state`: the program
   scene, one placement's visibility, one shared value), and `timeline.stop` stops it
   where it is. A cue runs as its call would, credited to the client that started the

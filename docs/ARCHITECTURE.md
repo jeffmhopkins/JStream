@@ -184,7 +184,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          camera?, camera_anchor?, camera_motion[], camera_follow?, ptz_shots[], timelines[], filters { video[] }, items[] }   flat display order
+│                          camera?, camera_anchor?, camera_motion[], camera_follow?, ptz_shots[], timelines[] (cues, lanes, starts, stops), filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
@@ -864,7 +864,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a timeline action. The objects a cue names aren't checked, so a deleted one leaves the
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
-  `source.restart` reloads a page or plays a file from its start.
+  `source.restart` reloads a page or plays a file from its start. Since 0.170
+  ([ADR-0184](adr/0184-sequences-lanes-and-triggers.md)) a timeline with `lanes` is a
+  sequence: each lane moves one channel through points as one more input of it, from
+  the channel's value when it starts where it has no point at 0, so nothing jumps; its
+  `starts` and `stops` play or stop it when a channel crosses a level or switches, a
+  scene goes on or off program, a keyframe loads or is left, or another timeline
+  starts, ends or loops; and `timeline.play` takes a `delay_ms`, with the waits listed
+  in `studio.get`'s `waiting`.
 - **A media clock a client can hold** (protocol 0.134,
   [ADR-0172](adr/0172-a-media-clock-a-client-can-hold-and-step.md)): `clock.hold`
   stops the engine's media clock, the one every animation and snapshot reads,
@@ -1168,7 +1175,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `channel`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1721,7 +1728,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0178) the `value_bindings` and motion modifiers on `width` and `height`, refused
   the same way; a value binding loads without its target being looked up. Version 20
   (ADR-0183) adds `channels`, an `amount` on a modifier or value binding, the `channel`
-  motion kind and the `note` MIDI control, each refused the same way. `jstream-core`
+  motion kind and the `note` MIDI control, each refused the same way, and version 21
+  (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
+  `delay_ms`, refused the same way. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

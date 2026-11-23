@@ -96,10 +96,16 @@ const V18: &str = include_str!("fixtures/v18.json");
 /// controller to the master's fader (ADR-0178). It must keep loading as version 1 must.
 const V19: &str = include_str!("fixtures/v19.json");
 
-/// A collection file at schema version 20, the current one: version 19 with a channel a
-/// controller drives and the master fader's binding scaled by it (ADR-0183). The same
-/// rule applies once version 21 exists.
+/// A collection file at schema version 20: version 19 with a channel a controller drives
+/// and the master fader's binding scaled by it (ADR-0183). It must keep loading as
+/// version 1 must.
 const V20: &str = include_str!("fixtures/v20.json");
+
+/// A collection file at schema version 21, the current one: version 20 with a sequence
+/// on scene `a`, a timeline with a lane on `power` that scene `a` going on program
+/// starts and `power` falling stops (ADR-0184). The same rule applies once version 22
+/// exists.
+const V21: &str = include_str!("fixtures/v21.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -403,6 +409,9 @@ fn v6_graph() -> Graph {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    lanes: Vec::new(),
+                    starts: Vec::new(),
+                    stops: Vec::new(),
                     labels: Vec::new(),
                     timeline_id: TimelineId::new("t_intro"),
                     name: "Intro".into(),
@@ -433,6 +442,7 @@ fn v6_graph() -> Graph {
             Edit::HotkeySet {
                 chord: Chord::new("F6"),
                 action: Action::TimelinePlay {
+                    delay_ms: None,
                     timeline_id: TimelineId::new("t_intro"),
                 },
             },
@@ -887,9 +897,92 @@ fn v20_graph() -> Graph {
     graph
 }
 
+/// [`v20_graph`] with a sequence on scene `a` (ADR-0184).
+fn v21_graph() -> Graph {
+    use jstream_protocol::{
+        ChannelEdge, Finite32, LaneCurve, LanePoint, LaneTarget, SceneEdge, TimelineId,
+        TimelineInfo, TimelineLane, TimelineLoop, TimelineTrigger,
+    };
+    let mut graph = v20_graph();
+    let applied = graph.apply(
+        &[Edit::TimelineSet {
+            scene_id: SceneId::new("a"),
+            timeline: TimelineInfo {
+                timeline_id: TimelineId::new("power_up"),
+                name: "Power up".into(),
+                duration_ms: 3000,
+                looping: TimelineLoop::Once,
+                cues: Vec::new(),
+                labels: Vec::new(),
+                lanes: vec![TimelineLane {
+                    target: LaneTarget {
+                        channel: "power".into(),
+                    },
+                    points: vec![
+                        LanePoint {
+                            at_ms: 1000,
+                            value: Finite32::ONE,
+                            curve: LaneCurve::EaseOut,
+                        },
+                        LanePoint {
+                            at_ms: 2000,
+                            value: Finite32::ZERO,
+                            curve: LaneCurve::Hold,
+                        },
+                    ],
+                    on: true,
+                }],
+                starts: vec![TimelineTrigger::Scene {
+                    scene_id: SceneId::new("a"),
+                    edge: SceneEdge::Shown,
+                    delay_ms: 500,
+                }],
+                stops: vec![TimelineTrigger::Channel {
+                    channel_id: "power".into(),
+                    edge: ChannelEdge::Falls,
+                    level: None,
+                    delay_ms: 0,
+                }],
+            },
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v20_graph().to_collection_json(), V20);
+    assert_eq!(v21_graph().to_collection_json(), V21);
+}
+
+#[test]
+fn the_v21_fixture_loads_exactly() {
+    let expected = v21_graph();
+    let loaded = load(V21);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(19)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 21 adds a timeline's lanes and triggers and `timeline.play`'s delay
+/// (ADR-0184): each in a version 20 file is refused, as version 20 refused it.
+#[test]
+fn a_version_20_lane_trigger_or_delay_is_refused() {
+    let mut sequence: Value = serde_json::from_str(V21).expect("the v21 fixture");
+    sequence["schema_version"] = json!(20);
+    assert!(matches!(
+        load(&sequence.to_string()),
+        Err(LoadError::Migration { from: 20, .. })
+    ));
+    let mut delay: Value = serde_json::from_str(V20).expect("the v20 fixture");
+    delay["hotkeys"] = json!([{
+        "chord": "F9",
+        "action": {"type": "timeline.play", "timeline_id": "t", "delay_ms": 500}
+    }]);
+    assert!(matches!(
+        load(&delay.to_string()),
+        Err(LoadError::Migration { from: 20, .. })
+    ));
 }
 
 #[test]

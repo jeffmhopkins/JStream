@@ -20,7 +20,8 @@
 //! controller (ADR-0168), how a `data` one follows a sender's live data and colours a
 //! setting from it (ADR-0171), how a value binding puts one on any other number
 //! (ADR-0178), how a channel gathers controls into one switched, faded value that
-//! anything can follow or be scaled by (ADR-0183), and how to write a custom shader the Filters window's
+//! anything can follow or be scaled by (ADR-0183), how a sequence's lanes move channels
+//! from where they are and what starts it (ADR-0184), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -454,6 +455,22 @@ each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \
+A timeline with `lanes` is a sequence: it moves a few channels over time while the \
+scene stays as it is (a keyframe repositions the whole scene instead). Each lane is \
+`{target: {channel}, points: [{at_ms, value, curve}]}`, `value` 0 to 1 and `curve` \
+`linear`, `ease_in`, `ease_out`, `ease_in_out` or `hold` (a switch). Leave out a point at 0 \
+so the lane starts from the channel's value at the moment it plays and glides from there, \
+with no jump: one point of 0 at 3000 ms is a lights-down that works from any level. To move \
+a position, a camera or any setting, make a channel it follows (a `channel` modifier or a \
+value binding) and give that channel a lane. A control moved meanwhile takes its channel \
+over; the last sequence started wins a channel; at the end channels hold. A timeline's \
+`starts` and `stops` play or stop it on a change: `{type: \"channel\", channel_id, edge: \
+rises|falls|on|off, level?}`, `{type: \"scene\", scene_id, edge: shown|hidden}`, \
+`{type: \"keyframe\", scene_id, keyframe_id?, edge: loads|leaves}` or `{type: \
+\"timeline\", timeline_id, edge: starts|ends|loops}`, each with an optional `delay_ms` (up \
+to 60000), as `timeline.play` takes one; `studio.get` lists what is `waiting`. A master \
+power switch is a channel with a note or key input whose `rises` starts the power-up \
+sequence and `falls` starts the power-down. \
 Group the parts of one effect (its keyframe scenes, the hotkeys that switch to them, \
 its timelines) under one label: `scene.set_meta` labels a keyframe scene, \
 `hotkey.set_labels` a hotkey and a timeline's own `labels` the timeline, and \

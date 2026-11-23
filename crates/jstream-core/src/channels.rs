@@ -20,8 +20,16 @@
 //! than `rise_ms` and `fall_ms` allow, and bent by the curve. A channel input reads the
 //! other channel's value of the same tick: channels tick in the order their inputs
 //! need. A channel that belongs to a scene starts again from its `default` and `on`
-//! each time that scene goes on program. Changing only a channel's processing keeps
+//! each time that scene goes on program, at once: that reset doesn't fade. Changing only a channel's processing keeps
 //! what it follows and its value; deleting it makes its cell read as no channel.
+//!
+//! **Lanes** (ADR-0184): a timeline's lane on a channel is one more input of it, from
+//! the time the timeline starts (or is sought) until something else changes the
+//! channel: under `latest` a control moved, an action or a later timeline's lane takes
+//! it over. A lane with no point at 0 starts from the channel's value at that moment
+//! (before its curve), so nothing jumps; each pass of a loop after the first starts
+//! from the lane's last point. When the timeline ends or stops, the lane holds its last
+//! value. The channel's own switch, averaging, fade and curve apply after the lane.
 //!
 //! Docs: docs/adr/0183-virtual-control-channels.md
 
@@ -34,6 +42,7 @@ use jstream_graph::Graph;
 use jstream_protocol::{
     ChannelCombine, ChannelDriver as Driver, ChannelInfo, ChannelSwitch, ChannelValueInfo,
     Finite32, MotionClock, MotionCurve, MotionKind, MotionModifier, MotionProperty, SceneId,
+    TimelineId, TimelineInfo, TimelineLane,
 };
 use jstream_sources::{ChannelCell, ChannelLevels, DataCell, LiveData, MidiInputs, MidiState};
 
@@ -184,6 +193,19 @@ impl Action {
     }
 }
 
+/// A timeline's lane driving a channel (ADR-0184).
+#[derive(Debug, Clone)]
+struct Lane {
+    timeline_id: TimelineId,
+    lane: TimelineLane,
+    /// Where it started from: the channel's value when the timeline started.
+    from: f32,
+    /// Its value now.
+    value: f32,
+    /// When it took the channel, in the driver's order of changes.
+    changed: u64,
+}
+
 /// One channel as the driver follows it.
 #[derive(Debug)]
 struct Followed {
@@ -191,6 +213,7 @@ struct Followed {
     cell: Arc<ChannelCell>,
     inputs: Vec<Input>,
     action: Option<Action>,
+    lane: Option<Lane>,
     on: bool,
     /// The last values combined, with when, over `average_ms`.
     window: VecDeque<(Instant, f32)>,
@@ -210,6 +233,7 @@ impl Followed {
             cell,
             inputs: Vec::new(),
             action: None,
+            lane: None,
             on: info.on,
             window: VecDeque::new(),
             faded: None,
@@ -224,6 +248,7 @@ impl Followed {
     /// Starts again from its `default` and `on`, its inputs at rest where they are.
     fn reset(&mut self) {
         self.action = None;
+        self.lane = None;
         self.on = self.info.on;
         self.window.clear();
         self.faded = None;
@@ -373,6 +398,63 @@ impl ChannelDriver {
             .action
             .map_or(followed.faded.unwrap_or(followed.value), |a| a.to);
         self.set_value(channel_id, (base + by).clamp(0.0, 1.0), fade_ms, now)
+    }
+
+    /// Timeline `timeline_id` started (or was sought) at `at_ms`: each of its lanes that
+    /// is on takes its channel, from the channel's value now, replacing another
+    /// timeline's lane there (ADR-0184: the last started wins).
+    pub(crate) fn lanes_start(
+        &mut self,
+        timeline_id: &TimelineId,
+        info: &TimelineInfo,
+        at_ms: u32,
+    ) {
+        for lane in info.lanes.iter().filter(|lane| lane.on) {
+            let Some(followed) = self.followed.get_mut(&lane.target.channel) else {
+                continue;
+            };
+            self.changes += 1;
+            let from = followed.faded.unwrap_or(followed.value);
+            followed.lane = Some(Lane {
+                timeline_id: timeline_id.clone(),
+                lane: lane.clone(),
+                from,
+                value: lane.value_at(f64::from(at_ms), from),
+                changed: self.changes,
+            });
+        }
+    }
+
+    /// Moves timeline `timeline_id`'s lanes to `at_ms` into pass `pass`. A pass after
+    /// the first starts from where the lane ends.
+    pub(crate) fn lanes_at(&mut self, timeline_id: &TimelineId, at_ms: f64, pass: u64) {
+        for followed in self.followed.values_mut() {
+            if let Some(lane) = &mut followed.lane
+                && lane.timeline_id == *timeline_id
+            {
+                let from = match lane.lane.points.last() {
+                    Some(last) if pass > 0 => last.value.get(),
+                    _ => lane.from,
+                };
+                lane.value = lane.lane.value_at(at_ms, from);
+            }
+        }
+    }
+
+    /// Whether a lane drives any channel: the values thread then ticks faster.
+    pub(crate) fn lanes_playing(&self, playing: impl Fn(&TimelineId) -> bool) -> bool {
+        self.followed.values().any(|f| {
+            f.lane
+                .as_ref()
+                .is_some_and(|lane| playing(&lane.timeline_id))
+        })
+    }
+
+    /// The value and switch of channel `channel_id` now, if the driver follows it.
+    pub(crate) fn level(&self, channel_id: &str) -> Option<(f32, bool)> {
+        self.followed
+            .get(channel_id)
+            .map(|followed| (followed.value, followed.on))
     }
 
     /// Switches channel `channel_id` as `to` says.
@@ -610,6 +692,15 @@ fn combine(followed: &Followed, now: Instant) -> (f32, Option<Driver>) {
         .collect();
     if let Some(action) = followed.action {
         sources.push((action.at(now), action.changed, Driver::Action));
+    }
+    if let Some(lane) = &followed.lane {
+        sources.push((
+            lane.value,
+            lane.changed,
+            Driver::Sequence {
+                timeline_id: lane.timeline_id.clone(),
+            },
+        ));
     }
     let newest = || sources.iter().max_by_key(|(_, changed, _)| *changed);
     let Some(latest) = newest() else {
@@ -928,5 +1019,67 @@ mod tests {
         rig.driver.scene_live(&SceneId::new("flight"));
         rig.tick(133);
         assert_eq!(rig.value("pad"), Some(0.2), "its own starts it again");
+    }
+
+    fn lane_timeline(id: &str, value: f32) -> jstream_protocol::TimelineInfo {
+        jstream_protocol::TimelineInfo {
+            timeline_id: jstream_protocol::TimelineId::new(id),
+            name: String::new(),
+            duration_ms: 1000,
+            looping: jstream_protocol::TimelineLoop::Loop,
+            cues: Vec::new(),
+            labels: Vec::new(),
+            lanes: vec![jstream_protocol::TimelineLane {
+                target: jstream_protocol::LaneTarget {
+                    channel: "c".into(),
+                },
+                points: vec![jstream_protocol::LanePoint {
+                    at_ms: 1000,
+                    value: f(value),
+                    curve: jstream_protocol::LaneCurve::Linear,
+                }],
+                on: true,
+            }],
+            starts: Vec::new(),
+            stops: Vec::new(),
+        }
+    }
+
+    /// ADR-0184: a lane starts from the channel's value, the last timeline started wins
+    /// it, a later pass starts from the lane's end, and an action takes it back.
+    #[test]
+    fn a_lane_starts_where_the_channel_is_and_the_last_started_wins() {
+        let mut rig = Rig::new();
+        set(&mut rig.graph, ChannelInfo::new("c"));
+        rig.tick(0);
+        rig.driver.set_value("c", 0.4, None, rig.at(0)).ok();
+        rig.tick(10);
+        let up = lane_timeline("up", 1.0);
+        let down = lane_timeline("down", 0.0);
+        rig.driver.lanes_start(&up.timeline_id, &up, 0);
+        rig.driver.lanes_at(&up.timeline_id, 500.0, 0);
+        rig.tick(20);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.7).abs() < 1e-5,
+            "halfway from 0.4 to 1"
+        );
+        rig.driver.lanes_at(&up.timeline_id, 500.0, 1);
+        rig.tick(30);
+        assert_eq!(
+            rig.value("c"),
+            Some(1.0),
+            "pass 1 starts from the lane's end"
+        );
+        rig.driver.lanes_start(&down.timeline_id, &down, 0);
+        rig.driver.lanes_at(&up.timeline_id, 0.0, 0);
+        rig.driver.lanes_at(&down.timeline_id, 500.0, 0);
+        rig.tick(40);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.5).abs() < 1e-5,
+            "down won, from 1"
+        );
+        rig.driver.set_value("c", 0.9, None, rig.at(40)).ok();
+        rig.tick(50);
+        assert_eq!(rig.value("c"), Some(0.9), "an action takes it back");
     }
 }

@@ -118,11 +118,11 @@ pub struct ChannelInfo {
     pub off_value: Finite32,
 }
 
-fn yes() -> bool {
+pub(crate) fn yes() -> bool {
     true
 }
 
-fn is_true(value: &bool) -> bool {
+pub(crate) fn is_true(value: &bool) -> bool {
     *value
 }
 
@@ -267,6 +267,12 @@ pub enum ChannelDriver {
     /// `channel.set_value` or `channel.nudge`, from a client, a hotkey, a binding or a
     /// cue.
     Action,
+    /// A lane of a playing (or played) sequence: a timeline's lane on this channel
+    /// (ADR-0184, since 0.170).
+    Sequence {
+        /// The timeline whose lane drives it.
+        timeline_id: crate::TimelineId,
+    },
     /// A value a newer server sends that this version doesn't know.
     #[serde(other)]
     #[schemars(skip)]

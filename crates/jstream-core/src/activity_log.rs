@@ -214,9 +214,17 @@ fn describe_action(action: &Action, state: &State) -> String {
             Some(id) => format!("Fired motion {} of {}", quote(id), item(state, item_id)),
             None => format!("Fired the motion of {}", item(state, item_id)),
         },
-        Action::TimelinePlay { timeline_id } => {
-            format!("Played timeline {}", timeline(state, timeline_id))
-        }
+        Action::TimelinePlay {
+            timeline_id,
+            delay_ms,
+        } => match delay_ms {
+            Some(ms) if *ms > 0 => format!(
+                "Played timeline {} after {:.1} s",
+                timeline(state, timeline_id),
+                f64::from(*ms) / 1000.0
+            ),
+            _ => format!("Played timeline {}", timeline(state, timeline_id)),
+        },
         Action::TimelineSeek { timeline_id, at_ms } => format!(
             "Played timeline {} from {:.1} s",
             timeline(state, timeline_id),

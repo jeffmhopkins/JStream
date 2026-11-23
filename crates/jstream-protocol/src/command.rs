@@ -2035,6 +2035,11 @@ pub enum Action {
     TimelinePlay {
         /// The timeline to play.
         timeline_id: TimelineId,
+        /// How long to wait first, in milliseconds, at most 60000 (ADR-0184, since
+        /// 0.170). While it waits, `studio.get` lists it in `waiting`; another play
+        /// starts the wait again, and `timeline.stop` cancels it. Omitted plays at once.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delay_ms: Option<u32>,
     },
     /// Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did
     /// stays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing
@@ -2542,7 +2547,7 @@ impl Action {
                 }
                 named
             }
-            Action::TimelinePlay { timeline_id }
+            Action::TimelinePlay { timeline_id, .. }
             | Action::TimelineStop { timeline_id }
             | Action::TimelineSeek { timeline_id, .. } => {
                 vec![(EntityKind::Timeline, timeline_id.as_str())]
@@ -2731,11 +2736,11 @@ impl Action {
             | Action::PtzFocus { .. }
             | Action::SceneSetKeyframe { .. }
             | Action::ItemTriggerMotion { .. }
-            | Action::TimelinePlay { .. }
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. }
             | Action::SourceRestart { .. }
             | Action::PrivacySet { .. } => None,
+            Action::TimelinePlay { .. } => self.play_problem(),
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on a value out of range.
             Action::ChannelSetValue { .. }
@@ -2845,6 +2850,24 @@ impl Action {
     /// playing a timeline adds nothing to an undo history. The `values.set` checks are
     /// `bind_problem`'s and the channel ones `channel_problem`'s.
     pub fn cue_problem(&self) -> Option<(&'static str, &'static str)> {
+        self.cue_problem_of()
+    }
+
+    /// `timeline.play`'s own check (ADR-0184): a `delay_ms` of at most 60000. `None`
+    /// for any other action.
+    pub fn play_problem(&self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Action::TimelinePlay {
+                delay_ms: Some(delay),
+                ..
+            } if *delay > crate::MAX_TRIGGER_DELAY_MS => {
+                Some(("delay_ms", "must be at most 60000 (one minute)"))
+            }
+            _ => None,
+        }
+    }
+
+    fn cue_problem_of(&self) -> Option<(&'static str, &'static str)> {
         match self {
             Action::SceneSwitch { .. }
             | Action::SceneSetKeyframe { .. }
@@ -2853,9 +2876,9 @@ impl Action {
             | Action::ItemToggle { .. }
             | Action::ItemTriggerMotion { .. }
             | Action::SourceRestart { .. }
-            | Action::TimelinePlay { .. }
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. } => None,
+            Action::TimelinePlay { .. } => self.play_problem(),
             Action::ValuesSet { .. } => self.bind_problem(),
             Action::ChannelSetValue { .. }
             | Action::ChannelSwitch { .. }

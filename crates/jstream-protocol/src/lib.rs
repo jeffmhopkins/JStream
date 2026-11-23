@@ -187,9 +187,11 @@ pub use rendering::{PROBE_RESOLUTIONS, RenderFeatures, RenderFeaturesChange};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use timeline::{
-    MAX_CUES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,
-    MIN_LOOP_MS, PlayingTimeline, TimelineChange, TimelineCue, TimelineInfo, TimelineLoop,
-    check_timeline_id,
+    ChannelEdge, KeyframeEdge, LaneCurve, LanePoint, LaneTarget, MAX_CUES, MAX_LANE_POINTS,
+    MAX_LANES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,
+    MAX_TRIGGER_DELAY_MS, MAX_TRIGGERS, MIN_LOOP_MS, PlayingTimeline, SceneEdge, TimelineChange,
+    TimelineCue, TimelineEdge, TimelineInfo, TimelineLane, TimelineLoop, TimelineTrigger,
+    WaitingTimeline, check_timeline_id,
 };
 pub use transition::{
     Bezier, CAMERA_ORBIT, CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition,

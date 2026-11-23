@@ -1425,6 +1425,7 @@ mod tests {
         }
         assert!(!c.id_taken("z"));
         let other = QueryResult::StudioGet {
+            waiting: Vec::new(),
             program_scene: None,
             preview_scene: None,
             timelines: Vec::new(),
