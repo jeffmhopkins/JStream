@@ -1,6 +1,6 @@
 //! Depth of field on a model's layer (ADR-0165): the layer blurred by the depth of the
-//! surface each pixel shows, in five fullscreen passes over the model's colour and view
-//! depth. [`crate::Compositor::draw_model`] runs it when the model's camera has depth of
+//! surface each pixel shows, in six fullscreen passes over the model's colour and view
+//! depth, the gather of the wider blurs at half the layer's size (ADR-0193). [`crate::Compositor::draw_model`] runs it when the model's camera has depth of
 //! field; otherwise the model draws with no pass.
 
 use crate::error::RenderError;
@@ -44,6 +44,12 @@ const SMOOTH: Shader = Shader {
         include_str!("focus/common.wgsl"),
         include_str!("focus/smooth.wgsl")
     ),
+    blend: Blend::Replace,
+};
+
+const RESOLVE: Shader = Shader {
+    label: "model-focus-resolve",
+    source: include_str!("focus/resolve.wgsl"),
     blend: Blend::Replace,
 };
 
@@ -120,7 +126,7 @@ impl Pass for ModelFocus {
             params: &params,
             target: &packed,
         })?;
-        let gathered = ctx.scratch(width, height)?;
+        let gathered = ctx.scratch(width.div_ceil(2), height.div_ceil(2))?;
         ctx.draw(&Draw {
             shader: GATHER,
             input,
@@ -128,12 +134,16 @@ impl Pass for ModelFocus {
             params: &params,
             target: &gathered,
         })?;
+        let smoothed = ctx.scratch(gathered.width(), gathered.height())?;
         ctx.draw(&Draw {
             shader: SMOOTH,
             input: &gathered,
             aux: Some(&packed),
             params: &params,
-            target: output,
-        })
+            target: &smoothed,
+        })?;
+        let inputs = [input.clone(), packed.clone(), smoothed];
+        let system = crate::filter::program_system(input, output, &inputs);
+        ctx.draw_program(RESOLVE.into(), &inputs, &system, &params, output)
     }
 }
