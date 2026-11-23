@@ -137,6 +137,8 @@ test('an item property is mapped by offsets, one per source, from the Inspector'
   const rotation = inspector.getByRole('textbox', { name: 'Rotation' });
   await expect(rotation).toBeVisible();
   const before = await rev(page);
+  // The crop edges are targets too.
+  await expect(inspector.locator('[data-map="item:box:crop_left"]')).toBeVisible();
 
   // A right-click on the number opens the property's menu, not the browser's.
   await rotation.click({ button: 'right' });

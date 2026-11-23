@@ -6942,7 +6942,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Updated t
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = """Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. | merge: The Add source text lists reflection_probe after light (#1609) and the Fog card's 1024 x 576 box (fog card), matching the 20-kind ORDER; "+ Add motion" up to 32 and the camera's Autofocus and Aperture (blur) (#1631), the Reflections check (#1609), the hologram's Style and presets (hologram follow-up) and the Controller learn bullet (CC PR 3 value bindings) match too, as does the control mock keeping value bindings.""" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/inspector.rs"]
-stamp = { hash = "b3:cca58e3985224aea", by = "agent:claude-mapping-ui", note = "Item mappings: map_target.rs, item_map.rs, the NumberField map mark and the Inspector fields as mapping targets; added the Mapping targets entry, checked against MapTarget, ItemUnit, ItemMapper and setting_at, and re-read the Map control and Mapping mode entries, which still hold with the request now carrying a MapTarget" }
+stamp = { hash = "b3:ff1df06445525036", by = "agent:claude-mapping-ui", note = "The Inspector's 3D (tilt, turn, depth) and crop fields now carry mapping marks, as position, size, rotation and opacity do; re-read the Mapping targets entry: the mapper hands each field its mark from the Transform tab, unchanged" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/item_map.rs"]
 stamp = { hash = "b3:d064c7b4078ad6e0", by = "agent:claude-mapping-ui", note = "Item mappings: map_target.rs, item_map.rs, the NumberField map mark and the Inspector fields as mapping targets; added the Mapping targets entry, checked against MapTarget, ItemUnit, ItemMapper and setting_at, and re-read the Map control and Mapping mode entries, which still hold with the request now carrying a MapTarget" }
@@ -7200,7 +7200,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Re-read: 
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = "Added learn.rs to the panels and value_bindings to the store's Collection. | merge: The contents list covers the panels code that #1609 (Reflections check, probe switch and cap), the fog card bundle (fog_card in ORDER), the hologram follow-up (hologram in filters.rs KNOWN) and CC PR 3 value bindings (learn.rs, the store's value bindings, learn in both filters.rs forms) changed; the panels it names and their tests match the merged files." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/inspector.rs"]
-stamp = { hash = "b3:cca58e3985224aea", by = "agent:claude-mapping-ui", note = "Item mappings: map_target.rs, item_map.rs, the NumberField map mark and the Inspector fields as mapping targets; added map_target.rs and item_map.rs to the contents list beside map_control.rs" }
+stamp = { hash = "b3:ff1df06445525036", by = "agent:claude-mapping-ui", note = "The Inspector's 3D (tilt, turn, depth) and crop fields now carry mapping marks, as position, size, rotation and opacity do; the contents list names item_map.rs as the Inspector fields' mapper, which still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/item_map.rs"]
 stamp = { hash = "b3:d064c7b4078ad6e0", by = "agent:claude-mapping-ui", note = "Item mappings: map_target.rs, item_map.rs, the NumberField map mark and the Inspector fields as mapping targets; added map_target.rs and item_map.rs to the contents list beside map_control.rs" }
@@ -7410,7 +7410,7 @@ stamp = { hash = "b3:20b6435bb10e0c51", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/map-control.spec.js"]
-stamp = { hash = "b3:5eac77bac852a549", by = "agent:claude-mapping-ui", note = "No harness change; map-control.spec.js gained a test that uses the existing liveSources fixture as described" }
+stamp = { hash = "b3:090b2d4e6d22bfdd", by = "agent:claude-mapping-ui", note = "The Inspector's 3D (tilt, turn, depth) and crop fields now carry mapping marks, as position, size, rotation and opacity do; no harness change" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
 stamp = { hash = "b3:74a909007ca3d6e3", by = "agent:claude", note = "Re-read: filters.spec.js and menus.spec.js add assertions only (the Settings chips, no Add as group or Name field for Color); the fixtures are unchanged." }
@@ -7485,7 +7485,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:2e0cc2e98e0393e6", by = "agent:claude-mapping-ui", note = "Extended the Map control entry with the Inspector item-mapping test, each clause checked against the spec | kept from the merged side: Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds" }
+stamp = { hash = "b3:0f2f9a01cd25a2c9", by = "agent:claude-mapping-ui", note = "Added the crop-edge target check to the Map control entry, matching the spec | kept from the merged side: Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7548,7 +7548,7 @@ stamp = { hash = "b3:20b6435bb10e0c51", by = "agent:claude", note = "Updated the
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/map-control.spec.js"]
-stamp = { hash = "b3:5eac77bac852a549", by = "agent:claude-mapping-ui", note = "Extended the Map control entry with the Inspector item-mapping test, each clause checked against the spec" }
+stamp = { hash = "b3:090b2d4e6d22bfdd", by = "agent:claude-mapping-ui", note = "Added the crop-edge target check to the Map control entry, matching the spec" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
 stamp = { hash = "b3:74a909007ca3d6e3", by = "agent:claude", note = "The Menus and Add source entry says Color shows neither New | Existing nor a Name field, and the Filters entry that the picked kind's settings are chips." }
@@ -8055,7 +8055,7 @@ stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 n
 stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
-stamp = { hash = "b3:3f1ce61457be0ab8", by = "agent:claude-mapping-ui", note = "Re-read the whole section: it says the Inspector holds the exact numbers and nothing about mapping, so the fields gaining mapping tags and a right-click menu leaves it true" }
+stamp = { hash = "b3:ee7a1674c1f8826c", by = "agent:claude-mapping-ui", note = "The Inspector's 3D (tilt, turn, depth) and crop fields now carry mapping marks, as position, size, rotation and opacity do; the section says nothing about mapping, re-read earlier in this change and unchanged since" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#menus"]
 stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited: File › Video settings… opens Settings on Video with Save, and Check for updates is a desktop-app item; checked against header.rs and settings.rs." }
@@ -8757,7 +8757,7 @@ stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New sect
 stamp = { hash = "b3:163512681695889f", by = "agent:claude-mapping-ui", note = "style.css gained only the mapping tag on a number field (accent text on the selected fill, 10 px) and its mapping-mode outline; re-read the section against those rules and it holds | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-FEATURES#automation"."body"]
-stamp = { hash = "b3:14534f67796ae072", by = "agent:claude-mapping-ui", note = "Added VC-05 Item mappings and the pointer to it in VC-01, each sentence checked against map_target.rs, item_map.rs and the browser test | kept from the merged side: Only the ADR number and link changed, 0188 to 0190." }
+stamp = { hash = "b3:af98cd4b4bf61470", by = "agent:claude-mapping-ui", note = "Updated VC-01 and VC-05 to list the 3D and crop fields as targets and Scale and Perspective as not built, matching inspector.rs and ItemUnit::of | kept from the merged side: Only the ADR number and link changed, 0188 to 0190." }
 
 ["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/channels.rs"]
 stamp = { hash = "b3:5ebd7fc23c2a4cb5", by = "agent:claude", note = "VC-01: the Smoothing field for a learned MIDI control and the 60 fps updates while moving (ADR-0188); VC-02: each input's Smoothing in ms." }
@@ -8898,10 +8898,10 @@ stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1
 stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#inspector"."body"]
-stamp = { hash = "b3:3f1ce61457be0ab8", by = "agent:claude-mapping-ui", note = "Added to IN-02 that X, Y, W, H, Rotation and Opacity take mappings; inspector.rs changed only by passing each field its mark and drawing the mapper's menu" }
+stamp = { hash = "b3:ee7a1674c1f8826c", by = "agent:claude-mapping-ui", note = "Extended IN-02 to say the 3D and Crop numbers but Perspective take mappings, matching inspector.rs" }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/inspector.rs"]
-stamp = { hash = "b3:cca58e3985224aea", by = "agent:claude-mapping-ui", note = "Added to IN-02 that X, Y, W, H, Rotation and Opacity take mappings; inspector.rs changed only by passing each field its mark and drawing the mapper's menu" }
+stamp = { hash = "b3:ff1df06445525036", by = "agent:claude-mapping-ui", note = "Extended IN-02 to say the 3D and Crop numbers but Perspective take mappings, matching inspector.rs" }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.rs passes the setting's label and value to the control button; the Inspector rows still hold, the menu is described under Channels and sequences." }

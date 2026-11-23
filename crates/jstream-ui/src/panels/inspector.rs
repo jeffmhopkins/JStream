@@ -1167,9 +1167,24 @@ fn Placement(
             Depth3::Perspective => ("Perspective", "px", 10.0, 0),
         };
         let (min, max) = which.range();
-        view! {
-            <NumberField label unit value step decimals min=f64::from(min)
-                max=f64::from(max) send=commit />
+        // Tilt, turn and depth take mappings; the perspective is no motion property.
+        let property = match which {
+            Depth3::Tilt => Some(jstream_protocol::MotionProperty::Tilt),
+            Depth3::Turn => Some(jstream_protocol::MotionProperty::Turn),
+            Depth3::Depth => Some(jstream_protocol::MotionProperty::Depth),
+            Depth3::Perspective => None,
+        };
+        match property {
+            Some(property) => view! {
+                <NumberField label unit value step decimals min=f64::from(min)
+                    max=f64::from(max) map=mapper.mark(property) send=commit />
+            }
+            .into_any(),
+            None => view! {
+                <NumberField label unit value step decimals min=f64::from(min)
+                    max=f64::from(max) send=commit />
+            }
+            .into_any(),
         }
     };
     // Whether the box turns to face a 3D scene's camera (ADR-0151 decision 2).
@@ -1321,9 +1336,15 @@ fn Placement(
             });
             true
         };
+        let map = mapper.mark(match side {
+            Side::Left => jstream_protocol::MotionProperty::CropLeft,
+            Side::Right => jstream_protocol::MotionProperty::CropRight,
+            Side::Top => jstream_protocol::MotionProperty::CropTop,
+            Side::Bottom => jstream_protocol::MotionProperty::CropBottom,
+        });
         view! {
             <NumberField label caption unit="px" value step=1.0 decimals=0 min=0.0
-                max=f64::from(MAX_CROP) inline=true send=commit />
+                max=f64::from(MAX_CROP) inline=true map send=commit />
         }
     };
     let crop_hint = Signal::derive(move || {
