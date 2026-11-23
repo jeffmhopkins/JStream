@@ -991,7 +991,8 @@ fn send_pictures(
     closing: &AtomicBool,
     clock: &mut StreamClock,
 ) {
-    let mut last: Vec<u8> = Vec::new();
+    // The stage's own buffer, shared: a frame repeated is the same buffer again.
+    let mut last: Arc<Vec<u8>> = Arc::default();
     let mut sent: Option<Instant> = None;
     let mut encoded = Vec::new();
     while !closing.load(Ordering::Acquire) {
@@ -1002,7 +1003,8 @@ fn send_pictures(
         };
         let stale = sent.is_none_or(|at| at.elapsed() >= KEYFRAME_EVERY);
         let asked = stream.keyframe.load(Ordering::Acquire);
-        if (shot.rgba == last && !stale && !asked) || !lock(&stream.sink).has_room() {
+        let same = Arc::ptr_eq(&shot.rgba, &last) || *shot.rgba == *last;
+        if (same && !stale && !asked) || !lock(&stream.sink).has_room() {
             continue;
         }
         let pts = shot

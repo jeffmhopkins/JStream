@@ -3216,10 +3216,11 @@ reports each scene's estimate and whether it is cold (`WarmCaptures::report`, re
 under the collection lock after the profile is built).
 
 A JPEG or PNG stream gets a picture queue instead of an encoder session
-(`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read
-back into it, at most two waiting (one beyond is dropped without a copy), and its
+(`Program::attach_pictures`, `picture_queue`): the render thread queues each frame read
+back in it, as the mix's own buffer shared and not a copy (*Runtime*), at most two
+waiting (one beyond is dropped), and its
 `jstream-preview-send` thread encodes and sends a picture when it differs from the last
-one sent, a keyframe was asked for (the request is that thread's to take, never the
+one sent (a repeated frame is the same buffer, so that costs no compare), a keyframe was asked for (the request is that thread's to take, never the
 hub's), or 2 s passed, and only while the stream's queue has room. A staged stream's
 `pts_us` go on from the hub's own across stages and sizes (`StreamClock`): its first
 picture on a stage is timed by how long the stream has been open, later ones by their
@@ -3963,9 +3964,10 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 
 The render thread keeps each capture's latest CPU frame as it was delivered, with no
 copy of its own, and reuses its composite targets, each mix's readback ring, and its GPU
-textures through the cache. Each tick allocates, for every mix it draws, one
-frame-sized buffer per encoder session on the CPU path fed from that mix, the frame the
-session takes ownership of (`VideoInput::push` cannot hand buffers back), and the item
+textures through the cache. Each tick allocates, for every mix it draws, the small
+handle of the frame it shows and of each encoder session's frame on the CPU path fed
+from that mix (the frame's pixels are the mix's own buffer, shared with the session,
+which holds it until it has encoded or dropped the frame; see *Runtime*), and the item
 list `compose` fills for that mix; a session on the GPU path gets a handle to an encode
 target, and the NV12 pass binds each target once. Then once per tick it allocates the
 cache key of each capture that names a
@@ -4586,7 +4588,14 @@ records it into the mix's `ReadbackRing` of three map-read buffers, kept with th
 compositor, and collects whichever earlier ones have mapped, polling without a wait.
 The copy out of a mapped buffer is the draw's `jstream-readback` thread's (`Copier`),
 whose frame the draw swaps into the mix's, so the render thread copies no pixels; should
-the OS refuse that thread, the render thread copies, as before. A
+the OS refuse that thread, the render thread copies, as before. The frame a mix shows is
+then shared with its readers, not copied for each: an encoder session's frame is planes
+over the buffer (`push_shared_frame`) and a picture stream's picture is the buffer itself,
+so the render thread still copies no pixels however many take the mix (a virtual camera
+and an armed probe still take a copy of their own). A buffer a reader holds is not read
+into again; the mix keeps up to eight such buffers and takes one back once only it holds
+it (`MixFrame::retire`), so a steady run allocates nothing, and past eight the oldest goes
+to the collector. A
 frame read back goes out a few ticks after it was drawn, with the time it was drawn
 for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
 nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)
