@@ -2,14 +2,14 @@
 id = "ADR-0181"
 title = "JStream names a JTunnel sender's modulation params"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0181: JStream names a JTunnel sender's modulation params
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
