@@ -508,7 +508,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    `GreaterEqual` or `Always`, and `depth_writer`). The pass clears it to 0 (it starts
    cleared rather than wiped then), the model's layer draws untested and then
    `fs_write_depth` writes `NEAR_W` times its depth image's `1 / w` where that isn't 0,
-   loaded texel for texel, and every other item tests its own `NEAR_W / w` (the vertex
+   loaded texel for texel, and every other item seen through a camera (an item with no
+   camera is on the screen, outside the models' space, and draws untested) tests its own `NEAR_W / w` (the vertex
    shader's clip z, `min(NEAR_W, w)`) against it without writing
    (`golden_model_a_card_behind_a_model_is_hidden_by_its_depth`). Otherwise
    stacking order is draw order, except that `prepare` sorts each run of consecutive

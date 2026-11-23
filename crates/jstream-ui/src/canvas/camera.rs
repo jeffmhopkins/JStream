@@ -111,14 +111,14 @@ pub enum Shape {
     },
 }
 
-/// The outline of one box or model as the camera shows it: see [`polygon`].
+/// The outline of one box or model as the camera shows it: see [`polygon`]. A model
+/// whose bounds reach past the near plane falls back to its card box (#1601).
 fn piece(
     geometry: &ItemGeometry,
     solid: Option<SolidBounds>,
     view: &CameraView,
 ) -> Option<Vec<Point>> {
-    if let Some(bounds) = solid {
-        let hull = geometry.solid_outline(bounds, Some(view))?;
+    if let Some(hull) = solid.and_then(|bounds| geometry.solid_outline(bounds, Some(view))) {
         return Some(
             hull.into_iter()
                 .map(|at| Point { x: at.x, y: at.y })
@@ -1176,5 +1176,22 @@ mod tests {
         assert!((bounds.size.width.get() - 100.0).abs() < 0.5, "{bounds:?}");
         assert!(contains(&at, &outer, &seen, Point { x: 480.0, y: 540.0 }));
         assert!(!contains(&at, &outer, &seen, Point { x: 960.0, y: 540.0 }));
+    }
+
+    #[test]
+    fn a_model_reaching_past_the_near_plane_keeps_its_card_outline() {
+        let seen = framing();
+        let g = item(960.0, 540.0, 400.0, 400.0, 0.0);
+        // A hundred times deeper than wide: its near corners land behind the camera.
+        let deep = SolidBounds::of_size(1.0, 1.0, 100.0);
+        assert!(g.solid_outline(deep, Some(&seen)).is_none());
+        let card = polygon(&g, &Shape::Box, &seen).expect("the card box is in front");
+        assert_eq!(polygon(&g, &Shape::Model(deep), &seen), Some(card));
+        assert!(contains(
+            &g,
+            &Shape::Model(deep),
+            &seen,
+            Point { x: 960.0, y: 540.0 }
+        ));
     }
 }
