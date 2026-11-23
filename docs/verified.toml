@@ -2436,7 +2436,7 @@ stamp = { hash = "b3:809a41a805e4184a", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:44b5b114d27ed218", by = "agent:claude", note = "ADR-0197: lib.rs only gains the private resolution module; the purpose text names no module list and still holds." }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:18d65231dcc19361", by = "agent:claude", note = "Rewrote the end of the governor paragraph: steps down only while a model is drawn (Chains::model_drawn), the rendering switches' model_resolution replaces the environment variable, a fixed size is held and gone on from, and the size is reported through the meter (ADR-0200). Checked against resolution.rs and its tests and the pipeline's tick." }
+stamp = { hash = "b3:cb44d653c6fafbc2", by = "agent:claude", note = "Governor paragraph now says a step up is expected to cost the frame's time divided by what the step down saved (worst case until one is timed) and that nothing is decided for the first 3 seconds (ADR-0200 decisions 6 and 7); checked against resolution.rs's saved, before and START_S and its two new tests. The rest of the paragraph (the setting, model_drawn, the report) is unchanged." }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:2f31bb6009aa1da4", by = "agent:claude", note = "Added that the render thread uploads no 3D model (Chains::upload_models_aside, ADR-0177). pipeline.rs: DrawFn takes the warm models as an eighth argument, Frames::draw passes the reader's, and the GPU draw calls keep_models after begin_frame; render.rs: RenderHub and RenderReader carry a WarmModels slot handled as the warm captures are, with a Garbage::WarmModels for the collector. Re-read the tick, collector and frames-in-flight text: unchanged by this." }
@@ -2445,7 +2445,7 @@ stamp = { hash = "b3:2f31bb6009aa1da4", by = "agent:claude", note = "Added that 
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/resolution.rs"]
-stamp = { hash = "b3:f31a8a405ddc5057", by = "agent:claude", note = "Rewrote the end of the governor paragraph: steps down only while a model is drawn (Chains::model_drawn), the rendering switches' model_resolution replaces the environment variable, a fixed size is held and gone on from, and the size is reported through the meter (ADR-0200). Checked against resolution.rs and its tests and the pipeline's tick." }
+stamp = { hash = "b3:eb93b77cb94165ab", by = "agent:claude", note = "Governor paragraph now says a step up is expected to cost the frame's time divided by what the step down saved (worst case until one is timed) and that nothing is decided for the first 3 seconds (ADR-0200 decisions 6 and 7); checked against resolution.rs's saved, before and START_S and its two new tests. The rest of the paragraph (the setting, model_drawn, the report) is unchanged." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/captures.rs"]
 stamp = { hash = "b3:08a294267bc9e469", by = "agent:claude-1555", note = "#1555: replaced the summed-skips sentences with the Pace rule (link to drop-counts) and added a reader's missed frames to the shared-device paragraph" }

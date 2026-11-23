@@ -4632,10 +4632,13 @@ units of one frame of every four added up), whether the conversions are behind a
 whether a model's layer was drawn since the last tick (`Chains::model_drawn`), and
 sets `Chains::model_percent` to one of 100, 85, 75, 67 and 50. It steps down at once
 when the GPU is behind and when three timed frames in a row took over 88% of the frame's
-budget; it steps up when the time the larger size is expected to take (all of the frame's
+budget; it steps up when the time the larger size is expected to take (the frame's time
+divided by what the step down to this size saved, the first frame timed after it over the
+last before it; until one has been timed, the worst case, all of the frame's time
 growing with the model's pixels) has stayed under 78% for 5 seconds, a wait that doubles,
 up to 80 seconds, each time a step up is undone within 15; and it decides nothing for 10
-ticks after a change, while the frames in flight are the old size. A device that can't
+ticks after a change, while the frames in flight are the old size, and nothing for its
+first 3 seconds, whose frames upload and compile. A device that can't
 time its frames steps on the first signal alone. It steps down only while a model is
 drawn, since fewer pixels gain nothing without one, and each change logs one line
 ([ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).

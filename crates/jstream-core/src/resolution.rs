@@ -34,6 +34,22 @@ const MAX_WAIT_S: u32 = 80;
 /// A step up undone within this many seconds doubles the wait before the next.
 const UNDONE_S: u32 = 15;
 
+/// Seconds after the first tick during which nothing is decided: a program's first
+/// frames upload and compile, and take longer than the ones after them.
+const START_S: u32 = 3;
+
+/// What a frame's GPU time at each of [`STEPS`] is taken to be of its time at the step
+/// before, until a step down has shown it: all of it growing with the model's pixels.
+fn worst(step: usize) -> f64 {
+    match step.checked_sub(1) {
+        Some(larger) => {
+            let side = f64::from(STEPS[step]) / f64::from(STEPS[larger]);
+            side * side
+        }
+        None => 1.0,
+    }
+}
+
 /// A percentage of its canvas's width and of its height that a model's layer is drawn
 /// with: 100 by default.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,8 +103,10 @@ impl Mode {
 /// take has stayed under [`LOW`] of the budget for the wait, which starts at [`WAIT_S`]
 /// seconds and doubles each time a step up is undone within [`UNDONE_S`] seconds, so a
 /// scene on the edge settles at the smaller size instead of flickering between two.
-/// The expectation is the worst case: all of the frame's GPU time growing with the
-/// model's pixels.
+/// The expectation comes from what the step down to this size saved, the frame's time
+/// after it over its time before; until a step down has been timed it is the worst
+/// case, all of the frame's GPU time growing with the model's pixels. It decides
+/// nothing for the first [`START_S`] seconds, whose frames upload and compile.
 ///
 /// It steps down only while the frames before drew a model: with none there is nothing
 /// to gain. On a device that can't time its frames it has only the first signal, and
@@ -117,6 +135,14 @@ pub(crate) struct Governor {
     settle: u32,
     /// Ticks since the last step up.
     since_up: u32,
+    /// The GPU time of the last frame timed at this size.
+    last: Option<f64>,
+    /// The size stepped down from and the GPU time of the last frame timed at it, until
+    /// a frame at this size is timed.
+    before: Option<(usize, f64)>,
+    /// What a frame's GPU time at each step is of its time at the step before
+    /// ([`worst`], or what a step down showed).
+    saved: [f64; STEPS.len()],
 }
 
 impl Governor {
@@ -136,8 +162,11 @@ impl Governor {
             roomy: true,
             calm: 0,
             wait: WAIT_S.saturating_mul(fps),
-            settle: 0,
+            settle: START_S.saturating_mul(fps),
             since_up: u32::MAX,
+            last: None,
+            before: None,
+            saved: std::array::from_fn(worst),
         }
     }
 
@@ -166,6 +195,8 @@ impl Governor {
                 self.calm = 0;
                 self.settle = SETTLE;
                 self.roomy = !self.timed;
+                self.last = None;
+                self.before = None;
             }
             return self.percent();
         }
@@ -181,15 +212,21 @@ impl Governor {
             self.timed = true;
             let budget = self.budget.as_secs_f64();
             let took = gpu.as_secs_f64();
+            // The first frame timed after a step down says what the step saved, held
+            // between the worst case and nothing.
+            if let Some((from, was)) = self.before.take()
+                && from + 1 == self.step
+                && was > 0.0
+            {
+                self.saved[self.step] = (took / was).clamp(worst(self.step), 1.0);
+            }
+            self.last = Some(took);
             if took > budget * HIGH {
                 self.over = self.over.saturating_add(1);
                 self.roomy = false;
             } else {
                 self.over = 0;
-                self.roomy = self.step > 0 && {
-                    let grow = f64::from(STEPS[self.step - 1]) / f64::from(STEPS[self.step]);
-                    took * grow * grow < budget * LOW
-                };
+                self.roomy = self.step > 0 && took / self.saved[self.step] < budget * LOW;
             }
         }
         if !models {
@@ -215,6 +252,7 @@ impl Governor {
         if self.step + 1 >= STEPS.len() {
             return;
         }
+        self.before = self.last.take().map(|was| (self.step, was));
         self.step += 1;
         self.settle = SETTLE;
         // A step up this undoes was too early: the next waits twice as long.
@@ -238,6 +276,8 @@ impl Governor {
         self.step -= 1;
         self.settle = SETTLE;
         self.since_up = 0;
+        self.last = None;
+        self.before = None;
         // Until a frame at the new size is timed, it isn't known to have room for more.
         self.roomy = !self.timed;
         tracing::info!(
@@ -255,8 +295,13 @@ mod tests {
 
     const FPS: u32 = 30;
 
+    /// A governor past its first seconds.
     fn governor() -> Governor {
-        Governor::new(Duration::from_micros(33_333))
+        let mut governor = Governor::new(Duration::from_micros(33_333));
+        for _ in 0..super::START_S * FPS {
+            governor.tick(Auto, None, false, true);
+        }
+        governor
     }
 
     fn ms(ms: f64) -> Option<Duration> {
@@ -393,6 +438,30 @@ mod tests {
         assert_eq!(governor.percent().get(), 100);
         governor.tick(Auto, None, true, true);
         assert_eq!(governor.percent().get(), 85);
+    }
+
+    #[test]
+    fn the_first_seconds_decide_nothing() {
+        let mut governor = Governor::new(Duration::from_micros(33_333));
+        for _ in 0..super::START_S * FPS {
+            governor.tick(Auto, ms(60.0), true, true);
+        }
+        assert_eq!(governor.percent().get(), 100, "start-up frames are long");
+        governor.tick(Auto, None, true, true);
+        assert_eq!(governor.percent().get(), 85);
+    }
+
+    /// A model that is a small part of the frame: 29.5 ms at 100 and 26.8 at 85, where
+    /// the worst case would expect 37 ms back at 100.
+    #[test]
+    fn it_steps_up_by_what_the_step_down_saved_and_not_the_worst_case() {
+        let mut governor = governor();
+        assert_eq!(run(&mut governor, 12, 29.5), 85, "three long frames");
+        // 26.8 ms here was 29.5 there: over 78% of the budget, so it stays.
+        assert_eq!(run(&mut governor, 3000, 26.8), 85);
+        // 23 ms here is expected to be 25.3 there, where the worst case says 31.8.
+        assert_eq!(run(&mut governor, 4 * FPS, 23.0), 85, "not yet");
+        assert_eq!(run(&mut governor, 2 * FPS, 23.0), 100);
     }
 
     #[test]
