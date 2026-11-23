@@ -237,7 +237,7 @@ Contents ([Design](#design) explains the choices):
   output and for each output with its state, Start or Stop, FX button and ⋯ menu, and a
   running one's stats line; Duplicate; each output's settings dialog, which creates or
   edits a stream, recording or virtual camera and its stream key, applies nothing until
-  OK or Apply and follows another client's changes to untouched fields, whose drafts,
+  Save and follows another client's changes to untouched fields, whose drafts,
   edits, copies and Start all are tested natively; and the delete confirmation);
   `encoders.rs`: `Profiles`, its encoder profile and video mix list and editor, in the
   panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
@@ -1117,18 +1117,21 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   path beside the original's, `copy_path`; never the stream key), then opens the copy's
   settings. Delete… asks first and is off while the output runs.
   An output's settings dialog (Settings…, a double-click, or "+ Add output" with a kind
-  picker) edits a draft (`OutputDraft`) and applies nothing until OK or Apply, which
+  picker and a Name field) edits a draft (`OutputDraft`) on a property grid (C16) and
+  applies nothing until Save (Add for a new one), which
   send what changed as one batch (`draft_edits`: `output.create` first for a new one,
   then `output.set_target` or `output.set_path` (#1072), `output.set_encoder`,
   `output.set_video_mix`, `output.set_audio_buses`), then the key action
-  (`send_settings`). A new output's ID is read from the engine at send time; if its key
+  (`send_settings`). A new output takes the name typed as its ID (`name_problem` checks it as it is typed, and
+  `send_settings` against the engine's list at send time); if its key
   is refused after the create, Add again sets only the key on it. While the dialog is
   open, another client's change reaches the fields still as the dialog started them
   (`OutputDraft::reseed`). A running output's target and bus are off, as the engine
   refuses those moves; a new mix or encoder applies when it starts again. In the
   desktop app a recording's path has a Browse… button, opening a save dialog for an
-  `.mp4`. The Video section has Edit mix… and the Encoder section Edit encoder… (off for
-  the engine's default) and New…, which open the Encoders & mixes dialog
+  `.mp4`. The Video section has an Edit… link (named Edit mix…) and the Encoder section
+  one (Edit encoder…), each only while a mix or profile is picked, and New… (New
+  encoder…), which open the Encoders & mixes dialog
   (`encoders.rs`) on that mix or profile or on a new one (`LibraryPick`). That dialog
   lists the profiles and mixes on the left, each with a short summary
   (`encoder_short`, `mix_short`), and edits the one picked on the right with the whole
