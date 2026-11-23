@@ -291,6 +291,14 @@ pub struct StreamProfile {
     /// The bit rate its encoders are set to, in kilobits a second, the same way.
     #[serde(default)]
     pub target_kbps: u32,
+    /// The name of the video encoder encoding it now, as the platform names it: the one
+    /// it fell back to when the one it opened refused its first frame. Empty from an
+    /// engine that does not report it.
+    #[serde(default)]
+    pub encoder: String,
+    /// Whether that encoder runs on dedicated hardware.
+    #[serde(default)]
+    pub hardware: bool,
 }
 
 /// An encoded stream, by what it feeds ([`StreamProfile::stream`]).

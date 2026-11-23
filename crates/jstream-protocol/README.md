@@ -384,7 +384,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.172 because a scene whose `reflections` is on also reflects
+`PROTOCOL_VERSION` is 0.173 because `profile.get` names each stream's video encoder:
+`StreamProfile` gains `encoder`, the name of the one encoding it now, and `hardware`,
+whether it runs on dedicated hardware; 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -2014,7 +2016,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   client) and `dropped` on the way, the frames its encoder took more than a frame
   period after they were handed over (`late`), the encoder's average time per frame
   (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
-  video and audio for an output, video for a preview stream). Most frames lost come
+  video and audio for an output, video for a preview stream). Since 0.173 it also
+  names the video encoder encoding the stream now (`encoder`, as the platform names
+  it, after any fallback) and whether that one runs on dedicated hardware
+  (`hardware`). Most frames lost come
   first; a stream that ran in none of the window, or has ended, is left out. `mixer`
   (omitted when it mixed no block in the window) counts the mixer's `blocks`, the
   `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest

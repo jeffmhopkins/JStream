@@ -4600,6 +4600,8 @@ mod cpu_pipeline {
         assert_eq!(stream.dropped, 0, "{stream:?}");
         assert!(stream.target_kbps > 0, "{stream:?}");
         assert!(stream.fps.get() > 0.0, "{stream:?}");
+        // The encoder encoding it is named (protocol 0.173); the fakes' is software.
+        assert!(!stream.encoder.is_empty() && !stream.hardware, "{stream:?}");
         let mixer = info.mixer.expect("the mixer");
         assert!(mixer.block_ms.get() > 0.0, "{mixer:?}");
         assert!(mixer.late_blocks <= mixer.blocks, "{mixer:?}");

@@ -1691,6 +1691,7 @@ impl Running {
                 fps,
                 target_kbps,
                 read: self.read_stream(),
+                encoder: streams::encoder_of(encoders.video.stats_handle()),
             }));
         }
     }

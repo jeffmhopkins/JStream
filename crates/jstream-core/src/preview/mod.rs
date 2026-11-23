@@ -521,6 +521,7 @@ fn meter_h264(stream: &PreviewStream, session: &VideoSession) -> Option<StreamGu
     let streams = stream.streams.as_ref()?;
     let (fps, target_kbps) = profile::streams::encoder_target(session.info(), None);
     let handle = session.stats_handle();
+    let encoder = profile::streams::encoder_of(session.stats_handle());
     let counts = Arc::clone(&stream.counts);
     let base = handle.stats().unwrap_or_default();
     let (base_sent, base_bytes, base_lost) = counts.read();
@@ -533,6 +534,7 @@ fn meter_h264(stream: &PreviewStream, session: &VideoSession) -> Option<StreamGu
         },
         fps,
         target_kbps,
+        encoder,
         read: Box::new(move || {
             let video = match handle.stats() {
                 Some(stats) => {
@@ -672,13 +674,14 @@ impl Work {
 }
 
 impl H264 {
-    /// Opens the platform's H.264 encoder at `width` × `height`, software preferred,
+    /// Opens the platform's H.264 encoder at `width` × `height`, as `hardware` says,
     /// for frames pushed in `input_format`.
     fn open(
         codecs: &dyn Codecs,
         (width, height): (u32, u32),
         fps: u32,
         input_format: PixelFormat,
+        hardware: HardwarePreference,
     ) -> Result<Self, String> {
         let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
         let frame_period = Timebase::new(1, fps).map_err(|err| err.to_string())?;
@@ -698,7 +701,7 @@ impl H264 {
                 max_kbps: kbps * 2,
             },
             keyframe_interval: fps.saturating_mul(KEYFRAME_EVERY.as_secs() as u32),
-            hardware: HardwarePreference::Avoid,
+            hardware,
         };
         let options = SessionOptions {
             input_capacity: 2,
@@ -787,6 +790,60 @@ struct Staged {
     stage: Weak<Program>,
     /// Its meter in `profile.get`, dropped with it.
     _profiled: Option<StreamGuard>,
+    /// The hub's one hardware encoder session, while this stream's encoder holds it.
+    _hardware: Option<HardwareTaken>,
+}
+
+/// The one hardware H.264 session the preview hub may hold (#1691). A program or scene
+/// stream the program stage draws tries the hardware encoder while the slot is free, so
+/// the canvas doesn't cost a CPU core on a software encoder. Any other stream encodes in
+/// software: hardware sessions can be limited, and outputs come first (ADR-0080 §3).
+#[derive(Clone, Debug, Default)]
+struct HardwareSlot(Arc<AtomicBool>);
+
+/// The slot, taken until it is dropped.
+#[derive(Debug)]
+struct HardwareTaken(Arc<AtomicBool>);
+
+impl HardwareSlot {
+    /// The slot, if no stream holds it.
+    fn take(&self) -> Option<HardwareTaken> {
+        self.0
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+            .then(|| HardwareTaken(Arc::clone(&self.0)))
+    }
+}
+
+impl Drop for HardwareTaken {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+/// Opens a staged stream's H.264 encoder: on hardware while `slot` is free, falling back
+/// to software when no hardware encoder opens, or in software while another stream holds
+/// the slot. The slot stays taken while the session is a hardware one.
+fn open_staged_h264(
+    codecs: &dyn Codecs,
+    size: (u32, u32),
+    fps: u32,
+    format: PixelFormat,
+    slot: &HardwareSlot,
+) -> Result<(H264, Option<HardwareTaken>), String> {
+    if let Some(taken) = slot.take() {
+        match H264::open(codecs, size, fps, format, HardwarePreference::Prefer) {
+            Ok(h264) if h264.session.info().codec.hardware => return Ok((h264, Some(taken))),
+            // `Prefer` fell back to software inside the platform: the slot is free again.
+            Ok(h264) => return Ok((h264, None)),
+            // Linux's `Prefer` has no software fallback when VA-API refuses.
+            Err(reason) => tracing::info!(
+                error = %reason,
+                "no hardware H.264 encoder for the preview; it encodes in software"
+            ),
+        }
+    }
+    H264::open(codecs, size, fps, format, HardwarePreference::Avoid).map(|h264| (h264, None))
 }
 
 /// The format the program stage's render thread pushes a preview's pictures of `size`
@@ -810,18 +867,23 @@ impl Staged {
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
         clock: StreamClock,
+        slot: &HardwareSlot,
     ) -> Result<Self, String> {
         // The stage draws every `divisor`th base tick, so the encoder is told the rate
         // it gets: never above the base rate, which a 60 fps ask of a 30 fps stage is.
         let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
         let fps = (stage.base_fps / divisor).max(1);
-        let H264 {
-            session, packets, ..
-        } = H264::open(
+        let (
+            H264 {
+                session, packets, ..
+            },
+            hardware,
+        ) = open_staged_h264(
             codecs,
             (size.width(), size.height()),
             fps,
             staged_format(size),
+            slot,
         )?;
         let profiled = meter_h264(stream, &session);
         stage.attach_preview(size, divisor, stream.scene.clone(), session.input());
@@ -846,6 +908,7 @@ impl Staged {
             size,
             stage: Arc::downgrade(stage),
             _profiled: profiled,
+            _hardware: hardware,
         })
     }
 
@@ -883,6 +946,7 @@ impl Staged {
             size,
             stage: Arc::downgrade(stage),
             _profiled: None,
+            _hardware: None,
         })
     }
 
@@ -1084,13 +1148,15 @@ fn stageable(stream: &PreviewStream, work: Option<&Work>, can_stage: bool) -> bo
 }
 
 /// Opens, or keeps, `stream`'s [`Staged`] session at its picture size of `canvas` (the
-/// program's, or its scene's), and passes a keyframe request on.
+/// program's, or its scene's), and passes a keyframe request on. An H.264 session
+/// opens on hardware while the hub's `slot` is free.
 fn serve_staged(
     stream: &Arc<PreviewStream>,
     work: &mut Work,
     stage: &Arc<Program>,
     canvas: (u32, u32),
     rev: &Arc<AtomicU64>,
+    slot: &HardwareSlot,
 ) -> Result<(), String> {
     let (width, height) = stream.settings.picture_size(canvas.0, canvas.1);
     let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
@@ -1124,6 +1190,7 @@ fn serve_staged(
                 stage,
                 rev,
                 StreamClock::of(work),
+                slot,
             )?;
             // A new session starts on a keyframe.
             stream.keyframe.store(false, Ordering::Release);
@@ -1350,6 +1417,7 @@ fn run(
     let mut stage: Option<Arc<Program>> = None;
     let mut stage_at = Instant::now();
     let rev_now = Arc::new(AtomicU64::new(0));
+    let hardware = HardwareSlot::default();
     let no_scenes: Scenes = Arc::default();
     loop {
         let streams: Vec<Arc<PreviewStream>> = {
@@ -1447,7 +1515,7 @@ fn run(
                     wake_at = wake_at.min(now + period);
                     continue;
                 };
-                match serve_staged(stream, work, stage, canvas, &rev_now) {
+                match serve_staged(stream, work, stage, canvas, &rev_now, &hardware) {
                     Ok(()) => {
                         let period = Duration::from_secs(1) / stream.settings.fps;
                         wake_at = wake_at.min(now + period);
@@ -1829,6 +1897,9 @@ fn open_h264(stream: &PreviewStream, work: &mut Work, size: FrameSize) -> Result
         (size.width(), size.height()),
         stream.settings.fps,
         PixelFormat::Rgba8,
+        // The hub's own drawing (a source, a draft, or no program stage) stays in
+        // software: only a staged stream takes the hub's hardware slot.
+        HardwarePreference::Avoid,
     )?;
     h264.profiled = meter_h264(stream, &h264.session);
     work.h264 = Some(h264);
@@ -2001,5 +2072,150 @@ mod format_tests {
         assert_eq!(staged_format(size(960, 540)), PixelFormat::Nv12);
         assert_eq!(staged_format(size(961, 540)), PixelFormat::Rgba8);
         assert_eq!(staged_format(size(960, 541)), PixelFormat::Rgba8);
+    }
+}
+
+#[cfg(test)]
+mod hardware_tests {
+    use super::{HardwareSlot, open_staged_h264};
+    use jstream_media::{Packet, PixelFormat};
+    use jstream_platform::fake::FakeCodecs;
+    use jstream_platform::{
+        AudioEncoder, AudioEncoderConfig, CodecInfo, Codecs, HardwarePreference, PlatformError,
+        VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    };
+    use std::sync::Mutex;
+
+    /// The fake encoder, reported as a hardware one when opened with `Prefer`, or
+    /// refused then when `refuse` is set. Records each preference it was opened with.
+    #[derive(Default)]
+    struct HardwareCodecs {
+        refuse: bool,
+        asked: Mutex<Vec<HardwarePreference>>,
+    }
+
+    struct Hardware {
+        inner: Box<dyn VideoEncoder>,
+        info: CodecInfo,
+    }
+
+    impl VideoEncoder for Hardware {
+        fn info(&self) -> &CodecInfo {
+            &self.info
+        }
+        fn can_accept(&self) -> bool {
+            self.inner.can_accept()
+        }
+        fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
+            self.inner.encode(frame)
+        }
+        fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+            self.inner.poll(out)
+        }
+        fn request_keyframe(&mut self) -> Result<(), PlatformError> {
+            self.inner.request_keyframe()
+        }
+        fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+            self.inner.finish(out)
+        }
+    }
+
+    impl Codecs for HardwareCodecs {
+        fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+            FakeCodecs.list()
+        }
+        fn video_encoder(
+            &self,
+            config: &VideoEncoderConfig,
+        ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+            self.asked.lock().expect("asked").push(config.hardware);
+            if config.hardware != HardwarePreference::Prefer {
+                return FakeCodecs.video_encoder(config);
+            }
+            if self.refuse {
+                return Err(PlatformError::Unsupported {
+                    what: "no hardware encoder here".into(),
+                });
+            }
+            let inner = FakeCodecs.video_encoder(config)?;
+            let mut info = inner.info().clone();
+            info.hardware = true;
+            Ok(Box::new(Hardware { inner, info }))
+        }
+        fn audio_encoder(
+            &self,
+            config: &AudioEncoderConfig,
+        ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+            FakeCodecs.audio_encoder(config)
+        }
+        fn video_decoder(
+            &self,
+            config: &VideoDecoderConfig,
+        ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+            FakeCodecs.video_decoder(config)
+        }
+    }
+
+    fn open(
+        codecs: &HardwareCodecs,
+        slot: &HardwareSlot,
+    ) -> (super::H264, Option<super::HardwareTaken>) {
+        open_staged_h264(codecs, (640, 360), 30, PixelFormat::Nv12, slot).expect("opens")
+    }
+
+    /// A staged preview encodes on the hardware encoder rather than a software one that
+    /// costs a CPU core (#1691), but only one stream at a time holds a hardware session:
+    /// outputs come first where sessions are limited (ADR-0080 §3).
+    #[test]
+    fn one_staged_preview_at_a_time_encodes_on_hardware() {
+        let codecs = HardwareCodecs::default();
+        let slot = HardwareSlot::default();
+        let (first, held) = open(&codecs, &slot);
+        assert!(
+            first.session.info().codec.hardware,
+            "the first is on hardware"
+        );
+        assert!(held.is_some(), "and holds the slot");
+        let (second, none) = open(&codecs, &slot);
+        assert!(
+            !second.session.info().codec.hardware,
+            "the second is software"
+        );
+        assert!(none.is_none());
+        drop((first, held));
+        let (third, again) = open(&codecs, &slot);
+        assert!(
+            third.session.info().codec.hardware,
+            "the freed slot is taken again"
+        );
+        assert!(again.is_some());
+        drop((second, third));
+        assert_eq!(
+            *codecs.asked.lock().expect("asked"),
+            [
+                HardwarePreference::Prefer,
+                HardwarePreference::Avoid,
+                HardwarePreference::Prefer
+            ]
+        );
+    }
+
+    /// A machine with no hardware encoder (VA-API's `Prefer` refuses rather than fall
+    /// back) still gets its preview, in software, and leaves the slot free.
+    #[test]
+    fn a_refused_hardware_encoder_falls_back_to_software() {
+        let codecs = HardwareCodecs {
+            refuse: true,
+            ..HardwareCodecs::default()
+        };
+        let slot = HardwareSlot::default();
+        let (h264, held) = open(&codecs, &slot);
+        assert!(!h264.session.info().codec.hardware);
+        assert!(held.is_none());
+        assert!(slot.take().is_some(), "the slot is free");
+        assert_eq!(
+            *codecs.asked.lock().expect("asked"),
+            [HardwarePreference::Prefer, HardwarePreference::Avoid]
+        );
     }
 }

@@ -544,7 +544,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
   mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
-  (`Control::binary`), in H.264 on a software `jstream-encode` session when the
+  (`Control::binary`), in H.264 on a `jstream-encode` session (software, or for one stream the program stage draws the hardware encoder) when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), or in PNG for a client that asks for it to take a screenshot
   (`video.snapshot`'s encoder, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), drawn on the engine's `jstream-preview` thread with its own
@@ -3211,8 +3211,8 @@ encodes it. A stream is due at most `fps` times a second, and only when the snap
 the live values changed, a transition is running in it (its picture changes with time), it
 one of the displays or windows it shows took a new frame,
 a keyframe was asked for, or 2 s passed since its last keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
-`VideoSession` that avoids hardware (so a preview never takes an output's hardware
-session), VBR at about half a bit per pixel per frame (at most 32 Mbit/s, so text in an
+`VideoSession` that avoids hardware when the hub draws the stream itself (a source, a
+draft, or no program stage), VBR at about half a bit per pixel per frame (at most 32 Mbit/s, so text in an
 editing view stays sharp, #1203), with a keyframe every 2 s, reopened when the picture size changes; its
 packets go out with the `rev` of the picture they encode. If it can't be opened the
 stream falls back to JPEG (quality 95) when the client accepts JPEG, and ends with an end frame
@@ -3226,7 +3226,16 @@ program or of a scene, in H.264, JPEG or PNG, isn't drawn by the hub: once the e
 program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
 under the start lock but never waiting for a start, asking again 200 ms later while an
 output is starting and 5 s later after a stage that failed to open) and holds it while
-such a stream is open. It opens the stream's encoder session (as above, but for NV12
+such a stream is open. It opens the stream's encoder session (as above, but on the
+hardware encoder for one stream at a time, #1691: a software H.264 encoder can cost a
+whole core for one canvas. `open_staged_h264` asks for hardware `Prefer` while the hub's
+`HardwareSlot` is free and keeps the slot while the session it got is a hardware one;
+every other stream, and any stream when `Prefer` opens software or fails to open, as
+VA-API's does without a software fallback, is opened with `Avoid`. So previews hold at
+most one hardware session, since sessions can be limited and outputs come first,
+[ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3;
+`one_staged_preview_at_a_time_encodes_on_hardware`,
+`a_refused_hardware_encoder_falls_back_to_software`. And for NV12
 input at an even picture size, `staged_format`, so the render thread converts the
 picture on the GPU and reads back the planes, as it does for an output's session, and
 the encoder converts nothing; RGBA8 at an odd one,
@@ -3369,6 +3378,9 @@ Each H.264 session a stream opens, the hub's own or the program stage's, is mete
 stream the profiler's `StreamRegistry`, and the stream counts each picture its binary
 queue took or refused (`SentCounts`), so its `frames_out` and `dropped` are what reached
 the client's queue and what its keyframe gate dropped, beside the encoder's own drops.
+Each stream's profile names the video encoder encoding it now and whether it is a
+hardware one (`encoder`, `hardware`, protocol 0.173; `streams::encoder_of` reads
+`StatsHandle::codec`, which follows a first-frame fallback), an output's too.
 JPEG and PNG streams are not metered.
 
 <a id="events"></a>

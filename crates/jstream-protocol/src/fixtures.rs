@@ -2706,6 +2706,8 @@ fn profile_info() -> ProfileInfo {
                 encode_ms: ms(4.5),
                 kbps: 6_210,
                 target_kbps: 6_160,
+                encoder: "H264 Encoder MFT (hardware)".into(),
+                hardware: true,
             },
             StreamProfile {
                 stream: ProfileStream::Preview {
@@ -2722,6 +2724,8 @@ fn profile_info() -> ProfileInfo {
                 encode_ms: ms(2.0),
                 kbps: 1_700,
                 target_kbps: 1_728,
+                encoder: "H264 Encoder MFT".into(),
+                hardware: false,
             },
         ],
         mixer: Some(MixerProfile {

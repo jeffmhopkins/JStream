@@ -16875,6 +16875,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "encoder": {
+          "default": "",
+          "description": "The name of the video encoder encoding it now, as the platform names it: the one\nit fell back to when the one it opened refused its first frame. Empty from an\nengine that does not report it.",
+          "type": "string"
+        },
         "fps": {
           "$ref": "#/$defs/Finite32",
           "default": 0.0,
@@ -16893,6 +16898,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "hardware": {
+          "default": false,
+          "description": "Whether that encoder runs on dedicated hardware.",
+          "type": "boolean"
         },
         "kbps": {
           "default": 0,
@@ -18999,5 +19009,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.172"
+  "title": "JStream protocol 0.173"
 }
