@@ -20,6 +20,7 @@ use jstream_control::protocol::{Action, Call, CallResult, Query, QueryResult};
 use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos::wasm_bindgen::JsCast;
 
 /// The project the engine saves to, and the ones opened before it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -247,6 +248,9 @@ pub fn ProjectDialog(
     folder: String,
     /// How many outputs are running, which an open or a new stops.
     running: usize,
+    /// The projects opened recently, most recent first, which Open lists to pick from.
+    #[prop(optional)]
+    recent: Vec<String>,
     /// Closes the dialog.
     close: impl Fn() + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
@@ -316,22 +320,111 @@ pub fn ProjectDialog(
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
             </div>
             <div class="project-body">
-                <label class="project-path">
-                    <span>"Project file on the engine's computer"</span>
-                    <span class="project-path-row">
-                        <input
-                            type="text"
-                            aria-label="Project file"
-                            placeholder="/path/to/show.json"
-                            prop:value=move || path.get()
-                            on:input=move |event| path.set(event_target_value(&event))
-                        />
-                        {browse}
-                    </span>
-                </label>
-                {(ask != ProjectAsk::Open).then(|| view! {
-                    <p class="project-note">"A project is saved only to a new file, never over one."</p>
+                {(!recent.is_empty()).then(|| {
+                    // One tab stop: the picked row, or the first while none is.
+                    let listed = StoredValue::new(recent.clone());
+                    view! {
+                    <div class="project-recent">
+                        <p class="eyebrow">"Recent"</p>
+                        <ul role="listbox" aria-label="Recent projects">
+                            {recent.clone().into_iter().enumerate().map(|(index, file)| {
+                                let name = project_name(&file);
+                                let folder = folder_of(&file);
+                                let chosen = file.clone();
+                                let opened = file.clone();
+                                let picked = file.clone();
+                                let picked_tab = file.clone();
+                                view! {
+                                    <li
+                                        role="option"
+                                        class="project-recent-item"
+                                        tabindex=move || {
+                                            let picked_here = path.with(|p| *p == picked_tab);
+                                            let none = path.with(|p| listed.with_value(|l| !l.contains(p)));
+                                            if picked_here || (none && index == 0) { "0" } else { "-1" }
+                                        }
+                                        title=file.clone()
+                                        aria-selected=move || (path.with(|p| *p == picked)).to_string()
+                                        on:click=move |_| path.set(chosen.clone())
+                                        on:dblclick=move |_| {
+                                            path.set(opened.clone());
+                                            submit();
+                                        }
+                                        on:keydown={
+                                            let file = file.clone();
+                                            move |event: leptos::ev::KeyboardEvent| {
+                                                match event.key().as_str() {
+                                                    // Enter opens it, as a double-click does.
+                                                    "Enter" => {
+                                                        event.prevent_default();
+                                                        path.set(file.clone());
+                                                        submit();
+                                                    }
+                                                    " " => {
+                                                        event.prevent_default();
+                                                        path.set(file.clone());
+                                                    }
+                                                    "ArrowDown" | "ArrowUp" => {
+                                                        event.prevent_default();
+                                                        let row = event
+                                                            .current_target()
+                                                            .and_then(|t| t.dyn_into::<web_sys::Element>().ok());
+                                                        let next = row.and_then(|row| {
+                                                            if event.key() == "ArrowDown" {
+                                                                row.next_element_sibling()
+                                                            } else {
+                                                                row.previous_element_sibling()
+                                                            }
+                                                        });
+                                                        if let Some(next) = next {
+                                                            if let Some(file) = next.get_attribute("title") {
+                                                                path.set(file);
+                                                            }
+                                                            if let Ok(next) = next.dyn_into::<web_sys::HtmlElement>() {
+                                                                let _ = next.focus();
+                                                            }
+                                                        }
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
+                                    >
+                                        <Icon name="file" size=16 />
+                                        <span class="project-recent-name">{name}</span>
+                                        <span class="project-recent-folder">{folder}</span>
+                                    </li>
+                                }
+                            }).collect_view()}
+                        </ul>
+                    </div>
+                    }
                 })}
+                <div class="prop-grid">
+                    <div class="prop-row">
+                        <label class="prop-label" for="project-path">"Location"</label>
+                        <div class="prop-control wide">
+                            <span class="path-row grow">
+                                <input
+                                    id="project-path"
+                                    type="text"
+                                    spellcheck="false"
+                                    placeholder="/path/to/show.json"
+                                    prop:value=move || path.get()
+                                    on:input=move |event| path.set(event_target_value(&event))
+                                />
+                                {browse}
+                            </span>
+                            <p class="help">
+                                {if ask == ProjectAsk::Open {
+                                    "A project file on the engine's computer."
+                                } else {
+                                    "On the engine's computer. A project is saved only to a new file, never over one."
+                                }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
                 {warning.map(|text| view! {
                     <p class="callout" class:warn={running > 0}>
                         <Icon name="info" size=16 />
