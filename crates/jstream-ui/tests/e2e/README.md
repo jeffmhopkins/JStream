@@ -109,6 +109,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   although Chromium sends that socket an `error` event and no `close` (#305). The
   bundled IBM Plex Sans and Mono load from the page's own origin, and `fonts/OFL.txt`
   is served beside them.
+- **Projects** (`projects.spec.js`, ADR-0121): the mock engine keeps no collection file,
+  so the spec routes the page's WebSocket, answers `collection.info` with an open
+  project and a recent list, and records and answers `collection.open`. File › Open
+  project… lists the recent projects other than the open one, with their folders; a
+  click, Space, Up and Down fill Location and pick that row; a typed path picks none;
+  the list is one tab stop, the picked row or else the first; a double-click or Enter
+  sends one `collection.open` with the row's path and closes the dialog. New project…
+  and Save project as… show no list and start beside the open project.
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
   program scene's "program" badge, selected, and its item listed under the scene's
   caption; a click putting a scene on program, which a second client follows, and in
