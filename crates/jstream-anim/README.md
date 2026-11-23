@@ -88,7 +88,8 @@ Contents:
   a `Midi`: a smoothing time, a `Curve` and a `from`..`to` range. `Midi::normalize_cc`
   and `Midi::normalize_bend` map a controller's value onto `0..=1` (a bend's rest is one
   half), `Smoothing::advance` follows it with one one-pole time constant for rising and
-  falling (0 jumps, and the first step lands on the value), and `Midi::value` bends and
+  falling (0 jumps, the first step lands on the value, and a step within `SNAP`, 0.0005,
+  of the value lands on it, so a held control rests exactly), and `Midi::value` bends and
   maps it. Which input, channel and controller it reads stay outside this crate: the
   evaluator hands each smoothed value to `evaluate_with` by modifier ID, as an audio
   level. `evaluate` and `value_at` read it at `from`. A `data` modifier (ADR-0171

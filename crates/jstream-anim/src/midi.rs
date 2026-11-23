@@ -94,9 +94,15 @@ impl Smoothing {
         self.level.unwrap_or(0.0)
     }
 
+    /// Its value once a step has run, or `None` before the first.
+    pub fn followed(&self) -> Option<f32> {
+        self.level
+    }
+
     /// Follows `target` (`0..=1`) for `dt_s` seconds with `midi`'s smoothing time: a
     /// one-pole smoothing whose time constant is that time, so it is about two thirds
-    /// of the way there after it. A time of 0 jumps, and so does the first step. A later
+    /// of the way there after it. Within `SNAP` (0.0005) of the target it lands on it, so a
+    /// held control comes to rest exactly. A time of 0 jumps, and so does the first step. A later
     /// step that isn't a finite, positive time changes nothing. Returns the new value.
     /// Allocates nothing.
     pub fn advance(&mut self, midi: &Midi, target: f32, dt_s: f32) -> f32 {
@@ -119,15 +125,20 @@ impl Smoothing {
             1.0
         };
         let next = level + (target - level) * k;
-        let next = if next.is_finite() {
-            next.clamp(0.0, 1.0)
-        } else {
+        let next = if !next.is_finite() || (target - next).abs() < SNAP {
             target
+        } else {
+            next.clamp(0.0, 1.0)
         };
         self.level = Some(next);
         next
     }
 }
+
+/// How close a smoothing comes to its target before it lands on it: far under a visible
+/// step, so a value at rest stops changing at once, rather than creeping in f32 for tens
+/// of seconds and redrawing whatever it drives each frame.
+pub const SNAP: f32 = 0.0005;
 
 #[cfg(test)]
 mod tests {
@@ -196,6 +207,32 @@ mod tests {
         jump.advance(&instant, 0.0, 0.0);
         assert_eq!(jump.advance(&instant, 1.0, 0.016), 1.0, "0 ms jumps");
         assert_eq!(jump.advance(&instant, f32::NAN, 0.016), 0.0, "NaN is 0");
+    }
+
+    #[test]
+    fn a_held_target_comes_to_rest_exactly_within_the_snap() {
+        let slow = Midi {
+            smoothing_ms: 1800.0,
+            ..Midi::default()
+        };
+        let mut s = Smoothing::default();
+        s.advance(&slow, 0.0, 0.0);
+        // At 60 frames a second, a one-pole of 1.8 s is within the snap in about 14 s
+        // (ln(1 / 0.0005) * 1.8), and then lands on the target and stays there.
+        let mut frames = 0;
+        while s.level() != 1.0 {
+            let before = s.level();
+            let after = s.advance(&slow, 1.0, 1.0 / 60.0);
+            assert!(after > before, "it rises every frame until it lands");
+            frames += 1;
+            assert!(frames < 60 * 15, "lands within 15 s, not after 30");
+        }
+        assert!(frames > 60 * 13, "no sooner than the snap allows: {frames}");
+        assert_eq!(s.advance(&slow, 1.0, 1.0 / 60.0), 1.0, "and stays");
+        // A step that would land within the snap of a lower target lands on it too.
+        let mut down = Smoothing::default();
+        down.advance(&slow, SNAP * 0.9, 0.0);
+        assert_eq!(down.advance(&slow, 0.0, 1.0 / 60.0), 0.0);
     }
 
     #[test]

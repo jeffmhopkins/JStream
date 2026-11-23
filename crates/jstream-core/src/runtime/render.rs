@@ -183,6 +183,13 @@ impl RenderHub {
         self.live.load_full()
     }
 
+    /// Whether a render thread is adopting snapshots, and so follows the program's
+    /// motion controls once a tick ([`crate::reactive::Follower`]). While none is, a
+    /// picture the control side draws follows them itself.
+    pub(crate) fn following(&self) -> bool {
+        self.adopted.load(Ordering::SeqCst) != STOPPED
+    }
+
     /// Whether the render thread has adopted `generation` or a later one, or is not
     /// adopting snapshots at all (stopped, or never started). The control side polls
     /// this to release a gesture's live values (ADR-0032); the render thread never waits

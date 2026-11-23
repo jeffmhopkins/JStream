@@ -111,6 +111,9 @@ struct Shared {
     gpu: Arc<SharedGpu>,
     /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
     sheets: AtomicUsize,
+    /// The program's motion controls as `video.snapshot` and the preview hub follow
+    /// them while no render thread does ([`Shared::hear_program`]).
+    hearing: Mutex<SceneHearing>,
     /// Whether the `jstream-tempo` thread has started: once per engine, however often
     /// JTunnel starts again (ADR-0147 §1).
     tempo: AtomicBool,
@@ -234,6 +237,7 @@ impl Default for Engine {
                     snapshots: SnapshotWorker::new(Arc::clone(&gpu)),
                     gpu,
                     sheets: AtomicUsize::new(0),
+                    hearing: Mutex::new(SceneHearing::default()),
                     tempo: AtomicBool::new(false),
                     data,
                     keys: Mutex::new(None),
@@ -3619,12 +3623,10 @@ impl Engine {
     fn video_snapshot(&self) -> SnapshotReply {
         let (snapshot, live, rev, at) = {
             let state = lock(&self.shared.state);
-            (
-                state.render.load(),
-                state.render.load_live(),
-                state.graph.rev(),
-                state.live.now(),
-            )
+            let snapshot = state.render.load();
+            let at = state.live.now();
+            self.shared.hear_program(&state, snapshot.shot(), at);
+            (snapshot, state.render.load_live(), state.graph.rev(), at)
         };
         self.shared.snapshots.request(snapshot, live, rev, at)
     }
@@ -3693,6 +3695,13 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
+    }
+
+    /// What the preview hub reads for its next picture, for tests: it follows the
+    /// program's motion controls as a picture drawn with no output running does.
+    #[cfg(test)]
+    pub(crate) fn preview_current(&self) -> crate::preview::Current {
+        self.shared.current()
     }
 
     /// The scenes planned for preview streams, for tests.
@@ -7192,8 +7201,10 @@ impl State {
 impl PreviewSource for Shared {
     fn current(&self) -> Current {
         let state = lock(&self.state);
+        let program = state.render.load();
+        self.hear_program(&state, program.shot(), state.live.now());
         Current {
-            program: state.render.load(),
+            program,
             scenes: Arc::clone(&state.scene_shots),
             sources: Arc::clone(&state.source_shots),
             live: state.render.load_live(),
@@ -7208,6 +7219,21 @@ impl PreviewSource for Shared {
 }
 
 impl Shared {
+    /// Follows `shot`'s motion controls to `at` for a picture drawn on the control side,
+    /// when no render thread follows them (no output runs): without it, a data, MIDI or
+    /// audio modifier would draw each control as it reads this instant, unsmoothed.
+    /// Called under the collection lock; its own lock is a leaf.
+    fn hear_program(
+        &self,
+        state: &State,
+        shot: &crate::snapshot::Shot,
+        at: jstream_media::MediaTime,
+    ) {
+        if !state.render.following() {
+            hear_scene(&mut lock(&self.hearing), shot.audio(), at);
+        }
+    }
+
     /// Changes the captures' sizes and announces the sources whose size that changes,
     /// waking the subscribers once the collection lock is released.
     fn capture_sizes(&self, change: impl FnOnce(&mut BTreeMap<CaptureKey, FrameSize>)) {

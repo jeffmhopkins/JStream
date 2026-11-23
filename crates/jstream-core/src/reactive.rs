@@ -685,6 +685,14 @@ impl Follow {
         }
     }
 
+    /// Its level as last followed, or `None` for a smoothing that hasn't stepped yet.
+    fn level(&self) -> Option<f32> {
+        match self {
+            Follow::Envelope(envelope) => Some(envelope.level()),
+            Follow::Smoothing(smoothing) => smoothing.followed(),
+        }
+    }
+
     /// Whether it is the state `binding` keeps.
     fn fits(&self, binding: &Binding) -> bool {
         match (self, &binding.input) {
@@ -730,7 +738,13 @@ impl Follower {
             return;
         }
         let dt_s = match self.last {
-            Some(last) if now <= last => return,
+            // The tick it already followed, for a shot planned since (an edit landed
+            // mid-tick, or between a held clock's steps): its bindings take the levels
+            // followed so far, so the new plan never draws a control unsmoothed.
+            Some(last) if now <= last => {
+                self.carry(bindings);
+                return;
+            }
             Some(last) => (now.as_secs_f64() - last.as_secs_f64()) as f32,
             // The first tick has nothing to follow from: it starts at silence.
             None => 0.0,
@@ -816,6 +830,26 @@ impl Follower {
                 _ => continue,
             };
             binding.store(level);
+        }
+    }
+
+    /// Stores in each of `bindings` that no follower has stored yet the level its item and
+    /// modifier were last followed to, when its state is of its kind and has stepped.
+    /// Allocates nothing.
+    fn carry(&self, bindings: &Bindings) {
+        for (item, id, binding) in bindings.all() {
+            if binding.followed.load(Ordering::Relaxed) {
+                continue;
+            }
+            let level = self
+                .envelopes
+                .get(item)
+                .and_then(|listed| listed.iter().find(|(at, _)| at == id))
+                .filter(|(_, follow)| follow.fits(binding))
+                .and_then(|(_, follow)| follow.level());
+            if let Some(level) = level {
+                binding.store(level);
+            }
         }
     }
 
@@ -1195,6 +1229,43 @@ mod tests {
         let mut none = Bindings::default();
         none.record(&item, &[fader("smooth", 0, None, None)], &heard, None, None);
         assert!(none.is_empty());
+    }
+
+    /// A shot planned after the tick was followed (an edit mid-tick, or between a held
+    /// clock's steps) takes the levels followed so far, not its controls unsmoothed.
+    #[test]
+    fn a_shot_planned_mid_tick_keeps_the_smoothed_level() {
+        let midi = MidiInputs::new();
+        let item = ItemId::new("itm_lever");
+        let heard: HeardScopes = Arc::default();
+        let plan = || {
+            let mut bindings = Bindings::default();
+            bindings.record(
+                &item,
+                &[fader("smooth", 100, None, None)],
+                &heard,
+                Some(&midi),
+                None,
+            );
+            bindings
+        };
+        let first = plan();
+        let mut follower = Follower::default();
+        midi.push("Faders", 0, &cc(0, 7, 127));
+        follower.follow(&first, at_ms(0));
+        midi.push("Faders", 1, &cc(0, 7, 0));
+        follower.follow(&first, at_ms(100));
+        let smoothed = first.level(&item, "smooth").expect("level");
+        assert!((smoothed - (-1f32).exp()).abs() < 1e-3, "{smoothed}");
+
+        // A new plan for the same tick: without carrying, it would read the control's 0.
+        let second = plan();
+        follower.follow(&second, at_ms(100));
+        assert_eq!(second.level(&item, "smooth"), Some(smoothed));
+        // The next tick follows on from there.
+        follower.follow(&second, at_ms(200));
+        let next = second.level(&item, "smooth").expect("level");
+        assert!((next - (-2f32).exp()).abs() < 1e-3, "{next}");
     }
 
     /// A modifier ID that turns from audio to MIDI between plans gets a fresh state of
