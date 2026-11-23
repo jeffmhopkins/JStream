@@ -1020,6 +1020,11 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .row.tree-row.keyframe { padding-left: 22px; }
 .tree-icon { display: inline-flex; }
 .tree-row .row-main .tree-icon.keyframe-icon .icon { color: #b07cff; }
+.tree-row .row-main .tree-icon.seq-icon .icon { color: var(--code-type); }
+.seq-row .seq-badge { font-variant-numeric: tabular-nums; }
+.seq-row .seq-keys { display: inline-flex; gap: 4px; margin-left: auto; }
+.seq-row .seq-key { padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--raised); font: 11px "IBM Plex Sans", sans-serif; color: var(--muted); }
+.seq-row .seq-capture .key-capture { height: 22px; padding: 0 6px; font-size: 12px; }
 .tree-fold { width: 16px; height: 16px; padding: 0; border: 0; background: none; color: var(--dim); font-size: 10px; }
 .tree-fold:hover:not(:disabled) { background: none; color: var(--text); }
 .keyframe-note { color: #c9b3ff; }
@@ -2467,6 +2472,9 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .chan-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .chan-x { border: none; background: none; color: var(--dim); padding: 0 4px; }
 .chan-x:hover { color: var(--text); }
+.chan-key .hotkey-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 2px; }
+.chan-key .hotkey-row .key { color: var(--muted); font-size: 12px; }
+.key-capture { outline: 2px solid var(--accent); outline-offset: -2px; }
 .chan-grid { display: grid; grid-template-columns: 88px minmax(0, 160px); gap: 6px 8px; align-items: center; color: var(--muted); font-size: 12px; }
 .chan-select { height: 28px; }
 .chan-delete { margin-top: 10px; justify-content: flex-start; color: var(--danger-text); }

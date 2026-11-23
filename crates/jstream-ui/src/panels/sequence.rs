@@ -187,6 +187,34 @@ pub fn move_point(points: &mut [LanePoint], n: usize, at_ms: u32, value: f32, du
     }
 }
 
+/// Adds a lane on `channel_id` to `t`, holding `level` at its end, unless it has one:
+/// whether it added it.
+pub fn with_lane(t: &mut TimelineInfo, channel_id: &str, level: f32) -> bool {
+    if t.lanes.iter().any(|l| l.target.channel == channel_id) {
+        return false;
+    }
+    t.lanes.push(TimelineLane {
+        target: LaneTarget {
+            channel: channel_id.to_owned(),
+        },
+        points: vec![LanePoint {
+            at_ms: t.duration_ms,
+            value: Finite32::new(level.clamp(0.0, 1.0)).unwrap_or(Finite32::ZERO),
+            curve: LaneCurve::Linear,
+        }],
+        on: true,
+    });
+    true
+}
+
+/// Opens sequence `timeline_id` in the Sequence panel, showing the panel.
+pub fn open_sequence(studio: Studio, timeline_id: TimelineId) {
+    studio.sequence.set(Some(timeline_id));
+    if let Some(dock) = use_context::<crate::workspace::DockState>() {
+        dock.0.update(|d| d.show(crate::dock::PanelId::Sequence));
+    }
+}
+
 /// A time snapped to [`SNAP_MS`] unless `free`.
 fn snap(at_ms: f64, free: bool) -> u32 {
     let ms = at_ms.max(0.0);
@@ -437,21 +465,7 @@ pub fn Sequence() -> impl IntoView {
         adding.set(false);
         let level = values.with_untracked(|v| v.get(&channel_id).map_or(0.0, |c| c.value.get()));
         change(&|t| {
-            if t.lanes.iter().any(|l| l.target.channel == channel_id) {
-                return;
-            }
-            let end = t.duration_ms;
-            t.lanes.push(TimelineLane {
-                target: LaneTarget {
-                    channel: channel_id.clone(),
-                },
-                points: vec![LanePoint {
-                    at_ms: end,
-                    value: Finite32::new(level).unwrap_or(Finite32::ZERO),
-                    curve: LaneCurve::Linear,
-                }],
-                on: true,
-            });
+            with_lane(t, &channel_id, level);
         });
     };
     let make_lane = move |name: String| {
