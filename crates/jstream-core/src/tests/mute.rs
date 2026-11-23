@@ -6,8 +6,8 @@ use super::{batch, block_on, code, connected, edits, query};
 use crate::Engine;
 use jstream_control::Control;
 use jstream_protocol::{
-    Action, BusId, Call, Chord, Edit, HistoryCall, HistoryOp, MuteTo, Query, QueryResult,
-    Settings, SourceId, SourceKind, Trigger,
+    Action, BusId, Call, Chord, Edit, HistoryCall, HistoryOp, MuteTo, Query, QueryResult, Settings,
+    SourceId, SourceKind, Trigger,
 };
 use std::time::{Duration, Instant};
 
@@ -105,7 +105,10 @@ fn mute_actions_refuse_what_has_no_mute() {
     let control = connected(&engine);
     batch(&control, edits(vec![create("red", "color")])).expect("creates");
     assert_eq!(act(&control, bus("aux", MuteTo::Muted)), Err("not_found"));
-    assert_eq!(act(&control, source("nope", MuteTo::Muted)), Err("not_found"));
+    assert_eq!(
+        act(&control, source("nope", MuteTo::Muted)),
+        Err("not_found")
+    );
     assert_eq!(
         act(&control, source("red", MuteTo::Muted)),
         Err("invalid_argument"),
@@ -153,7 +156,8 @@ fn a_mute_binding_goes_with_its_bus() {
 }
 
 /// A pad bound to push-to-talk: the note-on unmutes the master, the note-off mutes it
-/// again, run by the engine itself (ADR-0122 decision 1, ADR-0207).
+/// again, run by the engine itself (ADR-0122 decision 1, ADR-0207), from an input the
+/// person let run bindings.
 #[test]
 fn a_held_pad_talks_until_it_is_let_go() {
     let engine = Engine::new();
@@ -171,9 +175,11 @@ fn a_held_pad_talks_until_it_is_let_go() {
         }]),
     )
     .expect("binds");
+    // A JTunnel sender with "Use this sender's MIDI" on (ADR-0123 §3).
+    let midi = engine.midi_inputs();
+    midi.set_bindable(["Pads".to_owned()]);
     // The runner's first tick only looks.
     std::thread::sleep(Duration::from_millis(100));
-    let midi = engine.midi_inputs();
     let note = |on: bool| {
         jstream_midi::Message::parse(&[if on { 0x90 } else { 0x80 }, 36, 100]).expect("a note")
     };

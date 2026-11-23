@@ -6,10 +6,13 @@
 //!
 //! The `jstream-values` thread ticks the runner about 30 times a second while the
 //! collection holds a binding. Each tick reads, from each input a binding listens to
-//! (or every input at once, for a binding with no `input`), the notes and the control
-//! and program changes logged since the last tick, in the order they arrived, so a pad
-//! pressed and let go between two ticks still fires both. Nothing heard before the
-//! first tick that follows the input fires.
+//! (each input, for a binding with no `input`), the notes and the control and program
+//! changes logged since the last tick, in the order they arrived, so a pad pressed and
+//! let go between two ticks still fires both. Nothing heard before the first tick that
+//! follows the input fires. Only an input [`MidiInputs::bindable`] names is read: a
+//! JTunnel sender's MIDI runs bindings only once the person turns on "Use this
+//! sender's MIDI" ([ADR-0123](../../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+//! §3).
 //!
 //! - A note binding fires on its note-on and releases on its note-off (or a note-on
 //!   at velocity 0).
@@ -79,10 +82,11 @@ pub(crate) fn fired(trigger: &Trigger, heard: &Heard) -> Option<Fired> {
                 event:
                     ControlEvent {
                         channel,
-                        kind: ControlKind::Change {
-                            controller: heard,
-                            value,
-                        },
+                        kind:
+                            ControlKind::Change {
+                                controller: heard,
+                                value,
+                            },
                         ..
                     },
                 before,
@@ -118,8 +122,8 @@ struct Seen {
 /// The action bindings between ticks: how far each input's logs have been read.
 #[derive(Debug, Default)]
 pub(crate) struct ActionBindings {
-    /// By input, `None` for every input at once.
-    seen: BTreeMap<Option<String>, Seen>,
+    /// By input's name.
+    seen: BTreeMap<String, Seen>,
     notes: Vec<NoteEvent>,
     controls: Vec<ControlEvent>,
 }
@@ -132,24 +136,28 @@ impl ActionBindings {
             self.seen.clear();
             return Vec::new();
         };
-        let mut inputs: BTreeMap<Option<String>, Vec<(&Trigger, &Action)>> = BTreeMap::new();
+        // Each input that may run bindings, with the bindings listening to it: those
+        // naming it and those listening to every input. Only an input whose MIDI the
+        // person let run bindings is read (ADR-0123 §3).
+        let mut inputs: BTreeMap<String, Vec<(&Trigger, &Action)>> = BTreeMap::new();
+        let bindable = midi.bindable();
         for (trigger, action) in graph.state().bindings() {
-            inputs
-                .entry(trigger.input().map(str::to_owned))
-                .or_default()
-                .push((trigger, action));
+            for name in &bindable {
+                if trigger.input().is_none_or(|input| input == name) {
+                    inputs
+                        .entry(name.clone())
+                        .or_default()
+                        .push((trigger, action));
+                }
+            }
         }
         // An input no binding listens to any more is forgotten, so a binding made later
         // starts from what it sends then.
         self.seen.retain(|input, _| inputs.contains_key(input));
         let mut run = Vec::new();
         for (input, bindings) in inputs {
-            let state = match &input {
-                Some(name) => match midi.input(name) {
-                    Some(state) => state,
-                    None => continue,
-                },
-                None => midi.any(),
+            let Some(state) = midi.input(&input) else {
+                continue;
             };
             let Some(seen) = self.seen.get_mut(&input) else {
                 self.seen.insert(

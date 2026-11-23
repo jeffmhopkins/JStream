@@ -483,8 +483,9 @@ that does not want to change the graph it has.
   whole: the binding must exist, then each label, each once (`checked_labels`); an
   empty list removes them, and the inverse sets the old ones. Clearing or removing a
   binding takes its labels with it, and its inverse is `hotkey.set` then
-  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile or
-  transition preset (a `scene.switch` may name one) removes the bindings that name it, and
+  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile, bus (a
+  `bus.mute` names one, ADR-0207) or transition preset (a `scene.switch` may name one)
+  removes the bindings that name it, and
   any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names,
   or a timeline a `timeline.play`, `timeline.stop` or `timeline.seek` names, removes
   those bindings too (`remove_missing_items`,
@@ -511,7 +512,8 @@ that does not want to change the graph it has.
   `binding_id` (inverse `binding.clear_value`, or `binding.set_value` with the one it
   replaced) after `ValueBinding::problem` (`invalid_argument` at `binding.<field>`), the
   limit of 256 (at `binding`), and its target: `not_found` for a source, filter (found as
-  `filter.set_settings` finds it) or bus that doesn't exist, and `invalid_argument` at
+  `filter.set_settings` finds it), bus, item or scene that doesn't exist (the switch
+  targets `source_mute`, `bus_mute` and `item_visible`, ADR-0207, need only that), and `invalid_argument` at
   `binding.target.param` for a setting its kind lacks, doesn't mark `live`, or that isn't
   an `int`, `float` or `bool`. Last, the setter the engine will drive it with
   (`value_edit`) is applied to a copy of the state, and a refusal (a `scene` source's
@@ -520,7 +522,9 @@ that does not want to change the graph it has.
   ID none has. Deleting what a value binding names leaves it in place, so its touched set
   names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
   a number's ends and whether it is whole, or a switch), `None` while it is missing, and
-  `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
+  `value_edit` the setter edit that gives it a value, clamped, rounded or switched: for
+  a switch target the `source.set_audio` or `bus.set_fader` mute, or `item.set_visible`
+  with the binding's `scene_id`.
 - **Channels** (`channel.rs`, ADR-0183): `channel.set` sets one whole by its
   `channel_id` (inverse `channel.delete`, or `channel.set` with the one it replaced)
   after `ChannelInfo::problem` (`invalid_argument` at `channel.<field>`), the limit of

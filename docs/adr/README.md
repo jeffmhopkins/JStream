@@ -199,4 +199,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0184](0184-sequences-lanes-and-triggers.md) | Sequences: lanes on timelines, and what starts them | accepted | agent |  |
 | [ADR-0185](0185-how-reflections-landed-off-by-default.md) | How reflection probes and screen-space reflections landed, off by default | accepted | agent |  |
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
+| [ADR-0207](0207-mute-actions-and-held-triggers.md) | Mute actions, held triggers that release, and switches as value targets | accepted | agent |  |
 <!-- @generated end adr-index -->

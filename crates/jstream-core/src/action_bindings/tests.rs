@@ -21,6 +21,13 @@ fn talk(bus: &str, to: MuteTo) -> Action {
     }
 }
 
+/// Inputs whose MIDI may run bindings: the ones these tests send from.
+fn inputs() -> MidiInputs {
+    let midi = MidiInputs::new();
+    midi.set_bindable(["Pads", "Desk", "Other"].map(String::from));
+    midi
+}
+
 fn bound(trigger: Trigger, action: Action) -> Graph {
     let mut graph = Graph::new();
     graph
@@ -39,7 +46,7 @@ fn a_held_note_presses_then_releases_even_between_two_ticks() {
         },
         talk("master", MuteTo::PushToTalk),
     );
-    let midi = MidiInputs::new();
+    let midi = inputs();
     let mut runner = ActionBindings::default();
     // What was sent before the runner first looked never fires.
     midi.push("Pads", 0, &note(true, 36));
@@ -73,7 +80,7 @@ fn a_control_fires_crossing_up_and_releases_falling_back() {
         },
         talk("master", MuteTo::PushToMute),
     );
-    let midi = MidiInputs::new();
+    let midi = inputs();
     let mut runner = ActionBindings::default();
     assert!(runner.tick(&graph, Some(&midi)).is_empty());
     // Another input, and another channel, are not heard.
@@ -105,7 +112,7 @@ fn a_program_change_fires_and_has_no_release() {
         },
         talk("master", MuteTo::Toggle),
     );
-    let midi = MidiInputs::new();
+    let midi = inputs();
     let mut runner = ActionBindings::default();
     assert!(runner.tick(&graph, Some(&midi)).is_empty());
     midi.push("Desk", 0, &program(3));
@@ -126,7 +133,7 @@ fn a_toggle_on_a_note_ignores_the_note_off() {
         },
         talk("master", MuteTo::Toggle),
     );
-    let midi = MidiInputs::new();
+    let midi = inputs();
     let mut runner = ActionBindings::default();
     runner.tick(&graph, Some(&midi));
     midi.push("Pads", 0, &note(true, 40));
@@ -135,4 +142,37 @@ fn a_toggle_on_a_note_ignores_the_note_off() {
         runner.tick(&graph, Some(&midi)),
         vec![talk("master", MuteTo::Toggle)]
     );
+}
+
+/// ADR-0123 §3: an input the person didn't let run bindings (a JTunnel sender with "Use
+/// this sender's MIDI" off) is drawn but fires nothing; let in, it fires from then on.
+#[test]
+fn only_an_input_let_run_bindings_fires_them() {
+    let graph = bound(
+        Trigger::MidiNote {
+            note: 36,
+            channel: None,
+            input: None,
+        },
+        talk("master", MuteTo::Toggle),
+    );
+    let midi = MidiInputs::new();
+    let mut runner = ActionBindings::default();
+    assert!(runner.tick(&graph, Some(&midi)).is_empty());
+    midi.push("Stranger", 0, &note(true, 36));
+    assert!(runner.tick(&graph, Some(&midi)).is_empty(), "not let in");
+    assert_eq!(midi.any().held(0, 36), 100, "though it is drawn");
+    midi.set_bindable(["Stranger".to_owned()]);
+    assert!(
+        runner.tick(&graph, Some(&midi)).is_empty(),
+        "the first look runs nothing"
+    );
+    midi.push("Stranger", 1, &note(true, 36));
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Toggle)]
+    );
+    midi.set_bindable(Vec::new());
+    midi.push("Stranger", 2, &note(true, 36));
+    assert!(runner.tick(&graph, Some(&midi)).is_empty(), "let out again");
 }

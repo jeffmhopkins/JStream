@@ -7,7 +7,9 @@
 //! - **The accepted senders** are listed by tunnel name and the address and port they
 //!   send from, each with **Use this sender's state** (ADR-0171 decision 1, on once
 //!   the sender is accepted, until the person unticks it: the DAW's transport, tracks and clips become live data that
-//!   bindings and sources may read) and Remove. The add row takes a name and an `address:port`; the
+//!   bindings and sources may read), **Use this sender's MIDI** (ADR-0123 decision 3,
+//!   off until the person ticks it: only then do its notes and controls run the
+//!   collection's MIDI action bindings, ADR-0207) and Remove. The add row takes a name and an `address:port`; the
 //!   app checks the sender as the engine would (a private IPv4 address, a name no other
 //!   sender has) and the page shows why it refused one.
 //! - **Senders on this network** (protocol 0.114): while the app's receiver runs, the
@@ -82,6 +84,7 @@ pub fn with_sender(
         name: name.to_owned(),
         address: address.to_owned(),
         state: true,
+        midi: false,
     });
     Ok(next)
 }
@@ -130,6 +133,15 @@ pub fn JtunnelSettingView() -> impl IntoView {
         for sender in &mut next.accepted {
             if sender.name == name {
                 sender.state = on;
+            }
+        }
+        save(next, false);
+    };
+    let use_midi = move |name: String, on: bool| {
+        let mut next = setting.get_untracked();
+        for sender in &mut next.accepted {
+            if sender.name == name {
+                sender.midi = on;
             }
         }
         save(next, false);
@@ -267,7 +279,9 @@ pub fn JtunnelSettingView() -> impl IntoView {
                         {list.into_iter().map(|sender| {
                             let gone = sender.name.clone();
                             let named = sender.name.clone();
+                            let midi_named = sender.name.clone();
                             let label = format!("Use the state of {}", sender.name);
+                            let midi_label = format!("Use the MIDI of {}", sender.name);
                             view! {
                                 <li class="device">
                                     <span class="device-name">{sender.name}</span>
@@ -280,6 +294,15 @@ pub fn JtunnelSettingView() -> impl IntoView {
                                             on:change=move |event| use_state(named.clone(), event_target_checked(&event))
                                         />
                                         "Use this sender's state"
+                                    </label>
+                                    <label class="jtunnel-state" title="Let this sender's notes and controls run the collection's MIDI triggers, such as a pad bound to push to talk. Off until you turn it on; its MIDI is drawn either way.">
+                                        <input
+                                            type="checkbox"
+                                            aria-label=midi_label
+                                            prop:checked=sender.midi
+                                            on:change=move |event| use_midi(midi_named.clone(), event_target_checked(&event))
+                                        />
+                                        "Use this sender's MIDI"
                                     </label>
                                     <button type="button" on:click=move |_| remove(gone.clone())>"Remove"</button>
                                 </li>
@@ -324,12 +347,13 @@ mod tests {
             name: name.to_owned(),
             address: address.to_owned(),
             state,
+            midi: false,
         }
     }
 
     #[test]
     fn the_setting_reads_and_writes_the_apps_json() {
-        let text = r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"},{"name":"Live","address":"10.0.0.2:9000","state":false},{"name":7}]}"#;
+        let text = r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"},{"name":"Live","address":"10.0.0.2:9000","state":false},{"name":"Pads","address":"10.0.0.3:9000","midi":true},{"name":7}]}"#;
         let setting = JtunnelSetting::parse(text);
         assert!(setting.on);
         assert_eq!(
@@ -337,8 +361,13 @@ mod tests {
             vec![
                 sender("Bitwig", "192.168.1.5:9000", true),
                 sender("Live", "10.0.0.2:9000", false),
+                JtunnelSender {
+                    midi: true,
+                    ..sender("Pads", "10.0.0.3:9000", true)
+                },
             ],
-            "an entry it can't read is left out, and state is on unless it says off"
+            "an entry it can't read is left out, state is on unless it says off, and MIDI \
+             off unless it says on"
         );
         assert_eq!(JtunnelSetting::parse(&setting.to_json()), setting);
         assert_eq!(JtunnelSetting::parse("not json"), JtunnelSetting::default());

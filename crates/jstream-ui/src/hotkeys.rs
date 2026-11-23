@@ -320,7 +320,10 @@ pub fn Hotkeys() -> impl IntoView {
         }
     };
     let up = window_event_listener(leptos::ev::keyup, move |event| {
-        if let Some(action) = held.try_update_value(|held| held.release(&event.code())).flatten() {
+        if let Some(action) = held
+            .try_update_value(|held| held.release(&event.code()))
+            .flatten()
+        {
             event.prevent_default();
             release(vec![action]);
         }

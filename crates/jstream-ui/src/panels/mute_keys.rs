@@ -56,6 +56,7 @@ pub fn mode_name(to: MuteTo) -> &'static str {
         MuteTo::PushToMute => "Push to mute",
         MuteTo::Muted => "Mute",
         MuteTo::Unmuted => "Unmute",
+        _ => "Mute key",
     }
 }
 
@@ -142,7 +143,10 @@ pub fn MuteKeys(
     };
     let shown = move || {
         let (x, y) = menu.get()?;
-        let (left, top) = (format!("{}px", (x - 200.0).max(4.0)), format!("{}px", y + 12.0));
+        let (left, top) = (
+            format!("{}px", (x - 200.0).max(4.0)),
+            format!("{}px", y + 12.0),
+        );
         let name = label.get_value();
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| close()></div>

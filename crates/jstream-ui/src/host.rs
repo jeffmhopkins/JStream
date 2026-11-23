@@ -199,6 +199,9 @@ pub struct JtunnelSender {
     /// "Use this sender's state" (ADR-0171 decision 1): on unless the person turns it
     /// off, and on when the JSON leaves it out.
     pub state: bool,
+    /// "Use this sender's MIDI" (ADR-0123 decision 3): off unless the person turns it
+    /// on, and off when the JSON leaves it out. On, its MIDI runs action bindings.
+    pub midi: bool,
 }
 
 impl JtunnelSetting {
@@ -215,10 +218,13 @@ impl JtunnelSetting {
                         let address = entry.get("address")?.as_str()?;
                         let state =
                             entry.get("state").and_then(serde_json::Value::as_bool) != Some(false);
+                        let midi =
+                            entry.get("midi").and_then(serde_json::Value::as_bool) == Some(true);
                         Some(JtunnelSender {
                             name: name.to_owned(),
                             address: address.to_owned(),
                             state,
+                            midi,
                         })
                     })
                     .collect()
@@ -242,6 +248,7 @@ impl JtunnelSetting {
                         "name": sender.name,
                         "address": sender.address,
                         "state": sender.state,
+                        "midi": sender.midi,
                     })
                 })
                 .collect::<Vec<_>>(),

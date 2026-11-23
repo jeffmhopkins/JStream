@@ -108,7 +108,7 @@ Contents ([Design](#design) explains the choices):
   and `allow_network`, which read and save the app's "Allow devices on my network",
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
-  sender's state" (its JSON tested natively), and `desktop_ptz()`
+  sender's state" and "Use this sender's MIDI" (its JSON tested natively), and `desktop_ptz()`
   and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
   `same_engine` says
   whether the open session is that app's own engine, and `own_engine` asks it of the
@@ -168,7 +168,11 @@ Contents ([Design](#design) explains the choices):
   `false`), which the desktop app reads to register the bound chords with the OS
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
   registers reaches JStream as a hotkey even while the page has the focus, so the page
-  doesn't see that key press.
+  doesn't see that key press. A chord bound to an action with a release
+  (`Action::on_release`: push to talk, push to mute, a channel held on or off,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)) is kept in `Held`
+  while down: its key-up sends the release, and blur or `pagehide` sends every held
+  release, tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -187,7 +191,8 @@ Contents ([Design](#design) explains the choices):
   natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
-  the tool bars' own and a cube for the 3D model type).
+  the tool bars' own, a cube for the 3D model type and a key for the mute keys).
+  The item menu also has a Mute check for an audio source's item.
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
@@ -201,8 +206,8 @@ Contents ([Design](#design) explains the choices):
   arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
-  `looks` table in `looks.rs`), the control button beside a live setting, a fader or a send
-  (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
+  `looks` table in `looks.rs`), the control button beside a live setting, a fader, a send,
+  a mute or an item's visibility (the Inspector's hotkeys tab's Control row) (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
   binding are tested natively), the Channels panel (`channels.rs`: `Channels`, the channel
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
@@ -257,7 +262,11 @@ Contents ([Design](#design) explains the choices):
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
-  vertical strips, and the buses),
+  vertical strips, and the buses), with `mute_keys.rs` (`MuteKeys`, the key button
+  after a channel's or bus's mute: the chords bound to its `source.mute` or `bus.mute`
+  and Toggle, Push to talk and Push to mute keys to bind, ADR-0207, its listing of
+  bound keys tested natively) and the mute's control button (`learn.rs`' `SWITCH`
+  range, a `source_mute` or `bus_mute` value target),
   also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (the preset picker and editor, and each scene's
   overrides), `StudioControls`, studio mode's Transition, Cut, preset and Swap between
@@ -314,7 +323,7 @@ Contents ([Design](#design) explains the choices):
   stub that answers them as the server does.
 - **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
   JTunnel senders" switch, accepted senders (each with its "Use this sender's state"
-  checkbox) and the senders heard on the network
+  and "Use this sender's MIDI" checkboxes) and the senders heard on the network
   (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
   check, and `accepts`, whether a heard sender is on the list, tested natively. The
   store's `jtunnel_changed` counts `jtunnel.senders_changed`.
@@ -657,7 +666,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sent as `item.set_timing` or `item.clear_override`, ADR-0129), and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
   the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
   scene, as a scene's Hotkey row is,
-  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), then a Control row with the
+  visibility's control button, ADR-0207). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
   modifier with what it moves, how (wiggle, oscillate with its shape, drift, shake, a
   one-shot impulse with its length and decay, or audio: what it hears, the program mix or
   a bus (or a source set elsewhere, shown as itself until a bus or the program mix is
@@ -777,8 +787,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Controller learn** (`learn.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
   The properties form puts a learn button after the reset button of every setting its
   kind marks `live` that is a number with both ends or a switch, for a source's settings
-  and a filter's; the mixer puts one after each channel's and bus's mute button, and after the dB
-  field of each send that exists. A
+  and a filter's; the mixer puts one after each channel's and bus's mute button (for its
+  fader), a second after its mute keys for the mute itself (a `source_mute` or `bus_mute`
+  target over the `SWITCH` range, on at half way, ADR-0207), and one after the dB
+  field of each send that exists; the Inspector's item Hotkeys fold has a Control row
+  with one for the item's visibility (`item_visible`). A
   click opens the control menu; its Learn MIDI control reads `midi.last_controls` for a baseline, then every 150 ms for up to 15 s, and
   binds the first input whose count of control changes grew with `binding.set_value`,
   over the setting's whole range (a fader's over -60 to +6 dB), 50 ms smoothed, as
@@ -1445,7 +1458,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   clicks switch it between after and before FX on the same device. Its "FX N"
   counts the master chain's filters, from `Studio`'s collection, and shows that chain
   in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
-  (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
+  (the shared `NumberField`), mute, its mute keys and the mute's control button
+  (ADR-0207) and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
   no fader or sends of its own. Docked in a side column the mixer shows vertical strips

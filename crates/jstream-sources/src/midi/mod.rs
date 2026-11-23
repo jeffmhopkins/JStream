@@ -24,7 +24,7 @@ use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_midi::Message;
 use jstream_platform::MediaClock;
 use jstream_protocol::{KindDescriptor, Settings};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicI16, AtomicU8, AtomicU64, Ordering, fence};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
@@ -390,7 +390,9 @@ impl MidiState {
         out.clear();
         let end = self.pushed();
         let start = end.saturating_sub(most.min(LOG) as u64);
-        read_log(&self.log, start, end, |word| out.push(NoteEvent::unpack(word)));
+        read_log(&self.log, start, end, |word| {
+            out.push(NoteEvent::unpack(word))
+        });
     }
 
     /// Appends to `out` the note events pushed since `from` (a count [`Self::pushed`] or
@@ -399,9 +401,14 @@ impl MidiState {
     /// push is writing at that moment are skipped (ADR-0207).
     pub fn notes_since(&self, from: u64, out: &mut Vec<NoteEvent>) -> u64 {
         let end = self.pushed();
-        read_log(&self.log, from.max(end.saturating_sub(LOG as u64)), end, |word| {
-            out.push(NoteEvent::unpack(word));
-        });
+        read_log(
+            &self.log,
+            from.max(end.saturating_sub(LOG as u64)),
+            end,
+            |word| {
+                out.push(NoteEvent::unpack(word));
+            },
+        );
         end
     }
 
@@ -466,6 +473,9 @@ fn index(channel: u8, key: u8) -> usize {
 pub struct MidiInputs {
     any: Arc<MidiState>,
     named: Arc<Mutex<BTreeMap<String, Arc<MidiState>>>>,
+    /// The inputs whose MIDI may run action bindings: a JTunnel sender only once the
+    /// person turned on "Use this sender's MIDI" (ADR-0123 §3, ADR-0207).
+    bindable: Arc<Mutex<BTreeSet<String>>>,
     /// The media clock messages are stamped on, which the sources draw against: set
     /// once, when the host has one, and shared by every clone and every source.
     clock: Arc<OnceLock<Arc<dyn MediaClock>>>,
@@ -520,6 +530,17 @@ impl MidiInputs {
         let state = Arc::new(MidiState::new());
         named.insert(name.to_owned(), Arc::clone(&state));
         Some(state)
+    }
+
+    /// Lets the inputs `names`, and no others, run action bindings (ADR-0123 §3,
+    /// ADR-0207). What every input draws is unchanged.
+    pub fn set_bindable(&self, names: impl IntoIterator<Item = String>) {
+        *lock(&self.bindable) = names.into_iter().collect();
+    }
+
+    /// The inputs whose MIDI may run action bindings, by name.
+    pub fn bindable(&self) -> Vec<String> {
+        lock(&self.bindable).iter().cloned().collect()
     }
 
     /// Each named input's latest control change ([`MidiState::last_control`]), by name.

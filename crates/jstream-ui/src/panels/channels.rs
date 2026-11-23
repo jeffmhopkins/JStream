@@ -173,11 +173,10 @@ pub fn target_name(collection: &Collection, target: &ValueTarget) -> String {
             format!("{name} · mute")
         }
         ValueTarget::ItemVisible { item_id, .. } => {
-            let name = collection
-                .item(item_id)
-                .map_or_else(|| item_id.to_string(), |(_, item)| {
-                    collection.source_name(&item.source_id)
-                });
+            let name = collection.item(item_id).map_or_else(
+                || item_id.to_string(),
+                |(_, item)| collection.source_name(&item.source_id),
+            );
             format!("{name} · visible")
         }
         _ => "A setting".into(),

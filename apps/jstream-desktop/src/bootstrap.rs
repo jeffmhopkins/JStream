@@ -184,6 +184,7 @@ mod tests {
                         name: "</script>".into(),
                         address: "192.168.1.5:9000".into(),
                         state: false,
+                        midi: true,
                     }],
                 },
                 ptz: &crate::ptz::Setting {

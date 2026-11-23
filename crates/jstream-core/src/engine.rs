@@ -1573,6 +1573,17 @@ impl Engine {
             Some(changed),
         )?);
         spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
+        // Only a sender with "Use this sender's MIDI" on runs action bindings
+        // (ADR-0123 §3, ADR-0207); every sender's MIDI is drawn.
+        if let Some(midi) = &midi {
+            midi.set_bindable(
+                setup
+                    .accepted
+                    .iter()
+                    .filter(|sender| sender.uses_midi())
+                    .map(|sender| sender.name().to_owned()),
+            );
+        }
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
         // What the collection names its senders' params (ADR-0181), given to the new
@@ -1604,6 +1615,9 @@ impl Engine {
             return;
         }
         wanted.set_jtunnel(None);
+        if let Some(midi) = lock(&self.shared.state).live.midi() {
+            midi.set_bindable(Vec::new());
+        }
         self.jtunnel_turned();
     }
 
@@ -6579,10 +6593,12 @@ impl State {
         let state = self.graph.state();
         let (now, edit) = match target {
             Muting::Source(source_id) => {
-                let source = state.source(&source_id).ok_or_else(|| ProtocolError::NotFound {
-                    entity: EntityKind::Source,
-                    id: source_id.to_string(),
-                })?;
+                let source = state
+                    .source(&source_id)
+                    .ok_or_else(|| ProtocolError::NotFound {
+                        entity: EntityKind::Source,
+                        id: source_id.to_string(),
+                    })?;
                 let now = source.audio().is_some_and(|audio| audio.muted);
                 (
                     now,

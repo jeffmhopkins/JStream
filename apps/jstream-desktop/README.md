@@ -98,7 +98,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   capped log file (user-only, checked on Unix), the update check's request and the
   replies it gives a releases list, a rate limit and a malformed message, the network
   setting (off until saved on, user-only, off when malformed), the JTunnel setting (off
-  until turned on, user-only, a refused sender never saved, off when malformed), the network listener and
+  until turned on, user-only, a refused sender never saved, off when malformed, a
+  sender's MIDI running no bindings until its `midi` is on), the network listener and
   pairing it turns on, the UI folder inside a macOS app, the control token registered
   for redaction, the default project's path, its move from the data folder with its
   stream keys and recent-list place, and a screenshot's name, its never-replacing save
@@ -298,7 +299,10 @@ folder, and its log `logs\cef.log`.
   sender's audio and MIDI as the daemon's `--jtunnel-accept` does
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and the DAW state of
   each, unless its "Use this sender's state" is unticked, as `--jtunnel-no-state` does
-  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), and lists the
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), lets a
+  sender's MIDI run the collection's MIDI action bindings only once its "Use this
+  sender's MIDI" is ticked, as `--jtunnel-midi` does (off by default,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), and lists the
   senders that answer on the network, each not yet accepted with Accept…, which asks
   before adding it (so turning it on with no sender, then restarting, is how to find
   the first one). The page shows why a sender was refused, and the log names the
@@ -425,10 +429,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   setting is on but devices can't connect.
 - **JTunnel** (`jtunnel.rs`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
-  "address": "192.168.1.5:9000", "state": true}]}` in the data folder's `jtunnel.json`
-  (`state` is "Use this sender's state",
+  "address": "192.168.1.5:9000", "state": true, "midi": false}]}` in the data folder's
+  `jtunnel.json` (`state` is "Use this sender's state",
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 1, on
-  when left out, as for a newly accepted sender, so a file from before it reads as on), per machine
+  when left out, as for a newly accepted sender, so a file from before it reads as on;
+  `midi` is "Use this sender's MIDI", ADR-0123 decision 3, off when left out), per machine
   and never in the collection, so opening a collection never turns it on. It is written
   user-only (a leftover temporary file is removed first, so it never keeps another
   mode) and replaced whole, and only once the engine would take it

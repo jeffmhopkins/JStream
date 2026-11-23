@@ -20,8 +20,8 @@
 
 #![forbid(unsafe_code)]
 
-mod activity;
 mod action_bindings;
+mod activity;
 mod activity_log;
 mod aim;
 mod audio;

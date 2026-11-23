@@ -279,7 +279,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   A state packet ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decisions 1 and 2) is counted as `state_off` and dropped unless the sender's
   `AcceptedSender::with_state` is on ("Use this sender's state", on by default for an
-  accepted sender). On,
+  accepted sender). A sender's MIDI runs action bindings only while its
+  `AcceptedSender::with_midi` is on ("Use this sender's MIDI", off by default, ADR-0123
+  §3): `Engine::start_jtunnel` names those senders to `MidiInputs::set_bindable`, and
+  `stop_jtunnel` names none ([Action bindings](#contents-motion)). On,
   each sender's `StateAssembler` joins its pieces per key and the whole message goes to
   the engine's `LiveData` (`jstream-sources`, one per engine, `Engine::live_data`) under
   the sender's name, counted as `state`, or as `state_dropped` when it isn't one JSON
@@ -402,7 +405,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/channels.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
+covers = ["crates/jstream-core/src/action_bindings.rs", "crates/jstream-core/src/action_bindings/tests.rs", "crates/jstream-core/src/aim.rs", "crates/jstream-core/src/channels.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -465,6 +468,17 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   top of the open gestures' values ([Live values](#live-values)). A binding whose input
   or range is unchanged across a batch keeps its follower; a missing target drives
   nothing. A binding's `amount` scales its value toward `from` by a channel's level.
+- **Action bindings** (`action_bindings.rs`,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)): `ActionBindings`
+  runs each MIDI action binding (`binding.set`). On each `jstream-values` tick, while
+  the collection holds a binding, it reads each input's note log and its control and
+  program-change log since its last look, in the order heard, and runs a binding's action
+  on a note-on, a control rising past 64 or a program change, and the action's release
+  (`Action::on_release`) on that note's note-off or the control falling back below 64.
+  It reads only the inputs `MidiInputs::bindable` names (a JTunnel sender with "Use
+  this sender's MIDI" on, ADR-0123 §3), each for a binding naming it or naming none.
+  The first look at an input runs nothing. The actions run as their calls would, credited
+  to the engine with no audit entry, and a failure is logged at debug.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
   each channel's inputs with the same readers and smoothing, in an order where a
@@ -476,7 +490,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
   reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
   more input (ADR-0184): it starts from the channel's value (a seek keeps that start, unless under `latest` a control or action took the channel since), the last timeline started
-  wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
+  wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). `channel.switch`'s `hold_on` and `hold_off` switch it as `on` and `off` do; their release, from a held key or note, is the opposite ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
   modifier's or camera modifier's `amount` scales its value as it applies
   (`jstream_anim::evaluate_scaled`).
 - **Camera moves** (`follow.rs`,
@@ -741,7 +755,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
   `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
-  `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `tests/mcp.rs`,
+  `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `src/tests/mute.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -1010,7 +1024,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   its release to 0, `channel.set_value` takes over, `channel.switch` holds the off value,
   a missing channel's action fails, and a binding's `amount` gives half the throw at
   0.5; `channels.rs`'s own tests cover combining, fades, averaging, the order of
-  channels reading channels and a scene's reset. A
+  channels reading channels and a scene's reset. Mutes (`src/tests/mute.rs`,
+  ADR-0207): `source.mute` and `bus.mute` move `rev` with no undo step, an unchanged
+  mute emits nothing, a missing or soundless target is refused, a binding goes with its
+  bus, and a held MIDI pad bound to push to talk unmutes and mutes again on its release;
+  `action_bindings.rs`'s own tests cover what fires a press and a release. A
   `width` and `height` modifier stretching one side is `motion.rs`'s. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
   source built and rebuilt, drawn sharper when enlarged and left at its own size when a
@@ -1260,6 +1278,11 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `timeline.play`, `timeline.seek`, `timeline.stop` and `source.restart` (see
   [Timelines](#timelines)), `scene.set_keyframe` (see
   [Keyframe tracks](#keyframe-tracks)),
+  `source.mute` and `bus.mute`
+  ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md): they apply the
+  `source.set_audio` or `bus.set_fader` mute they stand for, as `item.show` below does,
+  with a `rev` and no undo step; an unchanged mute emits nothing, and a missing target is
+  `not_found`),
   and `item.show`, `item.hide` and `item.toggle`
   ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
   `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
@@ -4251,7 +4274,9 @@ the MIDI state and the live data's watches (atomics) under it, and sleeps withou
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
 takes the live data's lock briefly, last, to find or make its watch, as a plan does. A
 `jstream-values` tick also plays the timelines whose wait is over and those a trigger
-fired, and moves the lanes, all under the same collection lock. A
+fired, moves the lanes, and runs the MIDI action bindings that fired, each as its call
+would, all under the same collection lock; the note and control logs it reads are
+lock-free. A
 channel's level is one atomic (`ChannelCell`); the cell map's lock is a leaf, taken
 briefly to find or make a cell, by a plan, a binding or the channel driver. A channel
 action takes the collection lock, then the channel driver's state under it. The WASM plugins' registry lock
@@ -4318,8 +4343,9 @@ the host's error) and an `info` with how many effects it found. A `tempo.*` valu
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
 `warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
 answers; only its event is missing). A `jstream-values` thread that can't start is a
-`warn`; the value bindings and channels then wait for the next batch or channel action
-to start it.
+`warn`; the value bindings, channels and MIDI action bindings then wait for the next
+batch or channel action to start it. An action a MIDI binding runs logs as any call
+does, its failure at `debug` with the error code (ADR-0207).
 
 <a id="audit-log"></a>
 ## Audit log
@@ -4359,7 +4385,12 @@ a sink, and answers `activity.list` from them; a restarted engine starts empty. 
 or action the sentence table doesn't name reads as its command name. A controller
 binding reads by its trigger ("Bound MIDI note 36 on channel 10 from Pads to scene
 switch"), and a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
-"Switched channel “Power” off"). A timeline's cues
+"Switched channel “Power” off"). A `source.mute` or `bus.mute` says which way it
+sets the mute, read before it runs ("Muted “Mic”", "Unmuted bus “Music”",
+[ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)). An action a MIDI
+binding runs gets no entry, as a timeline's cue gets none: it runs on the
+`jstream-values` thread, not as a call, and the `binding.set` that bound it has one.
+A timeline's cues
 get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
 one, and `timeline.cue_fired` reports each cue
 ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)).

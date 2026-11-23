@@ -58,6 +58,7 @@ pub enum AudioFollow {
 /// held, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum MuteTo {
     /// Mutes it.
     Muted,
