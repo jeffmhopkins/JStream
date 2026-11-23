@@ -1693,12 +1693,14 @@ preset changed in one batch that one undo takes back.
   timeline events `timeline_play` and `send_timeline_step` noted (`starts`, `ends`,
   `loops`), and plays (at once, or after the trigger's delay) or stops each timeline
   whose trigger fired. The first check after the engine starts or a collection opens
-  (`restart`) only looks. A channel trigger crosses back only past a 0.02 dead band and
+  (`restart`) only looks, and a channel trigger's first check notes which side of its
+  level the channel is on, so a rise fires only from a side a check saw. A channel trigger crosses back only past a 0.02 dead band and
   fires at most once every 50 ms; an edge that limit holds back fires once it is over,
   if the channel is still on that side. The values thread runs while any timeline has a
   trigger or a wait. `src/tests/sequences.rs` checks a lane gliding down from where its
-  channel was, in small steps, and holding its end, driven by the sequence; a channel
-  rising playing a timeline after its delay, listed in `waiting` meanwhile, falling
+  channel was, never rising and passing through several values, and holding its end,
+  driven by the sequence; a channel rising (from a value a tick saw) playing a timeline
+  after its delay, listed in `waiting` meanwhile, falling
   stopping it, and a stop cancelling a delayed play; and a seek to 0 returning a lane to
   the value it started from.
 - **`source.restart`** calls `LiveSources::restart` at `action_now` (the cue's time

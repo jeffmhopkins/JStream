@@ -2187,7 +2187,7 @@ stamp = { hash = "b3:15c3e173441f74c3", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:07f37da77a7d1ab4", by = "agent:claude", note = "Re-read: the new tests are in files already listed (rendering.rs's probe cap, warm_scenes.rs's probe capture estimate, groups3d.rs's options literal, tests/mcp.rs's studio.get expectation); the mirror test is in chain.rs, covered by Snapshots." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/sequences.rs"]
-stamp = { hash = "b3:9a97f41889c784db", by = "agent:claude", note = "the lane glide test now checks the value never rises and passes several in-between values rather than a step bound that a slow runner exceeded; the section's description of what the tests cover still holds" }
+stamp = { hash = "b3:7cf62c40f0622957", by = "agent:claude", note = "Re-read: tests/sequences.rs only changed how two tests wait (for a tick and for the value, not fixed sleeps); the list of test files is unchanged." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/source_sizes.rs"]
 stamp = { hash = "b3:c269cab1b6da11ab", by = "agent:claude", note = "tests gain depth: None on size events and a_model_reports_its_depth_beside_its_size in source_sizes.rs; the tests list's description of source_sizes.rs still holds." }
@@ -2493,7 +2493,7 @@ stamp = { hash = "b3:0438c229566572f2", by = "agent:channels", note = "Added tha
 stamp = { hash = "b3:063f49fff0160755", by = "agent:release-alpha8", note = """#1609's probes, #1622's kept shadow maps and once-drawn sky, gpu-stack's priming and model depth layer, model upload's off-thread uploads and the hologram follow-up's 3D-family Moves and casts_shadow meet here; Priming now says a model's buffers are made on model upload's jstream-models thread, and the kept-map sentence after #1609's probe paragraph now says "A shadow map".""" }
 
 ["CRATE-jstream-core#timelines"."body"]
-stamp = { hash = "b3:bd7e8556f028fb55", by = "agent:claude", note = "Lanes bullet says a seek keeps the start value; triggers bullet says an edge MIN_REFIRE holds back fires later; tests list adds the seek test." }
+stamp = { hash = "b3:90c6d4c6170e73b1", by = "agent:claude", note = "Re-read against the sequences test fix: the trigger test now waits for a tick to see 0.2 before the rise, and the seek test waits for the value to come back above 0.7. Added that a channel trigger's first check notes the side its channel is on, and the glide test's wording now matches its never-rising, several-values check." }
 
 ["CRATE-jstream-core#timelines"."dep:crates/jstream-protocol/README.md#timelines"]
 stamp = { hash = "b3:5b59d20d2360b00d", by = "agent:channels", note = "Added Lanes and Triggers and waits bullets (sequences.rs, lanes_start/lanes_at, frame-rate ticks, dead band, refire limit) and the new test file to covers." }
@@ -2505,7 +2505,7 @@ stamp = { hash = "b3:8faf499b9753a233", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:43ca29f960db297d", by = "agent:claude", note = "Lanes bullet says a seek keeps the start value; triggers bullet says an edge MIN_REFIRE holds back fires later; tests list adds the seek test." }
 
 ["CRATE-jstream-core#timelines"."file:crates/jstream-core/src/tests/sequences.rs"]
-stamp = { hash = "b3:9a97f41889c784db", by = "agent:claude", note = "the lane glide test now checks the value never rises and passes several in-between values rather than a step bound that a slow runner exceeded; the section's description of what the tests cover still holds" }
+stamp = { hash = "b3:7cf62c40f0622957", by = "agent:claude", note = "Re-read against the sequences test fix: the trigger test now waits for a tick to see 0.2 before the rise, and the seek test waits for the value to come back above 0.7. Added that a channel trigger's first check notes the side its channel is on, and the glide test's wording now matches its never-rising, several-values check." }
 
 ["CRATE-jstream-core#timelines"."file:crates/jstream-core/src/tests/timelines.rs"]
 stamp = { hash = "b3:f1cec73d2d439e33", by = "agent:channels", note = "Added Lanes and Triggers and waits bullets (sequences.rs, lanes_start/lanes_at, frame-rate ticks, dead band, refire limit) and the new test file to covers." }
