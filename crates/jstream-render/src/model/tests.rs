@@ -309,13 +309,15 @@ fn a_models_layer_is_bounded_by_its_models_box() {
     assert!(count(&bounded, FRONT) > 300, "the cube shows");
 
     // Its depth, over a cleared layer, has the same box.
-    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
     let empty = Scene {
         canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
         background: Color::TRANSPARENT,
         items: &[],
     };
-    compositor.render_into(&empty, &depth).expect("it clears");
+    compositor
+        .render_view_depth(&empty, &depth)
+        .expect("it clears");
     compositor
         .draw_model_depth(&model_draw(geometry), &depth)
         .expect("the depth draws");
@@ -1085,7 +1087,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
         blur_px: Finite32::ZERO,
         autofocus: false,
     };
-    let map = compositor.layer(256, 256).expect("a map");
+    let map = compositor.depth_layer(256, 256).expect("a map");
     let clear = Scene {
         canvas: FrameSize::new(256, 256).expect("non-zero"),
         background: Color::rgb(0.0, 0.0, 0.0),
@@ -1116,7 +1118,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
     let card = compositor
         .upload_rgba8(1, 1, &[255, 255, 255, 255])
         .expect("a pixel uploads");
-    let card_map = compositor.layer(256, 256).expect("a map");
+    let card_map = compositor.depth_layer(256, 256).expect("a map");
     let mut card_at = boxed(60.0, 50.0, 20.0);
     card_at.fit_mode = jstream_protocol::FitMode::Stretch;
     let cards = [Item {
@@ -1476,7 +1478,7 @@ fn golden_model_a_floor_cuts_what_is_below_it() {
     let shot = render(compositor, &items);
     assert_near(rgb(&shot, 80, 40), FRONT, (80, 40));
     assert_near(rgb(&shot, 80, 60), [0, 0, 0], (80, 60));
-    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
     compositor
         .draw_model_depth(&draw, &depth)
         .expect("the depth draws");
@@ -2411,7 +2413,7 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         .expect("a pixel uploads");
     let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
-    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
     let mut geometry = boxed(80.0, 50.0, 30.0);
     geometry.depth_px = finite(40.0);
     let draw = ModelDraw {
@@ -2432,7 +2434,7 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         .draw_model(&draw, &layer)
         .expect("the model draws");
     compositor
-        .render_into(
+        .render_view_depth(
             &Scene {
                 canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
                 background: Color::TRANSPARENT,
@@ -2500,6 +2502,7 @@ fn a_second_compositor_on_the_device_makes_no_pipeline_again() {
             warp: 0.0,
             travel: 0.0,
             dropping: 0.0,
+            picture: None,
         };
         compositor.draw_sky(&sky, &layer).expect("the sky draws");
         let sky = render(

@@ -208,8 +208,8 @@ Contents ([Design](#design) explains the choices):
   values `live_values` reads, with channel IDs, the search and its order tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path and each trigger's sentence tested natively), its
-  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text
-  tested natively), the Add source dialog (`add_source.rs`:
+  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
+  which cues it edits and how it finds one, tested natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -495,7 +495,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   at the pointer, and
   the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
-  Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
+  Escape or Tab. A menu a panel draws itself (the control button's, a lane point's)
+  takes the same keys through `menu::keys` and `menu::focus_first`, and
+  `menu::asks_for_menu` reads the Menu key and Shift+F10. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
@@ -786,7 +788,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   control (`CC 7`), and the menu's Remove control unbinds it; a learning one says "Move…" and stops on a
   click, or once its form closes (its signals are read with `try_`, so a closed form ends
   the loop). An engine that reads no MIDI controls says so in the problem bar.
-  Since ADR-0183 the button is the control button: a click opens one menu (Learn MIDI
+  Since ADR-0183 the button is the control button: a click opens one menu (for a learned
+  MIDI control, a Smoothing field first, which sends the binding again with its
+  `smoothing_ms`; then Learn MIDI
   control, Make channel or Open channel, Follow channel…, Add to sequence ›, Set key…,
   Remove control). Make channel
   makes a channel named after the setting (`label`), in the selected scene, whose
@@ -798,8 +802,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`sequence::with_lane`), all in one batch, and opens the sequence. Set key… takes the
   next key pressed (`KeyCapture`, a focused button whose keys never reach the hotkeys;
   Escape or leaving it cancels) and binds it to `channel.switch` `toggle` on the channel,
-  made if need be, in the same batch. A setting that follows a channel shows the
-  channel's name as a chip.
+  made if need be, in the same batch. A sequence that already has the lane gets no
+  `timeline.set`; it only opens. A setting that follows a channel shows the
+  channel's name as a chip. Enter or Space opens the menu under the button (a click with
+  no pointer, `detail` 0) with its first item focused; Escape or Tab closes it and gives
+  the focus back to the button.
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in
@@ -807,7 +814,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`Studio::channel`): its name, switch (`channel.switch`), a meter that also sets the value
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
-  0 to 1; "+ Channel" adds a `channel` input), its shaping, the value bindings that follow
+  0 to 1; "+ Channel" adds a `channel` input; each input that reads something shows its
+  `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
   `channel.set` of the whole channel. `live_values` reads `channel.values` every 100 ms
@@ -822,14 +830,21 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   in a `0 0 1000 100` box stretched over the lane (`lane_path`, dashed from the channel's
   value when the first point is after 0) with its points as HTML dots placed with `style:`
   properties. A double-click adds a point, a drag moves one, kept between its neighbours,
-  and a right-click sets its curve or deletes it; each gesture sends one `timeline.set`.
+  and a right-click sets its curve or deletes it; each gesture sends one `timeline.set`,
+  and one that changes nothing sends none. A point takes the focus: Enter, Space, the Menu
+  key or Shift+F10 open its menu beside it, and Delete removes it.
   The play head runs from `Studio::playing`, kept from `studio.get`'s `timelines` and each
   `timeline.changed`, and a click on the ruler sends `timeline.seek`. Above the lanes, the
   Events lane (`panels/events.rs`) draws the timeline's `cues` as chips on the same
   ruler: a double-click opens an editor there (what happens, which item, keyframe, scene,
   channel, sequence or source, from `objects`), a click on a chip edits it, a drag moves
   it with the pointer captured, and the editor deletes it; each is one `timeline.set`,
-  with the cues kept in time order. The Scenes panel lists each scene's sequences after
+  with the cues kept in time order. The editor edits a cue only when it can build the
+  same action again (`editable`), and keeps an object that is gone as "(missing)"; each
+  edit finds its cue by time and action (`position`), and one another client changed
+  meanwhile is left as it is, with a problem shown. A chip opens its editor from the
+  keyboard (Enter, Space, the Menu key, Shift+F10), Escape closes it, and Delete removes
+  the event. The Scenes panel lists each scene's sequences after
   its keyframes (`Row::Sequence`, the teal sequence icon): a click opens one in the
   Sequence panel (`sequence::open_sequence`), its hover button plays or stops it, it shows
   its elapsed time while it plays and the keys bound to play it, and its menu plays or

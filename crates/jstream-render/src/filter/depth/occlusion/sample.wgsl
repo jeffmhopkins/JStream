@@ -9,6 +9,11 @@
 // than the point by more than a small bias, fading out where the occluder is much
 // farther away than the radius. Output red is the occluded share (0 where nothing was
 // drawn), green the pixel's own 1 / w, for the second pass.
+//
+// It is drawn at half the depth's size: each texel stands for a block of two by two
+// pixels and samples for one of them, `chosen`, one corner of the block and the other
+// on every other texel. The pattern's tile is counted in texels, so the second pass's
+// blur over 4 x 4 of them still meets every rotation.
 
 struct Params {
     radius: f32,
@@ -66,9 +71,16 @@ fn turn(i: i32) -> vec2<f32> {
     return select(two.xy, two.zw, i % 2 == 1);
 }
 
+// The pixel of the depth that texel `texel` samples for: apply.wgsl names the same one.
+fn chosen(texel: vec2<i32>) -> vec2<i32> {
+    let corner = (texel.x + texel.y) & 1;
+    return min(texel * 2 + vec2<i32>(corner), vec2<i32>(frame.in_size) - vec2<i32>(1));
+}
+
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    let px = vec2<i32>(in.pos.xy);
+    let texel = vec2<i32>(in.pos.xy);
+    let px = chosen(texel);
     let iw = inverse_w(px);
     if iw <= 0.0 || p.focal <= 0.0 {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -86,7 +98,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     if n.z > 0.0 {
         n = -n;
     }
-    let spin = turn(tile(px));
+    let spin = turn(tile(texel));
     let helper = select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(n.y) > 0.9);
     let t0 = normalize(cross(helper, n));
     let b0 = cross(n, t0);

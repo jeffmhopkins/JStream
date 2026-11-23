@@ -460,10 +460,13 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   follows each value binding's control or data field with the modifiers' readers and
   smoothing, and once its reading first differs from where it started, turns its mapped
   value into its target's setter edit (`jstream_graph::value_edit`). A `jstream-values`
-  thread ticks it about 30 times a second while the collection holds a binding, and when
+  thread ticks it about 30 times a second while the collection holds a binding (60 while
+  a value is still moving, [ADR-0190](../../docs/adr/0190-moving-values-tick-at-frame-pace.md)), and when
   those edits change the engine redraws and re-routes audio through the shown graph, on
   top of the open gestures' values ([Live values](#live-values)). A binding whose input
-  or range is unchanged across a batch keeps its follower; a missing target drives
+  or range is unchanged across a batch keeps its follower, as does one (or a channel's
+  input) whose input changed only its `smoothing_ms` (`same_but_smoothing`), which takes
+  the new time and goes on driving; a missing target drives
   nothing. A binding's `amount` scales its value toward `from` by a channel's level.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
@@ -1441,7 +1444,8 @@ the render parameter channel, never through the collection:
   moved control wins over a gesture on the same setting; through them `shown` also
   carries filter settings, faders and sends, which the mixer and the render snapshot
   follow as they follow a stored change. The `jstream-values` thread rebuilds it when
-  those edits change, at most about 30 times a second.
+  those edits change, at most about 30 times a second, or 60 while a value is moving
+  (ADR-0190).
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
@@ -1703,7 +1707,8 @@ preset changed in one batch that one undo takes back.
   timeline's lane already started from, so scrubbing never jumps); each `jstream-values` tick moves
   every playing timeline's lanes to its position on the animation clock (`lanes_at`)
   before the channels tick, and an end sets each lane's last point. The values thread
-  ticks every 16.7 ms while a lane drives a channel. See *Channels* in
+  ticks every 16.7 ms while a lane drives a channel, and while a channel's value or a
+  binding's setting is still moving ([ADR-0190](../../docs/adr/0190-moving-values-tick-at-frame-pace.md)). See *Channels* in
   [Contents: motion](#contents-motion).
 - **Triggers and waits** (`sequences.rs`): `Sequences` keeps the timelines waiting on a
   `delay_ms`, which the values tick plays when due, credited to the engine, and the
@@ -1783,7 +1788,7 @@ The engine keeps the keyframe each placed scene is switched to
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 
@@ -1874,6 +1879,26 @@ is above it, which zooms the deep sky back in), and how far its
 stars have travelled, advanced once a frame by the warp's mean rate times the media
 time since the last (a step back or of over a second jumps to the setting and moves
 nothing; a step of no time, a held clock, keeps the warp as it is).
+With its warp aimed ahead
+([ADR-0187](../../docs/adr/0187-a-warp-can-travel-straight-ahead.md)) it also keeps the
+rotation that lays the sky out around the scene's straight ahead, taken as a warp starts
+and adjusted while at warp to hold the travel within its limit (`warp_aim.rs` holds the
+rotations), and the sky
+it cross-fades from for half a second after a warp starts, which `draw_sky_of` draws,
+still, into a `GpuKey::SkyLeaving` layer that `sky_layers` puts under the `GpuKey::Sky`
+one (`a_warp_aimed_ahead_cross_fades_the_backdrop_to_straight_ahead`).
+With arrival pictures
+([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
+planning puts the frames of the visible items of the light's `sky_pictures` scene in the
+shot (`Shot::sky_pictures`, by the light's source, each with how much its item's width
+scales `sky_picture_deg`, `picture_scale`), and the state keeps the picture shown
+and where it is pinned (`Arrival`): none while the deep sky is gone at warp
+(`deep_shown`), and another, at random, picked once as it starts to show again with the
+warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
+`draw_sky_of` passes it to the backdrop, the upload loop takes the shown picture's average
+colour once per version (`note_picture_mean`, kept in `Chains::picture_means` for the
+shown pictures only), and `light_scene` and a probe's capture add a directional light from
+it in that colour (`arrival_light`, `an_arrival_picture_shows_ahead_and_lights_the_scene`).
 Its stars, star brightness, nebula, galaxy band and colours are drawn as those
 modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
@@ -2177,7 +2202,9 @@ crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetri
 `floor_reflection`, `depth_bloom` and the screen-space reflections the engine adds, below)
 also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
-planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
+planning gives its composite's pass a `GpuKey::ViewDepth` depth layer
+(`ResourceCache::depth_layer`: one channel, as every view depth, model depth and shadow
+map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
 the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
@@ -2208,7 +2235,7 @@ depth, `draw_reflection` draws the scene through the camera mirrored in the floo
 down, `a_camera_mirrors_in_the_floor`) into a `GpuKey::Reflection` layer, each model it
 shows drawn again through that camera into its `GpuKey::ReflectedModel`, lit as it is
 but unshadowed, in place of its layer, and items without a camera left out; then that
-picture's view depth into `GpuKey::ReflectionDepth` (`draw_view_depth` through the
+picture's view depth into the depth layer `GpuKey::ReflectionDepth` (`draw_view_depth` through the
 mirrored camera, every model included). The pass is cut at the floor, since the mirrored
 camera looks up at it from below and the floor would hide everything on it: each model
 is drawn with `ModelDraw::floor`, so nothing of it at or below the plane is drawn or
@@ -2306,7 +2333,8 @@ An environment light ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scene
 decision 9) isn't one of those lights: `scene_environment` takes the scene's first one,
 in stacking order, as the model's sky (`ModelDraw::environment`), at its intensity
 times its item's opacity and oriented by its item's turn, tilt and rotation
-([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), and a second one is logged once
+([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), after the
+layout a warp aimed ahead keeps in its backdrop's `SkyState` (ADR-0187), and a second one is logged once
 (`Chains::environments_warned`). Planning puts the frame of the source its `image`
 names in the shot when it places the light (`look_sky`), so it is uploaded though no
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
@@ -2346,7 +2374,7 @@ Shadows ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decisio
 by index with their softness (`Chains::shadowed`). The first `scene`-lit model of a run
 that receives shadows (`ShownModel::receives_shadows`) in a scene with any draws that
 scene's maps (`draw_shadows`): for each of the first 2 such lights, a
-`GpuKey::ShadowMap` layer of 2048² holding the view depth of the scene's pass (found
+`GpuKey::ShadowMap` depth layer of 2048² holding the view depth of the scene's pass (found
 among the chains', the program's and the mixes' passes, `scene_pass`) seen from the
 light, its cards through `render_view_depth` and its models through `draw_view_depth`'s
 model loop, leaving out a model whose source doesn't cast (`casts_shadows`) and a card
@@ -2355,7 +2383,10 @@ with the `additive` or `screen` blend, which only adds light (`casts_shadow`,
 light looks from where it is along its aim, through its cone and a tenth more; a
 directional light from far back along its aim, at the sphere around what the pass places
 (`caster_bounds`), through a 30° view that holds it, which stands in for an orthographic
-view. More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
+view. Before drawing them it makes every model the pass shows ready to cast
+(`ready_casting_models`: its upload and its layer), so a model drawn after the first, or
+not yet drawn by this compositor, casts in that frame too
+(`the_first_frame_shadows_with_every_model`). More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
 the maps for that run (`shadows_of`), and every receiving model of the scene draws with
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).
@@ -2403,7 +2434,10 @@ draws a view depth. Such a chain reads the scene's surface buffer too
 (`Chain::reads_surface`, `Pass::surface`). Each model item in such a scene that
 reflects it (`scene`-lit, its source's `reflections` on) draws its surface with its layer, into three `GpuKey::ModelSurface` layers of its layer's size
 (`Compositor::draw_model_with_surface`, noted in `Chains::surfaced` for the frame), so
-it is shaded once. After the view depth, `draw_surface` clears the scene's three
+it is shaded once. After the view depth, `draw_surface` hands the pass those layers
+themselves when one model alone reflects the scene and drew them this frame at the
+buffer's size, since a merge would only copy them
+([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)). Otherwise it clears the scene's three
 `GpuKey::Surface` layers and merges each reflecting model the view depth holds into them
 (`Compositor::merge_model_surface`); a model whose layer drew no surface this frame is
 drawn into them again through the scene's camera with the scene's lights, sky and probe
@@ -3177,7 +3211,10 @@ that size, and with the scene's captures as well as the program's. Monitored sce
 draw after every mix, so the program never waits for one: one not begun within the
 tick's period (`MixFrame::deadline`) is skipped, its layers kept, nothing pushed, and
 counted as a frame not read back in `render_ticks`. A scene not planned yet waits; one
-deleted ends its stream as before.
+deleted ends its stream as before. A monitored scene, and the program at a size only
+preview streams take, also give way while the GPU is behind and an output has a
+picture to draw, so an open preview costs a stream no frame: its own rate falls, to
+about two pictures a second at the least ([Runtime](#runtime)).
 
 The **warm scenes'** captures (ADR-0117 §7) run beside the program's, so a switch to
 one, or a transition toward it, finds its webcam open and its display already
@@ -4598,7 +4635,18 @@ behind: a mix that only feeds readbacks skips that tick's composite (its layers 
 as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
 ticks and frames that land behind a repeat are counted in `render_ticks`, and so is a monitored scene a preview stream
 shows (*Preview*), drawn after every mix, when the tick's period ran out before it
-began. The first tick is drawn at once; later ones fall
+began. A picture only this machine sees gives way to the outputs' before any of that:
+a monitored scene, or the program at a size only preview streams take
+(`MixFrame::local`, from `VideoTap::local`, never a frame an output's session or a
+virtual camera also takes). The draw counts each tick it drew anything out and back in
+as it does the conversions, and while the GPU has not finished the tick before, a tick
+that has an output's picture to draw skips the local ones (their layers kept, nothing
+pushed, counted in `render_ticks`), so a preview's work never queues ahead of a
+stream's frame and the preview's rate falls instead. After `LOCAL_YIELD_TICKS` (15) due
+ticks in a row a local picture is drawn anyway, so a preview under a GPU that never
+catches up still shows about two pictures a second at 30
+(`a_local_picture_gives_way_while_the_gpu_is_behind`,
+`only_preview_streams_make_a_picture_local`). The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
 (`on_frame_grid`), where the live sources' thread plans for them (*Live sources*). Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
