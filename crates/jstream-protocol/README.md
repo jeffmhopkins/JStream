@@ -384,7 +384,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.173 because `profile.get` counts each drawing thread's GPU
+`PROTOCOL_VERSION` is 0.174 because `profile.get` counts each drawing thread's GPU
 submits per frame (`DrawerProfile`'s `submits`); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
@@ -1998,7 +1998,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)): each drawing
   thread's (`program`, `preview`) frames, their average, 95th percentile and longest
   time, the frames over `frame_budget_ms`, the program's skipped ticks, the GPU submits
-  it made per frame (`submits`, since 0.173: each costs the thread a fixed time however
+  it made per frame (`submits`, since 0.174: each costs the thread a fixed time however
   little work it carries, and only the compositor's own are counted) and the time per
   phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
