@@ -3232,10 +3232,21 @@ whole core for one canvas. `open_staged_h264` asks for hardware `Prefer` while t
 `HardwareSlot` is free and keeps the slot while the session it got is a hardware one;
 every other stream, and any stream when `Prefer` opens software or fails to open, as
 VA-API's does without a software fallback, is opened with `Avoid`. So previews hold at
-most one hardware session, since sessions can be limited and outputs come first,
-[ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3;
-`one_staged_preview_at_a_time_encodes_on_hardware`,
-`a_refused_hardware_encoder_falls_back_to_software`. And for NV12
+most one hardware session, and outputs come first
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3): the slot
+is the stage's (`Program::preview_hardware`), and an output whose own open wanted a
+hardware encoder and got none, an error or a software one, takes it back
+(`HardwareSlot::reclaim` in `Program::encoders`). The stream holding it sees that on
+the hub's next pass (`Staged::gives_way`), closes its session and opens again with
+`Avoid`, starting on a keyframe; the output waits for that, at most 2 s
+(`PREVIEW_RECLAIM_WAIT`), and opens again, and no stream takes the slot until it has.
+An output that got its hardware encoder the first time leaves the preview's alone, so
+on an encoder with sessions to spare both stay on hardware. While a stream holds the
+slot, `output.status` counts its session in `encoder_sessions` and
+`hardware_sessions`. `one_staged_preview_at_a_time_encodes_on_hardware`,
+`a_refused_hardware_encoder_falls_back_to_software`,
+`an_output_takes_the_hardware_session_back_from_a_preview`,
+`a_reclaim_of_a_free_or_stuck_slot_returns_at_once_or_at_its_wait`. And for NV12
 input at an even picture size, `staged_format`, so the render thread converts the
 picture on the GPU and reads back the planes, as it does for an output's session, and
 the encoder converts nothing; RGBA8 at an odd one,
@@ -3731,7 +3742,11 @@ among the holders, rather than falling back on a cap that is still full while an
 output keeps the program stage up (#834). The codec list is read only while a hardware
 session is held. An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
-`prefer` still falls back to software when hardware refuses (ADR-0031). A new video
+`prefer` still falls back to software when hardware refuses (ADR-0031). Before either
+answer stands, a new video session that wanted a hardware encoder and got none, a
+refusal or a software one, takes back the hardware session a preview stream holds, if
+one does, and opens once more ([Preview streams](#preview-streams)); `output.status`
+counts that preview session with the outputs' until then. A new video
 session that `prefer` opens in software, because the machine lists no hardware encoder
 for the codec or the listed one refused the session at configure, logs a warning
 naming the output it opens for, the encoder and why (`why_software`; #443 case 1), so

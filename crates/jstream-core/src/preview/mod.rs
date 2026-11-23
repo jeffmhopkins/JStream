@@ -791,33 +791,105 @@ struct Staged {
     /// Its meter in `profile.get`, dropped with it.
     _profiled: Option<StreamGuard>,
     /// The hub's one hardware encoder session, while this stream's encoder holds it.
-    _hardware: Option<HardwareTaken>,
+    hardware: Option<HardwareTaken>,
 }
 
-/// The one hardware H.264 session the preview hub may hold (#1691). A program or scene
-/// stream the program stage draws tries the hardware encoder while the slot is free, so
-/// the canvas doesn't cost a CPU core on a software encoder. Any other stream encodes in
-/// software: hardware sessions can be limited, and outputs come first (ADR-0080 §3).
+/// The one hardware H.264 session the previews of a program stage may hold (#1691). A
+/// program or scene stream the stage draws tries the hardware encoder while the slot is
+/// free, so the canvas doesn't cost a CPU core on a software encoder. Any other stream
+/// encodes in software.
+///
+/// Outputs come first (ADR-0080 §3): an output whose own open did not get a hardware
+/// encoder [`reclaim`](Self::reclaim)s the slot, the stream holding it reopens in
+/// software, and the output opens again. The stage owns the slot, so its outputs and
+/// the hub see the same one.
 #[derive(Clone, Debug, Default)]
-struct HardwareSlot(Arc<AtomicBool>);
+pub(crate) struct HardwareSlot(Arc<SlotShared>);
+
+#[derive(Debug, Default)]
+struct SlotShared {
+    state: Mutex<SlotState>,
+    /// Woken when the slot is given up.
+    freed: Condvar,
+}
+
+#[derive(Debug, Default)]
+struct SlotState {
+    /// A preview stream's hardware session holds it.
+    taken: bool,
+    /// Outputs opening now that want it back: no stream takes it meanwhile.
+    reclaiming: u32,
+}
 
 /// The slot, taken until it is dropped.
 #[derive(Debug)]
-struct HardwareTaken(Arc<AtomicBool>);
+struct HardwareTaken(Arc<SlotShared>);
+
+/// An output's hold on a slot it reclaimed, until its own encoder has opened.
+#[derive(Debug)]
+pub(crate) struct Reclaimed(Arc<SlotShared>);
 
 impl HardwareSlot {
-    /// The slot, if no stream holds it.
+    /// The slot, if no stream holds it and no output is reclaiming it.
     fn take(&self) -> Option<HardwareTaken> {
-        self.0
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
-            .then(|| HardwareTaken(Arc::clone(&self.0)))
+        let mut state = lock(&self.0.state);
+        (!state.taken && state.reclaiming == 0).then(|| {
+            state.taken = true;
+            HardwareTaken(Arc::clone(&self.0))
+        })
+    }
+
+    /// Whether an output wants the slot back from the stream that holds it.
+    fn asked_back(&self) -> bool {
+        let state = lock(&self.0.state);
+        state.taken && state.reclaiming > 0
+    }
+
+    /// Whether a preview stream's hardware session holds the slot, for the count of
+    /// hardware sessions in use.
+    pub(crate) fn taken(&self) -> bool {
+        lock(&self.0.state).taken
+    }
+
+    /// Takes the slot back for an output: asks the stream holding it to reopen in
+    /// software and waits up to `wait` for its hardware session to close. `None` when
+    /// no stream held it, or when it was not given up in time; otherwise no stream
+    /// takes the slot until the returned hold is dropped.
+    pub(crate) fn reclaim(&self, wait: Duration) -> Option<Reclaimed> {
+        let mut state = lock(&self.0.state);
+        if !state.taken {
+            return None;
+        }
+        state.reclaiming += 1;
+        let hold = Reclaimed(Arc::clone(&self.0));
+        let deadline = Instant::now() + wait;
+        while state.taken {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                // The lock goes before `hold`, whose drop takes it.
+                drop(state);
+                return None;
+            };
+            state = match self.0.freed.wait_timeout(state, left) {
+                Ok((state, _)) => state,
+                Err(poisoned) => poisoned.into_inner().0,
+            };
+        }
+        drop(state);
+        Some(hold)
     }
 }
 
 impl Drop for HardwareTaken {
     fn drop(&mut self) {
-        self.0.store(false, Ordering::Release);
+        lock(&self.0.state).taken = false;
+        self.0.freed.notify_all();
+    }
+}
+
+impl Drop for Reclaimed {
+    fn drop(&mut self) {
+        let mut state = lock(&self.0.state);
+        state.reclaiming = state.reclaiming.saturating_sub(1);
     }
 }
 
@@ -836,7 +908,9 @@ fn open_staged_h264(
             Ok(h264) if h264.session.info().codec.hardware => return Ok((h264, Some(taken))),
             // `Prefer` fell back to software inside the platform: the slot is free again.
             Ok(h264) => return Ok((h264, None)),
-            // Linux's `Prefer` has no software fallback when VA-API refuses.
+            // Linux's `Prefer` has no software fallback when VA-API refuses. A platform
+            // that lets go of a closed session late can also refuse the open that
+            // follows a resize; software until the next open is harmless.
             Err(reason) => tracing::info!(
                 error = %reason,
                 "no hardware H.264 encoder for the preview; it encodes in software"
@@ -908,7 +982,7 @@ impl Staged {
             size,
             stage: Arc::downgrade(stage),
             _profiled: profiled,
-            _hardware: hardware,
+            hardware,
         })
     }
 
@@ -946,11 +1020,17 @@ impl Staged {
             size,
             stage: Arc::downgrade(stage),
             _profiled: None,
-            _hardware: None,
+            hardware: None,
         })
     }
 
     /// Whether it is open in `codec` at `size` on `stage`.
+    /// Whether its encoder holds the stage's hardware slot while an output wants it
+    /// back: the stream then opens again, in software.
+    fn gives_way(&self, slot: &HardwareSlot) -> bool {
+        self.hardware.is_some() && slot.asked_back()
+    }
+
     fn is(&self, codec: PreviewCodec, size: FrameSize, stage: &Arc<Program>) -> bool {
         self.codec == codec
             && self.size == size
@@ -1149,21 +1229,22 @@ fn stageable(stream: &PreviewStream, work: Option<&Work>, can_stage: bool) -> bo
 
 /// Opens, or keeps, `stream`'s [`Staged`] session at its picture size of `canvas` (the
 /// program's, or its scene's), and passes a keyframe request on. An H.264 session
-/// opens on hardware while the hub's `slot` is free.
+/// opens on hardware while the stage's [`HardwareSlot`] is free, and opens again, in
+/// software, when an output wants the slot back.
 fn serve_staged(
     stream: &Arc<PreviewStream>,
     work: &mut Work,
     stage: &Arc<Program>,
     canvas: (u32, u32),
     rev: &Arc<AtomicU64>,
-    slot: &HardwareSlot,
 ) -> Result<(), String> {
     let (width, height) = stream.settings.picture_size(canvas.0, canvas.1);
     let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
+    let slot = stage.preview_hardware();
     if !work
         .staged
         .as_ref()
-        .is_some_and(|staged| staged.is(work.codec, size, stage))
+        .is_some_and(|staged| staged.is(work.codec, size, stage) && !staged.gives_way(slot))
     {
         // The old session (or the hub's own) closes first.
         work.staged = None;
@@ -1417,7 +1498,6 @@ fn run(
     let mut stage: Option<Arc<Program>> = None;
     let mut stage_at = Instant::now();
     let rev_now = Arc::new(AtomicU64::new(0));
-    let hardware = HardwareSlot::default();
     let no_scenes: Scenes = Arc::default();
     loop {
         let streams: Vec<Arc<PreviewStream>> = {
@@ -1515,7 +1595,7 @@ fn run(
                     wake_at = wake_at.min(now + period);
                     continue;
                 };
-                match serve_staged(stream, work, stage, canvas, &rev_now, &hardware) {
+                match serve_staged(stream, work, stage, canvas, &rev_now) {
                     Ok(()) => {
                         let period = Duration::from_secs(1) / stream.settings.fps;
                         wake_at = wake_at.min(now + period);
@@ -2084,19 +2164,34 @@ mod hardware_tests {
         AudioEncoder, AudioEncoderConfig, CodecInfo, Codecs, HardwarePreference, PlatformError,
         VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
     };
-    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
 
     /// The fake encoder, reported as a hardware one when opened with `Prefer`, or
-    /// refused then when `refuse` is set. Records each preference it was opened with.
+    /// refused then when `refuse` is set. With `one`, it has a single hardware session
+    /// to give, and `Prefer` opens software while that one is open, as an encoder at
+    /// its session limit does. Records each preference it was opened with.
     #[derive(Default)]
     struct HardwareCodecs {
         refuse: bool,
+        one: Option<Arc<AtomicUsize>>,
         asked: Mutex<Vec<HardwarePreference>>,
     }
 
     struct Hardware {
         inner: Box<dyn VideoEncoder>,
         info: CodecInfo,
+        /// The count of open hardware sessions it is one of.
+        open: Option<Arc<AtomicUsize>>,
+    }
+
+    impl Drop for Hardware {
+        fn drop(&mut self) {
+            if let Some(open) = &self.open {
+                open.fetch_sub(1, Ordering::AcqRel);
+            }
+        }
     }
 
     impl VideoEncoder for Hardware {
@@ -2138,9 +2233,20 @@ mod hardware_tests {
                 });
             }
             let inner = FakeCodecs.video_encoder(config)?;
+            if let Some(open) = &self.one
+                && open
+                    .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_err()
+            {
+                return Ok(inner);
+            }
             let mut info = inner.info().clone();
             info.hardware = true;
-            Ok(Box::new(Hardware { inner, info }))
+            Ok(Box::new(Hardware {
+                inner,
+                info,
+                open: self.one.clone(),
+            }))
         }
         fn audio_encoder(
             &self,
@@ -2217,5 +2323,75 @@ mod hardware_tests {
             *codecs.asked.lock().expect("asked"),
             [HardwarePreference::Prefer, HardwarePreference::Avoid]
         );
+    }
+
+    /// Outputs come first (ADR-0080 §3): on an encoder with one hardware session to
+    /// give, an output whose open found it held by a preview stream takes it back. The
+    /// stream opens again in software, and the output's next open is on hardware.
+    #[test]
+    fn an_output_takes_the_hardware_session_back_from_a_preview() {
+        let codecs = HardwareCodecs {
+            one: Some(Arc::default()),
+            ..HardwareCodecs::default()
+        };
+        let slot = HardwareSlot::default();
+        let (preview, held) = open(&codecs, &slot);
+        assert!(preview.session.info().codec.hardware && held.is_some());
+        assert!(slot.taken(), "counted as a hardware session in use");
+        let output = || {
+            super::H264::open(
+                &codecs,
+                (1280, 720),
+                30,
+                PixelFormat::Nv12,
+                HardwarePreference::Prefer,
+            )
+            .expect("opens")
+        };
+        // The one session is the preview's, so the output's open lands on software.
+        let first = output();
+        assert!(!first.session.info().codec.hardware);
+        drop(first);
+        std::thread::scope(|scope| {
+            let started = scope.spawn(|| {
+                let hold = slot
+                    .reclaim(Duration::from_secs(10))
+                    .expect("given up in time");
+                let again = output();
+                drop(hold);
+                again
+            });
+            // The preview thread's next look at its stream.
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !slot.asked_back() {
+                assert!(Instant::now() < deadline, "the output never asked");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            // As `Staged` drops them: the session, then the slot.
+            drop(preview);
+            drop(held);
+            let (software, none) = open(&codecs, &slot);
+            assert!(!software.session.info().codec.hardware);
+            assert!(none.is_none(), "the stream holds no slot in software");
+            let output = started.join().expect("the output's open");
+            assert!(
+                output.session.info().codec.hardware,
+                "the output got the session"
+            );
+        });
+        assert!(!slot.taken());
+    }
+
+    /// A slot no stream holds has nothing to take back, and one not given up in time
+    /// is left with its stream, which can be asked again.
+    #[test]
+    fn a_reclaim_of_a_free_or_stuck_slot_returns_at_once_or_at_its_wait() {
+        let slot = HardwareSlot::default();
+        assert!(slot.reclaim(Duration::from_secs(10)).is_none(), "free");
+        let held = slot.take().expect("free");
+        assert!(slot.reclaim(Duration::from_millis(20)).is_none(), "stuck");
+        assert!(!slot.asked_back(), "no output is waiting any more");
+        drop(held);
+        assert!(slot.take().is_some(), "and the slot can be taken again");
     }
 }

@@ -949,6 +949,12 @@ impl From<StartError> for ProtocolError {
     }
 }
 
+/// How long an output's open waits for a preview stream to close the hardware encoder
+/// session it holds ([`crate::preview::HardwareSlot::reclaim`]). The preview thread
+/// looks once per picture of its streams, and closing a hardware session takes a
+/// moment; past this the output opens with what it got.
+const PREVIEW_RECLAIM_WAIT: Duration = Duration::from_secs(2);
+
 /// `profile` as a new video session opens it while `held` hold hardware sessions: a
 /// hardware preference becomes `require`, so a full hardware session limit fails the
 /// start instead of falling back to software (ADR-0080 §3). `avoid` stays software, and
@@ -1033,6 +1039,9 @@ pub(crate) struct Program {
     /// render thread once it leaves it (#699), and claimed by each session that opens on
     /// the GPU path until the thread has its tap (#733).
     gpu_gate: Arc<GpuGate>,
+    /// The one hardware encoder session this stage's preview streams may hold, which
+    /// an output takes back when its own open got no hardware encoder.
+    preview_hardware: crate::preview::HardwareSlot,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -1061,6 +1070,11 @@ pub(crate) struct Program {
 }
 
 impl Program {
+    /// The hardware encoder slot this stage's preview streams share.
+    pub(crate) fn preview_hardware(&self) -> &crate::preview::HardwareSlot {
+        &self.preview_hardware
+    }
+
     /// The encoder sessions for `key`: the open ones, or new ones not yet fed. Call
     /// [`attach`](Self::attach) once the output has subscribed, so a new session's
     /// first packets go to it. While `hardware_held` names outputs, a new video session
@@ -1091,14 +1105,38 @@ impl Program {
             let listed =
                 !hardware_held.is_empty() && hardware_listed(self.codecs.as_ref(), config.codec);
             let (profile, limited) = while_hardware_held(&key.2, hardware_held, listed);
-            let video = open_video(
-                self.codecs.as_ref(),
-                context,
-                &feed,
-                &profile,
-                self.base_fps,
-            )
-            .map_err(|reason| {
+            let open = || {
+                open_video(
+                    self.codecs.as_ref(),
+                    context,
+                    &feed,
+                    &profile,
+                    self.base_fps,
+                )
+            };
+            let mut video = open();
+            // Outputs come first (ADR-0080 §3): when this open wanted a hardware
+            // encoder and got none while a preview stream holds one, the stream gives
+            // it up and the open is made again. The hold keeps the slot from being
+            // taken again until this session is open.
+            let missed = config.hardware != HardwarePreference::Avoid
+                && video
+                    .as_ref()
+                    .map_or(true, |video| !video.info().codec.hardware);
+            let reclaimed = missed
+                .then(|| self.preview_hardware.reclaim(PREVIEW_RECLAIM_WAIT))
+                .flatten();
+            if reclaimed.is_some() {
+                tracing::info!(
+                    output_id = %output,
+                    "a preview stream gave up its hardware encoder session for the output"
+                );
+                // The first session, if it opened in software, closes before the next.
+                drop(video);
+                video = open();
+            }
+            drop(reclaimed);
+            let video = video.map_err(|reason| {
                 if limited {
                     StartError::HardwareSessionLimit {
                         outputs: hardware_held.to_vec(),
@@ -2830,6 +2868,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         base_fps: parts.base_fps,
         format,
         latency,
+        preview_hardware: crate::preview::HardwareSlot::default(),
         video_taps,
         audio_taps,
         vcam_taps,

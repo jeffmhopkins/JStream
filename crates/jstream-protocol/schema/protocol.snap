@@ -14314,7 +14314,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "encoder_sessions": {
               "default": 0,
-              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
+              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. A preview stream's session counts\nin both while it is a hardware one (since 0.175). Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
               "format": "uint32",
               "minimum": 0,
               "type": "integer"

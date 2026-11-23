@@ -548,7 +548,8 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         encoder: Option<EncoderSessionInfo>,
         /// How many video encoder sessions the engine has open now, for every output,
-        /// and how many of them are hardware ones. Hardware encoders cap their
+        /// and how many of them are hardware ones. A preview stream's session counts
+        /// in both while it is a hardware one (since 0.175). Hardware encoders cap their
         /// concurrent sessions per GPU vendor and driver, and the engine doesn't guess
         /// the cap. Missing (from a server older than 0.13) parses as 0.
         #[serde(default)]

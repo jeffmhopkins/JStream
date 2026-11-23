@@ -1904,7 +1904,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
-  the cap (0.13; missing, they parse as absent and 0). `cleartext` says whether
+  the cap (0.13; missing, they parse as absent and 0), and since 0.175 a preview
+  stream's session too while it is a hardware one. `cleartext` says whether
   publishing sends the stream key across the network unencrypted: a generic RTMP
   target whose URL is plain `rtmp://` to a host other than `localhost` or a loopback
   address (`OutputKind::sends_key_in_cleartext`; 0.37, missing it parses as `false`).
