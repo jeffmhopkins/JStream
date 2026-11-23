@@ -18,7 +18,8 @@
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
 //! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
-//! controller (ADR-0168), how a `data` one follows a sender's live data (ADR-0171), and how to write a custom shader the Filters window's
+//! controller (ADR-0168), how a `data` one follows a sender's live data and colours a
+//! setting from it (ADR-0171), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -362,6 +363,13 @@ level 0 to 1 from `states`, such as `{\"recording\": 1, \"playing\": 0.5}`, and 
 text 0. It glides over `smoothing_ms` (default 50; 0 jumps, which suits a switch), and \
 rests at `from` while the field is absent. On `opacity`, `from` -1 and `to` 0 shows an \
 item only while the field reads 1. A camera takes no `data` modifier. \
+To colour something from the DAW (a light in a track's own colour, a clip lamp red while \
+recording), put a `data` modifier on a colour setting (`property` `source` with \
+`source: {param: \"color\"}`, a material's `emissive`, or an effect's colour) with \
+`color_from` `field` for a field that is `#rrggbb` (a track's `color`), or `palette` \
+with `palette` mapping each text to a colour, such as `{\"recording\": \"#ff2020\", \
+\"playing\": \"#20ff40\"}`. While the field gives a colour it replaces the setting's own, \
+blended over `smoothing_ms`; otherwise the setting's own colour shows. \
 To make an effect itself pulse (a border's `width`, a glow's `radius` or `strength`, a \
 blur's `radius`), give the item a modifier with `property` `effect` and \
 `effect: {filter_id, param}` naming one of its own effects and a number or colour \

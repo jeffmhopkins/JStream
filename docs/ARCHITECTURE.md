@@ -711,7 +711,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)),
   and since 0.160 a `data` modifier follows one field of a sender's live data, a number
   through a range or a text through a table of states
-  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
+  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3), which since
+  0.164 can set a colour setting from the field, a `#rrggbb` text or a pick from a
+  palette (decision 5).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -1340,7 +1342,9 @@ and scenes they read. The layer is then placed flat
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
 each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
-with procedural nebulae, a galaxy band and stars laid out about the direction of travel,
+with nebulae and a galaxy band baked once per seed into cube maps
+([ADR-0174](adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md))
+and procedural stars laid out about the direction of travel,
 which at warp streak away from it as the render thread's per-scene travel advances, and
 its layer is placed under every item, through no camera, so it sorts with nothing and
 has no view depth. Its

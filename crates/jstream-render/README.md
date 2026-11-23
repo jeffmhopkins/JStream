@@ -60,12 +60,16 @@ and calls this crate.
   texel written by one triangle (`sky.wgsl`). Each pixel looks along its ray from the
   camera (its axes, principal point and focal length, never its position) into the
   gradient or the panorama spun by the turn. Over it go nebulae and a galaxy band
-  (`DeepSky`: warped fractal value noise on the direction) and stars hashed per cell of a
+  (`DeepSky`: warped fractal value noise on the direction, baked once per seed into two
+  cube maps of 1024² faces by `sky_deep.wgsl` and read along the direction,
+  [ADR-0174](../../docs/adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md);
+  a bake holds shapes only, four weights for the nebulae and one for the band, which the
+  colours, amounts and intensity scale, so only another seed bakes again) and stars hashed per cell of a
   grid about the direction of travel (`-z`): columns around it by the log-tan of half the
   angle from it, so cells are square and a star moving away from it at any angle moves at
   one speed. The seed also picks the nebulae's style (`Style`: size, cover, churn,
   wisps, dust, gathering) and tilts the band. At `warp` each star streaks behind it over
-  up to 64 cells, the deep sky blurs over 5 taps and fades out, and the stars are
+  up to 64 cells, the deep sky blurs over 5 reads of its bake and fades out, and the stars are
   aberrated (a shift in log-tan by the rapidity of `warp` × 0.9 of light's speed) and
   Doppler shifted (bluer and brighter ahead, redder and dimmer behind, leaning cool),
   over a blue background-radiation glow ahead (`radiation`). While the warp is
@@ -73,7 +77,9 @@ and calls this crate.
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.
-  The pipeline is made on the first draw.
+  The pipeline is made on the first draw, and the bake's on the first sky with nebulae
+  or a band (`golden_sky_the_deep_sky_is_baked_once_per_seed`,
+  `golden_sky_a_bakes_faces_meet_without_a_seam`).
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
   draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
   nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
@@ -581,6 +587,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
+| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
@@ -811,7 +818,9 @@ decision 4). `ModelDraw::materials` holds `MaterialDrive`s, each adding to every
 material or to the file's materials of one name: to the base colour, lightened in sRGB;
 to metallic and roughness, each within 0 and 1; and by name to the glow's colour, scaled
 by its own brightness, and its strength, a multiplier 1 at rest within 0 and
-`MAX_EMISSIVE_STRENGTH` (64). The draw writes each changed material's uniform before it
+`MAX_EMISSIVE_STRENGTH` (64). A drive can also set the base colour (`set_color`) or the
+glow's colour at its own brightness (`set_emissive`) before the others add, the last
+one that sets winning (ADR-0171 decision 5). The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
 the same model draws it as it is. A material with a live texture binds a uniform of its
 own, which is driven the same way

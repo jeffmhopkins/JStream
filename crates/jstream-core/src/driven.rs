@@ -29,6 +29,10 @@
 //! padded for the most and the least the settings reach, so a pulsing outer stroke or
 //! glow is never cut.
 //!
+//! A `data` modifier that paints (`color_from`, ADR-0171 decision 5) sets a colour
+//! setting to its field's colour instead, while it has one, before the others on it add
+//! theirs; on a number setting it adds nothing.
+//!
 //! A setting that a filter saved before its kind had it lacks moves from the kind's
 //! default. A shot whose driven settings changed is a new shot, so an edit to an effect
 //! modifier alone reaches the renderer.
@@ -113,22 +117,41 @@ impl Driven {
     /// doesn't hold them, so the chain keeps `base`. `of` reads each filter's settings
     /// from `base` in place, so nothing is cloned on a frame where nothing moves. A
     /// setting `base` lacks (saved before its kind had it) moves from its default.
+    ///
+    /// `tint` says which modifiers paint (ADR-0171 decision 5): `Some` for one, with the
+    /// colour it sets now, if any. A colour setting takes the last one's colour before
+    /// the others add to it, and a painting modifier adds nothing.
     pub(crate) fn settings<T>(
         &self,
         base: &[T],
         of: impl Fn(&T) -> &Settings,
         value: impl Fn(&Modifier) -> f64,
+        tint: impl Fn(&Modifier) -> Option<Option<[f32; 3]>>,
     ) -> Option<Vec<Settings>> {
         let mut out: Option<Vec<Settings>> = None;
         for setting in &self.settings {
-            let add: f64 = setting.modifiers.iter().map(&value).sum();
-            if add == 0.0 || !add.is_finite() {
+            let mut set = None;
+            let mut add = 0.0;
+            for modifier in &setting.modifiers {
+                match tint(modifier) {
+                    Some(color) => set = color.or(set),
+                    None => add += value(modifier),
+                }
+            }
+            if setting.target != Target::Color {
+                set = None;
+            }
+            if !add.is_finite() || (add == 0.0 && set.is_none()) {
                 continue;
             }
             let Some(v) = base
                 .get(setting.filter)
                 .map(|s| setting.at(of(s)))
-                .and_then(|at| moved(setting.target, at, add))
+                .map(|at| match set {
+                    Some(color) => painted(at, color),
+                    None => at.clone(),
+                })
+                .and_then(|at| moved(setting.target, &at, add))
             else {
                 continue;
             };
@@ -209,6 +232,20 @@ fn moved(target: Target, at: &Value, add: f64) -> Option<Value> {
     }
 }
 
+/// `at`, a colour setting, set to `color` (straight sRGB 0 to 1), keeping its alpha.
+fn painted(at: &Value, color: [f32; 3]) -> Value {
+    let alpha = at
+        .as_str()
+        .and_then(|s| s.strip_prefix('#'))
+        .filter(|hex| hex.len() == 8 && hex.is_ascii())
+        .map(|hex| hex[6..8].to_owned());
+    let [r, g, b] = color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
+    Value::from(match alpha {
+        Some(a) => format!("#{r:02x}{g:02x}{b:02x}{a}"),
+        None => format!("#{r:02x}{g:02x}{b:02x}"),
+    })
+}
+
 /// The least and the most `modifier`'s value can be: a wave or a shake within its
 /// amplitude, an audio or MIDI modifier between its `from` and `to`, a drift within its wrap or
 /// without end in its direction, and 0 when it is disabled.
@@ -277,23 +314,32 @@ mod tests {
         };
         let width = driven("width", (0.0, 64.0), false, vec![drift(1.0), drift(2.0)]);
         let base = settings(json!({"width": 4.0, "color": "#ffffff"}));
-        let at = |each: f64| width.settings(&base, |s| s, |_| each).expect("it moves");
+        let at = |each: f64| {
+            width
+                .settings(&base, |s| s, |_| each, |_| None)
+                .expect("it moves")
+        };
         assert_eq!(at(1.5)[0].0["width"], json!(7.0));
         assert_eq!(at(-10.0)[0].0["width"], json!(0.0));
         assert_eq!(at(100.0)[0].0["width"], json!(64.0));
         assert_eq!(at(1.5)[0].0["color"], json!("#ffffff"), "the rest stays");
         // Nothing added: the chain keeps its settings.
-        assert_eq!(width.settings(&base, |s| s, |_| 0.0), None);
+        assert_eq!(width.settings(&base, |s| s, |_| 0.0, |_| None), None);
         let steps = driven("steps", (1.0, 8.0), true, vec![drift(1.0)]);
         let base = settings(json!({"steps": 3}));
-        let moved = steps.settings(&base, |s| s, |_| 1.6).expect("it moves");
+        let moved = steps
+            .settings(&base, |s| s, |_| 1.6, |_| None)
+            .expect("it moves");
         assert_eq!(moved[0].0["steps"], json!(5));
         // A setting that isn't a number, or a filter the base doesn't have, adds nothing.
         assert_eq!(
-            steps.settings(&settings(json!({"steps": "x"})), |s| s, |_| 1.0),
+            steps.settings(&settings(json!({"steps": "x"})), |s| s, |_| 1.0, |_| None),
             None
         );
-        assert_eq!(steps.settings::<Settings>(&[], |s| s, |_| 1.0), None);
+        assert_eq!(
+            steps.settings::<Settings>(&[], |s| s, |_| 1.0, |_| None),
+            None
+        );
     }
 
     /// #1417 review N4: settings saved before the kind had the parameter move from its
@@ -311,7 +357,7 @@ mod tests {
         );
         width.settings[0].default = json!(4.0);
         let moved = width
-            .settings(&settings(json!({})), |s| s, |_| 2.0)
+            .settings(&settings(json!({})), |s| s, |_| 2.0, |_| None)
             .expect("it moves");
         assert_eq!(moved[0].0["width"], json!(6.0));
     }
@@ -324,8 +370,13 @@ mod tests {
         };
         let tint = driven_as("color", Target::Color, vec![drift]);
         let at = |color: &str, add: f64| {
-            tint.settings(&settings(json!({ "color": color })), |s| s, |_| add)
-                .map(|s| s[0].0["color"].clone())
+            tint.settings(
+                &settings(json!({ "color": color })),
+                |s| s,
+                |_| add,
+                |_| None,
+            )
+            .map(|s| s[0].0["color"].clone())
         };
         assert_eq!(at("#204060", 0.2), Some(json!("#537393")));
         assert_eq!(at("#204060ff", -1.0), Some(json!("#000000ff")));
