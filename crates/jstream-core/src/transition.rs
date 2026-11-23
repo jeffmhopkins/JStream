@@ -166,6 +166,16 @@ pub(crate) struct Visual {
     pub(crate) motion: TrackMotion,
 }
 
+impl Visual {
+    /// Whether it is a whole scene's picture over the canvas, as a transition draws a
+    /// scene with a video chain (ADR-0065 §6): it places no item, and its scene's own
+    /// camera already drew it, so it is drawn flat, through no camera (ADR-0180
+    /// decision 2).
+    pub(crate) fn is_whole_scene(&self) -> bool {
+        self.item_id.as_str().is_empty() && matches!(self.image, SourceRef::Scene(_))
+    }
+}
+
 /// The camera a [`Visual`] is seen through (ADR-0094 decision 7).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) enum Seen {

@@ -424,7 +424,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    the count and the chains, as they share the texture), and a chain is
    rebuilt when the count moved since its last build: `rewrite_rgba8` marks an upload,
    `render_into` the layer it drew into, a filter every layer it drew into (its output,
-   which is one layer for as long as its chain lives, included), and
+   which is one layer for as long as its chain lives, included, so a filter's new
+   settings over an unchanged input reach a 3D card), and
    `ResourceCache::import` an import it hands
    a new frame (one whose hold or info, its presentation time included, differs from
    the last one's, since a platform may reuse a hold for every frame it writes into a
@@ -1246,11 +1247,13 @@ premultiplied linear light on the way out.
   sixteen, a deeper dip) and a `glitch` (on up to 30% of the steps of 12 a second, a
   band of rows shifts sideways). `reveal` (0..1, default 1) materialises it from
   `reveal_from` (`bottom`, `top` or `middle`): rows past the edge are empty, the rows
-  just behind it fill in at random as it passes, and a bright line marks it, fading out
+  just behind it are drawn at random, re-picked each step so the band sparkles while a
+  reveal holds part-way, and a bright line marks it, fading out
   at either end so a finished reveal shows none. A Move between a keyframe at `reveal`
   0 and one at 1 (ADR-0127) projects it in and out. Every time-driven value is worked
   out on the CPU in `f64` from the clock, so two machines draw the same frame at the
-  same time. Coverage is kept, and the light it adds stays inside it. One draw of the
+  same time. Coverage is kept (a glitch band shifts it with the picture), and the light
+  it adds stays inside it. One draw of the
   input's size, at most four texture reads a pixel. The UI offers it with presets
   (Transmission, Steady, Broken signal, Amber).
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
@@ -1709,6 +1712,7 @@ tests check:
 - that an upload's chain is rebuilt after `rewrite_rgba8`;
 - that a layer's is rebuilt after `render_into` draws into it and not on a second draw
   while it is unchanged, and built once for two items and two calls;
+- that `apply_filter_into` marks the layer it draws into changed each time;
 - that a cached import drawn by two calls in a frame is rebuilt once per new frame;
 - that an import's is rebuilt for a new frame from the cache, one under the same hold
   with a later time included, but not for the same frame again;

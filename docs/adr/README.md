@@ -185,5 +185,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0170](0170-generic-reflections-and-3d-rendering-switches.md) | Generic reflections between scene surfaces, and app-wide 3D rendering switches | accepted | agent |  |
 | [ADR-0171](0171-live-data-from-a-daw-drives-scenes.md) | Live data from a DAW drives scenes: JTunnel state, data bindings, source settings and grids | accepted | agent |  |
 | [ADR-0172](0172-a-media-clock-a-client-can-hold-and-step.md) | A media clock a client can hold and step | accepted | agent |  |
-| [ADR-0177](0177-models-upload-off-the-render-thread.md) | A 3D model is uploaded off the render thread, and a warm scene's stays uploaded | accepted | agent |  |
+| [ADR-0174](0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md) | A sky backdrop's nebulae and galaxy band are baked once per seed | accepted | agent |  |
+| [ADR-0179](0179-cards-that-only-add-light-cast-no-shadow.md) | Cards that only add light cast no shadow | accepted | agent |  |
+| [ADR-0180](0180-a-move-within-a-3d-family-glides-through-its-chain.md) | A Move within a 3D scene's family glides item by item, its chain paused | accepted | agent |  |
 <!-- @generated end adr-index -->

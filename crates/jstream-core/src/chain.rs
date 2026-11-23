@@ -5161,14 +5161,14 @@ mod tests {
     /// is lit there.
     #[test]
     fn a_card_shadows_a_scene_lit_wall() {
-        let graph = shadow_wall(0.0);
+        let mut graph = shadow_wall(0.0);
         // The card's shadow falls 17 px to one side of it on the wall, which is behind
         // the canvas plane, so the camera sees it nearer the centre: about 10 px out
         // from the card's edge.
         let sides = [(22, 18), (42, 18)];
-        let shot = |light: jstream_sources::ShownLight, receives: bool| {
+        let shot = |graph: &Graph, light: jstream_sources::ShownLight, receives: bool| {
             let card = Frame::new(1, 1, &[255; 4], 4).expect("invariant: 1x1 RGBA8");
-            let shot = shadow_wall_shot(&graph, shadow_wall_model(receives), light, &card);
+            let shot = shadow_wall_shot(graph, shadow_wall_model(receives), light, &card);
             let _gpu = crate::tests::one_gpu_test_at_a_time();
             let mut compositor = gpu()?;
             let mut cache = ResourceCache::new();
@@ -5182,11 +5182,11 @@ mod tests {
         };
         let light = shadow_wall_light;
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
-        let Some(lit) = shot(light(false), true) else {
+        let Some(lit) = shot(&graph, light(false), true) else {
             return;
         };
-        let shadowed = shot(light(true), true).expect("an adapter");
-        let unreceived = shot(light(true), false).expect("an adapter");
+        let shadowed = shot(&graph, light(true), true).expect("an adapter");
+        let unreceived = shot(&graph, light(true), false).expect("an adapter");
         assert!(
             lit.iter().all(|&p| luma(p) > 150),
             "the wall is lit: {lit:?}"
@@ -5204,6 +5204,24 @@ mod tests {
             (1, 1),
             "one side is shadowed: {shadowed:?} against {lit:?}"
         );
+        // ADR-0179: a card that only adds light casts no shadow.
+        for blend in [
+            jstream_protocol::BlendMode::Additive,
+            jstream_protocol::BlendMode::Screen,
+        ] {
+            apply(
+                &mut graph,
+                vec![Edit::ItemSetBlend {
+                    item_id: ItemId::new("card"),
+                    blend,
+                }],
+            );
+            let light_only = shot(&graph, light(true), true).expect("an adapter");
+            assert!(
+                (0..2).all(|side| luma(light_only[side]).abs_diff(luma(lit[side])) <= 6),
+                "a {blend:?} card casts no shadow: {light_only:?} against {lit:?}"
+            );
+        }
     }
 
     /// A shadow map is drawn once while nothing that casts into it changes: frames of

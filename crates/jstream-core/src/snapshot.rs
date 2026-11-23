@@ -845,6 +845,25 @@ struct Transitioning {
     /// The item chains whose settings a Move blends between two looks (ADR-0127).
     blends: Vec<EffectBlend>,
     end_ms: f32,
+    /// The pictures of whole scenes among its tracks ([`Visual::is_whole_scene`]): each
+    /// is already seen through its scene's camera, so it is drawn flat over the canvas.
+    whole: BTreeSet<GpuKey>,
+}
+
+impl Transitioning {
+    /// The camera the track drawing `key` is seen through `elapsed_ms` into it: none
+    /// for a whole scene's picture, else as [`TrackCameras::camera`] says.
+    fn camera(
+        &self,
+        cameras: &TrackCameras,
+        (key, track, seen): (&GpuKey, &Track, Seen),
+        elapsed_ms: f32,
+    ) -> Option<SceneCamera> {
+        if self.whole.contains(key) {
+            return None;
+        }
+        cameras.camera(track, seen, elapsed_ms)
+    }
 }
 
 /// One item's effects as a Move blends their settings (ADR-0127): from the leaving
@@ -1277,10 +1296,16 @@ impl Shot {
     /// Every item this shot draws, in any pass or transition track: whose `shown`
     /// clock runs (ADR-0099).
     pub(crate) fn drawn_items(&self) -> BTreeSet<ItemId> {
+        // A scene with a chain is drawn by a chain phase's pass, its items with it.
+        let chain_passes = self.chain_steps.iter().filter_map(|step| match step {
+            ChainStep::Pass(pass) => Some(&**pass),
+            ChainStep::Run(_) | ChainStep::Box(_) => None,
+        });
         let layers = self
             .passes
             .iter()
             .chain(self.mix_passes.values().flatten())
+            .chain(chain_passes)
             .flat_map(|pass| &pass.layers)
             // A 3D group's item is drawn through its children (ADR-0164).
             .flat_map(|layer| {
@@ -1521,7 +1546,7 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, seen, _)| t.cameras.camera(track, *seen, elapsed_ms))
+                .map(|(key, track, seen, _)| t.camera(&t.cameras, (key, track, *seen), elapsed_ms))
                 .collect()
         })
     }
@@ -1950,6 +1975,12 @@ fn plan_inner(
             for blend in &blends {
                 widen(&mut shot, &blend.owner, &blend.from);
             }
+            let whole = planned
+                .tracks
+                .iter()
+                .filter(|(visual, _)| visual.is_whole_scene())
+                .map(|(visual, _)| key(&visual.image, &shot))
+                .collect();
             let tracks = planned
                 .tracks
                 .into_iter()
@@ -1996,6 +2027,7 @@ fn plan_inner(
                 ),
                 blends,
                 end_ms: planned.end_ms,
+                whole,
             });
             shot.passes = schedule_tracks(&shot);
         } else {
@@ -2170,7 +2202,10 @@ pub(crate) fn on_screen(
     let elapsed_ms = running.elapsed_ms(now);
     planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
         Seen::Held {
-            camera: cameras.camera(track, visual.seen, elapsed_ms),
+            // A whole scene's picture was drawn flat.
+            camera: (!visual.is_whole_scene())
+                .then(|| cameras.camera(track, visual.seen, elapsed_ms))
+                .flatten(),
             depth_run: cameras.depth_run(track, visual.seen),
         }
     })
@@ -2598,10 +2633,37 @@ impl<'a> Planner<'a, '_> {
         })
     }
 
+    /// Whether `running` is a Move within the family of a 3D scene (ADR-0180): from one
+    /// of its members, or from what was on screen, to another. Its items pair by item
+    /// and the camera moves, even when the family has a video chain, which then waits
+    /// for the Move to end.
+    fn moves_within_3d_family(&self, running: &Running) -> bool {
+        running.by_item
+            && running.run.pairs
+            && self.camera(&running.to).is_some()
+            && match &running.from {
+                From::Scene(from) => {
+                    self.family(from).is_some() && self.family(from) == self.family(&running.to)
+                }
+                From::OnScreen(_) => true,
+            }
+    }
+
+    /// What a transition shows of scene `id` at one end, as [`Self::endpoint`] does,
+    /// but its items one by one in a Move within a 3D family (ADR-0180).
+    fn end_of(&mut self, id: &SceneId, flatten: bool, within: bool, out: &mut Shot) -> Vec<Visual> {
+        if within {
+            self.visuals(id, flatten, out)
+        } else {
+            self.endpoint(id, flatten, out)
+        }
+    }
+
     fn transition(&mut self, running: &Running, out: &mut Shot) -> (Planned, bool) {
         let flatten = running.run.pairs;
+        let within = self.moves_within_3d_family(running);
         let mut from: Vec<Visual> = match &running.from {
-            From::Scene(scene) => self.endpoint(scene, flatten, out),
+            From::Scene(scene) => self.end_of(scene, flatten, within, out),
             // A group whose children were moving is drawn once its track is known.
             From::OnScreen(items) => items
                 .iter()
@@ -2609,7 +2671,7 @@ impl<'a> Planner<'a, '_> {
                 .cloned()
                 .collect(),
         };
-        let mut to = self.endpoint(&running.to, flatten, out);
+        let mut to = self.end_of(&running.to, flatten, within, out);
         // A Move between 2D and 3D sees the 2D side through the framing camera
         // (ADR-0128); where that side can't be drawn the same through it, it fades.
         let mut pairs = running.run.pairs;
@@ -2705,9 +2767,10 @@ impl<'a> Planner<'a, '_> {
         let mut stops: Vec<Vec<Visual>> = Vec::with_capacity(running.via.len());
         let (quiet, wake) = (self.quiet, self.wake);
         self.quiet = true;
+        let within = self.moves_within_3d_family(running);
         for id in &running.via {
             if self.drawn(id).is_some() {
-                stops.push(self.endpoint(id, flatten, &mut scratch));
+                stops.push(self.end_of(id, flatten, within, &mut scratch));
             }
         }
         (self.quiet, self.wake) = (quiet, wake);
@@ -6623,6 +6686,29 @@ fn light_card(
     }
 }
 
+/// The camera the running transition's track of `owner`'s box is seen through at `at`,
+/// if a track draws it: what a model's layer is drawn through while it is one.
+fn track_camera(
+    shot: &Shot,
+    owner: &ChainOwner,
+    at: MediaTime,
+    chains: &Chains,
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Option<SceneCamera> {
+    let transition = shot.transition.as_ref()?;
+    let ChainOwner::Item(scene, item) = owner else {
+        return None;
+    };
+    let (key, track, seen, _) = transition.tracks.iter().find(|(key, ..)| match key {
+        GpuKey::Filtered(drawn) => drawn == owner,
+        GpuKey::ItemBox(s, i) => s == scene && i == item,
+        _ => false,
+    })?;
+    let cameras = moving_cameras((shot, transition), chains, at, (live, captures));
+    let elapsed = transition::elapsed_ms(transition.start, at);
+    transition.camera(&cameras, (key, track, *seen), elapsed)
+}
+
 /// Draws the 3D model item `boxed` shows into its canvas-sized layer `key` (ADR-0107
 /// decision 6): posed by its geometry with its live values and motion applied, seen
 /// through its scene's camera as it moves this frame, and lit as its source says. The
@@ -6670,13 +6756,17 @@ fn draw_model(
         chains.fail(owner);
         return Ok(());
     };
-    let camera = moved_camera(
-        live.camera_of(scene_id, boxed.camera.as_ref()),
-        boxed.camera.as_ref(),
-        (shot, at, shot.shown_at(&boxed.item)),
-        (live, captures),
-        chains,
-    );
+    // A model a transition's track draws is seen through that track's camera, which a
+    // Move moves, so both sides of a glide draw it the same (ADR-0180).
+    let camera = track_camera(shot, owner, at, chains, (live, captures)).or_else(|| {
+        moved_camera(
+            live.camera_of(scene_id, boxed.camera.as_ref()),
+            boxed.camera.as_ref(),
+            (shot, at, shot.shown_at(&boxed.item)),
+            (live, captures),
+            chains,
+        )
+    });
     if let Err(error) = chains.upload_model(compositor, source, &shown.model) {
         chains.fail_box(owner, &error);
         return Ok(());
@@ -7018,6 +7108,8 @@ fn draw_shadows(
     ) else {
         return Ok(Vec::new());
     };
+    // A card that only adds light blocks none (ADR-0179).
+    items.retain(casts_shadow);
     let bounds = caster_bounds(&items);
     // What the maps would be drawn of. A map kept from an earlier frame that was drawn
     // of the same things through the same light, and not written since, is left alone.
@@ -7341,6 +7433,14 @@ fn scene_pass<'s>(shot: &'s Shot, id: &SceneId) -> Option<&'s Pass> {
                 .flatten()
                 .find(|pass| &pass.scene == id)
         })
+}
+
+/// Whether `item` is drawn into a shadow map (ADR-0179): a model's layer, or a card
+/// whose blend can darken what is under it. A card with the `additive` or `screen` blend
+/// only adds light, so it blocks none and casts no shadow.
+fn casts_shadow(item: &Item<'_>) -> bool {
+    matches!(item.placement, Placement::Layer(_))
+        || !matches!(item.blend, BlendMode::Additive | BlendMode::Screen)
 }
 
 /// The sphere around what `items` place in the scene's space, as a centre and radius:
@@ -8190,7 +8290,7 @@ fn fill_tracks<'a>(
                     opacity: sampled.opacity,
                     blend: sampled.blend,
                     visible: true,
-                    camera: cameras.camera(track, *seen, elapsed),
+                    camera: transition.camera(&cameras, (key, track, *seen), elapsed),
                     // A stinger's items sort on their own, over the scenes under them.
                     depth_run: transition.cameras.depth_run(track, *seen),
                     depth: None,
@@ -9289,6 +9389,7 @@ pub(crate) mod tests {
             skies: (None, None),
             blends: Vec::new(),
             end_ms: 1000.0,
+            whole: BTreeSet::new(),
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));
         for blending in jstream_protocol::Blending::ALL {

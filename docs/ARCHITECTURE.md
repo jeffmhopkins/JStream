@@ -1337,7 +1337,8 @@ lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): poin
 spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
 `f64`; a spot or directional light may cast shadows, up to 2 a scene, each through a
 2048² map of the scene's view depth drawn from the light, again only when the light or
-what casts into it has changed, and sampled with a soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
+what casts into it has changed, and sampled with a soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md), a card that only
+adds light casting none, [ADR-0179](adr/0179-cards-that-only-add-light-cast-no-shadow.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
 studio gradient). A model's `texture` names another source whose picture, after its
 own filters, replaces its base colour, sampled through a mip chain of the whole picture
