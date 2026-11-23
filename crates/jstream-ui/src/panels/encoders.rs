@@ -17,7 +17,8 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
-use crate::panels::codec_downloads::{CodecDownloads, Downloads, Offer};
+use crate::icons::Icon;
+use crate::panels::codec_downloads::{CodecDownloads, Downloads, Offer, offer_reason};
 use jstream_control::protocol::{
     AudioCodec, AudioEncoding, Edit, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
     HardwarePreference, MixInput, MixResolution, OutputId, OutputInfo, RateControl, SceneId,
@@ -480,14 +481,13 @@ pub(crate) fn Profiles(
             None => view! {
                 <Downloads state=codecs encoders=encoders />
                 <p class="hint library-empty">
-                    "Pick an encoder or a video mix to edit it, or make a new one."
+                    "Pick an encoder or a video mix on the left, or make one with +."
                 </p>
             }
             .into_any(),
             Some(LibraryPick::Encoder(_)) if !listed => missing("encoder"),
             Some(LibraryPick::Mix(_)) if !listed => missing("video mix"),
             Some(LibraryPick::Encoder(editing)) => view! {
-                <Downloads state=codecs encoders=encoders />
                 <EncoderForm
                     editing=editing
                     encoders=encoders
@@ -500,7 +500,6 @@ pub(crate) fn Profiles(
             }
             .into_any(),
             Some(LibraryPick::Mix(editing)) => view! {
-                <p class="hint">"An output shows the program at the canvas size unless it picks a mix."</p>
                 <MixForm
                     editing=editing
                     mixes=mixes
@@ -538,7 +537,21 @@ pub(crate) fn Profiles(
         <div class="library">
             <div class="library-list">
                 <section class="library-group" aria-label="Encoders">
-                    <h3>"Encoders"</h3>
+                    <div class="library-head">
+                        <h3>"Encoders"</h3>
+                        <button
+                            type="button"
+                            class="icon-button library-new"
+                            aria-label="New encoder"
+                            title="New encoder"
+                            on:click=move |_| pick.set(Some(LibraryPick::Encoder(None)))
+                        >
+                            <Icon name="plus" size=14 />
+                        </button>
+                    </div>
+                    <Show when=move || encoders.with(Vec::is_empty)>
+                        <p class="library-none">"None yet: outputs use the engine's default."</p>
+                    </Show>
                     <ul>
                         <For
                             each=move || encoders.get()
@@ -552,16 +565,23 @@ pub(crate) fn Profiles(
                             )}
                         </For>
                     </ul>
-                    <button
-                        type="button"
-                        class="secondary library-new"
-                        on:click=move |_| pick.set(Some(LibraryPick::Encoder(None)))
-                    >
-                        "+ New encoder"
-                    </button>
                 </section>
                 <section class="library-group" aria-label="Video mixes">
-                    <h3>"Video mixes"</h3>
+                    <div class="library-head">
+                        <h3>"Video mixes"</h3>
+                        <button
+                            type="button"
+                            class="icon-button library-new"
+                            aria-label="New video mix"
+                            title="New video mix"
+                            on:click=move |_| pick.set(Some(LibraryPick::Mix(None)))
+                        >
+                            <Icon name="plus" size=14 />
+                        </button>
+                    </div>
+                    <Show when=move || mixes.with(Vec::is_empty)>
+                        <p class="library-none">"None yet: outputs show the program."</p>
+                    </Show>
                     <ul>
                         <For
                             each=move || mixes.get()
@@ -578,13 +598,6 @@ pub(crate) fn Profiles(
                             }
                         </For>
                     </ul>
-                    <button
-                        type="button"
-                        class="secondary library-new"
-                        on:click=move |_| pick.set(Some(LibraryPick::Mix(None)))
-                    >
-                        "+ New video mix"
-                    </button>
                 </section>
             </div>
             <div class="library-editor">{editor}</div>
@@ -720,9 +733,42 @@ fn EncoderForm(
     } else {
         "New encoder"
     };
+    // The form's heading: the profile's name as saved, or New encoder.
+    let heading = move || {
+        editing
+            .with_value(|id| {
+                id.as_ref().and_then(|id| {
+                    encoders.with(|e| {
+                        e.iter()
+                            .find(|e| &e.profile_id == id)
+                            .map(|e| e.name.clone())
+                    })
+                })
+            })
+            .unwrap_or_else(|| title.to_owned())
+    };
     view! {
         <form class="profile-form" aria-label=title on:submit=save>
-            <p class="profile-summary">{move || draft.with(|d| encoder_summary(&d.profile()))}</p>
+            <div class="profile-head">
+                <h3 class="profile-title">{heading}</h3>
+                <p class="profile-summary">{move || draft.with(|d| encoder_summary(&d.profile()))}</p>
+            </div>
+            // One notice at the top (C17): the downloads the saved profiles need, then
+            // this draft's, unless that is one of them.
+            <Downloads state=codecs encoders=encoders />
+            {move || {
+                let (codec, hardware) = draft.with(|d| (d.codec, d.hardware));
+                codecs
+                    .needed_by(codec, hardware)
+                    .filter(|download| encoders.with(|e| offer_reason(download, e).is_none()))
+                    .map(|download| {
+                        let reason = format!(
+                            "This encoding needs {}, which isn't installed.",
+                            download.name
+                        );
+                        view! { <Offer state=codecs download=download reason=reason /> }
+                    })
+            }}
             <label class="profile-field">
                 <span class="label">"Name"</span>
                 <input
@@ -847,18 +893,6 @@ fn EncoderForm(
                         .collect_view()}
                 </select>
             </label>
-            {move || {
-                let (codec, hardware) = draft.with(|d| (d.codec, d.hardware));
-                codecs
-                    .needed_by(codec, hardware)
-                    .map(|download| {
-                        let reason = format!(
-                            "This encoding needs {}, which isn't installed.",
-                            download.name
-                        );
-                        view! { <Offer state=codecs download=download reason=reason /> }
-                    })
-            }}
             <label class="profile-field">
                 <span class="label">"Audio bit rate (kbps, AAC)"</span>
                 <input
@@ -875,7 +909,7 @@ fn EncoderForm(
             </label>
             {move || problem.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
             <p class="hint">"A running output keeps its encoding until it starts again."</p>
-            <div class="buttons">
+            <div class="buttons profile-buttons">
                 <Show when=move || editing.with_value(Option::is_some)>
                     <button
                         type="button"
@@ -969,9 +1003,21 @@ fn MixForm(
     } else {
         "New video mix"
     };
+    let heading = move || {
+        editing
+            .with_value(|id| {
+                id.as_ref().and_then(|id| {
+                    mixes.with(|m| m.iter().find(|m| &m.mix_id == id).map(|m| m.name.clone()))
+                })
+            })
+            .unwrap_or_else(|| title.to_owned())
+    };
     view! {
         <form class="profile-form" aria-label=title on:submit=save>
-            <p class="profile-summary">{summary}</p>
+            <div class="profile-head">
+                <h3 class="profile-title">{heading}</h3>
+                <p class="profile-summary">{summary}</p>
+            </div>
             <label class="profile-field">
                 <span class="label">"Name"</span>
                 <input
@@ -1098,8 +1144,8 @@ fn MixForm(
                 <span class="field-note">"Of the canvas's base rate."</span>
             </label>
             {move || problem.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
-            <p class="hint">"A running output follows a new input at once; a new size or rate applies when it starts again."</p>
-            <div class="buttons">
+            <p class="hint">"An output shows the program at the canvas size unless it picks a mix. A running output follows a new input at once; a new size or rate applies when it starts again."</p>
+            <div class="buttons profile-buttons">
                 <Show when=move || editing.with_value(Option::is_some)>
                     <button
                         type="button"

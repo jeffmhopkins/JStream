@@ -1535,16 +1535,20 @@ pub fn Outputs() -> impl IntoView {
                             panel.problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })
                         }}
                     </div>
-                    <div class="modal-footer">
-                        <button
-                            type="button"
-                            class="secondary"
-                            data-primary
-                            on:click=move |_| close_libraries()
-                        >
-                            "Close"
-                        </button>
-                    </div>
+                    // While an encoder or mix is open its form's Delete, Cancel and Save
+                    // are the footer (C17); otherwise Close is.
+                    <Show when=move || panel.pick.with(Option::is_none)>
+                        <div class="modal-footer">
+                            <button
+                                type="button"
+                                class="secondary"
+                                data-primary
+                                on:click=move |_| close_libraries()
+                            >
+                                "Close"
+                            </button>
+                        </div>
+                    </Show>
                 </Modal>
             </Show>
         </section>
