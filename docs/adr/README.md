@@ -198,4 +198,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0183](0183-virtual-control-channels.md) | Channels: named live values that controls set and anything follows | accepted | agent |  |
 | [ADR-0184](0184-sequences-lanes-and-triggers.md) | Sequences: lanes on timelines, and what starts them | accepted | agent |  |
 | [ADR-0185](0185-how-reflections-landed-off-by-default.md) | How reflection probes and screen-space reflections landed, off by default | accepted | agent |  |
+| [ADR-0195](0195-the-engine-runs-at-top-priority.md) | The engine runs at top priority: the highest GPU scheduling class and a high CPU priority class by default | accepted | agent |  |
 <!-- @generated end adr-index -->
