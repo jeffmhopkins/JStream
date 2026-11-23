@@ -1689,7 +1689,9 @@ scene's shaders take seconds, which was a stall at the output's start or at the 
 A scene with a camera also has what a 3D scene alone draws with made
 (`Compositor::warm_3d`), whether or not anything in it draws yet. A primed draw has
 images and filters of its own, dropped after it, so it leaves the snapshots' cache and
-GPU memory as they were. It runs only with a GPU context to share (`SharedGpu::lends`);
+GPU memory as they were. It runs only with a GPU context to share (`SharedGpu::lends`,
+and the snapshot thread skips the job when the context won't open, so nothing is drawn
+on a software device of its own);
 a scene that fails to draw is logged at `debug`. Not primed: a scene made or changed
 after the collection opened, which is compiled where it is first drawn (its preview,
 while it is edited); a source's filters while the source has no frame; and each
@@ -2720,8 +2722,9 @@ to start, which is logged) deleted sources keep their grants. Width or height of
 or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
-snapshot. It owns the compositor, serves requests in order, and stops when the
-engine goes away. The compositor opens on the first snapshot, on the engine's GPU
+snapshot, or before it to prime a collection's scenes (*Priming* above). It owns the
+compositor, serves requests in order, and stops when the
+engine goes away. The compositor opens on its first job, on the engine's GPU
 context when it has one, so it draws the browser pages painted there
 ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), and otherwise on a
 device of its own, hardware adapter first, with lavapipe or WARP as the fallback

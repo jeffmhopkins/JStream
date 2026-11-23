@@ -4994,6 +4994,15 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
             gpu = None;
         }
         if let Work::Prime { shot, at } = &work {
+            // Only on the engine's context: a device of this thread's own shares no
+            // pipeline with the stage, and a software one would draw for nothing.
+            let shares = match &gpu {
+                Some((compositor, ..)) => compositor.context().is_some(),
+                None => shared.context().is_some(),
+            };
+            if !shares {
+                continue;
+            }
             let primed = panic::catch_unwind(AssertUnwindSafe(|| {
                 let (compositor, ..) = open(&mut gpu, &mut backoff, shared)?;
                 let (started, before) = (Instant::now(), compositor.pipelines_made());

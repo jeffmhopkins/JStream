@@ -613,6 +613,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Resource | Lifetime |
 |---|---|
 | Device, queue, pipelines, sampler, layouts | Compositor |
+| The blend, depth, model, sky, sky bake and filter pipelines, once made | Every compositor on the device holds its own clone; the device's shared pipelines keep one too (`pipelines.rs`, in the `GpuContext`, or with the compositor for a device of its own), up to 1024, so a later compositor makes none of them again ([Scope](#purpose)) |
 | FP16 target, sRGB target, resolve bind group | Recreated when the canvas size changes |
 | Vertex buffer | Grown when the scene needs more vertices, never shrunk; `queue.write_buffer` otherwise |
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
@@ -622,8 +623,8 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (depth prepass, opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
-| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per sky drawn (none for a call whose layer already holds the sky) |
-| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
+| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky` or by `warm_3d`; a uniform and bind group per sky drawn (none for a call whose layer already holds the sky) |
+| Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |

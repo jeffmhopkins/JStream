@@ -492,7 +492,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts, or for the capture and video-device backends, when a preview shows a display,
-  window or webcam (a webcam's one open is shared with the output's). A `jstream-clap-scan` thread then scans the CLAP plugins with
+  window or webcam (a webcam's one open is shared with the output's). The GPU context
+  is the exception: given its backends, the engine opens it on its snapshot thread to
+  compile the collection's scenes ahead of their first frame
+  ([jstream-core › Snapshots](../../crates/jstream-core/README.md#snapshots), *Priming*). A `jstream-clap-scan` thread then scans the CLAP plugins with
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
   audio-filter kinds once found, and the engine logs each file it couldn't scan; the
   daemon serves meanwhile. The engine keeps the hosts, rescans with them on
