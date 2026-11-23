@@ -44,10 +44,12 @@ Contents ([Design](#design) explains the choices):
   `OpenProject`, the open project and the recent ones from `collection.info`, which the
   header reads at start and again on `collection.file_changed` and `events.dropped`, so a
   switch any client or agent makes shows at once; `None` while the engine has no
-  collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog:
-  a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
+  collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog
+  (C18): Open lists the recent projects other than the open one under a Recent eyebrow
+  (one tab stop; a click, Space or Up and Down fill Location, a double-click or Enter opens it), then a Location row on the
+  property grid, a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
   `collection.new`, `collection.open` or `collection.save_as`, with what an open or new
-  stops. `collection_folder` is the folder Browse… places `collection` assets under: the
+  stops as a one-line callout. `collection_folder` is the folder Browse… places `collection` assets under: the
   open project's, or the one the desktop app named at start. Its logic (names, suggested
   paths, the warning) is tested natively.
 - **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
@@ -1356,7 +1358,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   disk, and sends `plugin.uninstall` only on Remove; a refusal shows above the list.
   The list is read again on `plugin.uninstalled` too, so a plugin another client
   removed goes. Install
-  plugin asks for the package folder (in the desktop app, a Browse… button opens a
+  plugin, a medium dialog on the property grid (C18), asks for the package Folder (in the desktop app, a Browse… button opens a
   folder dialog) and an ID, suggested from the folder's name
   (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
   with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
