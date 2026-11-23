@@ -2795,8 +2795,6 @@ fn bound_of(
     })
 }
 
-/// Appends one item's triangles, a fan from its first vertex, and returns how many
-/// vertices that is.
 /// Whether `shape` is a flat quad that lays its image over the whole canvas texel for
 /// texel: the four corners of the canvas, each with its own corner of the image, with
 /// no perspective, edge or blur.
@@ -2811,6 +2809,8 @@ fn covers_whole(shape: &Shape, width: f32, height: f32) -> bool {
         })
 }
 
+/// Appends one item's triangles, a fan from its first vertex, and returns how many
+/// vertices that is.
 fn push_shape(
     buf: &mut Vec<u8>,
     shape: &Shape,
