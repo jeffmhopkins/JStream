@@ -1077,6 +1077,9 @@ impl Engine {
             }
         };
         wake_all(wake);
+        if swapped.is_ok() {
+            self.prime_scenes();
+        }
         let (rev, json) = match swapped {
             Ok(saved) => saved,
             Err(err) => {
@@ -1460,7 +1463,7 @@ impl Engine {
         self.shared.gpu.set_interop(backends.gpu);
         backends.gpu = Arc::clone(&self.shared.gpu) as Arc<dyn jstream_platform::GpuInterop>;
         // The collection the engine was made with is compiled now, off this thread.
-        lock(&self.shared.state).prime_scenes();
+        self.prime_scenes();
         // A context that replaces a lost one goes to the browser engine, whichever
         // holder saw the loss.
         {
@@ -3578,6 +3581,25 @@ impl Engine {
         wake_all(wake);
     }
 
+    /// Has every scene of the collection drawn once on the snapshot thread, planned
+    /// alone, so what each draws with is compiled before it goes on air
+    /// ([`SnapshotWorker::prime`]): a switch to a scene the program never showed, a 3D
+    /// one above all, then waits for no shader. Called when a collection is opened and
+    /// when the engine gets its backends; a scene made or changed after that is
+    /// compiled where it is first drawn, which while it is edited is its preview.
+    /// Nothing without a GPU context: a device of the snapshot thread's own shares no
+    /// pipelines with the stage. The scenes are planned under the collection lock and
+    /// queued after it is released.
+    fn prime_scenes(&self) {
+        if !self.shared.gpu.lends() {
+            return;
+        }
+        let (shots, now) = lock(&self.shared.state).plan_every_scene();
+        for shot in shots {
+            self.shared.snapshots.prime(shot, now);
+        }
+    }
+
     /// `video.snapshot`. The `rev`, the render snapshot published for it and the live
     /// values on the parameter channel are read together under the collection lock; the
     /// snapshot thread renders them after that lock is released, so the image shows
@@ -5185,7 +5207,6 @@ impl State {
             // `changed` reported no move: the new collection has no scene.
             self.emit_studio(client_id, request_id, None, wake);
         }
-        self.prime_scenes();
     }
 
     /// Keeps `graph`, the same collection saved as another file, in this one's place
@@ -6531,21 +6552,10 @@ impl State {
         Some(planning.shot)
     }
 
-    /// Has every scene of the collection drawn once on the snapshot thread, planned alone
-    /// as [`Self::plan_scene_alone`] plans it, so what each draws with is compiled before
-    /// it goes on air ([`SnapshotWorker::prime`](crate::snapshot::SnapshotWorker::prime)):
-    /// a switch to a scene the program never showed, a 3D one above all, then waits for
-    /// no shader. Called when a collection is opened and when the engine gets its
-    /// backends; a scene made or changed after that is compiled where it is first
-    /// drawn, which while it is edited is its preview. Nothing without a GPU context:
-    /// a device of the snapshot thread's own shares no pipelines with the stage.
-    fn prime_scenes(&mut self) {
-        let Some(shared) = self.shared.upgrade() else {
-            return;
-        };
-        if !shared.gpu.lends() {
-            return;
-        }
+    /// Every scene of the collection planned alone now, as [`Self::plan_scene_alone`]
+    /// plans it, with the time they were planned at: what [`Engine::prime_scenes`] has
+    /// drawn.
+    fn plan_every_scene(&mut self) -> (Vec<snapshot::Shot>, MediaTime) {
         let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
         let scenes: Vec<SceneId> = graph
             .state()
@@ -6553,12 +6563,11 @@ impl State {
             .iter()
             .map(|scene| scene.id().clone())
             .collect();
-        let now = self.live.now();
-        for scene_id in scenes {
-            if let Some(shot) = self.plan_scene_alone(&scene_id) {
-                shared.snapshots.prime(shot, now);
-            }
-        }
+        let shots = scenes
+            .iter()
+            .filter_map(|scene_id| self.plan_scene_alone(scene_id))
+            .collect();
+        (shots, self.live.now())
     }
 
     /// Re-plans the program mix and the scene each video mix shows at the current time,

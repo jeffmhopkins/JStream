@@ -201,7 +201,25 @@ and calls this crate.
   and builds every compositor it needs on it (`Compositor::on_context`: the program
   stage's, the preview's, the snapshot thread's), and they share one device-loss watch
   (`GpuContext::watch`), so each sees the loss whichever was opened last;
-  `context_lost` asks the same watch without a compositor. `Compositor::open` is the other
+  `context_lost` asks the same watch without a compositor. They share the render
+  pipelines made on the device too (`pipelines.rs`, kept in the context beside the
+  watch): making a pipeline compiles its shaders for the backend, for seconds in all on
+  Direct3D 12 for a 3D scene, so a compositor asks first for one made already and
+  compiles only what no compositor on the device has. A pipeline is found by everything
+  it was made from: its descriptor's fields, its shader's source, and what its caller
+  says its bind group layouts are (each compositor makes its own layouts, and wgpu
+  treats two with the same entries as one). One that another thread is making is waited
+  for, not made twice. So an output's second start compiles nothing, a scene the
+  preview or a snapshot drew is compiled for the program stage, and a caller may
+  compile ahead of time on a thread of its own: by drawing what will be drawn on any
+  compositor of the context, and with `Compositor::warm_3d` for what a 3D scene alone
+  draws with (the sky's pipeline and the scene passes' depth pipelines, otherwise made
+  at the first draw that needs them). This covers the blend, depth, model, sky and
+  filter pipelines; the mip, resolve, wipe, NV12 and ingest ones are still each
+  compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
+  edited over and over adds one per source). `Compositor::pipelines_made` counts the
+  ones made on the device, so a draw that leaves it as it was waited for no compile.
+  `Compositor::open` is the other
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
   a hardware adapter first by default (`OpenOptions::hardware`), with the software
   adapter as the fallback, so ARCH principle 7's "runs with a software adapter" still
@@ -1027,9 +1045,12 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
   kept for the compositor's life, keyed by the shader's label and source (up to four
   sources per label, so a reloaded pack's old and new filters don't evict each other).
+  It is taken from the device's shared pipelines when a compositor on it built the same
+  one ([Scope](#purpose)), so only its shader module is made again.
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
-  `RenderError`, not a panic: error scopes for both catch the build, and the refusal is
-  cached so it isn't recompiled every frame. An external filter's uniform bytes that
+  `RenderError`, not a panic: error scopes for both catch the module and the build, and
+  the refusal is cached, in the compositor and with the shared pipelines, so it isn't
+  recompiled every frame or by the next compositor. An external filter's uniform bytes that
   aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.

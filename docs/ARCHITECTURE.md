@@ -1457,7 +1457,13 @@ first again. The platform's context is the engine's one context, lent to every
 compositor and to the browser engine
 ([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
 opens a new one for the next holder that asks and hands it to the browser engine, while
-the stage that saw the loss stays on its own device until it stops. The preview's and
+the stage that saw the loss stays on its own device until it stops. The compositors
+on one context share the render pipelines made on it, so a shader is compiled once per
+device, not at every output start, and the engine has every scene of a collection drawn
+once on the snapshot thread when the collection opens, so a scene's first frame on air
+waits for no compile
+([jstream-render › Scope](../crates/jstream-render/README.md#purpose),
+[jstream-core › Snapshots](../crates/jstream-core/README.md#snapshots)). The preview's and
 the snapshot thread's compositors on it collect their own errors in wgpu error scopes,
 so an error one of them raises fails only its own call, not the stage's next frame
 (#1268). Encoders on the CPU
