@@ -182,9 +182,10 @@ and calls this crate.
   premultiplied sRGB-encoded colour while the items draw: each item encodes its colour
   (the shader's `ENCODED` override), the same blend states then give a browser's
   composite, and the backdrop modes mix the encoded values as they are. One decode pass
-  after the last item (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of the target,
-  or over a transparent background of the box the items reached alone) leaves
-  premultiplied linear light, so a canvas or a layer is linear either way.
+  after the last item of a layer (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of
+  the target, or over a transparent background of the box the items reached alone) leaves
+  premultiplied linear light, so a layer is linear either way; a frame's own target is
+  decoded by its resolve instead.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
@@ -540,9 +541,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    the background premultiplied without the transfer, each fragment's premultiplied
    linear colour is encoded straight and premultiplied again (pipelines built with the
    `ENCODED` override), and the backdrop modes mix the encoded colours directly. After
-   the last item the whole target is copied into the backdrop and one fullscreen draw
-   (`resolve.wgsl`'s `fs_decode`) writes it back as premultiplied linear, so steps 4 and
-   on, and a layer's reader, see linear light. Over a transparent background the copy
+   the last item of a layer (`render_into`, `render_image`) the whole target is copied
+   into the backdrop and one fullscreen draw (`resolve.wgsl`'s `fs_decode`) writes it
+   back as premultiplied linear, so a layer's reader sees linear light. `render`'s own
+   target is left encoded, and step 4 decodes it. Over a transparent background the copy
    and the draw cover only the box the items could reach (the one a layer keeps as its
    content, #1070), and a pass that drew nothing has neither: every other texel is zero,
    which is zero in both spaces (`a_browser_style_layer_is_decoded_only_where_it_drew`). The curves are written so that 1 encodes
@@ -550,7 +552,11 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It samples the FP16 texel at its centre with a nearest sampler (the
    value a `textureLoad` gives, at about half the cost on llvmpipe, #1449),
-   un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
+   un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. With
+   `Blending::Srgb` the texel is premultiplied sRGB-encoded colour, as step 3 left it,
+   and the pass (`fs_encoded`) decodes the un-premultiplied colour before it writes it:
+   the decode and the resolve in one, with no copy of the target and no linear pass
+   between (`a_browser_style_frame_is_resolved_from_its_encoded_target`). The sRGB format encodes RGB on store;
    alpha is stored as-is. The triangle writes every texel, so a GPU starts the pass
    cleared (cheap there, and a tiled GPU then reads nothing in), and a software
    adapter starts it loaded, sparing a clear that costs about 0.5 ms a 1080p frame on

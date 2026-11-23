@@ -44,6 +44,16 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return vec4<f32>(select(vec3<f32>(0.0), c.rgb / c.a, c.a > 0.0), c.a);
 }
 
+// The resolve of a working target the composite left sRGB-encoded (ADR-0126 §3): the
+// decode above and `fs` in one, with no linear copy of the target between them. `src`
+// holds premultiplied sRGB-encoded colour; the output takes straight linear RGB, which
+// its format encodes on store.
+@fragment
+fn fs_encoded(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let c = textureSampleLevel(src, nearest, pos.xy / vec2<f32>(textureDimensions(src)), 0.0);
+    return vec4<f32>(select(vec3<f32>(0.0), srgb_to_linear(c.rgb / c.a), c.a > 0.0), c.a);
+}
+
 // IEC 61966-2-1 encode, as the composite's: the curve continues above 1, and 1 encodes
 // to exactly 1.
 fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {

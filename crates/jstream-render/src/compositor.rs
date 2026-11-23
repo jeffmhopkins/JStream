@@ -157,6 +157,8 @@ pub struct Compositor {
     resolve_input: wgpu::BindGroupLayout,
     resolve_sampler: wgpu::Sampler,
     resolve: wgpu::RenderPipeline,
+    /// The resolve of a working target left sRGB-encoded (`fs_encoded`).
+    resolve_encoded: wgpu::RenderPipeline,
     /// Decodes an sRGB-encoded target back to linear light, from the backdrop.
     decode: wgpu::RenderPipeline,
     /// Resolves a scene that is one whole layer straight from the layer (`fs_layer`),
@@ -496,6 +498,8 @@ impl Compositor {
                     (&targets.working_view, &targets.working),
                     scene,
                     None,
+                    // The resolve reads the encoded colour itself.
+                    false,
                 );
                 self.record_resolve(&mut encoder, targets);
             }
@@ -679,7 +683,7 @@ impl Compositor {
         let prior = (scene.background.a == 0.0)
             .then(|| target.content())
             .flatten();
-        self.record_composite(&mut encoder, (view, target.texture()), scene, prior);
+        self.record_composite(&mut encoder, (view, target.texture()), scene, prior, true);
         self.record_release(&mut encoder);
         self.gpu.submit_work(encoder.finish());
         target.mark_changed();
@@ -1766,6 +1770,12 @@ impl Compositor {
             &resolve_shader,
             ("fs", wgpu::TextureFormat::Rgba8UnormSrgb),
         );
+        let resolve_encoded = resolve_pipeline(
+            &gpu.device,
+            &resolve_input,
+            &resolve_shader,
+            ("fs_encoded", wgpu::TextureFormat::Rgba8UnormSrgb),
+        );
         // The decode reads the backdrop with a load, so it binds the texture alone.
         let decode = resolve_pipeline(
             &gpu.device,
@@ -1841,6 +1851,7 @@ impl Compositor {
             resolve_input,
             resolve_sampler,
             resolve,
+            resolve_encoded,
             decode,
             resolve_layer,
             over,
@@ -2388,7 +2399,10 @@ impl Compositor {
     }
 
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
-    /// the items, premultiplied linear. An item whose mode reads the backdrop ends the
+    /// the items, premultiplied linear. In the encoded space the target is decoded
+    /// back to linear light after the last item when `decode` says so; without, it is
+    /// left holding premultiplied sRGB-encoded colour for a reader that expects that
+    /// ([`Self::record_resolve`]). An item whose mode reads the backdrop ends the
     /// pass: the texels it covers are copied into the backdrop, and a new pass draws it
     /// and the items after it (ADR-0082).
     fn record_composite(
@@ -2397,6 +2411,7 @@ impl Compositor {
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
         scene: &Scene<'_>,
         prior: Option<Region>,
+        decode: bool,
     ) {
         let encoded = self.blending == Blending::Srgb;
         let clear = if encoded {
@@ -2441,7 +2456,7 @@ impl Compositor {
             }
             first = end;
         }
-        if encoded {
+        if encoded && decode {
             // Over a transparent background only what the items reached holds encoded
             // colour: every other texel is zero, which decodes to itself. So the decode
             // covers that box alone, and a pass that drew nothing has none.
@@ -2628,7 +2643,10 @@ impl Compositor {
         );
     }
 
-    /// The resolve pass: the FP16 working target to the straight sRGB output.
+    /// The resolve pass: the FP16 working target to the straight sRGB output. In the
+    /// encoded space the target holds premultiplied sRGB-encoded colour, left so by
+    /// the composite, and the pass decodes it as it resolves (`fs_encoded`): no
+    /// backdrop copy and no decode pass of its own.
     ///
     /// Its triangle writes every texel, so what the output held before is never seen. A
     /// GPU starts it cleared, which costs it little and spares a tiled GPU reading the
@@ -2648,7 +2666,11 @@ impl Compositor {
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        pass.set_pipeline(&self.resolve);
+        pass.set_pipeline(if self.blending == Blending::Srgb {
+            &self.resolve_encoded
+        } else {
+            &self.resolve
+        });
         pass.set_bind_group(0, &targets.resolve_bind, &[]);
         pass.draw(0..3, 0..1);
     }
