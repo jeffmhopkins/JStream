@@ -238,6 +238,7 @@ pub fn Modal(
     children: Children,
 ) -> impl IntoView {
     let dialog = NodeRef::<html::Div>::new();
+    let control_menu = use_context::<crate::panels::learn::ControlMenuAt>();
     // The shell's map. A dialog drawn without it (none are) stays centred.
     let places = use_context::<DialogPlaces>();
     let offset = RwSignal::new(places.map(|p| p.get(label)).unwrap_or((0.0, 0.0)));
@@ -445,7 +446,13 @@ pub fn Modal(
                     end_drag(&event, true);
                 }
                 on:pointercancel=move |event: ev::PointerEvent| end_drag(&event, false)
-                on:contextmenu=|event: ev::MouseEvent| event.stop_propagation()
+                on:contextmenu=move |event: ev::MouseEvent| {
+                    // A setting's row hands the click to its control button (VC-08).
+                    if let Some(at) = control_menu {
+                        crate::panels::learn::row_context(at, &event);
+                    }
+                    event.stop_propagation();
+                }
             >
                 {children()}
             </div>

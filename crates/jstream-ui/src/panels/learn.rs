@@ -338,6 +338,90 @@ pub fn KeyCapture(
     }
 }
 
+/// A right-click on a setting's row, for the control button of that row: the button's
+/// `data-learn` ID and where the pointer was. The shell provides it; each button opens
+/// its menu there when the ID is its own.
+#[derive(Clone, Copy)]
+pub struct ControlMenuAt(pub RwSignal<Option<(String, f64, f64)>>);
+
+impl ControlMenuAt {
+    /// No right-click waiting.
+    pub fn new() -> Self {
+        ControlMenuAt(RwSignal::new(None))
+    }
+}
+
+impl Default for ControlMenuAt {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Whether a right-click on an element with this tag and `type` keeps the browser's own
+/// menu: a field of free text, where copy and paste live.
+fn keeps_own_menu(tag: &str, ty: &str) -> bool {
+    match tag.to_ascii_lowercase().as_str() {
+        "textarea" => true,
+        "input" => matches!(ty, "" | "text" | "search" | "url" | "password" | "email"),
+        _ => false,
+    }
+}
+
+/// Hands a right-click to the control button of the setting it landed on, and says
+/// whether it did. The setting is the nearest element around the click that holds
+/// exactly one control button as its own child, looked for no further out than the
+/// panel or dialog. A right-click in a field of free text is left to the browser.
+pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
+    use leptos::wasm_bindgen::JsCast;
+    let Some(mut el) = event
+        .target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+    else {
+        return false;
+    };
+    if keeps_own_menu(
+        &el.tag_name(),
+        &el.get_attribute("type").unwrap_or_default(),
+    ) {
+        return false;
+    }
+    loop {
+        if let Ok(buttons) = el.query_selector_all(":scope > button.learn") {
+            match buttons.length() {
+                0 => {}
+                1 => {
+                    let id = buttons
+                        .item(0)
+                        .and_then(|n| n.dyn_into::<web_sys::Element>().ok())
+                        .and_then(|b| b.get_attribute("data-learn"));
+                    let Some(id) = id else {
+                        return false;
+                    };
+                    event.prevent_default();
+                    at.0.set(Some((
+                        id,
+                        f64::from(event.client_x()),
+                        f64::from(event.client_y()),
+                    )));
+                    return true;
+                }
+                _ => return false,
+            }
+        }
+        let class = el.class_name();
+        if class
+            .split_whitespace()
+            .any(|c| matches!(c, "panel" | "modal" | "shell"))
+        {
+            return false;
+        }
+        match el.parent_element() {
+            Some(parent) => el = parent,
+            None => return false,
+        }
+    }
+}
+
 /// What the control menu shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Menu {
@@ -373,6 +457,34 @@ pub fn Learn(
     let label = StoredValue::new(label.unwrap_or_else(|| "Control".into()));
     let learning = RwSignal::new(false);
     let menu = RwSignal::new(None::<Menu>);
+    let own_id = target.with_value(learn_id);
+    // A right-click on this setting's row opens the menu where the pointer was.
+    if let Some(at) = use_context::<ControlMenuAt>() {
+        let own_id = own_id.clone();
+        Effect::new(move |_| {
+            if let Some((id, x, y)) = at.0.get()
+                && id == own_id
+            {
+                at.0.set(None);
+                learning.set(false);
+                menu.set(Some(Menu::Open(x, y)));
+            }
+        });
+    }
+    let map_dialog = use_context::<crate::panels::map_control::MapControlDialog>();
+    let map_control = move || {
+        menu.set(None);
+        if let Some(dialog) = map_dialog {
+            dialog
+                .0
+                .set(Some(crate::panels::map_control::MapControlRequest {
+                    target: target.get_value(),
+                    range,
+                    label: label.get_value(),
+                    current: current.and_then(|c| c.get_untracked()),
+                }));
+        }
+    };
     // The control button, which the menus give the focus back to when the keyboard
     // closes them.
     let opener = NodeRef::<leptos::html::Button>::new();
@@ -569,7 +681,8 @@ pub fn Learn(
         };
         menu.set(Some(Menu::Open(x, y)));
     };
-    let title = move || match (learning.get(), bound()) {
+    let title = move || {
+        match (learning.get(), bound()) {
         (true, _) => "Move a fader, knob or button on a MIDI controller. Click to stop.".into(),
         (false, Some(binding)) => match channel() {
             Some(id) => format!(
@@ -581,8 +694,9 @@ pub fn Learn(
             None => long_name(&binding).replace("Click to unbind it.", "Click for its menu."),
         },
         (false, None) => {
-            "Control this setting: learn a MIDI control, or make or follow a channel.".to_owned()
+            "Control this setting: map a control, learn a MIDI control, or make or follow a channel. A right-click on the setting opens the same menu.".to_owned()
         }
+    }
     };
     let text = move || match (learning.get(), bound()) {
         (true, _) => "Move…".to_owned(),
@@ -656,6 +770,11 @@ pub fn Learn(
             <div class="context-menu control-menu" role="menu" aria-label="Control" node_ref=node on:keydown=menu_keys
                 style:left=place(x, y).0 style:top=place(x, y).1>
                 <div class="ctx-head">{format!("Control “{name}”")}</div>
+                <button type="button" class="menuitem" role="menuitem" on:click=move |_| map_control()>
+                    <span class="ctx-check"></span>
+                    <span class="ctx-label">"Map control…"</span>
+                    <span class="hint">"choose a source"</span>
+                </button>
                 {smoothing}
                 <button type="button" class="menuitem" role="menuitem" on:click=move |_| { menu.set(None); learn(); }>
                     <span class="ctx-check"></span>
@@ -780,6 +899,7 @@ pub fn Learn(
             class:learning=learning
             class:bound=move || bound().is_some()
             class:chip=move || channel().is_some()
+            data-learn=own_id
             title=title
             aria-label=title
             aria-haspopup="menu"
@@ -808,6 +928,17 @@ mod tests {
             value: 64,
             count,
         }
+    }
+
+    #[test]
+    fn a_right_click_in_free_text_keeps_the_browsers_menu() {
+        assert!(keeps_own_menu("TEXTAREA", ""));
+        assert!(keeps_own_menu("INPUT", "text"));
+        assert!(keeps_own_menu("input", ""));
+        assert!(!keeps_own_menu("INPUT", "number"));
+        assert!(!keeps_own_menu("INPUT", "range"));
+        assert!(!keeps_own_menu("INPUT", "checkbox"));
+        assert!(!keeps_own_menu("LABEL", ""));
     }
 
     #[test]

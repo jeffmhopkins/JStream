@@ -27,6 +27,7 @@ pub mod keyframe_timing;
 pub mod labels;
 pub mod learn;
 pub mod looks;
+pub mod map_control;
 pub mod mixer;
 pub mod motion;
 pub mod number;
