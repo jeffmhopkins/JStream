@@ -206,17 +206,6 @@ pub struct Item<'a> {
     /// models still order among themselves by their centres. `None` for every other
     /// item, and in a scene with none of them nothing changes.
     pub depth: Option<&'a Image>,
-    /// A 3D model drawn here, in the scene's own pass, in place of a layer of it
-    /// (ADR-0191): a draw [`crate::Compositor::prepare_model`] made ready for a target
-    /// of the canvas's size. The model is shaded straight onto what the items before
-    /// this one drew, tested against its own depth alone, exactly where a
-    /// [`Placement::Layer`] of its layer would have been composited at full opacity in
-    /// [`BlendMode::Normal`], so the item must have that placement, that blend and an
-    /// opacity of 1, and the compositor must mix in linear light; anything else is
-    /// [`crate::RenderError::Invalid`]. `image` isn't drawn; `depth` is written as for a
-    /// layer. Two items of one scene can't carry draws of the same uploaded model.
-    /// `None` for every other item.
-    pub model: Option<&'a crate::PreparedModel>,
 }
 
 /// One scene: a canvas, its clear colour, and items bottom-first.

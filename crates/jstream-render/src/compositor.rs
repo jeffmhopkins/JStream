@@ -47,10 +47,6 @@ struct Draw {
     /// For a mode that reads the backdrop, the target's texels it covers, which are
     /// copied into the backdrop before it draws.
     rect: Option<Rect>,
-    /// Whether the item carries a model drawn here (ADR-0191), in a pass of its own
-    /// before this draw, which then only writes the model's depth, over its vertices
-    /// when it has any.
-    model: bool,
     /// Whether it is a premultiplied linear image of the canvas's size laid over the
     /// whole canvas texel for texel, opaque and in `normal`: a scene of that alone is
     /// resolved straight from the image ([`Compositor::record_layer_resolve`]).
@@ -86,9 +82,6 @@ struct DrawnDraw {
     blend: BlendMode,
     rect: Option<Rect>,
     reach: Option<Rect>,
-    /// Whether the item carried a model's draw (ADR-0191): what it showed is in no
-    /// image, so it never matches a later draw.
-    model: bool,
 }
 
 /// A mip chain remembered without keeping it, equal only to itself.
@@ -113,16 +106,12 @@ impl DrawnDraw {
             blend: draw.blend,
             rect: draw.rect,
             reach: draw.reach,
-            model: draw.model,
         }
     }
 
-    /// Whether it draws what `other` does, wherever in the vertex buffer each is. A
-    /// model's draw (ADR-0191) is never what another showed.
+    /// Whether it draws what `other` does, wherever in the vertex buffer each is.
     fn shows(&self, other: &Self) -> bool {
-        !self.model
-            && !other.model
-            && self.image == other.image
+        self.image == other.image
             && self.mips == other.mips
             && self.blend == other.blend
             && self.rect == other.rect
@@ -949,9 +938,7 @@ impl Compositor {
                     // count (ADR-0143 decision 4): a model its group has faded further
                     // adds no depth.
                     (Placement::Layer(_), Some(depth))
-                        if depth.owner().is(&self.owner)
-                            && item.opacity >= 0.5
-                            && draw.vertex_count > 0 =>
+                        if depth.owner().is(&self.owner) && item.opacity >= 0.5 =>
                     {
                         pass.set_pipeline(&self.depth_copier);
                         depth.bind_group()
@@ -1190,101 +1177,6 @@ impl Compositor {
         surface: [&Image; 3],
     ) -> Result<(), RenderError> {
         self.draw_model_beside(draw, target, Some(surface))
-    }
-
-    /// Makes `draw` ready to be drawn later this frame (ADR-0191), over a target of
-    /// `width` by `height`: into its scene's pass, by the item that carries it
-    /// ([`crate::Item::model`]), so the model is shaded straight onto the scene with no
-    /// layer of its own, or into a layer after all ([`Self::draw_prepared`]). `surface`
-    /// are three layers of that size its surface is drawn into beside it, as
-    /// [`Self::draw_model_with_surface`] takes them. `recycle` is what the last call for
-    /// the same item returned: its frame uniform and bind group are used again when they
-    /// fit, so a steady frame makes neither.
-    ///
-    /// Everything a draw reads is taken now: its live texture's and panoramas' mip
-    /// chains are built here, and its lights, shadow maps and drives are kept as they
-    /// are. Its pose is not: the palette is the uploaded model's
-    /// ([`Self::pose_model`]), shared by every draw of it, so the model must still be
-    /// posed the same when the pass draws it. Were a pose ever a draw's own, this
-    /// would have to keep it as it keeps the drives. The pass that draws it writes its
-    /// materials' drives, so nothing else
-    /// may draw the same uploaded model with other drives between that pass's recording
-    /// and its submit, which one call of [`Self::render_into`] or [`Self::render`]
-    /// spans.
-    ///
-    /// `None` for a draw that needs a layer: one whose camera has depth of field
-    /// (ADR-0165), and, on a compositor that mixes encoded colour (ADR-0126), one of a
-    /// model with a blended primitive, whose fragments a layer mixes in linear light.
-    ///
-    /// # Errors
-    /// As for [`Self::draw_model`], apart from its target's.
-    pub fn prepare_model(
-        &mut self,
-        draw: &ModelDraw<'_>,
-        (width, height): (u32, u32),
-        surface: Option<[&Image; 3]>,
-        recycle: Option<crate::PreparedModel>,
-    ) -> Result<Option<crate::PreparedModel>, RenderError> {
-        if self.blending == Blending::Srgb && draw.model.blends() {
-            return Ok(None);
-        }
-        let canvas = jstream_protocol::Canvas { width, height };
-        let focused = draw
-            .camera
-            .and_then(|camera| camera.view(canvas).ok())
-            .is_some_and(|view| view.focus().is_some());
-        if focused {
-            return Ok(None);
-        }
-        let errors = self.errors();
-        let chain = draw
-            .texture
-            .and_then(|texture| texture.image)
-            .filter(|image| image.owner().is(&self.owner))
-            .map(|image| self.built_chain(image, "jstream-render-model-texture"));
-        let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
-        let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
-        let sky = draw
-            .reflection
-            .or(draw.environment.and_then(|environment| environment.image))
-            .filter(|_| lit);
-        let probe = draw
-            .probe
-            .map(|probe| probe.image)
-            .filter(|_| draw.lighting == jstream_media::model::Lighting::Scene);
-        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
-        let panoramas = Panoramas {
-            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
-            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
-        };
-        let prepared = self.models.prepare(
-            &self.gpu,
-            &self.owner,
-            draw,
-            ((width, height), surface, recycle),
-            (live, panoramas),
-        );
-        errors.close(prepared.map(Some))
-    }
-
-    /// Draws `prepared` into `target`, a layer of the size it was prepared for,
-    /// replacing what it held: what [`Self::draw_model`] would have drawn from the same
-    /// draw (or [`Self::draw_model_with_surface`], with the surface layers it was
-    /// prepared with), for a model that needs its layer after all.
-    ///
-    /// # Errors
-    /// [`RenderError::Invalid`] when `target` isn't a layer this compositor made of that
-    /// size, or the model or its surface layers aren't this compositor's.
-    pub fn draw_prepared(
-        &mut self,
-        prepared: &crate::PreparedModel,
-        target: &Image,
-    ) -> Result<(), RenderError> {
-        let errors = self.errors();
-        errors.close(
-            self.models
-                .draw_prepared(&self.gpu, &self.owner, prepared, target),
-        )
     }
 
     /// Merges a model's surface that [`Self::draw_model_with_surface`] drew into
@@ -2217,14 +2109,7 @@ impl Compositor {
                 });
             }
             self.blends.steps(item.blend)?;
-            if let Some(model) = item.model {
-                self.check_model_item(scene, index, model)?;
-            }
-            // A model drawn here is in the canvas's pixels, as its layer would be.
-            let (width, height) = match item.model {
-                Some(_) => (scene.canvas.width(), scene.canvas.height()),
-                None => item.image.extent(),
-            };
+            let (width, height) = item.image.extent();
             if let Some(camera) = item.camera
                 && view.as_ref().is_none_or(|(seen, _)| *seen != camera)
             {
@@ -2254,67 +2139,6 @@ impl Compositor {
                 .ok()
                 .filter(|first| first.checked_add(MAX_VERTICES_PER_ITEM).is_some())
                 .ok_or_else(too_many)?;
-            if let Some(model) = item.model {
-                // What it can cover, as its layer would have said (#1070).
-                let reach = match model.content() {
-                    Some(region) if crate::wipe::is_empty(region) => continue,
-                    Some(region) => Rect {
-                        x: region.x,
-                        y: region.y,
-                        width: region.width,
-                        height: region.height,
-                    },
-                    None => Rect {
-                        x: 0,
-                        y: 0,
-                        width: scene.canvas.width(),
-                        height: scene.canvas.height(),
-                    },
-                };
-                self.drawn = Some(self.drawn.map_or(reach, |drawn| drawn.union(reach)));
-                // Its depth is written over the layer's quad, cut to what the depth holds.
-                let vertex_count = match item.depth {
-                    Some(depth) => {
-                        let whole = match depth.content() {
-                            Some(content) => {
-                                let (w, h) = (depth.width() as f32, depth.height() as f32);
-                                shape.trim_to([
-                                    content.x as f32 / w,
-                                    content.y as f32 / h,
-                                    (content.x + content.width) as f32 / w,
-                                    (content.y + content.height) as f32 / h,
-                                ])
-                            }
-                            None => true,
-                        };
-                        if whole {
-                            push_shape(
-                                &mut self.vertices,
-                                shape,
-                                canvas_w,
-                                canvas_h,
-                                item.opacity,
-                                Alpha::Premultiplied,
-                            )
-                        } else {
-                            0
-                        }
-                    }
-                    None => 0,
-                };
-                self.draws.push(Draw {
-                    index,
-                    first_vertex,
-                    vertex_count,
-                    mips: None,
-                    blend: item.blend,
-                    rect: None,
-                    model: true,
-                    whole: false,
-                    reach: Some(reach),
-                });
-                continue;
-            }
             // A 3D item, and a 2D one drawn small (#1217), samples a chain of its crop,
             // so its texture coordinates are mapped from the source's into the chain's.
             let texels = (item.image.width(), item.image.height());
@@ -2409,7 +2233,6 @@ impl Compositor {
                 mips,
                 blend: item.blend,
                 rect,
-                model: false,
                 whole,
                 reach,
             });
@@ -2428,60 +2251,9 @@ impl Compositor {
         Ok(())
     }
 
-    /// That item `index` of `scene` can carry `model`, a draw made ready for it
-    /// (ADR-0191): one of this compositor's, for the canvas's size, placed as its layer
-    /// would be, at full opacity in the normal blend, in linear light, and the only draw
-    /// of its uploaded model in the scene.
-    fn check_model_item(
-        &self,
-        scene: &Scene<'_>,
-        index: usize,
-        model: &crate::PreparedModel,
-    ) -> Result<(), RenderError> {
-        let invalid = |detail: String| RenderError::Invalid {
-            what: "model",
-            detail,
-        };
-        model.check(&self.owner)?;
-        let item = &scene.items[index];
-        if model.size() != (scene.canvas.width(), scene.canvas.height()) {
-            return Err(invalid(format!(
-                "item {index}'s model was prepared for {}x{}, not the canvas",
-                model.size().0,
-                model.size().1
-            )));
-        }
-        if !matches!(item.placement, Placement::Layer(_))
-            || item.blend != BlendMode::Normal
-            || item.opacity != 1.0
-        {
-            return Err(invalid(format!(
-                "item {index} carries a model but isn't a layer placement at full opacity in the normal blend"
-            )));
-        }
-        if self.blending == Blending::Srgb && model.blends() {
-            return Err(invalid(format!(
-                "item {index} carries a model with a blended primitive, which a compositor mixing encoded colour draws as a layer"
-            )));
-        }
-        if scene.items[..index]
-            .iter()
-            .filter_map(|earlier| earlier.model)
-            .any(|earlier| earlier.shares_model(model))
-        {
-            return Err(invalid(format!(
-                "item {index} carries a second draw of one uploaded model"
-            )));
-        }
-        Ok(())
-    }
-
     fn stage_sources(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         self.staged.clear();
         for draw in &self.draws {
-            if draw.model {
-                continue;
-            }
             let image = scene.items[draw.index].image;
             let Some(sync) = image.sync() else {
                 continue;
@@ -2648,8 +2420,7 @@ impl Compositor {
     /// [`Self::render_into`] drew the same vertices, of the same images in the same
     /// modes over the same background in the same space, nothing has written to it
     /// since, and none of those images has changed. A scene with a model's depth is
-    /// always drawn: its pass also writes the depth target. So is one whose item
-    /// carries a model's draw (ADR-0191), which shows what no image of the scene holds.
+    /// always drawn: its pass also writes the depth target.
     fn holds(&self, scene: &Scene<'_>, target: &Image) -> bool {
         let drawn = target.drawn_as();
         let Some(drawn) = drawn.as_ref() else {
@@ -2662,7 +2433,7 @@ impl Compositor {
             && drawn.draws.len() == self.draws.len()
             && drawn.draws.iter().zip(&self.draws).all(|(was, draw)| {
                 let item = &scene.items[draw.index];
-                item.depth.is_none() && !draw.model && *was == DrawnDraw::of(draw, item)
+                item.depth.is_none() && *was == DrawnDraw::of(draw, item)
             })
     }
 
@@ -2689,8 +2460,7 @@ impl Compositor {
     /// change (ADR-0201), or leaves it empty when the whole layer is to be
     /// drawn. They are the boxes, before and now, of each draw that is not what the
     /// layer's last [`Self::render_into`] drew in its place: other vertices, another
-    /// image or mode, an image whose texels changed, or a model's draw (ADR-0191),
-    /// which is new each time. Boxes that meet are joined, so
+    /// image or mode, or an image whose texels changed. Boxes that meet are joined, so
     /// no texel is in two.
     ///
     /// The whole layer is drawn instead when the layer does not hold that last draw any
@@ -2750,78 +2520,56 @@ impl Compositor {
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
         scene: &Scene<'_>,
     ) {
-        let size = (scene.canvas.width(), scene.canvas.height());
-        let encoded = self.blending == Blending::Srgb;
-        let blends = if encoded {
-            &self.encoded_blends
-        } else {
-            &self.blends
-        };
-        let open = |encoder: &mut wgpu::CommandEncoder| {
-            encoder
-                .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("jstream-render-composite-patches"),
-                    color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                })
-                .forget_lifetime()
-        };
-        let mut pass = open(encoder);
-        for patch in &self.patches {
-            let region = Region {
-                x: patch.x,
-                y: patch.y,
-                width: patch.width,
-                height: patch.height,
-            };
-            self.wipe.record(&mut pass, region, size, false);
-            pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            for draw in &self.draws {
-                if !draw.reach.is_some_and(|reach| reach.meets(*patch)) {
-                    continue;
-                }
-                if draw.model {
-                    // A model's draw is recorded in passes of its own (ADR-0191), at
-                    // its place in the order. All it can reach is in this box, which
-                    // its own reach was joined into.
-                    if let Some(model) = scene.items[draw.index].model {
-                        drop(pass);
-                        self.models.record_prepared(
-                            &self.gpu,
-                            encoder,
-                            model,
-                            (view, wgpu::LoadOp::Load, encoded),
-                        );
-                        pass = open(encoder);
-                        pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
-                        pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-composite-patches"),
+                color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            let size = (scene.canvas.width(), scene.canvas.height());
+            for patch in &self.patches {
+                let region = Region {
+                    x: patch.x,
+                    y: patch.y,
+                    width: patch.width,
+                    height: patch.height,
+                };
+                self.wipe.record(&mut pass, region, size, false);
+                pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                let encoded = self.blending == Blending::Srgb;
+                let blends = if encoded {
+                    &self.encoded_blends
+                } else {
+                    &self.blends
+                };
+                for draw in &self.draws {
+                    if !draw.reach.is_some_and(|reach| reach.meets(*patch)) {
+                        continue;
                     }
-                    continue;
-                }
-                // `changed` let no draw through that reads its backdrop.
-                let Ok(Steps::Fixed(pipelines)) = blends.steps(draw.blend) else {
-                    continue;
-                };
-                let bind_group = match &draw.mips {
-                    Some(mips) => &mips.bind_group,
-                    None => scene.items[draw.index].image.bind_group(),
-                };
-                for pipeline in pipelines {
-                    pass.set_pipeline(pipeline);
-                    pass.set_bind_group(0, bind_group, &[]);
-                    pass.draw(
-                        draw.first_vertex..draw.first_vertex + draw.vertex_count,
-                        0..1,
-                    );
+                    // `changed` let no draw through that reads its backdrop.
+                    let Ok(Steps::Fixed(pipelines)) = blends.steps(draw.blend) else {
+                        continue;
+                    };
+                    let bind_group = match &draw.mips {
+                        Some(mips) => &mips.bind_group,
+                        None => scene.items[draw.index].image.bind_group(),
+                    };
+                    for pipeline in pipelines {
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, bind_group, &[]);
+                        pass.draw(
+                            draw.first_vertex..draw.first_vertex + draw.vertex_count,
+                            0..1,
+                        );
+                    }
                 }
             }
         }
-        drop(pass);
-        if encoded {
+        if self.blending == Blending::Srgb {
             for patch in &self.patches {
                 self.record_decode(encoder, (view, texture), *patch);
             }
@@ -2841,11 +2589,6 @@ impl Compositor {
             .any(|draw| scene.items[draw.index].depth.is_some());
         if self.depth_on {
             self.ensure_scene_depth(scene.canvas.width(), scene.canvas.height());
-        }
-        // A model drawn in the pass tests against the models' own depth target.
-        if self.draws.iter().any(|draw| draw.model) {
-            self.models
-                .ensure_depth(&self.gpu, scene.canvas.width(), scene.canvas.height());
         }
         if !self.vertices.is_empty() {
             self.gpu
@@ -3018,9 +2761,7 @@ impl Compositor {
             Some(region) if !self.depth_on => Start::Wipe(region),
             _ => Start::Clear(clear),
         };
-        // A pass ends before an item that reads the backdrop, which is copied then, and
-        // before a model drawn here (ADR-0191), which has a pass of its own.
-        let reads = |draw: &Draw| draw.rect.is_some() || draw.model;
+        let reads = |draw: &Draw| draw.rect.is_some();
         let count = self.draws.len();
         let mut cleared = false;
         let mut first = 0;
@@ -3031,23 +2772,6 @@ impl Compositor {
                     cleared = true;
                 }
                 self.record_backdrop_copy(encoder, texture, rect);
-            }
-            if let Some(model) = self
-                .draws
-                .get(first)
-                .filter(|draw| draw.model)
-                .and_then(|draw| scene.items[draw.index].model)
-            {
-                if !cleared {
-                    self.record_draws(encoder, view, Some(start), &[], scene);
-                    cleared = true;
-                }
-                self.models.record_prepared(
-                    &self.gpu,
-                    encoder,
-                    model,
-                    (view, wgpu::LoadOp::Load, encoded),
-                );
             }
             let end = (first + 1..count)
                 .find(|&index| reads(&self.draws[index]))
@@ -3163,25 +2887,12 @@ impl Compositor {
         }
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         for draw in draws {
-            let vertices = draw.first_vertex..draw.first_vertex + draw.vertex_count;
-            // A model drawn here has drawn its colour; its depth is left to write.
-            if draw.model {
-                if let (Some(depths), Some(model_depth)) = (
-                    self.depth_pipelines.as_ref().filter(|_| self.depth_on),
-                    scene.items[draw.index].depth,
-                ) && draw.vertex_count > 0
-                {
-                    pass.set_pipeline(&depths.writer);
-                    pass.set_bind_group(0, model_depth.bind_group(), &[]);
-                    pass.draw(vertices, 0..1);
-                }
-                continue;
-            }
             let image = scene.items[draw.index].image;
             let bind_group = match &draw.mips {
                 Some(mips) => &mips.bind_group,
                 None => image.bind_group(),
             };
+            let vertices = draw.first_vertex..draw.first_vertex + draw.vertex_count;
             // `prepare` checked every item's mode.
             let encoded = self.blending == Blending::Srgb;
             let item = &scene.items[draw.index];

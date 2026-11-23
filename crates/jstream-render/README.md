@@ -57,13 +57,7 @@ and calls this crate.
   the model is placed on the extent's canvas and the layer holds the same picture, less sharp.
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
-  at the model's centre. A model nothing reads the layer of, drawn with the canvas's
-  pixels, is shaded in its scene's
-  pass instead ([ADR-0191](../../docs/adr/0191-a-model-is-drawn-in-its-scenes-pass.md)):
-  `Compositor::prepare_model` makes the same draw ready without drawing it (a
-  `PreparedModel`), and the item that would place the layer carries it (`Item::model`),
-  so the pass draws the model's fragments where the layer's would have been blended.
-  `Compositor::draw_prepared` draws one into a layer after all, for whatever needs it.
+  at the model's centre.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
   `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
   `Environment`, the camera, the stars, the deep sky, the warp and travel, and an opacity) into a canvas-sized layer, every
@@ -532,8 +526,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    `depth_on`, makes the scene depth target (`Depth32Float`, kept per canvas size) and,
    the first time, `DepthPipelines` (every blend pipeline in both spaces again, tested
    `GreaterEqual` or `Always`, and `depth_writer`). The pass clears it to 0 (it starts
-   cleared rather than wiped then), the model's layer (or the model, where its item
-   carries its draw, ADR-0191) draws untested and then
+   cleared rather than wiped then), the model's layer draws untested and then
    `fs_write_depth` writes `NEAR_W` times its depth image's `1 / w` where that isn't 0,
    loaded texel for texel, and every other item seen through a camera (an item with no
    camera is on the screen, outside the models' space, and draws untested) tests its own `NEAR_W / w` (the vertex
@@ -603,8 +596,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    for a redraw matches that, and nothing has written to the layer since
    (`Compositor::holds`), nothing is recorded or submitted and the layer is not marked
    as changed, so a scene that places it matches too. A scene with a model's depth is
-   always drawn, and so is one with an item that carries a model's draw (ADR-0191),
-   whose picture is in no image. So every write into an image's texels has to mark it
+   always drawn. So every write into an image's texels has to mark it
    (`Image::mark_changed`), as mip chains already needed
    (`a_layer_is_drawn_again_only_when_what_it_draws_has_changed`,
    `a_parent_is_kept_while_the_layers_it_places_are`).
@@ -613,13 +605,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    drawn (`Compositor::changed`,
    [ADR-0201](../../docs/adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)): each draw that differs
    from the one last drawn in its place (its vertices' bytes, its image and that
-   image's count of writes, its mode or mip chain; a model's draw, ADR-0191, always
-   differs) gives the box it could touch then
+   image's count of writes, its mode or mip chain) gives the box it could touch then
    and the one it can touch now, boxes that share a texel are joined, and
    `record_patches` makes each box transparent, draws every draw that reaches it
-   clipped to it (a model's draw in passes of its own, at its place in the order: all
-   it can reach is in the one box its reach was joined into), and decodes it in `srgb`
-   (`a_layer_that_carries_a_model_is_drawn_each_time`). More than 8 boxes, boxes over more than
+   clipped to it, and decodes it in `srgb`. More than 8 boxes, boxes over more than
    half the layer, a draw that reads its backdrop, a model's depth, a draw added or
    removed or a background draw the layer whole. The pixels are a whole redraw's bit
    for bit (`a_layer_is_redrawn_only_where_its_items_changed`).
@@ -910,37 +899,6 @@ than its extent ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels
 the kept layers are the target's size and stand for the same canvas, and both are scaled
 by the target's width over its extent's, so the blur covers as much of the picture
 (`golden_model_drawn_with_fewer_pixels_is_as_soft_out_of_focus`).
-
-**Models in a pass** (ADR-0191). `prepare_model(draw, size, surface, recycle)` does all
-of `draw_model` but the pass: it checks the draw, takes what it binds, and writes the
-frame's uniform into a buffer of the draw's own (the one `recycle`, last frame's draw of
-the same item, held, when it has one), where `draw_model` writes the model runtime's
-shared one. It keeps the order of the blended primitives and the values each material
-is driven to, since those are written to the uploaded model's own buffers and another
-placement of the model may be drawn in between. It keeps no pose: the palette is the
-uploaded model's, the same for every draw of it, so the model must be posed the same
-when the pass draws it. It returns `None`, and the caller draws
-the layer, for a camera with a depth of field, which blurs the layer, and, on a
-compositor that mixes encoded colour, for a model with a blended primitive. There a
-pass holds sRGB-encoded colour, and the model's fragments are written encoded
-(`model.wgsl`'s `to_target`, as `composite.wgsl`'s: the frame uniform's last `vec4`
-says so, set only when a pass records the draw), which for an opaque fragment is what
-its layer's texel, encoded and blended, would leave; a blended primitive's fragments
-mix with the model's own in linear light inside a layer, so such a model keeps it. A
-pass records an item's `PreparedModel` between the
-draws around it, into the pass's own encoder: it ends the pass it is in, writes the
-materials, records the model's passes (depth prepass, opaque, blended, and the surface
-beside it when it was prepared with one) loading the target, and opens the pass again
-for the items after it, so the whole composite is still one submit. The item's own
-quad isn't drawn; where the item carries a depth (`Item::depth`) that is written as it
-is for a layer. The model tests against the runtime's private depth buffer, cleared for
-it, so it is hidden by nothing in the pass, as its layer wasn't. `prepare` refuses, as
-`RenderError::Invalid`, an item whose draw wasn't prepared for the canvas's size, that
-isn't a `Placement::Layer` at opacity 1 in the normal blend, or that follows an item
-carrying a draw of the same uploaded model (`PreparedModel::shares_model`): one submit
-holds one set of a model's material values. The picture is the layer's to within the
-rounding of the blend the layer path adds
-(`golden_model_drawn_in_the_pass_matches_its_layer`).
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
@@ -1914,13 +1872,7 @@ plane; a model's layer sorts with a card by the model's depth, whatever the stac
 order; a normal map tilted up its texture lights the same, toward the key light, when
 the placement mirrors the model, and seen from behind (a double-sided plane turned 180°)
 lights as the front of the opposite tilt, while an unmapped plane's back lights as its
-front; a model carried by its item is drawn by the pass as its layer would be blended,
-unlit, lit, blended, through a camera and with its surface beside it, and one drawn
-into a layer from its `PreparedModel` matches `draw_model`
-(`golden_model_drawn_in_the_pass_matches_its_layer`); an item that carries one where
-it needs its layer is refused
-(`a_model_in_the_pass_is_refused_where_it_needs_its_layer`); a model draws into layers
-of three sizes in a row (the
+front; a model draws into layers of three sizes in a row (the
 depth target follows the layer); and a primitive past the adapter's buffer limit is
 refused with `RenderError::Invalid`. Scene lights (ADR-0143), each through the framing
 camera: a point light to the right lights a sphere's right side and leaves its left

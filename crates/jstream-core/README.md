@@ -192,7 +192,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/snapshot/direct.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 - **The media clock** (`clock.rs`): `HeldClock` wraps the injected media clock so that
@@ -343,8 +343,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   receiver forgetting them all; and through the engine `data.list` empty before the
   receiver starts, then the sender's key listed and `data.get` reading it.
 - **Snapshot** (`snapshot.rs`, its reflection probes' capture and lookup in
-  `snapshot/probes.rs`, its models drawn in their scenes' passes in
-  `snapshot/direct.rs`, see *Snapshots*): the program mix and the video mixes as the render
+  `snapshot/probes.rs`, see *Snapshots*): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -1813,7 +1812,7 @@ The engine keeps the keyframe each placed scene is switched to
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/snapshot/direct.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/warp_aim.rs", "crates/jstream-core/src/model_uploads.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 
@@ -2241,8 +2240,7 @@ planning gives its composite's pass a `GpuKey::ViewDepth` depth layer
 map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
-the model's layer (`GpuKey::ItemBox`), shades the model in place of it (ADR-0191), or
-places its effects' output (`GpuKey::Filtered`). A
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
 model's item carries its `GpuKey::ModelDepth` layer there (`Item::depth`), and
 `Compositor::render_view_depth` writes that layer into the view depth, so the model's
 geometry, drawn once into that layer with its colour, isn't drawn a second time for the
@@ -2349,9 +2347,7 @@ placed on the canvas and the pass places the layer over it
 (`golden_a_model_is_seen_through_the_scene_camera`); the scene's surface buffer merges
 a smaller surface whatever its size (`a_metal_floor_reflects_a_card_on_screen`). The
 chain phase draws the
-model into it with `Compositor::draw_model`, or, while the layer has the canvas's
-pixels, makes that draw ready for the scene's pass to shade in place (below): posed by
-the item's geometry with its live
+model into it with `Compositor::draw_model`: posed by the item's geometry with its live
 values and motion applied, seen through its scene's camera with the camera's live value,
 motion and follow applied as the scene's pass resolves them, and lit as the source says.
 A `scene`-lit model in a 3D scene is lit by its scene's lights
@@ -2395,31 +2391,6 @@ places when the item has no effects (`boxed_key`, `key`), `GpuKey::boxed_item` n
 the item behind any of the three images, and `ChainOrder::chain` draws the layer before
 whichever chain reads it. A profile counts it toward the item's effects, as its box is
 (`golden_a_models_source_filters_run_over_its_layer`).
-A model whose layer nothing has to read is shaded in its scene's pass
-([ADR-0191](../../docs/adr/0191-a-model-is-drawn-in-its-scenes-pass.md),
-`snapshot/direct.rs`). `draw_model` then makes its draw ready with
-`Compositor::prepare_model` and keeps it in `Chains::direct` instead of drawing the
-layer; its depth layer is drawn as before. It draws the layer, as it always did, for an
-item with effects or a source with filters (a chain reads the layer), while its layer has
-fewer pixels than the canvas (ADR-0197: the smaller layer is the saving,
-`a_model_drawn_with_fewer_pixels_keeps_its_layer`), while a transition runs (its tracks
-place layers), when the compositor returns no draw (a camera with a depth of field, or a
-model with a see-through material on a canvas that mixes encoded colour), and for a model more than one pass showed in the frame
-before. Each pass that draws a scene's colour fills its items with `fill_shown`, which
-is `fill_items` and settles each model made ready (`DirectModels::place`): the first
-pass of the frame to show it puts the draw on its item (`Item::model`) when the item is
-fully opaque in the normal blend and no item before it carries a draw of the same
-upload; any other pass draws it into the model's layer first, once a frame
-(`Compositor::draw_prepared`), and places the layer. So a model is shaded once a frame
-however many passes show it, and opacity, blend modes and two items of one model keep
-the layer path. The layer stays allocated either way, because a floor reflection and a
-probe's capture find a model's item by it; one that held a picture is emptied in the
-first frame that leaves it undrawn. The passes that draw depth, shadows, a reflection
-or a probe's faces fill their items with `fill_items` and carry no draw. A model's GPU
-time in a profile moves with it: shaded in the pass, it counts under the scene's pass,
-and only its depth under the item (`a_plain_model_is_drawn_in_its_scenes_pass`,
-`a_model_that_needs_its_layer_keeps_it`, `two_items_of_one_model_are_drawn_in_one_pass`,
-`a_model_two_passes_show_is_shaded_once_a_frame`).
 A model's `texture` and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
 decision 5) name other sources. Planning resolves each where it places the model
 (`look_maps`) as an item would show it, its frame, its video chain or, for a `scene`

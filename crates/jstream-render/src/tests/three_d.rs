@@ -1140,7 +1140,6 @@ fn golden_camera_items_draw_far_to_near() {
                 camera: Some(seen),
                 depth_run: far_run,
                 depth: None,
-                model: None,
                 ..item(&far_image, Placement::Geometry(far), Crop::NONE, 1.0)
             },
         ];

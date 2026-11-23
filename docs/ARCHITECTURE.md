@@ -1349,7 +1349,7 @@ decision 7): a scene pass that places one gets a reversed `Depth32Float` target,
 model writes `NEAR_W / w` there where it covers a pixel (before its filters), and every
 item drawn after it tests against that, so a card that sorts in front of a model but
 passes behind it is hidden where the model is nearer. A model's own layer isn't
-tested, nor is a model the pass shades in place, so models still order among themselves by their centres; a scene with no model
+tested, so models still order among themselves by their centres; a scene with no model
 has no depth target. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
@@ -1459,11 +1459,7 @@ boxes ([ADR-0201](adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-t
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
 group of a few small items doesn't shade the whole canvas twice. A model's layer is
-bounded the same way, by the box of its model's bounds on the canvas. A model whose
-layer nothing has to read (no effects, fully opaque in the normal blend, no depth of
-field, drawn with the canvas's pixels, one pass showing it) has no layer drawn at all: its scene's pass shades it in
-place ([ADR-0191](adr/0191-a-model-is-drawn-in-its-scenes-pass.md)), and the picture
-is the same. A blur, a mask, a shadow or a glow over
+bounded the same way, by the box of its model's bounds on the canvas. A blur, a mask, a shadow or a glow over
 such a layer, as an item's effects, shades only that box grown by how far it reaches, and
 keeps the box for what reads it next. A layer or filter target drawn again is made
 transparent over that box rather than cleared whole (#1449). The caller walks the

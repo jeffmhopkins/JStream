@@ -52,8 +52,8 @@ pub use image::{Image, Seen};
 pub use jstream_protocol::BlendMode;
 pub use model::{
     CardDraw, Environment, GpuModel, LightKind, Lighting, LiveTexture, MAX_EMISSIVE_STRENGTH,
-    MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, PreparedModel, ProbeLookup,
-    SHADOW_MAP_PX, SceneLight, SeenModel, ShadowMap,
+    MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, ProbeLookup, SHADOW_MAP_PX,
+    SceneLight, SeenModel, ShadowMap,
 };
 pub use probe::ProbeFace;
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
