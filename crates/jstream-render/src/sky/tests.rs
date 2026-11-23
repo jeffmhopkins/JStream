@@ -67,6 +67,8 @@ fn gradient() -> Environment<'static> {
         },
         intensity: 1.0,
         turn_deg: 0.0,
+        tilt_deg: 0.0,
+        roll_deg: 0.0,
         image: None,
     }
 }
@@ -220,6 +222,57 @@ fn golden_sky_turning_the_camera_turns_the_sky() {
         &sky(turned, looking([0.0; 3], [1.0, 0.0, 0.2])),
     );
     assert_eq!(rgb(&spun, 80, 50), [255, 0, 0]);
+}
+
+/// The light's tilt and rotation orient the sky as they do any item (ADR-0182): tilted a
+/// quarter, the camera looking ahead sees the sky's zenith, the other way its ground,
+/// and rolled a half turn, a camera looking a little up sees the ground.
+#[test]
+fn golden_sky_the_lights_tilt_and_roll_orient_the_sky() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let ahead = |environment: Environment<'_>, aim: [f32; 3], compositor: &mut Compositor| {
+        rgb(
+            &shot(compositor, &sky(environment, looking([0.0; 3], aim))),
+            80,
+            50,
+        )
+    };
+    let level = ahead(gradient(), [0.0, 0.0, -1.0], &mut opened.compositor);
+    assert!(
+        level.iter().all(|&c| c > 200),
+        "at rest, ahead is the horizon: {level:?}"
+    );
+    let up = Environment {
+        tilt_deg: 90.0,
+        ..gradient()
+    };
+    let zenith = ahead(up, [0.0, 0.0, -1.0], &mut opened.compositor);
+    assert!(
+        zenith[2] > 200 && zenith[0] < 60 && zenith[1] < 60,
+        "tilted a quarter, ahead is the sky: {zenith:?}"
+    );
+    let down = Environment {
+        tilt_deg: -90.0,
+        ..gradient()
+    };
+    let ground = ahead(down, [0.0, 0.0, -1.0], &mut opened.compositor);
+    assert!(
+        ground[1] > 200 && ground[0] < 60 && ground[2] < 60,
+        "tilted the other way, ahead is the ground: {ground:?}"
+    );
+    let above = ahead(gradient(), [0.0, -0.5, -1.0], &mut opened.compositor);
+    assert!(above[2] > above[1], "a little up is sky: {above:?}");
+    let rolled = Environment {
+        roll_deg: 180.0,
+        ..gradient()
+    };
+    let below = ahead(rolled, [0.0, -0.5, -1.0], &mut opened.compositor);
+    assert!(
+        below[1] > below[2],
+        "rolled a half turn, a little up is ground: {below:?}"
+    );
 }
 
 /// Stars: none at 0; at 1, scattered points brighter than the black sky they are on,

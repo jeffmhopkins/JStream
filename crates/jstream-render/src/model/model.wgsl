@@ -16,7 +16,7 @@
 // environment is scaled by the scene's ambient light. A scene's environment light
 // (ADR-0151 decision 9) replaces the studio gradient with its sky, in the scene's space:
 // a gradient from its ground through its horizon to its sky straight up, or its
-// picture as an equirectangular panorama, spun about the vertical by its turn. A model's
+// picture as an equirectangular panorama, oriented by its turn, tilt and roll. A model's
 // own `reflection` (ADR-0107 decision 5) is such a panorama too, with or without scene
 // lights, in place of either. A rough
 // reflection, and the diffuse light, read the panorama over a ring of taps around the
@@ -61,7 +61,7 @@ fn below_floor(seen: vec3<f32>) -> bool {
 struct Environment {
     // rgb: straight up, linear light times intensity; w: 1 when there is one.
     sky: vec4<f32>,
-    // rgb: at the horizon; w: its turn about the vertical, in radians.
+    // rgb: at the horizon; w: unused (the axes below carry the sky's orientation).
     horizon: vec4<f32>,
     // rgb: below the horizon; w: how its picture stores alpha, -1 for no picture.
     ground: vec4<f32>,
@@ -177,14 +177,12 @@ fn environment(dir: vec3<f32>) -> vec3<f32> {
     return select(floor, sky, up >= 0.0);
 }
 
-// `dir`, in the viewing frame, as a direction in the scene's space spun by the sky's
-// turn: x right, y down, z toward where the camera looks from.
+// `dir`, in the viewing frame, as a direction in the sky's own frame: the environment's
+// axes are the camera's with the sky's turn, tilt and roll undone (ADR-0182). x right,
+// y down, z toward where the camera looks from at rest.
 fn sky_dir(dir: vec3<f32>) -> vec3<f32> {
     let e = frame.environment;
-    let d = normalize(e.right.xyz * dir.x + e.down.xyz * dir.y - e.forward.xyz * dir.z);
-    let c = cos(e.horizon.w);
-    let s = sin(e.horizon.w);
-    return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
+    return normalize(e.right.xyz * dir.x + e.down.xyz * dir.y - e.forward.xyz * dir.z);
 }
 
 // The panorama's light along `d`, a scene direction: its centre ahead along -z.

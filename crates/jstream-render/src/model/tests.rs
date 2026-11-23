@@ -1119,6 +1119,8 @@ fn golden_model_an_environment_lights_a_model_from_its_sky() {
         ground: black,
         intensity: 2.0,
         turn_deg: 0.0,
+        tilt_deg: 0.0,
+        roll_deg: 0.0,
         image: None,
     };
     let shot = sky_sphere(&mut opened.compositor, &[], gradient);
@@ -1171,6 +1173,8 @@ fn golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload() {
         ground: Color::WHITE,
         intensity: 1.0,
         turn_deg: 0.0,
+        tilt_deg: 0.0,
+        roll_deg: 0.0,
         image: None,
     };
     let uploaded = opened
@@ -2063,4 +2067,56 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         assert_near(rgb(&shot, 80, 50), want, (80, 50));
         assert_near(rgb(&shot, 120, 50), [255, 255, 255], (120, 50));
     }
+}
+
+/// An environment's axes undo its item's orientation in ADR-0022's order (ADR-0182): a
+/// direction the item's rotation takes `v` to reads the sky at `v`, and a turn alone
+/// spins as the shaders spun it before.
+#[test]
+fn an_environments_axes_undo_its_items_turn_tilt_and_roll() {
+    let environment = |turn: f32, tilt: f32, roll: f32| super::Environment {
+        sky: Color::TRANSPARENT,
+        horizon: Color::TRANSPARENT,
+        ground: Color::TRANSPARENT,
+        intensity: 1.0,
+        turn_deg: turn,
+        tilt_deg: tilt,
+        roll_deg: roll,
+        image: None,
+    };
+    // ADR-0022's rotation of `v` by `[rotation, turn, tilt]`: about z, then y, then x.
+    let rotate = |[rotation, turn, tilt]: [f32; 3], [x, y, z]: [f64; 3]| {
+        let rad = |d: f32| f64::from(d).to_radians();
+        let (s, c) = rad(rotation).sin_cos();
+        let (x, y) = (x * c - y * s, x * s + y * c);
+        let (s, c) = rad(turn).sin_cos();
+        let (x, z) = (x * c + z * s, -x * s + z * c);
+        let (s, c) = rad(tilt).sin_cos();
+        let (y, z) = (y * c - z * s, y * s + z * c);
+        [x, y, z]
+    };
+    let close = |a: [f32; 3], b: [f64; 3]| {
+        a.iter()
+            .zip(b)
+            .all(|(p, q)| (f64::from(*p) - q).abs() < 1e-5)
+    };
+    let v = [[0.3, -0.5, 0.8], [1.0, 0.0, 0.0], [0.0, 0.6, -0.8]];
+    for angles in [
+        [0.0, 0.0, 0.0],
+        [30.0, 0.0, 0.0],
+        [0.0, 25.0, 0.0],
+        [0.0, 0.0, -40.0],
+        [15.0, -70.0, 120.0],
+    ] {
+        let [roll, turn, tilt] = angles;
+        let axes = environment(turn, tilt, roll).sky_axes(v.map(|w| rotate(angles, w)));
+        for (got, want) in axes.iter().zip(v) {
+            assert!(close(*got, want), "{angles:?}: {got:?} is not {want:?}");
+        }
+    }
+    // A turn alone, as the shaders turned a direction before: (c x - s z, y, s x + c z).
+    let (s, c) = 35.0_f64.to_radians().sin_cos();
+    let [x, y, z] = [0.2, -0.4, -0.9];
+    let spun = environment(35.0, 0.0, 0.0).sky_axes([[x, y, z]; 3])[0];
+    assert!(close(spun, [c * x - s * z, y, s * x + c * z]), "{spun:?}");
 }

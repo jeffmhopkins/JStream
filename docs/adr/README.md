@@ -187,4 +187,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0172](0172-a-media-clock-a-client-can-hold-and-step.md) | A media clock a client can hold and step | accepted | agent |  |
 | [ADR-0174](0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md) | A sky backdrop's nebulae and galaxy band are baked once per seed | accepted | agent |  |
 | [ADR-0175](0175-ship-the-directx-shader-compiler.md) | Ship Microsoft's DirectX Shader Compiler in the Windows zip | accepted | maintainer |  |
+| [ADR-0182](0182-a-sky-follows-its-items-tilt-and-roll.md) | An environment light's sky follows its item's tilt and rotation as well as its turn | accepted | agent |  |
 <!-- @generated end adr-index -->

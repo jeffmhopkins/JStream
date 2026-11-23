@@ -680,8 +680,7 @@ fn sky_values(
     };
     let [top, horizon, ground] =
         [environment.sky, environment.horizon, environment.ground].map(linear);
-    let turn = finite(environment.turn_deg, -1.0e6, 1.0e6).to_radians();
-    let [right, down, forward] = view.axes().map(|axis| axis.map(|c| c as f32));
+    let [right, down, forward] = environment.sky_axes(view.axes());
     let [cx, cy] = view.principal();
     let deep = &sky.deep;
     let [nebula_a, nebula_b] = deep.nebula_colors.map(linear);
@@ -708,7 +707,7 @@ fn sky_values(
         horizon[0],
         horizon[1],
         horizon[2],
-        turn,
+        0.0,
         ground[0],
         ground[1],
         ground[2],

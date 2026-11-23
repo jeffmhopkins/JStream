@@ -350,9 +350,46 @@ pub struct Environment<'a> {
     pub intensity: f32,
     /// How far it is spun about the vertical axis, in degrees: its item's turn.
     pub turn_deg: f32,
+    /// How far it is pitched about the scene's x axis, in degrees: its item's tilt
+    /// (ADR-0182).
+    pub tilt_deg: f32,
+    /// How far it is rolled about the scene's z axis, in degrees: its item's rotation
+    /// (ADR-0182).
+    pub roll_deg: f32,
     /// A picture that is the sky instead, as an equirectangular panorama: its centre
     /// straight ahead along -z, up at its top.
     pub image: Option<&'a Image>,
+}
+
+impl Environment<'_> {
+    /// The camera's axes `[right, down, forward]` in the sky's own frame: each scene
+    /// direction taken back through the sky's orientation, as an item's (ADR-0022's
+    /// order: roll about z, then turn about y, then tilt about x, ADR-0166). The shaders
+    /// read a direction's sky along these axes with no turn of their own, so the sky is
+    /// oriented by all three of its item's angles (ADR-0182) and a turn alone spins it
+    /// as before (ADR-0167).
+    #[must_use]
+    pub fn sky_axes(&self, axes: [[f64; 3]; 3]) -> [[f32; 3]; 3] {
+        let rad = |deg: f32| {
+            if deg.is_finite() {
+                f64::from(deg.clamp(-1.0e6, 1.0e6)).to_radians()
+            } else {
+                0.0
+            }
+        };
+        let (tilt, turn, roll) = (rad(self.tilt_deg), rad(self.turn_deg), rad(self.roll_deg));
+        axes.map(|[x, y, z]| {
+            // The inverse of the item's rotation: undo the tilt, then the turn, then
+            // the roll.
+            let (s, c) = (-tilt).sin_cos();
+            let (y, z) = (y * c - z * s, y * s + z * c);
+            let (s, c) = (-turn).sin_cos();
+            let (x, z) = (x * c + z * s, -x * s + z * c);
+            let (s, c) = (-roll).sin_cos();
+            let (x, y) = (x * c - y * s, x * s + y * c);
+            [x as f32, y as f32, z as f32]
+        })
+    }
 }
 
 /// One light's shadow map (ADR-0151 decision 3): the scene's casters' view depth drawn
@@ -1813,12 +1850,7 @@ fn environment_values(
     };
     let [sky, horizon, ground] =
         [environment.sky, environment.horizon, environment.ground].map(linear);
-    let turn = if environment.turn_deg.is_finite() {
-        environment.turn_deg.to_radians()
-    } else {
-        0.0
-    };
-    let [right, down, forward] = view.axes().map(|axis| axis.map(|c| c as f32));
+    let [right, down, forward] = environment.sky_axes(view.axes());
     [
         sky[0],
         sky[1],
@@ -1827,7 +1859,7 @@ fn environment_values(
         horizon[0],
         horizon[1],
         horizon[2],
-        turn,
+        0.0,
         ground[0],
         ground[1],
         ground[2],

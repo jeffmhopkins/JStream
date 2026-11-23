@@ -7255,7 +7255,8 @@ fn scene_lights(
 }
 
 /// The sky of scene `id` at `at` (ADR-0151 decision 9): its first environment light, in
-/// stacking order, at its intensity times its item's opacity, spun by its item's turn,
+/// stacking order, at its intensity times its item's opacity, oriented by its item's
+/// turn, tilt and rotation,
 /// with its picture when that source's frame was uploaded this frame. Also how many
 /// environment lights the scene places, so a caller can log the ones that don't count.
 fn scene_environment<'c>(
@@ -7329,9 +7330,14 @@ fn environment_at<'c>(
     let (placement, opacity) =
         groups::place_placement(&placed.groups, (placement, opacity), shot, at, live)
             .unwrap_or((placement, 0.0));
-    let turn_deg = match placement {
-        Placement::Geometry(geometry) => geometry.turn_deg.get(),
-        _ => 0.0,
+    // Its item's turn, tilt and rotation orient the sky (ADR-0167, ADR-0182).
+    let [turn_deg, tilt_deg, roll_deg] = match placement {
+        Placement::Geometry(geometry) => [
+            geometry.turn_deg.get(),
+            geometry.tilt_deg.get(),
+            geometry.rotation_deg.get(),
+        ],
+        _ => [0.0; 3],
     };
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
     let environment = jstream_render::Environment {
@@ -7345,6 +7351,8 @@ fn environment_at<'c>(
             |m| shot.tint(&placed.item, m),
         ),
         turn_deg,
+        tilt_deg,
+        roll_deg,
         image: sky
             .image
             .as_ref()

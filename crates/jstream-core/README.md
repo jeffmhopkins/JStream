@@ -2133,7 +2133,8 @@ position and is left out. In a 2D scene a `scene`-lit model is studio-lit
 An environment light ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 9) isn't one of those lights: `scene_environment` takes the scene's first one,
 in stacking order, as the model's sky (`ModelDraw::environment`), at its intensity
-times its item's opacity and spun by its item's turn, and a second one is logged once
+times its item's opacity and oriented by its item's turn, tilt and rotation
+([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), and a second one is logged once
 (`Chains::environments_warned`). Planning puts the frame of the source its `image`
 names in the shot when it places the light (`look_sky`), so it is uploaded though no
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
