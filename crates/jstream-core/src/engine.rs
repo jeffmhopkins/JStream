@@ -1544,6 +1544,7 @@ impl Engine {
         spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
+        self.jtunnel_turned();
         if let Some(midi) = midi
             && !self.shared.tempo.swap(true, Ordering::Relaxed)
             && !spawn_tempo(Arc::downgrade(&self.shared), midi)
@@ -1552,6 +1553,30 @@ impl Engine {
             self.shared.tempo.store(false, Ordering::Relaxed);
         }
         Ok(local)
+    }
+
+    /// Turns receiving from JTunnel senders off: the receiver is let go, so its socket
+    /// closes and its thread stops once no `network_audio` source still holds it, and
+    /// `jtunnel.senders` reports it off. Succeeds when it is already off. With
+    /// [`start_jtunnel`](Self::start_jtunnel), a host applies a changed setting at once,
+    /// with no restart.
+    pub fn stop_jtunnel(&self) {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        if wanted.jtunnel_receiver().is_none() {
+            return;
+        }
+        wanted.set_jtunnel(None);
+        self.jtunnel_turned();
+    }
+
+    /// Tells clients `jtunnel.senders` changed because receiving turned on, off or
+    /// started again, so a settings page reads it again.
+    fn jtunnel_turned(&self) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state)
+            .subscribers
+            .emit(&Event::JtunnelSendersChanged {}, &mut wake);
+        wake_all(wake);
     }
 
     /// What the JTunnel receiver has dropped and played, while it is on.

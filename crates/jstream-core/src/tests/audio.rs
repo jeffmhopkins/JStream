@@ -1701,6 +1701,76 @@ fn jtunnel_senders_lists_the_senders_that_answer_and_says_when_they_change() {
         .any(|e| matches!(e, Event::JtunnelSendersChanged {}))));
 }
 
+/// A host applies a changed JTunnel setting live: starting again with another sender
+/// accepted replaces the receiver, which subscribes to the new sender at once;
+/// `stop_jtunnel` turns receiving off; and it starts again after that, all without a
+/// new engine.
+#[test]
+fn a_jtunnel_setting_applies_live_with_no_restart() {
+    use jstream_protocol::{Query, QueryResult};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let on = || match super::query(&control, Query::JtunnelSenders) {
+        Ok(QueryResult::JtunnelSenders { on, .. }) => Some(on),
+        _ => None,
+    };
+    let setup = |senders: &[(&str, &std::net::UdpSocket)]| {
+        let mut setup = crate::JtunnelSetup::new(
+            senders
+                .iter()
+                .map(|(name, socket)| {
+                    crate::AcceptedSender::new(name, socket.local_addr().expect("an address"))
+                        .expect("accepted")
+                })
+                .collect(),
+        )
+        .expect("a setup");
+        setup.bind = "127.0.0.1:0".parse().expect("an address");
+        setup.discover = None;
+        setup
+    };
+    let first = jtunnel_sender();
+    let second = jtunnel_sender();
+    let mut buf = [0; 64];
+    assert_eq!(on(), Some(false), "off by default");
+    let before = engine
+        .start_jtunnel(&setup(&[("Bitwig", &first)]))
+        .expect("a receiver");
+    let (_, from) = first.recv_from(&mut buf).expect("a subscribe");
+    assert_eq!(from, before);
+    assert_eq!(on(), Some(true));
+    // A sender accepted while receiving: the new receiver subscribes to it now.
+    let after = engine
+        .start_jtunnel(&setup(&[("Bitwig", &first), ("Keys", &second)]))
+        .expect("a second receiver");
+    let (_, from) = second
+        .recv_from(&mut buf)
+        .expect("a subscribe to the new sender");
+    assert_eq!(from, after);
+    assert_eq!(on(), Some(true));
+    // Turned off: `jtunnel.senders` says so, and nothing is received.
+    engine.stop_jtunnel();
+    assert_eq!(on(), Some(false));
+    assert!(engine.jtunnel_stats().is_none());
+    engine.stop_jtunnel();
+    assert_eq!(on(), Some(false), "stopping twice is fine");
+    // And on again.
+    let again = engine
+        .start_jtunnel(&setup(&[("Keys", &second)]))
+        .expect("a third receiver");
+    loop {
+        let (_, from) = second
+            .recv_from(&mut buf)
+            .expect("a subscribe once on again");
+        if from == again {
+            break;
+        }
+    }
+    assert_eq!(on(), Some(true));
+}
+
 /// ADR-0171 decisions 1 and 2: an accepted sender's state ("Use this sender's state" is
 /// on by default) is what `data.list` and `data.get` read.
 #[test]

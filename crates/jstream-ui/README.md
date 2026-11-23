@@ -1187,8 +1187,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   state" checkbox, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decision 1, off for a new sender, and Remove) and an add row. Each change saves the whole setting through `setJtunnel`, the app's own command,
   never a protocol call; a refused change is undone and the app's reason shown (the
-  page itself only asks for a name, an address and a name no other sender has), and
-  while it differs from the setting the app started with it says to restart JStream.
+  page itself only asks for a name, an address and a name no other sender has). The
+  app applies a saved change at once, so nothing says to restart JStream.
   Below them, while the engine's receiver runs, "Senders on this network" lists what
   `jtunnel.senders` answers, read when the page opens and again on each
   `jtunnel.senders_changed`, each sender's name (its own text, shown as text) and

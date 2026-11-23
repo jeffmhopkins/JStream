@@ -58,8 +58,9 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`;
   `move_collection_file` (a host's default project moving, ADR-0163); `set_process_cpu`
-  and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel` and
-  `jtunnel_stats` (the JTunnel receiver, off until a host starts it; see *Contents:
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel`,
+  `stop_jtunnel` and `jtunnel_stats` (the JTunnel receiver, off until a host starts
+  it, and started again or stopped whenever the host's setting changes; see *Contents:
   live sources*); `live_data` (the JTunnel senders' state, ADR-0171); `set_thread_cpu`
   (`profile.get`'s threads, below); `set_thread_priority` (the OS scheduling class the
   program stage's render and mixer threads take as they start, on Windows their MMCSS
@@ -238,7 +239,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   receiver is off, the sender isn't accepted or nothing has arrived from it.
 - **JTunnel receiver** (`jtunnel/`, [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md),
   [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): off unless the host
-  calls `Engine::start_jtunnel` with a `JtunnelSetup`, the senders this machine accepts
+  calls `Engine::start_jtunnel` with a `JtunnelSetup` (again to replace the receiver
+  with another setup, and `Engine::stop_jtunnel` to turn it off, each emitting
+  `jtunnel.senders_changed`, so a host applies a changed setting with no restart), the
+  senders this machine accepts
   (`AcceptedSender`: a tunnel name of at most 31 bytes, with no white space at either
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
   taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
@@ -810,7 +814,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   loopback JTunnel sender once its first frame arrives, one naming a sender not accepted
   and one with the receiver off unavailable with their reasons, `jtunnel.senders` off
   by default and then listing a sender that answered a fake mDNS responder, with
-  `jtunnel.senders_changed`, a sender's state read with `data.list` and `data.get`
+  `jtunnel.senders_changed`, a receiver started again with another sender accepted
+  (which subscribes to it at once), stopped and started again
+  (`a_jtunnel_setting_applies_live_with_no_restart`), a sender's state read with
+  `data.list` and `data.get`
   (ADR-0171), a CLAP filter on the master chain run on its
   own fake host by the program stage's thread, put on the host's block, and its host
   stopped when the filter is removed (`a_master_clap_filter_runs_on_a_host`), a media file's sound reaching
@@ -3892,7 +3899,8 @@ receiver's thread takes no engine lock, getting opens and closes over a channel 
 takes only its own senders list's leaf mutex, which `jtunnel.senders` also takes alone,
 and reports a change to the list over a one-slot channel that it never waits on; the
 `jstream-jtunnel-events` thread takes the collection lock to emit
-`jtunnel.senders_changed`); its senders'
+`jtunnel.senders_changed`, and `start_jtunnel` and `stop_jtunnel` take it alone, after
+setting the slot, to emit the same); its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
 lock held. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
 receiver's thread takes it alone to put a state message and set the watches on its key,

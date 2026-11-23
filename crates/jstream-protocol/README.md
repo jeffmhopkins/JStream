@@ -2410,7 +2410,8 @@ After `welcome`, the server pushes every event to every client.
   `kind.list` again, and one that misses it sees the change on its next read.
 - `jtunnel.senders_changed {}` (0.114, ADR-0123 §3) says the senders `jtunnel.senders`
   lists changed: one answered for the first time, said goodbye, or went unheard for
-  35 s. A sender answering again sends nothing. Runtime state, so no `rev`: a client
+  35 s, or the host turned receiving on, off or started it again with other senders.
+  A sender answering again sends nothing. Runtime state, so no `rev`: a client
   that shows them reads `jtunnel.senders` again.
 
 <a id="youtube"></a>
