@@ -314,7 +314,9 @@ To arrive somewhere after each warp, put flat pictures (a planet, a nebula; tran
 around them) as items of a scene of their own and name it in the light's `sky_pictures`: \
 the backdrop shows one, pinned in the sky near straight ahead, picks another at random as \
 each warp drops out, and lights the scene from it in its colour (`sky_picture_deg`, \
-default 30, sets its width; `sky_picture_light`, default 1, how much it lights). \
+default 30, is the width of a picture whose item spans the canvas, and an item half as \
+wide shows its picture half as wide, so size each item to the sky it should span; \
+`sky_picture_light`, default 1, how much it lights). \
 A flat photo stretched as a panorama smears toward \
 the top and bottom, so prefer a real panorama or the procedural sky. \
 A group placed in a 3D scene is one flat card unless it shares the space: \

@@ -44,15 +44,19 @@ is unchanged without the new setting.
 | Setting | Meaning | Default |
 |---|---|---|
 | `sky_pictures` | A scene whose visible items are the pictures to arrive at | none |
-| `sky_picture_deg` | How wide the picture shown is across the sky, 1 to 120 degrees | 30 |
+| `sky_picture_deg` | How wide a picture whose item spans the canvas is across the sky, 1 to 120 degrees | 30 |
 | `sky_picture_light` | How much it lights the scene, 0 to 8, before the light's intensity | 1 |
 
 Settings saved before these read as their defaults: no pictures.
 
 **2. Which pictures.** Planning puts the frame of each visible item of the
-`sky_pictures` scene in the shot, bottom first, whatever the item's place in that
-scene, so it is uploaded though no item shows it. An item showing a light, a model, a
-probe, a nested scene or a capture is left out.
+`sky_pictures` scene in the shot, bottom first, so it is uploaded though no item shows
+it. An item showing a light, a model, a probe, a nested scene or a capture is left out.
+The item's place in that scene doesn't matter, but its width does: a picture is
+`sky_picture_deg` times its item's width over the canvas's wide (a legacy transform's
+horizontal scale), held to 1 to 120 degrees, so a scene sizes each picture, a nebula wide
+and a planet small, by sizing its item. An item spanning the canvas shows it at
+`sky_picture_deg`.
 
 **3. One at a time, picked at random as a warp ends.** The render thread's per-scene sky
 state keeps the picture shown and where it is pinned. It shows one from the first frame.

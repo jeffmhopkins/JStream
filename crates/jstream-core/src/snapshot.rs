@@ -736,8 +736,10 @@ pub(crate) struct Shot {
     lights: BTreeMap<SceneId, Vec<Lit>>,
     /// The arrival pictures of each environment light with some (ADR-0188), by its
     /// source: the sources its `sky_pictures` scene shows, bottom first, whose frames
-    /// are in [`Self::frames`].
-    pub(crate) sky_pictures: BTreeMap<SourceId, Vec<SourceId>>,
+    /// are in [`Self::frames`], each with how wide its item is against the canvas (its
+    /// box's width over the canvas's, or a legacy transform's horizontal scale), which
+    /// scales its `sky_picture_deg`.
+    pub(crate) sky_pictures: BTreeMap<SourceId, Vec<(SourceId, f32)>>,
     /// The reflection probe items each copied scene places (ADR-0170 decision 3), in
     /// stacking order, as [`Self::lights`] holds its lights.
     probes: BTreeMap<SceneId, Vec<Lit>>,
@@ -3607,7 +3609,7 @@ impl<'a> Planner<'a, '_> {
                         frame.light.is_none() && frame.model.is_none() && frame.probe.is_none()
                     })
                 {
-                    shown.push(picture);
+                    shown.push((picture, picture_scale(item.placement(), out.canvas)));
                 }
             }
             out.sky_pictures.insert(id.clone(), shown);
@@ -8082,13 +8084,12 @@ fn draw_sky_of(
     // Its arrival picture (ADR-0188), where its frame was uploaded this frame.
     let pinned = |arrival: Option<crate::chain::Arrival>| {
         let arrival = arrival?;
-        let image = cache.get(&GpuKey::Frame(
-            arrival_source(shot, placed, arrival)?.clone(),
-        ))?;
+        let (source, scale) = arrival_picture(shot, placed, arrival)?;
+        let image = cache.get(&GpuKey::Frame(source.clone()))?;
         Some(jstream_render::SkyPicture {
             image,
             direction: arrival.direction.map(|v| v as f32),
-            width_deg: sky.sky_picture_deg,
+            width_deg: (sky.sky_picture_deg * scale).clamp(1.0, 120.0),
             opacity: 1.0,
         })
     };
@@ -8273,7 +8274,7 @@ fn mean_rgb(rgba: &[u8]) -> Option<[f32; 3]> {
 
 /// The arrival pictures of the environment light `placed` (ADR-0188): the sources its
 /// `sky_pictures` scene shows, bottom first; none without one.
-fn sky_pictures<'s>(shot: &'s Shot, placed: &Lit) -> &'s [SourceId] {
+fn sky_pictures<'s>(shot: &'s Shot, placed: &Lit) -> &'s [(SourceId, f32)] {
     shot.sky_pictures
         .get(&placed.source)
         .map_or(&[], Vec::as_slice)
@@ -8285,11 +8286,41 @@ fn arrival_source<'s>(
     placed: &Lit,
     arrival: crate::chain::Arrival,
 ) -> Option<&'s SourceId> {
+    arrival_picture(shot, placed, arrival).map(|(source, _)| source)
+}
+
+/// The source of the environment light `placed`'s arrival picture `arrival`, with how
+/// much its item scales its width ([`Shot::sky_pictures`]).
+fn arrival_picture<'s>(
+    shot: &'s Shot,
+    placed: &Lit,
+    arrival: crate::chain::Arrival,
+) -> Option<(&'s SourceId, f32)> {
     let pictures = sky_pictures(shot, placed);
     let count = u32::try_from(pictures.len())
         .ok()
         .filter(|count| *count > 0)?;
-    pictures.get(usize::try_from(arrival.index % count).ok()?)
+    let (source, scale) = pictures.get(usize::try_from(arrival.index % count).ok()?)?;
+    Some((source, *scale))
+}
+
+/// How much an arrival picture's item scales its width (ADR-0188): its box's width over
+/// `canvas`'s, or a legacy transform's horizontal scale; 1 where that isn't a positive
+/// finite number.
+pub(crate) fn picture_scale(placement: &GraphPlacement, canvas: Canvas) -> f32 {
+    let scale = match placement {
+        GraphPlacement::Geometry(geometry) => {
+            geometry.size.width.get() / canvas.width.max(1) as f32
+        }
+        GraphPlacement::Legacy(transform) => transform.scale.x.get().abs(),
+        // A placement a later graph adds: the setting as it is.
+        _ => 1.0,
+    };
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
 }
 
 /// How the warp of an environment light's backdrop is aimed (ADR-0187), oriented as

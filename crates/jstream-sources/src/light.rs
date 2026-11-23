@@ -152,7 +152,8 @@ pub struct ShownEnvironment {
     /// The scene whose items are the pictures the backdrop arrives at, one at a time,
     /// pinned in its sky (ADR-0188).
     pub sky_pictures: Option<SceneId>,
-    /// How wide an arrival picture is across the sky, in degrees, 1 to 120.
+    /// How wide an arrival picture whose item spans the canvas is across the sky, in
+    /// degrees, 1 to 120; a narrower item's is narrower in proportion.
     pub sky_picture_deg: f32,
     /// How much an arrival picture lights the scene, 0 to 8, in its average colour.
     pub sky_picture_light: f32,
@@ -436,7 +437,9 @@ impl LightKind {
                     "Arrival picture size",
                     number(1.0, MAX_SKY_PICTURE_DEG, 1.0, Some("deg")),
                     json!(30.0),
-                    "How wide an arrival picture is across the sky.",
+                    "How wide an arrival picture whose item spans the canvas is across \
+                     the sky; size an item at half the canvas's width to show its picture \
+                     half as wide.",
                 )),
                 sky(p(
                     "sky_picture_light",
