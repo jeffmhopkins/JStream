@@ -111,7 +111,7 @@ Contents ([Design](#design) explains the choices):
   sender's state" (its JSON tested natively), and `desktop_ptz()`
   and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`,
   and `desktop_ptz_cameras()` and `set_ptz_cameras`, which read and save its "Control
-  PTZ cameras" as a `PtzCameraSetting` of `PtzCameraEntry`s (ADR-0208).
+  PTZ cameras" as a `PtzCameraSetting` of `PtzCameraEntry`s (ADR-0209).
   `same_engine` says
   whether the open session is that app's own engine, and `own_engine` asks it of the
   session's `ConnectedEngine` (for Browse… and the canvas's full-resolution preview).
@@ -321,13 +321,13 @@ Contents ([Design](#design) explains the choices):
   (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
   check, and `accepts`, whether a heard sender is on the list, tested natively. The
   store's `jtunnel_changed` counts `jtunnel.senders_changed`.
-- **PTZ cameras** (`ptz_cameras.rs`, [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)
+- **PTZ cameras** (`ptz_cameras.rs`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)
   decision 1): `PtzCameraSettingView`, the desktop app's "Control PTZ cameras" switch and
   camera list on the Devices page, with Edit filling the form for Save camera, saved
   through `host::set_ptz_cameras` and applied by the app at once; `current`, the setting
   last saved in this window or else the app's at start; and `with_camera`, the form's
   check, tested natively.
-- **PTZ panel** (`panels/ptz.rs`, ADR-0146, ADR-0208): `Ptz`, the "PTZ cameras" dock panel
+- **PTZ panel** (`panels/ptz.rs`, ADR-0146, ADR-0209): `Ptz`, the "PTZ cameras" dock panel
   (`PanelId::Ptz`, on the right from the View menu). It reads `ptz.list` every 500 ms while
   shown and controls the picked camera: a pad of arrows that drive while held
   (`ptz.drive`, stopped on release, on leaving and on cleanup), Home, Wide and Tele, focus
@@ -1332,7 +1332,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   only Accept in that prompt adds it, through the same save. With the receiver off it
   says senders show while receiving is on.
   Below it, "Control PTZ cameras" (`ptz_cameras.rs`,
-  [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md) decision 1), shown
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1), shown
   only when the global has `ptzCameras` and `setPtzCameras`: the switch, the cameras
   (name, address and port, transport and VISCA address, each with Edit and Remove) and
   a form that adds one or, after Edit, saves it. Each change saves the whole setting

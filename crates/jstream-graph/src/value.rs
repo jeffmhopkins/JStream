@@ -3,7 +3,7 @@
 //! ([`ValueRange`]), and the setter edit that gives it a value ([`value_edit`]).
 //!
 //! A value binding names a source setting, a filter setting on any chain, a fader or a
-//! send, or (ADR-0208) one axis of a PTZ camera's position, which the engine turns into
+//! send, or (ADR-0209) one axis of a PTZ camera's position, which the engine turns into
 //! aims rather than edits ([`value_edit`] gives none). `binding.set_value` checks the target exists and takes a number: a setting its
 //! kind marks `live` of type `int`, `float` or `bool`, an audio source's fader (not a
 //! `scene` source's), a bus's, or a send that exists. Unlike an action binding, a value
@@ -153,7 +153,7 @@ fn set(
         ));
     }
     let range = range(state, kinds, &binding.target, at)?;
-    // A PTZ axis (ADR-0208) is no setting of the collection: the engine aims the head, so
+    // A PTZ axis (ADR-0209) is no setting of the collection: the engine aims the head, so
     // there is no setter to probe. Its camera belongs to the machine and isn't looked up.
     if matches!(binding.target, ValueTarget::PtzAxis { .. }) {
         let old = state.value_bindings.insert(id.clone(), binding.clone());
@@ -285,7 +285,7 @@ fn range(
                 .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
             return Ok(fader);
         }
-        // The head's own counts (ADR-0146 §5, ADR-0208): whole numbers over the range
+        // The head's own counts (ADR-0146 §5, ADR-0209): whole numbers over the range
         // the protocol carries.
         ValueTarget::PtzAxis { axis, .. } => {
             let (min, max) = axis.range();

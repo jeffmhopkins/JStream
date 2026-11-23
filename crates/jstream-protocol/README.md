@@ -384,10 +384,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.180 because a value binding can drive one axis of a PTZ
+`PROTOCOL_VERSION` is 0.183 because a value binding can drive one axis of a PTZ
 camera's position: `ValueTarget`'s `ptz_axis {camera, axis}` with `PtzAxis` (`pan`,
 `tilt`, `zoom` or `focus`), in the head's own counts, which the engine sends as aims
-([ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)); 0.172 because a scene whose `reflections` is on also reflects
+([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -1542,8 +1542,8 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
   modifier's own check refuses, as `binding.<field>`.
 - **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
   `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
-  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}` and (0.180,
-  [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)) `ptz_axis {camera,
+  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}` and (0.183,
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) `ptz_axis {camera,
   axis}`, one axis (`PtzAxis`: `pan`, `tilt`, `zoom`, `focus`) of a PTZ camera's
   position in the head's own counts, whole numbers within `PtzAxis::range`. A
   `ptz_axis` names the camera by name, as a shot does; `ValueBinding::problem` refuses a
@@ -3008,8 +3008,8 @@ after 1.0:
   `ItemEasing` values `ease_in`, `hold` and `cubic_bezier` (ADR-0129) on the same
   terms: a client older than 0.99 can't parse `state.get` or an item listing once a
   preset, an item or a keyframe's timing uses one.
-  0.180 adds the `ValueTarget` value `ptz_axis` (ADR-0208) on the same terms: a client
-  older than 0.180 can't parse `state.get` once a value binding aims a PTZ head's axis.
+  0.183 adds the `ValueTarget` value `ptz_axis` (ADR-0209) on the same terms: a client
+  older than 0.183 can't parse `state.get` once a value binding aims a PTZ head's axis.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

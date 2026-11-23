@@ -1,4 +1,4 @@
-// The PTZ panel (PZ-02 to PZ-05, ADR-0208): a camera the mock daemon lists, its pose aimed
+// The PTZ panel (PZ-02 to PZ-05, ADR-0209): a camera the mock daemon lists, its pose aimed
 // from the panel's fields, its presets named and saved, and the selected scene's shot. The
 // mock has no head, so an aim moves the pose `ptz.list` reports and nothing else.
 import { test, expect, connect } from '../fixtures.js';

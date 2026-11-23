@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0208"
+id = "ADR-0209"
 title = "PTZ cameras in the desktop app: the camera list, the PTZ panel, and value bindings that aim a head"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0208: PTZ cameras in the desktop app: the camera list, the PTZ panel, and value bindings that aim a head
+# ADR-0209: PTZ cameras in the desktop app: the camera list, the PTZ panel, and value bindings that aim a head
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -59,7 +59,7 @@ changes the product's scope, or makes a compatibility promise, so it is agent ti
    from the head's position too ("set from current", ADR-0146 §6). Preset names are a UI
    setting kept per machine (`ptz.preset_names`), never in the collection, since a
    preset's content lives in the head.
-3. **A value binding can aim one axis of a head (protocol 0.180).** `ValueTarget` gains
+3. **A value binding can aim one axis of a head (protocol 0.183).** `ValueTarget` gains
    `ptz_axis {camera, axis}`, `axis` one of `pan`, `tilt`, `zoom` and `focus`, in the
    head's own counts (ADR-0146 §5). So a MIDI control, a live-data field or a channel can
    drive a camera's position through the same binding system, mapping range, smoothing,

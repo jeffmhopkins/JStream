@@ -184,7 +184,7 @@ pub enum PanelId {
     Channels,
     /// The open sequence: its lanes and triggers (ADR-0184).
     Sequence,
-    /// Live control of the machine's PTZ cameras (ADR-0146, ADR-0208).
+    /// Live control of the machine's PTZ cameras (ADR-0146, ADR-0209).
     Ptz,
 }
 

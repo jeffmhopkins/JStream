@@ -1,4 +1,4 @@
-//! The PTZ panel (ADR-0146, [ADR-0208](../../../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)):
+//! The PTZ panel (ADR-0146, [ADR-0209](../../../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)):
 //! live control of the machine's PTZ camera heads, one at a time.
 //!
 //! - **The camera** is picked from `ptz.list`, which the panel reads about twice a second

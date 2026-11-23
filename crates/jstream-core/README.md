@@ -254,7 +254,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   the name of what reads its `params` key's `values.<n>` (an enabled `data` modifier on an
   item, named by its source and property, or on a scene's camera, by the scene and
   property, a value binding, by its target (a PTZ axis as the camera and axis, `Wide
-  Zoom`, ADR-0208), or a channel's input
+  Zoom`, ADR-0209), or a channel's input
   ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), by the channel's name or
   else its ID), a reader naming the sender winning a
   slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine
@@ -478,7 +478,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   the new time and goes on driving; a missing target drives
   nothing. A binding's `amount` scales its value toward `from` by a channel's level. A
   binding on a PTZ head's axis (`ptz_axis`,
-  [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)) makes no edit: the
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) makes no edit: the
   tick rounds its value to a whole count (`PtzAim`) and the engine hands those to the
   heads (`Ptz::follow_axes`, [PTZ cameras](#contents-media)).
 - **Channels** (`channels.rs`,
@@ -620,7 +620,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   preview scene changes (the program's paced to the switch's duration by
   `matched_speed`; the preview's only for cameras the program's shots don't name), and
   the value bindings on the heads' axes after each value tick (`follow_axes`,
-  ADR-0208): per camera an aim at the fastest speed, sent only when the bound pose
+  ADR-0209): per camera an aim at the fastest speed, sent only when the bound pose
   changed, a lone pan or tilt taking the other from the pose the bindings last aimed,
   else the head's last answer (none until it answers), and a camera not listed
   skipped.
@@ -4296,7 +4296,7 @@ render thread only tries it. The PTZ heads work
 the same way as the camera controls (ADR-0146): actions and shots go to each `jstream-ptz` thread over a channel,
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
 alone and `ptz.list`, `profile.get` and the value tick's PTZ aims (`follow_axes`, for a
-head's answered pose, ADR-0208) take under the collection lock; the thread holds no engine lock
+head's answered pose, ADR-0209) take under the collection lock; the thread holds no engine lock
 while it sends or waits for a reply. A PTZ controller endpoint's thread is a client:
 each message it translates is a call on its session, which takes the collection lock
 as any call does, and it holds no lock while it waits on its socket. The engine's list

@@ -274,7 +274,7 @@ setting can set the colour from a `#rrggbb` field or a `palette` (`color_from`),
 [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md); and for a number with
 no motion list, a filter's or a source's setting, a fader or a send, a value binding
 (`binding.set_value`), which replaces the value once its control moves, or aims one axis
-of a PTZ head (`ptz_axis`, [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)), with `width` and
+of a PTZ head (`ptz_axis`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)), with `width` and
 `height` modifiers to stretch an item,
 [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), a channel
 (`channel.set`) that gathers controls into one switched, faded value anything can follow

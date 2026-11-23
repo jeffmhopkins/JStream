@@ -285,7 +285,7 @@ pub(crate) struct Ptz {
     /// The client whose drive last set each camera moving, by camera name: its session
     /// ending stops the camera (ADR-0146 §3).
     drivers: Vec<(String, ClientId)>,
-    /// The pose the value bindings last aimed each camera at, by camera name (ADR-0208).
+    /// The pose the value bindings last aimed each camera at, by camera name (ADR-0209).
     bound: Vec<(String, PtzPose)>,
 }
 
@@ -476,7 +476,7 @@ impl Ptz {
         }
     }
 
-    /// Aims the cameras the value bindings drive (ADR-0208) at the counts `aims` gives,
+    /// Aims the cameras the value bindings drive (ADR-0209) at the counts `aims` gives,
     /// at the fastest speed. A camera this machine doesn't list is skipped. A camera is
     /// sent an aim only when its bound pose changed, so a control at rest sends nothing,
     /// and the head's queue keeps only the latest unsent aim. Pan and tilt move together

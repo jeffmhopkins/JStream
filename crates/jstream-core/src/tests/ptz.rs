@@ -314,7 +314,7 @@ fn preview_never_moves_a_camera_the_program_frames() {
     assert!(close.wait(|h| recalled(h) == [3, 3]), "{:?}", close.state());
 }
 
-/// ADR-0208: a value binding on a PTZ axis aims the head as its control moves: zoom on
+/// ADR-0209: a value binding on a PTZ axis aims the head as its control moves: zoom on
 /// its own, and pan with the tilt the head last answered. Nothing moves until the control
 /// does, a camera this machine doesn't list is skipped, and the collection keeps no pose.
 #[test]

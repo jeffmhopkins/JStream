@@ -258,7 +258,7 @@ pub enum ValueTarget {
         /// The bus it sends into.
         bus_id: BusId,
     },
-    /// One axis of a PTZ camera's position (ADR-0208, since 0.180), in the head's own
+    /// One axis of a PTZ camera's position (ADR-0209, since 0.183), in the head's own
     /// counts (ADR-0146 §5): the engine aims the head there as the value moves. The
     /// camera is named as `ptz.*` actions and shots name it, so a collection carries
     /// the mapping to a machine that lists a camera by that name; on a machine that
@@ -271,7 +271,7 @@ pub enum ValueTarget {
     },
 }
 
-/// An axis of a PTZ head's position that a value binding drives (ADR-0208, since 0.180).
+/// An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.183).
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -526,7 +526,7 @@ mod tests {
         assert_eq!(later.action(), None);
     }
 
-    /// ADR-0208: a PTZ axis target names a camera and an axis, on the wire as
+    /// ADR-0209: a PTZ axis target names a camera and an axis, on the wire as
     /// `ptz_axis`, and its camera name is checked as `ptz.*` checks one.
     #[test]
     fn a_value_binding_can_aim_a_ptz_axis() {

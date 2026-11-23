@@ -486,7 +486,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Channels** (`channels.spec.js`, [ADR-0183](../../../../docs/adr/0183-virtual-control-channels.md)):
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
-- **PTZ cameras** (`ptz.spec.js`, [ADR-0208](../../../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)):
+- **PTZ cameras** (`ptz.spec.js`, [ADR-0209](../../../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)):
   with no camera listed, the panel's empty state naming `--ptz-camera`; with two
   (`--ptz-camera`), the picker, the head answering, a typed zoom aiming it, the control
   button on each axis, a preset named and saved from its menu and Save, and the selected

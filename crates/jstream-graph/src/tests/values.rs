@@ -261,7 +261,7 @@ fn the_setter_keeps_the_value_within_the_range() {
     assert_eq!(gain_db.map(Finite32::get), Some(-6.0));
 }
 
-/// ADR-0208: a PTZ axis takes whole head counts over its protocol range, names a
+/// ADR-0209: a PTZ axis takes whole head counts over its protocol range, names a
 /// camera the collection can't look up (it belongs to the machine), and gives no setter
 /// edit, since the engine aims the head instead.
 #[test]

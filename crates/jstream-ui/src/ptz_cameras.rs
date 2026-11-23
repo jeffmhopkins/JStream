@@ -1,6 +1,6 @@
 //! "Control PTZ cameras" ([ADR-0123](../../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
 //! §4, [ADR-0146](../../../docs/adr/0146-ptz-cameras-shots-and-actions.md) §1,
-//! [ADR-0208](../../../docs/adr/0208-value-bindings-aim-ptz-cameras.md) decision 1), on the
+//! [ADR-0209](../../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1), on the
 //! Settings dialog's Devices page (`settings.rs`), in the desktop app only. The PTZ panel's
 //! Add camera… opens it (`panels/ptz.rs`).
 //!

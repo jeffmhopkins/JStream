@@ -675,13 +675,13 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:a29b94e23fe7fc13", by = "agent:claude", note = "Design guidance summary now names a value binding on a PTZ head's axis; tools.snap only adds the PtzAxis schema." }
+stamp = { hash = "b3:1a5176da6a545fd4", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: only design.rs's sky paragraph grew (sky_pictures); the MCP section holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/build.rs"]
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:55f15b5ba9d5d841", by = "agent:claude", note = "Design guidance summary now names a value binding on a PTZ head's axis; tools.snap only adds the PtzAxis schema." }
+stamp = { hash = "b3:0a658829bc617814", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:bb66151baebeaee0", by = "agent:claude", note = "Design guidance summary now names a value binding on a PTZ head's axis; tools.snap only adds the PtzAxis schema." }
@@ -834,10 +834,10 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:469e300ae477e5ef", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:5b3f6668550eb3dd", by = "agent:claude", note = "binding.set_value paragraph now says 0.180 lets a value binding aim one PTZ axis (ADR-0208), aimed rather than stored." }
+stamp = { hash = "b3:4e66b976c51323b1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#protocol"."dep:crates/jstream-protocol/README.md#compatibility"]
-stamp = { hash = "b3:00b58349a27c729e", by = "agent:claude", note = "binding.set_value paragraph now says 0.180 lets a value binding aim one PTZ axis (ADR-0208), aimed rather than stored." }
+stamp = { hash = "b3:367b9ae8ed5af735", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#protocol"."dep:crates/jstream-protocol/README.md#design"]
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Covers narrowed to the three crates' code (src/**) and the protocol's schema snapshots: their READMEs and Cargo.toml dropped, since each README section is checked by its own covers and the manifests by the crate map and crate READMEs. In place of hashing the protocol README whole, depends_on names the sections this summary says the design lives in: protocol #design (envelope, versioning), #compatibility and #errors. Re-read the summary; unchanged and holds" }
@@ -885,10 +885,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:47507676bbfb6cc7", by = "agent:claude", note = "binding.set_value paragraph now says 0.180 lets a value binding aim one PTZ axis (ADR-0208), aimed rather than stored." }
+stamp = { hash = "b3:5c1e6541895c6623", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e3f9eaebc91090e4", by = "agent:claude", note = "binding.set_value paragraph now says 0.180 lets a value binding aim one PTZ axis (ADR-0208), aimed rather than stored." }
+stamp = { hash = "b3:14725f99440febed", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -900,7 +900,7 @@ stamp = { hash = "b3:138243dd2b7d1475", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: edit list adds bus.set_monitor (a bus's monitor, protocol 0.42); re-read the rest against the mock's set_monitor and the snapshots." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:894944fc7d2b4b32", by = "agent:claude", note = "binding.set_value paragraph now says 0.180 lets a value binding aim one PTZ axis (ADR-0208), aimed rather than stored." }
+stamp = { hash = "b3:c511b7b1399a196f", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/camera_aim.rs"]
 stamp = { hash = "b3:308cc15f74393559", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the live-aim bullet beside PTZ cameras; the rest of the protocol section holds; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -939,7 +939,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Edited: since 0.99 item.set_timing and the three easings; mock and fixtures match" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:bddbb99d0838f7d7", by = "agent:claude", note = "binding.set_value paragraph now says 0.180 lets a value binding aim one PTZ axis (ADR-0208), aimed rather than stored." }
+stamp = { hash = "b3:aa139632728660f1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Queries bullet adds video.frames and the frame sheet scene.switch_and_watch answers with; the protocol inputs add frames.rs (FrameStrip, FrameSheet, SheetFrame), both ops in command.rs, query.rs and envelope.rs, plugin scopes, fixtures and snapshots; control README notes the mock answers both with internal. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); video.frames now says protocol 0.82 beside main's shared values at 0.78 | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The protocol summary keeps #1080's frame-sheet clause (0.82) beside #1125's item.set_motion (0.81); snapshots, fixtures and frames.rs match. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. ARCH#protocol has #1041's Codec downloads bullet (0.69) beside the wave's 0.80 to 0.86 clauses; mock, snapshots and protocol sources match." }
@@ -1041,7 +1041,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Proto
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:claude", note = "binding.set_value paragraph now says 0.180 lets a value binding aim one PTZ axis (ADR-0208), aimed rather than stored." }
+stamp = { hash = "b3:c667cdd07cdabb82", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1755,7 +1755,7 @@ stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Ed
 stamp = { hash = "b3:8bb3038396e25ca8", by = "agent:claude", note = "Added the mock's PTZ cameras bullet (with_ptz_cameras, ptz.list, action outcomes, ptz_actions), checked against mock.rs." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b3f6668550eb3dd", by = "agent:claude", note = "Added the mock's PTZ cameras bullet (with_ptz_cameras, ptz.list, action outcomes, ptz_actions), checked against mock.rs." }
+stamp = { hash = "b3:4e66b976c51323b1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1878,7 +1878,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, history.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on 0013-command-model.md, RULES.md#R-API-004, README.md#batches, matching what it relies on" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:9b9e476e3b23917a", by = "agent:claude", note = "Re-read: ptz_axis bindings go through binding.set_value under the batch rules, and their aims ride the value tick, not a call; the PTZ actions' paths are unchanged. | kept from the merged side: Re-read: item.show and set_keyframe still continue a transition in flight from what is on screen; an ended one now counts as not in flight, as Program scene says" }
+stamp = { hash = "b3:164ea796f338759a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Re-read: item.show and set_keyframe still continue a transition in flight from what is on screen; an ended one now counts as not in flight, as Program scene says | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:3396a70c4ea3f458", by = "agent:lane-d", note = "collection.* dispatch through collection_call before the generic path; the call flow, saving after batches and audit described here still hold. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
@@ -1902,7 +1902,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:128b8747967ace26", by = "agent:release-alpha8", note = "added stop_jtunnel beside start_jtunnel and jtunnel_stats; checked engine.rs" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:9b9e476e3b23917a", by = "agent:claude", note = "engine.rs adds a follow_axes call after the value tick; the Engine handle's API list is unchanged (start_ptz already existed). | kept from the merged side: Re-read: engine.rs only changes how a switch and screen_now pick what is on screen (still_on_screen); the module list is unchanged" }
+stamp = { hash = "b3:164ea796f338759a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Re-read: engine.rs only changes how a switch and screen_now pick what is on screen (still_on_screen); the module list is unchanged | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -1920,7 +1920,7 @@ stamp = { hash = "b3:7340afc60977b334", by = "agent:lane-d-wave-sync", note = "m
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-media"."body"]
-stamp = { hash = "b3:96612c7016e57208", by = "agent:claude", note = "PTZ cameras paragraph now describes follow_axes: per-camera aims at the fastest speed, sent when the bound pose changes, pan or tilt filled from the last bound or answered pose, unlisted cameras skipped. | kept from the merged side: Added to the Profile bullet that the composite's gpu_ms includes the frame's way out (the NV12 conversion into the encode target and a readback's copy), which pipeline.rs now names the composite unit around; its CPU ms stay in the finish phase as before" }
+stamp = { hash = "b3:df3608ade872869a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Added to the Profile bullet that the composite's gpu_ms includes the frame's way out (the NV12 conversion into the encode target and a readback's copy), which pipeline.rs now names the composite unit around; its CPU ms stay in the finish phase as before | kept from the merged side: ADR-0197: added to the Profile entry that a timed frame's units add up to DrawMeter::take_gpu_frame, which the program's draw hands to resolution::Governor; re-read the pipeline entries against the governor's one call in the draw. | merge: wave 2: #1668 (bf641c5) times a frame's way out (the NV12 conversion and a readback's copy, each its own submit) inside the composite's gpu_ms; the media contents hold" }
 
 ["CRATE-jstream-core#contents-media"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:ff5e2c24579293a0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -1977,7 +1977,7 @@ stamp = { hash = "b3:d95f92fbaf2a6fa8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:698a780a35622e03", by = "agent:ptz-flake", note = "A UDP endpoint now polls a non-blocking socket every 5 ms instead of reading with a 50 ms timeout (Windows can lose a datagram on a timed-out receive); the PTZ controllers paragraph (binding, thread, session, drops, idle stop) still holds." }
 
 ["CRATE-jstream-core#contents-media"."file:crates/jstream-core/src/ptz/mod.rs"]
-stamp = { hash = "b3:02146449b405173c", by = "agent:claude", note = "PTZ cameras paragraph now describes follow_axes: per-camera aims at the fastest speed, sent when the bound pose changes, pan or tilt filled from the last bound or answered pose, unlisted cameras skipped." }
+stamp = { hash = "b3:6f6e361a8f022aaa", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-core#contents-media"."file:crates/jstream-core/src/quality.rs"]
 stamp = { hash = "b3:30e6474ead184318", by = "agent:claude", note = "Review B1/N1 on #1424: the probe no longer asks for a second keyframe (the subscription's own request starts it), and a readback made only for a GPU session's probe counts no drops (MixFrame::probe_only, take_unread). The probe paragraph now says the subscription comes first with no second request; the rest holds." }
@@ -2013,7 +2013,7 @@ stamp = { hash = "b3:4c313edf233da586", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:7555920d25b26a7d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-motion"."body"]
-stamp = { hash = "b3:97b8a1eea612111c", by = "agent:claude", note = "Value bindings paragraph now says a ptz_axis binding makes no edit and becomes a whole-count PtzAim handed to the heads." }
+stamp = { hash = "b3:c1b8e223bc4de18f", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/aim.rs"]
 stamp = { hash = "b3:250c6e6ada6ca966", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the Live aim bullet (aim.rs) and its covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -2025,7 +2025,7 @@ stamp = { hash = "b3:d1aca46da610447c", by = "agent:claude", note = "B1: a bindi
 stamp = { hash = "b3:6cd45e61e61a2c66", by = "agent:claude", note = "Re-read: the Data-driven motion bullet now describes painting bindings and Bindings::tint, and Driven source settings names set_color and set_emissive and effects, matching reactive.rs, sourced.rs and driven.rs." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:9b9e476e3b23917a", by = "agent:claude", note = "Value bindings paragraph now says a ptz_axis binding makes no edit and becomes a whole-count PtzAim handed to the heads. | kept from the merged side: Re-read: no motion, scene or timeline behaviour changed by the engine.rs switch-start fix" }
+stamp = { hash = "b3:164ea796f338759a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Re-read: no motion, scene or timeline behaviour changed by the engine.rs switch-start fix | kept from the merged side: B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/follow.rs"]
 stamp = { hash = "b3:67a9c13712b51b9d", by = "agent:channels", note = "Added channels.rs to covers and a Channels bullet (driver, cells, values thread, scene reset, note control, amount); value bindings bullet notes amount." }
@@ -2049,7 +2049,7 @@ stamp = { hash = "b3:2833b18aab066189", by = "agent:channels", note = "Added the
 stamp = { hash = "b3:04c978be23724359", by = "agent:issues-thread", note = "Transitions bullet edited: a 3D group's child track places each end through its groups each frame (Visual::groups, paired as Visual::motion in plan); motion.rs adds TrackMotion::offsets_on, which the bullet list's Motion entry doesn't go into; holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/value_bindings.rs"]
-stamp = { hash = "b3:0213fdd43245c996", by = "agent:claude", note = "Value bindings paragraph now says a ptz_axis binding makes no edit and becomes a whole-count PtzAim handed to the heads." }
+stamp = { hash = "b3:d4dccf17715f7424", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190." }
 
 ["CRATE-jstream-core#contents-plugins"."body"]
 stamp = { hash = "b3:6351a5fdb4ee9121", by = "agent:plugin-uninstall", note = "re-read: plugins/automation.rs gains uninstall within the WASM plugin module the section names; its CLAP and filter text is unchanged" }
@@ -2091,7 +2091,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:36a30329d79e7147", by = "agent:claude", note = "names.rs's target_label now names a PTZ axis as camera and axis; added that to the names packet bullet. The rest is untouched by this change." }
+stamp = { hash = "b3:d46b182a8ee09166", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: 3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:ff5e2c24579293a0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2214,7 +2214,7 @@ stamp = { hash = "b3:eacca7bbe63b2958", by = "agent:lane-d", note = "merge: Merg
 stamp = { hash = "b3:0848b06d8659b67d", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/ptz.rs"]
-stamp = { hash = "b3:90003dbf558bee0b", by = "agent:claude", note = "PTZ tests bullet names value_bindings_aim_ptz_axes (MIDI CCs on zoom and pan, the answered tilt kept)." }
+stamp = { hash = "b3:090f5829b041bcb6", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/rendering.rs"]
 stamp = { hash = "b3:cd17cec087f59b8f", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: tests/mcp.rs and tests/rendering.rs expect the default with the switch off; the test list holds." }
@@ -2277,13 +2277,13 @@ stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b3f6668550eb3dd", by = "agent:claude", note = "engine.rs adds one call to Ptz::follow_axes after the value tick; sessions and calls unchanged." }
+stamp = { hash = "b3:4e66b976c51323b1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-core#design"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:9b9e476e3b23917a", by = "agent:claude", note = "engine.rs adds one call to Ptz::follow_axes after the value tick; sessions and calls unchanged. | kept from the merged side: Re-read: engine and session design unchanged by the switch-start fix" }
+stamp = { hash = "b3:164ea796f338759a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Re-read: engine and session design unchanged by the switch-start fix | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
 stamp = { hash = "b3:44b5b114d27ed218", by = "agent:claude", note = "ADR-0197: lib.rs only gains the private resolution module; engine and sessions are untouched and the section still holds." }
@@ -2346,10 +2346,10 @@ stamp = { hash = "b3:f13bc220412c8d90", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:b7ef33611a15221a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to gesture.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#live-values, matching what it relies on" }
 
 ["CRATE-jstream-core#locking"."body"]
-stamp = { hash = "b3:24f95ea4e1fb74d9", by = "agent:claude", note = "follow_axes runs in the jstream-values tick under the collection lock, sends on each head's channel and reads a head's status leaf mutex for its answered pose; added that to the PTZ sentence." }
+stamp = { hash = "b3:64514df2b9d4eef7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:9b9e476e3b23917a", by = "agent:claude", note = "follow_axes runs in the jstream-values tick under the collection lock, sends on each head's channel and reads a head's status leaf mutex for its answered pose; added that to the PTZ sentence. | kept from the merged side: Re-read: no new lock; still_on_screen runs under the same collection lock on_screen did" }
+stamp = { hash = "b3:164ea796f338759a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Re-read: no new lock; still_on_screen runs under the same collection lock on_screen did | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2358,7 +2358,7 @@ stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:027e29bed3a16896", by = "agent:channels", note = "The values thread now also starts for channels; updated the warn sentence." }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:9b9e476e3b23917a", by = "agent:claude", note = "follow_axes logs nothing; the jstream-values thread paragraph still holds, as PTZ aims ride its tick. | kept from the merged side: Re-read: no logging changed" }
+stamp = { hash = "b3:164ea796f338759a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Re-read: no logging changed | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2412,7 +2412,7 @@ stamp = { hash = "b3:62d8d7d707f625e6", by = "agent:release-alpha11", note = "Ed
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
 
 ["CRATE-jstream-core#privacy"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:9b9e476e3b23917a", by = "agent:claude", note = "Re-read; the engine.rs change only hands bound poses to PTZ heads, nothing about microphones or privacy calls. | kept from the merged side: Re-read: nothing about privacy changed" }
+stamp = { hash = "b3:164ea796f338759a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Re-read: nothing about privacy changed | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#program-scene"."body"]
 stamp = { hash = "b3:6ce554deb0186f21", by = "agent:issues-thread", note = "Re-read against the fix: added that a switch, set_keyframe or item.show after a transition ended but not yet let go starts from the program scene (still_on_screen), and that a held whole-scene picture keeps its scene's camera; ADR-0029 §7 and ADR-0180 decision 2 still hold" }
@@ -2769,7 +2769,7 @@ stamp = { hash = "b3:fbab93da6f1f4bc6", by = "agent:ptz-builder", note = "#1181 
 stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "token.rs only moved its file logic to jstream_server::token_file with the same checks and messages; --token-file, reuse and output lines unchanged" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:1fb2cb50ae55eb4f", by = "agent:claude", note = "Added the PTZ cameras bullet (ptz_cameras.json, set_ptz_cameras through the ptz capability, applied at once with Engine::start_ptz) and the command in the list; build.rs and capabilities/ptz.json updated to match." }
+stamp = { hash = "b3:39a0c23894d6c093", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
@@ -2841,7 +2841,7 @@ stamp = { hash = "b3:5258307aeb3811d1", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:ee38a059888ee11b", by = "agent:ptz-builder", note = "#1496 review N1: ptz.rs's doc comment names the page's hook setPtz, which bootstrap.rs defines and this section names; nothing else changed" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/ptz_cameras.rs"]
-stamp = { hash = "b3:abc735802e076fdb", by = "agent:claude", note = "Added the PTZ cameras bullet (ptz_cameras.json, set_ptz_cameras through the ptz capability, applied at once with Engine::start_ptz) and the command in the list; build.rs and capabilities/ptz.json updated to match." }
+stamp = { hash = "b3:75271bf5a2695ec8", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/screenshots.rs"]
 stamp = { hash = "b3:010b0f3fda63fe9f", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
@@ -2865,7 +2865,7 @@ stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:846f91394e995b68", by = "agent:claude", note = "bundle-app.sh now copies LICENSE-MIT and LICENSE-APACHE into Contents/Resources before signing; the macOS app bullet says so; rest unchanged | merge: #1522 (ADR-0157) brought bundle-app.sh's --browser-helper/--cef options, which bundle the helper, CEF's framework and helper apps and sign them inside out. This branch's licence copy into Contents/Resources still runs before any signing, so the app signature covers it; the bundle bullet still holds alongside main's browser text. | kept from the merged side: bundle-app.sh in this PR: new --browser-helper and --cef options (required together, refused with --sign), the browser() step copying the helper to Contents/MacOS and the framework to Contents/Frameworks, five helper apps with LSUIElement plists, CEF-CREDITS.html and CEF-VERSION.txt, ad-hoc signing inside out, and a --deep --strict verify. Latest change (N3): the plist helper is a top-level plist_key taking the plist path, same keys written, bash -n and shellcheck clean. Re-read Design's bundling paragraph; it still describes the layout and signing exactly." }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:11bf31d24dd6679b", by = "agent:claude", note = "Bootstrap bullet now names setPtz and setPtzCameras; module bullet for ptz_cameras.rs and the window's command list include the camera list." }
+stamp = { hash = "b3:927852f4488d55b1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:4e90635d835b4a5c", by = "agent:claude", note = "The Browser sources bullet names Windows, macOS (helper in the bundle, ADR-0157) and 64-bit Linux (helper beside the app, ADR-0158), matching lib.rs's cfg for the browser module (windows, macos, or 64-bit linux, with cef), host.rs's with_browser cfg and its Linux branch, and browser.rs's module doc. | kept from the merged side: Purpose's Browser sources bullet now says Windows and macOS with cef, the macOS helper in the app bundle (ADR-0157); 'browser sources on macOS' left the Not here yet list. host.rs's macOS branch wires browser::backend and with_browser under cef, and browser.rs's docs match. The ARCH apps/* row change (helper executable on Linux and macOS) agrees. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -2913,7 +2913,7 @@ stamp = { hash = "b3:5258307aeb3811d1", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:ee38a059888ee11b", by = "agent:ptz-builder", note = "#1496 review N1: only ptz.rs's doc comment changed (setPtzControllers corrected to setPtz); the purpose holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/ptz_cameras.rs"]
-stamp = { hash = "b3:abc735802e076fdb", by = "agent:claude", note = "Bootstrap bullet now names setPtz and setPtzCameras; module bullet for ptz_cameras.rs and the window's command list include the camera list." }
+stamp = { hash = "b3:75271bf5a2695ec8", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/screenshots.rs"]
 stamp = { hash = "b3:010b0f3fda63fe9f", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
@@ -2934,7 +2934,7 @@ stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6caa3af75f382d1a", by = "agent:linux-desktop", note = "Re-read against the Linux window: contents now say the window runs on Windows and on Linux with webkitgtk (ADR-0141), the host is live on 64-bit Linux, pick.rs uses the FileChooser portal there, tests list tests/webkitgtk.rs, and 'not here yet' drops the Linux window and adds Linux packages" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "PTZ cameras bullet matches Settings › Devices and the apply-at-once save; the build and run steps are untouched by this change." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
 stamp = { hash = "b3:9fc99a614fdf4018", by = "agent:claude", note = "The On Linux bullet keeps #1521's v4l2loopback camera text and says browser sources need cef and the helper's browser folder, which dist-linux's .deb and AppImage have (ADR-0158). Cargo.toml: jstream-browser is an optional dep on Windows, macOS and Linux; jstream-sources is no longer a dep (host.rs names jstream_browser::BrowserBackend); the cef feature comment names all three. The macOS bundle bullet now also lists the licence files in Contents/Resources. | kept from the merged side: macOS target deps gain jstream-browser (optional, with cef) and jstream-sources, and the cef feature comment says Windows and macOS with the bundle laid out by bundle-app.sh. Usage's 'only Windows and macOS have the backend in the app' matches. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -3078,7 +3078,7 @@ stamp = { hash = "b3:96cd71b98ff1e82e", by = "agent:lane-d", note = "VideoSessio
 stamp = { hash = "b3:da598d986fcdf80f", by = "agent:lane-d", note = "VideoSession gains stats_handle (StatsHandle, a Weak reader); Purpose's API list says so | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: VideoInput::format and NV12 sessions converting RGBA8/BGRA8 on the encode thread fit the crate's purpose; unchanged" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:2c3b255423e1fbf1", by = "agent:claude", note = "Value bindings bullet now says a ptz_axis target is bound without lookup or setter probe, ranges over the axis's whole counts and has no value_edit, matching value.rs." }
+stamp = { hash = "b3:6165810de3a13328", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#batches"]
 stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "Added bindings to the state, the controller bindings bullet, delete.plan and state.get, the file's bindings, schema 8 and its migration, the rebuild order and the tests for controller bindings (ADR-0122, protocol 0.96); SCHEMA_VERSION now 8 (was written 6)" }
@@ -3237,7 +3237,7 @@ stamp = { hash = "b3:207c1592fad66ca5", by = "agent:release-alpha9", note = "Add
 stamp = { hash = "b3:c5f2e44f7e2c5b78", by = "agent:channels", note = "Added that lanes, starts and stops are checked by TimelineInfo::problem alone and saved from schema 21." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/values.rs"]
-stamp = { hash = "b3:ce4f7b0c1c0b42d4", by = "agent:claude", note = "Value bindings bullet now says a ptz_axis target is bound without lookup or setter probe, ranges over the axis's whole counts and has no value_edit, matching value.rs." }
+stamp = { hash = "b3:2a8c3a882570e184", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/timeline.rs"]
 stamp = { hash = "b3:c68f267a80a0acce", by = "agent:claude", note = "Edited for ADR-0133: State's hotkey_labels, timeline.set's label check at timeline.labels, binding and timeline label.delete blockers and plan order, hotkey.set_labels and its inverse, labels going and coming with a removed binding, touched uses, label.members in reads, and schema 9 with the 8 to 9 migration (refuse a binding's labels, drop a timeline's). Re-read against hotkey.rs, organise.rs, timeline.rs, persist and the new tests." }
@@ -3249,7 +3249,7 @@ stamp = { hash = "b3:9a5c1915e6e9023e", by = "agent:channels", note = "Added the
 stamp = { hash = "b3:bc365c27a1f12a16", by = "agent:claude", note = "Edited: schema_version 9 placeholder for an override's timing, the 8 to 9 migration, and item.set_timing on load; set_timing, Prop::Timing and the preset easing check hold" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/value.rs"]
-stamp = { hash = "b3:76b16a153b7b6a77", by = "agent:claude", note = "Value bindings bullet now says a ptz_axis target is bound without lookup or setter probe, ranges over the axis's whole counts and has no value_edit, matching value.rs." }
+stamp = { hash = "b3:6979abbce8569a7d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-jtunnel#purpose"."body"]
 stamp = { hash = "b3:8d733a8b71762ded", by = "agent:claude", note = "wire gains PacketType::Names, MOD_SLOTS, MAX_MOD_NAME, is_mod_name and write_names, and the layout test; README lists them" }
@@ -3282,7 +3282,7 @@ stamp = { hash = "b3:f372f4393411319f", by = "agent:claude", note = "New crate: 
 stamp = { hash = "b3:70b18ef3f311952a", by = "agent:claude", note = "wire gains PacketType::Names, MOD_SLOTS, MAX_MOD_NAME, is_mod_name and write_names, and the layout test; README lists them" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:0160e88edb6b7fc6", by = "agent:claude", note = "Design guidance summary now names aiming a PTZ axis with ptz_axis (ADR-0208)." }
+stamp = { hash = "b3:d0be16ffcc0d3dc1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: the scene-design bullet now names sky_pictures with ADR-0188, matching design.rs" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:1778784f1287b20d", by = "agent:claude", note = "Design guidance summary now names aiming a PTZ axis with ptz_axis (ADR-0208)." }
@@ -4572,7 +4572,7 @@ stamp = { hash = "b3:e90844923a76aa3e", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "added 'Views report back': preview.report's label rules, ViewCounts fields, run restart, session-only, 16-view limit, errors; checked against command.rs, preview.rs and the engine | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
 
 ["CRATE-jstream-protocol#bindings"."body"]
-stamp = { hash = "b3:3bcc5adb65dc7778", by = "agent:claude", note = "ValueTarget bullet and binding.set_value describe ptz_axis {camera, axis} and its camera name check." }
+stamp = { hash = "b3:e9ac4912eb1ef256", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#bindings"."dep:docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
 stamp = { hash = "b3:90465e14077d637b", by = "agent:r9bzj2", note = "New section for 0.96 controller bindings (ADR-0122): binding.set/clear, Trigger, Binding, state.get bindings, delete.plan bindings, removed_bindings, entity binding, checked against binding.rs, the graph's and the mock's checks, and the parity cases | merge: Merged wave/alpha5 (page API schema 8, projects 0.94, collection tool, #1272's crates): re-read for what it changed here; the binding text holds beside it" }
@@ -4581,7 +4581,7 @@ stamp = { hash = "b3:90465e14077d637b", by = "agent:r9bzj2", note = "New section
 stamp = { hash = "b3:a37bba619c95806a", by = "agent:release-alpha8", note = "Added value bindings: ValueBinding, ValueTarget, set_value/clear_value checks, left in place, midi.last_controls, against binding.rs and value.rs. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: ADR-0178 as merged (schema 19 after #1609's 18, at most 256, five target types, left in place when the target goes, learn via midi.last_controls) matches the value-binding paragraph CC PR 3 value bindings added, and ValueBinding::problem agrees with binding.rs." }
 
 ["CRATE-jstream-protocol#bindings"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:894944fc7d2b4b32", by = "agent:claude", note = "ValueTarget bullet and binding.set_value describe ptz_axis {camera, axis} and its camera name check." }
+stamp = { hash = "b3:c511b7b1399a196f", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#calls"."body"]
 stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to command.rs, envelope.rs, query.rs, the modules its text names; #purpose still covers all of src/**; depends_on 0013-command-model.md, RULES.md#R-ARCH-006, matching what it relies on; self-links to #design now name this anchor" }
@@ -4617,22 +4617,22 @@ stamp = { hash = "b3:8ef7f24e2cd4259d", by = "agent:frame-probe", note = "Re-rea
 stamp = { hash = "b3:e81629be10e7bfde", by = "agent:grok", note = "Re-read it. The encoder-profile comment change does not affect codec downloads." }
 
 ["CRATE-jstream-protocol#compatibility"."body"]
-stamp = { hash = "b3:00b58349a27c729e", by = "agent:claude", note = "Added 0.180's ptz_axis: a client older than 0.180 can't parse state.get once a binding aims a PTZ axis, as ValueTarget has no Unknown fallback." }
+stamp = { hash = "b3:367b9ae8ed5af735", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#compatibility"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:47507676bbfb6cc7", by = "agent:claude", note = "Added 0.180's ptz_axis: a client older than 0.180 can't parse state.get once a binding aims a PTZ axis, as ValueTarget has no Unknown fallback." }
+stamp = { hash = "b3:5c1e6541895c6623", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e3f9eaebc91090e4", by = "agent:claude", note = "Added 0.180's ptz_axis: a client older than 0.180 can't parse state.get once a binding aims a PTZ axis, as ValueTarget has no Unknown fallback." }
+stamp = { hash = "b3:14725f99440febed", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:claude", note = "Added 0.180's ptz_axis: a client older than 0.180 can't parse state.get once a binding aims a PTZ axis, as ValueTarget has no Unknown fallback." }
+stamp = { hash = "b3:c667cdd07cdabb82", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
 stamp = { hash = "b3:676067bd06525692", by = "agent:channels", note = "Added channel.values to the query list and the channel actions to the actions list." }
@@ -4692,7 +4692,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:claude", note = "version.rs only bumps minor to 180; the errors, IDs and numbers list holds." }
+stamp = { hash = "b3:c667cdd07cdabb82", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:626ba3cd643e0e61", by = "agent:claude", note = "Added solid_outline (hull of the eight projected corners, None if one is behind the viewer), outline_contains and SolidBounds::of_size to the solid.rs entry; checked against solid.rs." }
@@ -4722,7 +4722,7 @@ stamp = { hash = "b3:f04efc8b542328fd", by = "agent:claude", note = "Added solid
 stamp = { hash = "b3:c1a63b9ead949330", by = "agent:claude", note = "This PR: the body names a hotkey binding's labels and label.members of a missing label among the parity cases. Merge: #1299's binding checks there (#1284, #1299, #1316, #1319, #1364 and #1368). On re-reading, fixtures.rs and parity.rs match. | kept from the merged side: The parity collection now also holds two controller bindings, one rebound, and its rejected batches check bindings: updated the fixture description for 0.96 controller bindings (ADR-0122): binding.set/clear, Trigger, Binding, state.get bindings, delete.plan bindings, removed_bindings, entity binding" }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:bddbb99d0838f7d7", by = "agent:claude", note = "Fixtures gain a ptz_axis zoom binding; the schema and examples snapshots were regenerated and only add PtzAxis and that example; the parity fixture is untouched." }
+stamp = { hash = "b3:aa139632728660f1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:54abc60954404dc6", by = "agent:channels", note = "Re-read: fixtures and parity gain channel examples; the schema description holds." }
@@ -4773,7 +4773,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:b3e5ecfea0edcbbe", by = "agent:claude", note = "lib.rs exports PtzAxis and version.rs bumps minor to 180; envelope, versioning and tagging rules unchanged (ptz_axis is internally tagged like the other targets)." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:claude", note = "lib.rs exports PtzAxis and version.rs bumps minor to 180; envelope, versioning and tagging rules unchanged (ptz_axis is internally tagged like the other targets)." }
+stamp = { hash = "b3:c667cdd07cdabb82", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4923,7 +4923,7 @@ stamp = { hash = "b3:138243dd2b7d1475", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: audio.rs gains BusMonitor {device, tap}, MonitorTap (pre_filters, post_filters, unknown skipped in the schema), BusMonitor::problem and MAX_MONITOR_DEVICE_LEN; BusInfo.monitor; Edit::BusSetMonitor named and classified (plugin.rs); edit list and Audio bullet updated; version paragraph says 0.42 for bus monitors; fixtures and parity cover set, change, removal, a deleted bus's monitor and three refusals." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:894944fc7d2b4b32", by = "agent:claude", note = "Re-read; a new ValueTarget variant and PtzAxis in binding.rs don't change the crate's contents list." }
+stamp = { hash = "b3:c511b7b1399a196f", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/camera_aim.rs"]
 stamp = { hash = "b3:308cc15f74393559", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; re-read: nothing in this section names what changed (the new actions, query, endpoints or flags), and it still holds; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4962,7 +4962,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read against ADR-0129 (keyframe timing in switches into a keyframe, item.set_timing, ease_in/hold/cubic_bezier, protocol 0.99 and schema 9 placeholders); holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:bddbb99d0838f7d7", by = "agent:claude", note = "Re-read; a new ValueTarget variant and PtzAxis in binding.rs don't change the crate's contents list." }
+stamp = { hash = "b3:aa139632728660f1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Added video.frames to the queries, scene.switch_and_watch to the actions, a Frame sheets bullet for frames.rs (FrameStrip with its limits and check, FrameSheet, SheetFrame), and the frame sheets to the version history. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The file list holds: frames.rs (#1080), command.rs, fixtures.rs (scene.switch_and_watch and the item actions both), plugin.rs, lib.rs and query.rs carry the merged motion; version.rs is 0.82. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. command.rs, fixtures.rs, lib.rs, plugin.rs and query.rs carry #1041's codec downloads (codec.downloads, codec.download, codec.delete, protocol 0.69, people-only) beside the wave's motion work (0.80 to 0.86); lib.rs's Docs line now names both #motion and #codec-downloads (the one conflict in it). frames.rs is the wave's and unchanged by main." }
@@ -5064,7 +5064,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Addit
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:claude", note = "Re-read; a new ValueTarget variant and PtzAxis in binding.rs don't change the crate's contents list." }
+stamp = { hash = "b3:c667cdd07cdabb82", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -5118,13 +5118,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:e9844bc0724c3cda", by = "agent:claude", note = "Versions paragraph opens with 0.180's reason (ADR-0208), matching version.rs." }
+stamp = { hash = "b3:d1aa1a054df34664", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:claude", note = "Versions paragraph opens with 0.180's reason (ADR-0208), matching version.rs." }
+stamp = { hash = "b3:c667cdd07cdabb82", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -6360,7 +6360,7 @@ stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "This branch
 stamp = { hash = "b3:8bb3038396e25ca8", by = "agent:claude", note = "Its inputs changed only by the mock's PTZ cameras bullet and ARCH's 0.180 ptz_axis note; this section names neither the mock's state nor value targets, so it holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b3f6668550eb3dd", by = "agent:claude", note = "Its inputs changed only by the mock's PTZ cameras bullet and ARCH's 0.180 ptz_axis note; this section names neither the mock's state nor value targets, so it holds." }
+stamp = { hash = "b3:4e66b976c51323b1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the server's Host, Origin and token checks are unchanged" }
@@ -6807,7 +6807,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:ca69ab8eb6676a50", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs. | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section" }
+stamp = { hash = "b3:1fe5f556f93d919c", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652) | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; Escape reaches the topmost dialog, near-plane outline fallback; holds beside #1662's restyle and #1657's smoothing | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; re-read the canvas paragraph beside #1679's near-plane fallback (merged in #1686 itself), #1685's group sharing and #1662's restyle, holds" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:8bb3038396e25ca8", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
@@ -6873,13 +6873,13 @@ stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652)" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:91c3e1c6af44a583", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
+stamp = { hash = "b3:8805062948c7618d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:6c3b60e3f9d78afd", by = "agent:claude", note = "C18: the Install plugin passage now says it is a medium dialog on the property grid (Folder, ID); other design bullets unaffected by the project/plugin dialog restyle and the new .project-recent / .install-dialog CSS." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:3778c587701c983f", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
+stamp = { hash = "b3:a9edace53bbce78a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/hotkeys.rs"]
 stamp = { hash = "b3:963da80dc92013c6", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via, and no panel shows camera_path beyond the generic preset settings form" }
@@ -6978,7 +6978,7 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/ptz.rs"]
-stamp = { hash = "b3:b9d32afc3243d34f", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
+stamp = { hash = "b3:5c106354861dc057", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scene_properties.rs only adds a sentence to the Share the 3D space note; the design section's Share the 3D space and Moves with lines still hold" }
@@ -7017,7 +7017,7 @@ stamp = { hash = "b3:8385e7f9b58814f5", by = "agent:claude", note = "Round 1 N1 
 stamp = { hash = "b3:a5d166b3880cdb96", by = "agent:claude-perf-suite", note = "review N2: a projector picture's view label now starts projector#<channel>, so two pictures of one scene report apart; nothing else in this section changes | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed | merge: Merged wave/alpha5 (#1271 stream profiles, #1287 page-API warnings, #1269 projects, #1286 main sync): both sides kept; this PR's preview-rate change and 0.95 still hold" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ptz_cameras.rs"]
-stamp = { hash = "b3:2d7faeee5a7ced2a", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
+stamp = { hash = "b3:ee9bff1e61929d94", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ptz_controllers.rs"]
 stamp = { hash = "b3:3e35d148593c0cf0", by = "agent:ptz-builder", note = """ADR-0153 §3: added desktop_ptz and set_ptz to host.rs, the ptz_controllers.rs bullet, ptz and setPtz to the global's list, and the Devices page's "Accept a PTZ controller" paragraph""" }
@@ -7059,7 +7059,7 @@ stamp = { hash = "b3:bfb85071cf8940dc", by = "agent:claude", note = "Added Contr
 stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:f24542a2a28f32f0", by = "agent:claude", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs." }
+stamp = { hash = "b3:f6f3df13a5529add", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds | merge: wave 2: #1662's panels restyled on the design language; the purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -7122,13 +7122,13 @@ stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Re-read against the Escape capture listener in dialog.rs and camera.rs's Shape (3D group outline) plus the near-plane model fallback; the purpose summary still holds | kept from the merged side: Re-read against the Escape capture listener in dialog.rs and the solid outline fallback in canvas/camera.rs; the purpose summary still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:91c3e1c6af44a583", by = "agent:claude", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs." }
+stamp = { hash = "b3:8805062948c7618d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:6c3b60e3f9d78afd", by = "agent:claude", note = "C18: project.rs ProjectDialog gains Open's Recent list (recent prop, header passes the recent projects other than the open one), a Location prop-grid row and the callout; plugins.rs InstallDialog moves Folder and ID onto the prop grid with a callout; icons.rs adds a file icon. Edited the Projects bullet to say so." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:3778c587701c983f", by = "agent:claude", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs." }
+stamp = { hash = "b3:a9edace53bbce78a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/hotkeys.rs"]
 stamp = { hash = "b3:963da80dc92013c6", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via" }
@@ -7227,7 +7227,7 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "C20-C22 (ou
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/ptz.rs"]
-stamp = { hash = "b3:b9d32afc3243d34f", by = "agent:claude", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs." }
+stamp = { hash = "b3:5c106354861dc057", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scene_properties.rs only adds a sentence to the Share the 3D space note (a scene shares a group once); the purpose section names no note text; holds" }
@@ -7266,7 +7266,7 @@ stamp = { hash = "b3:8385e7f9b58814f5", by = "agent:claude", note = "Round 1 N1:
 stamp = { hash = "b3:a5d166b3880cdb96", by = "agent:claude-perf-suite", note = "review N2: a projector picture's view label now starts projector#<channel>, so two pictures of one scene report apart; nothing else in this section changes | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed | merge: Merged wave/alpha5 (#1271 stream profiles, #1287 page-API warnings, #1269 projects, #1286 main sync): both sides kept; this PR's preview-rate change and 0.95 still hold" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ptz_cameras.rs"]
-stamp = { hash = "b3:2d7faeee5a7ced2a", by = "agent:claude", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs." }
+stamp = { hash = "b3:ee9bff1e61929d94", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ptz_controllers.rs"]
 stamp = { hash = "b3:3e35d148593c0cf0", by = "agent:ptz-builder", note = "ADR-0153 §3: the UI gains the Devices page's PTZ controller setting, which the design section covers; the purpose holds" }
@@ -7428,7 +7428,7 @@ stamp = { hash = "b3:74ed841d65c4e32a", by = "agent:issues-thread", note = "Re-r
 stamp = { hash = "b3:3d21b6093877d509", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. properties.spec.js gains one test using the existing fixtures; no harness change | kept from the merged side: properties.spec.js gains one test using the existing fixtures (connect, the row menu); no harness change" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/ptz.spec.js"]
-stamp = { hash = "b3:737bd671001fc148", by = "agent:claude", note = "The mock daemon's repeatable --ptz-camera is described, matching mock-daemon/src/main.rs." }
+stamp = { hash = "b3:181e553e74976612", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
 stamp = { hash = "b3:30a05dca4c965c31", by = "agent:claude", note = "Only the scene-cameras readout pattern changed (field of view added); mock daemon, fixtures and helpers are untouched." }
@@ -7473,7 +7473,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:8226740ccdd627b1", by = "agent:claude", note = "Added the PTZ cameras spec bullet; Polish now says fourteen panels. Both specs pass locally; the full suite passed apart from that count, since fixed." }
+stamp = { hash = "b3:55013543ffda5592", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | kept from the merged side: Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7566,7 +7566,7 @@ stamp = { hash = "b3:74ed841d65c4e32a", by = "agent:issues-thread", note = "Adde
 stamp = { hash = "b3:3d21b6093877d509", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. properties.spec.js adds 'Escape closes the topmost dialog wherever the focus is'; the Properties spec description still covers it | kept from the merged side: properties.spec.js adds 'Escape closes the topmost dialog wherever the focus is'; the tests section's description of the Properties spec still covers it" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/ptz.spec.js"]
-stamp = { hash = "b3:737bd671001fc148", by = "agent:claude", note = "Added the PTZ cameras spec bullet; Polish now says fourteen panels. Both specs pass locally; the full suite passed apart from that count, since fixed." }
+stamp = { hash = "b3:181e553e74976612", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
 stamp = { hash = "b3:30a05dca4c965c31", by = "agent:claude", note = "scene-cameras.spec.js now expects the readout's field of view (· N°) that #1633 added; the 3D scenes bullet says the Alt-drag shows the camera's readout without spelling its text, so it holds. The outputs and codec bullets stay as this PR left them." }
@@ -7980,13 +7980,13 @@ stamp = { hash = "b3:6be7d361d99aa3ff", by = "agent:claude-settings", note = "St
 stamp = { hash = "b3:1fb8e51769db6783", by = "agent:release-thread", note = "Re-read: the change to its dependency is only the bench adding its own fade preset when the collection has none; this section doesn't mention the bench or presets and still holds." }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "Re-read against the desktop usage's PTZ cameras bullet; the camera list is the app's own command, out of an agent's reach, so nothing here changes." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#install"."body"]
 stamp = { hash = "b3:c3582f80fbcb5d5d", by = "agent:claude", note = 'Re-read: the folders paragraph now says the project is saved in Documents\JStream (My project.json), settings and logs stay in %APPDATA%\JStream, screenshots go to Downloads with a message, and portable keeps it all in data; matches ADR-0162 and the app.' }
 
 ["GETTING-STARTED#install"."dep:apps/jstream-desktop/README.md#usage"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "Re-read against the desktop usage's PTZ cameras bullet; ptz_cameras.json sits in the data folder already described." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#install"."dep:docs/ARCHITECTURE.md#packaging"]
 stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "The DXC DLLs sit at the top of the zip and need nothing from the user; keeping the folder together still covers them" }
@@ -7995,7 +7995,7 @@ stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "The 
 stamp = { hash = "b3:57db58043cad8447", by = "agent:claude", note = "Step 1 keeps Stream picked on the Kind control, the key shows only as Saved, step 2 says nothing changes until Save, and Edit… and New… replace Edit encoder… and Edit mix… (C16)." }
 
 ["GETTING-STARTED#live"."dep:apps/jstream-desktop/README.md#usage"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "Re-read against the desktop usage's PTZ cameras bullet; going live is unaffected." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8007,7 +8007,7 @@ stamp = { hash = "b3:946bde14bc7e59a5", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:23d99288d10a6118", by = "agent:claude", note = "Pick Record on Add output's Kind control in place of a Recording (MP4) option; the rest of the section holds." }
 
 ["GETTING-STARTED#record"."dep:apps/jstream-desktop/README.md#usage"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "Re-read against the desktop usage's PTZ cameras bullet; recording is unaffected." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8022,7 +8022,7 @@ stamp = { hash = "b3:571a3148557f4619", by = "agent:claude", note = "Added one p
 stamp = { hash = "b3:3f1978bb81618bbc", by = "agent:claude", note = "README#platforms changed only its macOS and Linux delivery cells (beta.1 packages on the releases page); this section's Windows list and its macOS and Linux paragraph match the requirement columns, which are unchanged" }
 
 ["GETTING-STARTED#requirements"."dep:apps/jstream-desktop/README.md#usage"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "Re-read against the desktop usage's new PTZ cameras bullet: requirements unchanged, a camera list needs nothing more." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#requirements"."dep:docs/ARCHITECTURE.md#packaging"]
 stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "Packaging now ships DXC in the zip; the requirements still hold: nothing else to install" }
@@ -8067,7 +8067,7 @@ stamp = { hash = "b3:9e3c8a2f4aab4952", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
 
 ["GETTING-STARTED#trouble"."dep:apps/jstream-desktop/README.md#usage"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "Re-read against the desktop usage's PTZ cameras bullet; logs and reports unchanged." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#trouble"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -8076,7 +8076,7 @@ stamp = { hash = "b3:f3e3a293b719fe8d", by = "agent:wave-owner", note = '''merge
 stamp = { hash = "b3:d390058a379a8e3e", by = "agent:vcam-linux", note = "added the Linux steps: install v4l2loopback, the modprobe line with card_label JStream Camera and exclusive_caps=1, and how to persist it, matching vcam.rs's remedy and ADR-0156" }
 
 ["GETTING-STARTED#vcam"."dep:apps/jstream-desktop/README.md#usage"]
-stamp = { hash = "b3:af0c80662d56eea3", by = "agent:claude", note = "Re-read against the desktop usage's PTZ cameras bullet; the virtual camera steps are unaffected." }
+stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#vcam"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
@@ -8217,7 +8217,7 @@ stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:2d09ebc9fa2a93a0", by = "agent:release-alpha9", note = "Re-read against ARCH persistence (schema 21 with its refusing migration); the rule holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependencies ARCH#protocol and #persistence hold (protocol 0.172, schema 21) | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; ARCH persistence's default changed; additive, so R-API-001 holds." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b3f6668550eb3dd", by = "agent:claude", note = "The section is a pointer to ARCH#protocol and persistence; the 0.180 addition there follows the minor-bump rule." }
+stamp = { hash = "b3:4e66b976c51323b1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:9b1de3f0c0d6da7f", by = "agent:dxc-packaging", note = "R-DEP-001 now names the DXC DLLs as a shipped binary under Microsoft's terms beside the CEF exception (ADR-0175); the other rules are unchanged" }
@@ -8514,7 +8514,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:0f0dfcf2e50428c6", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:314d5b5b08db6416", by = "agent:claude", note = "Names packets may now carry a PTZ camera's name and axis (names.rs target_label), and ptz_axis bindings send only to listed heads; edited both." }
+stamp = { hash = "b3:1931a7342624f99d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
@@ -8760,7 +8760,7 @@ stamp = { hash = "b3:23e71cd58085129e", by = "agent:claude", note = "Devices par
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "agents.rs: only its doc comment and the toggle's <label for> changed; the Agents bullet's Ask before connecting holds." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:3778c587701c983f", by = "agent:claude", note = "Devices paragraph names Control PTZ cameras (PZ-01, ptz_cameras.rs, applied at once) before Accept a PTZ controller, matching settings.rs; host.rs's new camera setting needs nothing else here." }
+stamp = { hash = "b3:a9edace53bbce78a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/pairing.rs"]
 stamp = { hash = "b3:ed4734a23d304b33", by = "agent:claude", note = "Re-read against pairing.rs: only Pairing's doc comment changed, naming PairDialog as code rather than an intra-doc link to a private item (cargo doc -D warnings); the section's text on the Paired devices section and Pair a device dialog still holds." }
@@ -8841,7 +8841,7 @@ stamp = { hash = "b3:b96ceca3138fc384", by = "agent:claude", note = "DK-07 home 
 stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read against app.rs's Toast component change: docking is unaffected." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:91c3e1c6af44a583", by = "agent:claude", note = "DK-07 home zones now list Channels and PTZ cameras on the right and Sequence at the bottom, matching dock.rs's home()." }
+stamp = { hash = "b3:8805062948c7618d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/workspace.rs"]
 stamp = { hash = "b3:bfb85071cf8940dc", by = "agent:claude", note = "DK-07 home zones now list Channels and PTZ cameras on the right and Sequence at the bottom, matching dock.rs's home()." }
@@ -8943,13 +8943,13 @@ stamp = { hash = "b3:946bde14bc7e59a5", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "Rewrote the panel paragraph and OU-01/OU-02 for C20: flat rows with a state dot and the state in words, '110 frames dropped', secondary Start all, funnel FX buttons with a count, + Add output as a link" }
 
 ["UI-FEATURES#ptz"."body"]
-stamp = { hash = "b3:320eebf4ac0a6742", by = "agent:claude", note = "PZ-01 to PZ-05 checked against panels/ptz.rs, ptz_cameras.rs and ptz.spec.js, which passes locally." }
+stamp = { hash = "b3:9f5f00ff1043e629", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["UI-FEATURES#ptz"."file:crates/jstream-ui/src/panels/ptz.rs"]
-stamp = { hash = "b3:b9d32afc3243d34f", by = "agent:claude", note = "PZ-01 to PZ-05 checked against panels/ptz.rs, ptz_cameras.rs and ptz.spec.js, which passes locally." }
+stamp = { hash = "b3:5c106354861dc057", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["UI-FEATURES#ptz"."file:crates/jstream-ui/src/ptz_cameras.rs"]
-stamp = { hash = "b3:2d7faeee5a7ced2a", by = "agent:claude", note = "PZ-01 to PZ-05 checked against panels/ptz.rs, ptz_cameras.rs and ptz.spec.js, which passes locally." }
+stamp = { hash = "b3:ee9bff1e61929d94", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:5da0006a6faf1847", by = "agent:claude", note = "new SC-12 for sequence rows (caret, open, play/stop, elapsed, keys, menu with Set key and Delete); matches scenes.rs Row::Sequence and sequence_row" }

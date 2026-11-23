@@ -53,7 +53,7 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   `ptz_controllers.json`, opening the engine's controller endpoints from it, and
   `set_ptz_controllers`, the command that saves it.
 - **PTZ cameras** (`ptz_cameras.rs`): "Control PTZ cameras"
-  ([ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md) decision 1), the
+  ([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1), the
   switch and the machine's camera list in the data folder's `ptz_cameras.json`, giving
   the engine its cameras from it at start (`Engine::start_ptz`), and `set_ptz_cameras`,
   the command that saves it and applies it at once.
@@ -321,7 +321,7 @@ folder, and its log `logs\cef.log`.
   its cameras (a name, a LAN address and port, a transport and a VISCA address) save
   `ptz_cameras.json` in the data folder, and apply at once: the engine drives the heads
   listed, as the daemon's `--ptz-camera` lets it
-  ([ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md)), from the PTZ
+  ([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)), from the PTZ
   panel, scene shots, hotkeys and mappings. The page shows why a camera was refused,
   and the log names the cameras when they start.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
@@ -473,7 +473,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   endpoints first so their drives stop; a refused setting or a port that can't be bound
   is logged and the app runs without them. Off, no endpoint socket is open.
 - **PTZ cameras** (`ptz_cameras.rs`,
-  [ADR-0208](../../docs/adr/0208-value-bindings-aim-ptz-cameras.md) decision 1,
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1,
   [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md) §1). The setting is
   `{"on": true, "cameras": [{"name": "Wide", "address": "192.168.1.40:52381",
   "transport": "visca_ip", "visca": 1}]}` in the data folder's `ptz_cameras.json`, kept

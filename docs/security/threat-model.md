@@ -783,14 +783,14 @@ somewhere it shouldn't.
   check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server) for
   what they may send and receive. Unlike the JTunnel socket, a controller endpoint binds
   only the one address the person gives. A value binding aiming a head's axis
-  (ADR-0208) sends only to the heads the machine lists, as a shot does; a binding
+  (ADR-0209) sends only to the heads the machine lists, as a shot does; a binding
   naming a camera this machine doesn't list sends nothing.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw
 (ADR-0123 §6), as with JTunnel anywhere. An accepted sender, and anything on the path to
 its address, learns the names of the sources, scenes, buses, channels and PTZ cameras
-bound to its params (ADR-0181, [ADR-0208](../adr/0208-value-bindings-aim-ptz-cameras.md));
+bound to its params (ADR-0181, [ADR-0209](../adr/0209-value-bindings-aim-ptz-cameras.md));
 its state switch turns that off.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
 same network who already targets this machine. The check is of the source address a

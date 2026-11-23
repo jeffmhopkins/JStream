@@ -772,9 +772,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
   [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
-  setting, a fader or a send, drawn and heard without being stored, or since 0.180 one
+  setting, a fader or a send, drawn and heard without being stored, or since 0.183 one
   axis of a PTZ head, aimed rather than stored
-  ([ADR-0208](adr/0208-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
+  ([ADR-0209](adr/0209-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
   reports each input's latest control change, for learning one.
   `channel.set` and `channel.delete` (protocol 0.169,
   [ADR-0183](adr/0183-virtual-control-channels.md)) set and remove a channel: up to eight

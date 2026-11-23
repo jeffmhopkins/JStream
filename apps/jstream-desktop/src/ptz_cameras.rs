@@ -1,6 +1,6 @@
 //! "Control PTZ cameras" ([ADR-0123](../../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
 //! §4, [ADR-0146](../../../docs/adr/0146-ptz-cameras-shots-and-actions.md) §1,
-//! [ADR-0208](../../../docs/adr/0208-value-bindings-aim-ptz-cameras.md) decision 1): the
+//! [ADR-0209](../../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1): the
 //! desktop app's switch for driving PTZ heads, with the machine's camera list, as the
 //! daemon's `--ptz-camera` gives it.
 //!
@@ -262,7 +262,7 @@ mod tests {
         }
     }
 
-    /// ADR-0123 §4, ADR-0208 decision 1: off until the person turns it on; a saved list
+    /// ADR-0123 §4, ADR-0209 decision 1: off until the person turns it on; a saved list
     /// applies at once, and off stops every head.
     #[test]
     fn the_camera_list_is_off_until_turned_on_and_applies_at_once() {

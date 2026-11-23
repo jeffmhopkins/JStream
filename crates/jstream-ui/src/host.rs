@@ -11,7 +11,7 @@
 //! opens a native file dialog, and `allowNetwork`, which saves that setting; `jtunnel` and
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
 //! `setJtunnel` and `setPtz` save them; `ptzCameras` is the machine's PTZ camera list
-//! (ADR-0208 decision 1), which `setPtzCameras` saves and the app applies at once.
+//! (ADR-0209 decision 1), which `setPtzCameras` saves and the app applies at once.
 //! `saveScreenshot` saves a screenshot in Downloads and
 //! answers its path, and `openSaved` and `showSaved` open such a file or show it in its
 //! folder (ADR-0163 §3). In a browser the global is absent and the UI shows
@@ -416,7 +416,7 @@ pub async fn set_ptz(setting: &PtzSetting) -> Option<String> {
 }
 
 /// The desktop app's "Control PTZ cameras" setting as it was when the app started
-/// (ADR-0208 decision 1), if the page runs in an app that has it.
+/// (ADR-0209 decision 1), if the page runs in an app that has it.
 pub fn desktop_ptz_cameras() -> Option<PtzCameraSetting> {
     let global = global()?;
     Reflect::get(&global, &JsValue::from_str("setPtzCameras"))

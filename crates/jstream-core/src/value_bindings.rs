@@ -64,12 +64,12 @@ pub(crate) struct ValueDriver {
     driven: BTreeMap<String, Driven>,
     last: Option<Instant>,
     edits: Vec<Edit>,
-    /// The PTZ positions the last tick gave (ADR-0208): a camera, an axis and the count,
+    /// The PTZ positions the last tick gave (ADR-0209): a camera, an axis and the count,
     /// in binding order.
     aims: Vec<PtzAim>,
 }
 
-/// One PTZ axis a value binding drives, and the count it gives it now (ADR-0208).
+/// One PTZ axis a value binding drives, and the count it gives it now (ADR-0209).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PtzAim {
     /// The camera, by name.
@@ -86,7 +86,7 @@ impl ValueDriver {
         &self.edits
     }
 
-    /// The PTZ positions the bindings give now, in binding order (ADR-0208).
+    /// The PTZ positions the bindings give now, in binding order (ADR-0209).
     pub(crate) fn aims(&self) -> &[PtzAim] {
         &self.aims
     }
