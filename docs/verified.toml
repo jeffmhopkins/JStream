@@ -2079,7 +2079,7 @@ stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "merge:
 stamp = { hash = "b3:14b9314542c7686f", by = "agent:claude", note = "JTunnel receiver paragraph gains the names packet (ADR-0181): readers of params values.N, labels, state-on senders only, keepalive cadence, clearing rounds; checked against jtunnel/mod.rs and names.rs" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/names.rs"]
-stamp = { hash = "b3:3e72cbf6d1257bfe", by = "agent:claude", note = "JTunnel receiver paragraph gains the names packet (ADR-0181): readers of params values.N, labels, state-on senders only, keepalive cadence, clearing rounds; checked against jtunnel/mod.rs and names.rs" }
+stamp = { hash = "b3:1674a5f101285700", by = "agent:claude", note = "names.rs: a shared slot's joined name goes through fit again so it never starts with a space; the section's description of names (cut to 40 bytes, +N) still holds" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/tests.rs"]
 stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and edited: Jeff asked for Use this sender's state on by default once a sender is accepted; AcceptedSender::new now sets state on, and the text says on by default for an accepted sender, counted as state_off and dropped while off." }
@@ -8367,7 +8367,7 @@ stamp = { hash = "b3:566e43a3335da375", by = "agent:claude", note = "New section
 stamp = { hash = "b3:14b9314542c7686f", by = "agent:claude", note = "controls list the names packet (ADR-0181): accepted, state-on senders only, bound names only, 40 bytes, cadence; Accepted adds what a sender learns" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/names.rs"]
-stamp = { hash = "b3:3e72cbf6d1257bfe", by = "agent:claude", note = "controls list the names packet (ADR-0181): accepted, state-on senders only, bound names only, 40 bytes, cadence; Accepted adds what a sender learns" }
+stamp = { hash = "b3:1674a5f101285700", by = "agent:claude", note = "names.rs fix only makes every sent name pass is_mod_name; the packet's bounds as described are unchanged" }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/tests.rs"]
 stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and edited: Jeff asked for Use this sender's state on by default once a sender is accepted; state is taken only from accepted senders and is on by default for them, the person's acceptance being the consent; --jtunnel-no-state or the unticked checkbox drops it; bounds unchanged." }
