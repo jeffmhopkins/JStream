@@ -33,6 +33,26 @@ const NEBULA_2: &str = "#2471a8";
 /// The longest a backdrop's warp takes to change from still to full, in seconds.
 const MAX_WARP_RAMP_S: f64 = 10.0;
 
+/// The widest a backdrop's warp aimed ahead lets its direction of travel turn from
+/// straight ahead, in degrees (ADR-0186).
+const MAX_WARP_LOOK_DEG: f64 = 180.0;
+
+/// Where a backdrop's warp travels toward (ADR-0186).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WarpAim {
+    /// The sky's own centre ahead, which its item's turn, tilt and rotation turn
+    /// (ADR-0167, ADR-0182).
+    #[default]
+    Sky,
+    /// The scene's straight ahead (`-z`), taken when the warp starts from still.
+    Ahead,
+}
+
+const WARP_AIMS: [(WarpAim, &str, &str); 2] = [
+    (WarpAim::Sky, "sky", "The sky's centre"),
+    (WarpAim::Ahead, "ahead", "Straight ahead"),
+];
+
 /// The highest sky seed.
 const MAX_SEED: u32 = 9999;
 
@@ -118,6 +138,11 @@ pub struct ShownEnvironment {
     /// How many seconds the backdrop takes to go from still to full warp, or back, when
     /// `warp` changes, 0 to 10; 0 changes at once.
     pub warp_ramp_s: f32,
+    /// Where the warp travels toward (ADR-0186).
+    pub warp_aim: WarpAim,
+    /// With the warp aimed ahead, how far its direction of travel may turn from straight
+    /// ahead while at warp, in degrees, 0 to 180.
+    pub warp_look_deg: f32,
 }
 
 /// The `light` kind.
@@ -351,6 +376,36 @@ impl LightKind {
                      or slow from full warp to still, when Warp changes; 0 changes at \
                      once.",
                 )),
+                sky(p(
+                    "warp_aim",
+                    "Warp aim",
+                    ParamType::Enum {
+                        options: WARP_AIMS
+                            .iter()
+                            .map(|(_, value, label)| EnumOption {
+                                value: (*value).into(),
+                                label: (*label).into(),
+                            })
+                            .collect(),
+                    },
+                    json!("sky"),
+                    "Where the warp travels toward. The sky's centre turns with the item, \
+                     so turning the item turns the stars and the travel together. Straight \
+                     ahead travels along the scene's straight ahead (-z) as the warp starts \
+                     from still, wherever the item has turned the sky: the backdrop \
+                     cross-fades to a sky laid out around that direction, keeps it after \
+                     the warp, and a turn of the item then turns the sky from there.",
+                )),
+                sky(p(
+                    "warp_look_deg",
+                    "Warp look",
+                    number(0.0, MAX_WARP_LOOK_DEG, 1.0, Some("deg")),
+                    json!(10.0),
+                    "With the warp aimed straight ahead, how far turning the item can \
+                     swing the direction of travel from straight ahead while at warp; \
+                     past that it turns no further, and turning back moves it at once. \
+                     Rolling about the travel is free.",
+                )),
             ],
             ..kind("light", "Light", true, false)
         })
@@ -537,6 +592,18 @@ fn environment(settings: &Settings) -> Result<ShownEnvironment, SourceError> {
         },
         warp: number("warp", 1.0, 0.0)?,
         warp_ramp_s: number("warp_ramp_s", MAX_WARP_RAMP_S as f32, 1.5)?,
+        warp_aim: match settings.get("warp_aim") {
+            None => WarpAim::Sky,
+            Some(value) => WARP_AIMS
+                .iter()
+                .find(|(_, id, _)| value.as_str() == Some(*id))
+                .map(|(aim, _, _)| *aim)
+                .ok_or_else(|| SourceError::Setting {
+                    param: "warp_aim".into(),
+                    reason: "must be `sky` or `ahead`".into(),
+                })?,
+        },
+        warp_look_deg: number("warp_look_deg", MAX_WARP_LOOK_DEG as f32, 10.0)?,
     })
 }
 

@@ -211,6 +211,8 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
         "sky_seed": 42,
         "warp": 0.75,
         "warp_ramp_s": 3.0,
+        "warp_aim": "ahead",
+        "warp_look_deg": 25.0,
     }))
     .light()
     .and_then(|light| light.environment)
@@ -221,6 +223,9 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
     assert_eq!(sky.sky_seed, 42);
     assert!((sky.warp - 0.75).abs() < 1e-6);
     assert!((sky.warp_ramp_s - 3.0).abs() < 1e-6);
+    // ADR-0186: the warp's aim and how far it may look.
+    assert_eq!(sky.warp_aim, crate::WarpAim::Ahead);
+    assert!((sky.warp_look_deg - 25.0).abs() < 1e-6);
     let mut older = settings(json!({"type": "environment"}));
     for id in [
         "nebula",
@@ -230,6 +235,8 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
         "sky_seed",
         "warp",
         "warp_ramp_s",
+        "warp_aim",
+        "warp_look_deg",
     ] {
         older.0.remove(id);
     }
@@ -244,6 +251,8 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
         (0.0, 0.0, 0, 0.0)
     );
     assert!((sky.warp_ramp_s - 1.5).abs() < 1e-6);
+    assert_eq!(sky.warp_aim, crate::WarpAim::Sky);
+    assert!((sky.warp_look_deg - 10.0).abs() < 1e-6);
     assert_eq!(
         sky.nebula_colors[1],
         [36.0 / 255.0, 113.0 / 255.0, 168.0 / 255.0]
@@ -251,6 +260,8 @@ fn an_environment_light_carries_its_deep_sky_and_warp() {
     for bad in [
         json!({"type": "environment", "warp": 1.5}),
         json!({"type": "environment", "warp_ramp_s": 11.0}),
+        json!({"type": "environment", "warp_aim": "nose"}),
+        json!({"type": "environment", "warp_look_deg": 181.0}),
         json!({"type": "environment", "sky_seed": 10000}),
         json!({"type": "environment", "sky_seed": 1.5}),
         json!({"type": "environment", "nebula_color": "violet"}),

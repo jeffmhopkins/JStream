@@ -3769,6 +3769,9 @@ pub(crate) enum GpuKey {
     /// and placed under its items. The compositor draws into it only when the sky asked
     /// for differs from the one it holds.
     Sky(SceneId),
+    /// The sky a 3D scene's backdrop cross-fades from as a warp aimed ahead starts
+    /// (ADR-0186), drawn under its [`GpuKey::Sky`] while it fades.
+    SkyLeaving(SceneId),
     /// A reflection probe's capture (ADR-0170 decision 3): its scene seen from its
     /// box's centre, as a panorama four faces wide and two high, kept between captures.
     ProbeMap(SceneId, ItemId),
@@ -7211,7 +7214,7 @@ fn scene_sky<'c>(
     at: MediaTime,
     live: &LiveParams,
 ) -> Option<jstream_render::Environment<'c>> {
-    let (environment, skies) = scene_environment((shot, cache), scene_id, at, live);
+    let (environment, skies) = scene_environment((shot, cache, chains), scene_id, at, live);
     if skies > 1
         && !chains.environments_warned.contains(scene_id)
         && chains.environments_warned.insert(scene_id.clone())
@@ -7528,7 +7531,7 @@ fn draw_reflection(
                 lighting: shown.shown.lighting,
                 lights: (shown.shown.lighting == Lighting::Scene).then_some(lights),
                 shadows: &[],
-                environment: scene_environment((shot, &*cache), &pass.scene, at, live).0,
+                environment: scene_environment((shot, &*cache, chains), &pass.scene, at, live).0,
                 // Only what stands above the floor is reflected in it.
                 floor: Some(floor),
                 materials: &drives[..driving],
@@ -7819,8 +7822,11 @@ fn scene_lights(
 /// turn, tilt and rotation,
 /// with its picture when that source's frame was uploaded this frame. Also how many
 /// environment lights the scene places, so a caller can log the ones that don't count.
+///
+/// A backdrop whose warp is aimed ahead lights the scene as it is drawn (ADR-0186): laid
+/// out around the travel, as its sky's state last stepped.
 fn scene_environment<'c>(
-    (shot, cache): (&Shot, &'c ResourceCache<GpuKey>),
+    (shot, cache, chains): (&Shot, &'c ResourceCache<GpuKey>, &Chains),
     id: &SceneId,
     at: MediaTime,
     live: &LiveParams,
@@ -7829,8 +7835,24 @@ fn scene_environment<'c>(
     let found = first.map(|(placed, light, sky)| {
         let (environment, _, opacity) =
             environment_at((shot, cache), (placed, light, sky), at, live);
+        let [turn_deg, tilt_deg, roll_deg] = chains
+            .skies
+            .borrow()
+            .get(id)
+            .filter(|_| sky.backdrop)
+            .map_or(
+                [
+                    environment.turn_deg,
+                    environment.tilt_deg,
+                    environment.roll_deg,
+                ],
+                |state| state.angles(warp_aiming(&environment, sky)),
+            );
         jstream_render::Environment {
             intensity: environment.intensity * opacity,
+            turn_deg,
+            tilt_deg,
+            roll_deg,
             ..environment
         }
     });
@@ -7990,31 +8012,45 @@ fn draw_sky_of(
     };
     let key = GpuKey::Sky(scene.clone());
     cache.layer(compositor, &key, canvas.width(), canvas.height())?;
-    let cache = &*cache;
-    let Some(target) = cache.get(&key) else {
-        return Ok(());
-    };
-    let (environment, look, opacity) =
-        environment_at((shot, cache), (placed, light, sky), at, live);
-    let travel = {
+    // The sky steps once a frame, before its layers are drawn.
+    let state = {
+        let (environment, look, _) =
+            environment_at((shot, &*cache), (placed, light, sky), at, live);
         let mut skies = chains.skies.borrow_mut();
         let state = skies.entry(scene.clone()).or_default();
         state.step(
             cache.frame(),
             at.as_secs_f64(),
             (look.warp, sky.warp_ramp_s),
+            warp_aiming(&environment, sky),
         );
-        (state.warp, state.travel, state.dropping)
+        *state
     };
-    let (warp, travel, dropping) = travel;
+    // A warp aimed ahead that has just started cross-fades from the sky laid out before
+    // it, still, drawn under this one (ADR-0186).
+    let leaving_key = GpuKey::SkyLeaving(scene.clone());
+    if state.leaving.is_some() {
+        cache.layer(compositor, &leaving_key, canvas.width(), canvas.height())?;
+    }
+    let cache = &*cache;
+    let Some(target) = cache.get(&key) else {
+        return Ok(());
+    };
+    let (environment, look, opacity) =
+        environment_at((shot, cache), (placed, light, sky), at, live);
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
-    compositor.draw_sky(
-        &jstream_render::SkyDraw {
-            environment,
+    let draw = |[turn_deg, tilt_deg, roll_deg]: [f32; 3], (opacity, warp, travel, dropping)| {
+        jstream_render::SkyDraw {
+            environment: jstream_render::Environment {
+                turn_deg,
+                tilt_deg,
+                roll_deg,
+                ..environment
+            },
             camera,
             stars: look.stars,
             star_brightness: look.star_brightness,
-            opacity: opacity * fade,
+            opacity,
             deep: jstream_render::DeepSky {
                 nebula: look.nebula,
                 nebula_colors: look.nebula_colors.map(colour),
@@ -8024,13 +8060,49 @@ fn draw_sky_of(
             warp,
             travel,
             dropping,
-        },
+        }
+    };
+    let mut left = None;
+    if let (Some(leaving), Some(under)) = (state.leaving, cache.get(&leaving_key)) {
+        compositor.draw_sky(
+            &draw(leaving.angles, (opacity * fade, 0.0, leaving.travel, 0.0)),
+            under,
+        )?;
+        left = Some(cache.frame());
+    }
+    compositor.draw_sky(
+        &draw(
+            state.angles(warp_aiming(&environment, sky)),
+            (
+                opacity * fade * state.faded_in(at.as_secs_f64()),
+                state.warp,
+                state.travel,
+                state.dropping,
+            ),
+        ),
         target,
     )?;
     if let Some(state) = chains.skies.borrow_mut().get_mut(scene) {
         state.drawn = Some(cache.frame());
+        state.left = left;
     }
     Ok(())
+}
+
+/// How the warp of an environment light's backdrop is aimed (ADR-0186), oriented as
+/// `environment` is by its item.
+fn warp_aiming(
+    environment: &jstream_render::Environment<'_>,
+    sky: &ShownEnvironment,
+) -> crate::chain::WarpAiming {
+    crate::chain::WarpAiming {
+        angles: [
+            environment.turn_deg,
+            environment.tilt_deg,
+            environment.roll_deg,
+        ],
+        ahead: (sky.warp_aim == jstream_sources::WarpAim::Ahead).then_some(sky.warp_look_deg),
+    }
 }
 
 /// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
@@ -8156,34 +8228,59 @@ fn under_sky<'a>(
     canvas: FrameSize,
     camera: Option<SceneCamera>,
 ) {
-    let drawn = chains
-        .skies
-        .borrow()
-        .get(&pass.scene)
-        .and_then(|sky| sky.drawn);
-    if camera.is_none() || drawn != Some(cache.frame()) {
+    if camera.is_none() {
         return;
     }
-    let Some(image) = cache.get(&GpuKey::Sky(pass.scene.clone())) else {
-        return;
+    for (under, image) in sky_layers(&pass.scene, (cache, chains), canvas)
+        .into_iter()
+        .enumerate()
+    {
+        items.insert(under, sky_item(image));
+    }
+}
+
+/// The layers scene `scene`'s sky backdrop drew this frame at the canvas size, bottom
+/// first: the sky a warp aimed ahead cross-fades from while it does (ADR-0186), then
+/// the sky (ADR-0167).
+fn sky_layers<'a>(
+    scene: &SceneId,
+    (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
+    canvas: FrameSize,
+) -> Vec<&'a jstream_render::Image> {
+    let Some(state) = chains.skies.borrow().get(scene).copied() else {
+        return Vec::new();
     };
-    if (image.width(), image.height()) != (canvas.width(), canvas.height()) {
-        return;
+    let frame = Some(cache.frame());
+    if state.drawn != frame {
+        return Vec::new();
     }
-    items.insert(
-        0,
-        Item {
-            image,
-            placement: Placement::Legacy(LegacyTransform::IDENTITY),
-            crop: Crop::NONE,
-            opacity: OPAQUE,
-            blend: BlendMode::Normal,
-            visible: true,
-            camera: None,
-            depth_run: 0,
-            depth: None,
-        },
-    );
+    let sized = |key: GpuKey| {
+        cache
+            .get(&key)
+            .filter(|image| (image.width(), image.height()) == (canvas.width(), canvas.height()))
+    };
+    let leaving = (state.left == frame)
+        .then(|| sized(GpuKey::SkyLeaving(scene.clone())))
+        .flatten();
+    leaving
+        .into_iter()
+        .chain(sized(GpuKey::Sky(scene.clone())))
+        .collect()
+}
+
+/// A sky backdrop's layer as the item under a scene's items: the canvas, whole.
+fn sky_item(image: &jstream_render::Image) -> Item<'_> {
+    Item {
+        image,
+        placement: Placement::Legacy(LegacyTransform::IDENTITY),
+        crop: Crop::NONE,
+        opacity: OPAQUE,
+        blend: BlendMode::Normal,
+        visible: true,
+        camera: None,
+        depth_run: 0,
+        depth: None,
+    }
 }
 
 /// The item `layer` of a pass draws at `at`, through `camera`, as [`fill_items`] says.
@@ -8397,7 +8494,7 @@ fn draw_surface(
         pose(compositor, drawn.model, shown);
         let reflects = shown.lighting == Lighting::Scene && shown.reflections;
         let environment = reflects
-            .then(|| scene_environment((shot, cache), &pass.scene, at, live).0)
+            .then(|| scene_environment((shot, cache, chains), &pass.scene, at, live).0)
             .flatten();
         let probe = reflects
             .then(|| {
@@ -8676,33 +8773,12 @@ fn fill_tracks<'a>(
         from.as_ref().filter(|from| Some(*from) != to.as_ref()),
         to.as_ref(),
     ];
-    let drawn = chains.skies.borrow();
     let mut under = 0;
     for scene in skies.into_iter().flatten() {
-        if drawn.get(scene).and_then(|sky| sky.drawn) != Some(cache.frame()) {
-            continue;
+        for image in sky_layers(scene, (cache, chains), canvas) {
+            items.insert(under, sky_item(image));
+            under += 1;
         }
-        let Some(image) = cache.get(&GpuKey::Sky(scene.clone())) else {
-            continue;
-        };
-        if (image.width(), image.height()) != (canvas.width(), canvas.height()) {
-            continue;
-        }
-        items.insert(
-            under,
-            Item {
-                image,
-                placement: Placement::Legacy(LegacyTransform::IDENTITY),
-                crop: Crop::NONE,
-                opacity: OPAQUE,
-                blend: BlendMode::Normal,
-                visible: true,
-                camera: None,
-                depth_run: 0,
-                depth: None,
-            },
-        );
-        under += 1;
     }
 }
 

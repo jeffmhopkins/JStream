@@ -389,6 +389,8 @@ mod tests {
             sky_seed: 7,
             warp: 0.0,
             warp_ramp_s: 1.0,
+            warp_aim: jstream_sources::WarpAim::Sky,
+            warp_look_deg: 10.0,
         }
     }
 

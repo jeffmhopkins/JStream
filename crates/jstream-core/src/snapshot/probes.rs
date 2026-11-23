@@ -399,7 +399,7 @@ fn capture(
     {
         return Ok(false);
     }
-    let environment = scene_environment((shot, cache), scene_id, at, live).0;
+    let environment = scene_environment((shot, cache, &*chains), scene_id, at, live).0;
     let mut lights = Vec::new();
     let mut shadowed = Vec::new();
     let mut seen: Vec<Item<'_>> = Vec::with_capacity(items.len());

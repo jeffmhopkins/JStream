@@ -3078,6 +3078,44 @@ source: crates/jstream-core/src/kinds.rs
           "equals": "environment"
         },
         "live": true
+      },
+      {
+        "id": "warp_aim",
+        "type": "enum",
+        "options": [
+          {
+            "value": "sky",
+            "label": "The sky's centre"
+          },
+          {
+            "value": "ahead",
+            "label": "Straight ahead"
+          }
+        ],
+        "default": "sky",
+        "label": "Warp aim",
+        "description": "Where the warp travels toward. The sky's centre turns with the item, so turning the item turns the stars and the travel together. Straight ahead travels along the scene's straight ahead (-z) as the warp starts from still, wherever the item has turned the sky: the backdrop cross-fades to a sky laid out around that direction, keeps it after the warp, and a turn of the item then turns the sky from there.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "warp_look_deg",
+        "type": "float",
+        "min": 0.0,
+        "max": 180.0,
+        "step": 1.0,
+        "unit": "deg",
+        "default": 10.0,
+        "label": "Warp look",
+        "description": "With the warp aimed straight ahead, how far turning the item can swing the direction of travel from straight ahead while at warp; past that it turns no further, and turning back moves it at once. Rolling about the travel is free.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
       }
     ]
   },
