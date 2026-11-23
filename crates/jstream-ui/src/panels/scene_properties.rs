@@ -992,7 +992,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                                         <span>"Share the 3D space"</span>
                                     </label>
                                     <p class="help">{move || if draft.with(|d| d.share_space) {
-                                        "In a 3D scene its items are drawn in that scene's space, each sorted, focused and lit on its own, and move with this group's item. Its own filters, effects, crop and blend don't apply, and a stretched group keeps its proportions."
+                                        "In a 3D scene its items are drawn in that scene's space, each sorted, focused and lit on its own, and move with this group's item. Its own filters, effects, crop and blend don't apply, and a stretched group keeps its proportions. A scene shares it once: a second placement there is a flat card."
                                     } else {
                                         "Drawn as one flat card, in a 3D scene too."
                                     }}</p>

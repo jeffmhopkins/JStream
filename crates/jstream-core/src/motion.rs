@@ -328,23 +328,41 @@ impl TrackMotion {
         elapsed_ms: f32,
         of: impl Fn(&ItemId, &[Modifier]) -> Offsets,
     ) -> Offsets {
+        self.offsets_on(track, elapsed_ms, [true, true], of)
+    }
+
+    /// [`Self::offsets`] with only the sides `on` names (leaving, arriving) moving it: a
+    /// side that is off adds nothing, as a 3D group's child whose own modifiers moved it
+    /// in its group's space before it was placed (ADR-0164 §4).
+    pub(crate) fn offsets_on(
+        &self,
+        track: &Track,
+        elapsed_ms: f32,
+        [from_on, to_on]: [bool; 2],
+        of: impl Fn(&ItemId, &[Modifier]) -> Offsets,
+    ) -> Offsets {
         if self.is_still() {
             return Offsets::IDENTITY;
         }
-        let side = |(item, motion): &(ItemId, Motion)| of(item, motion);
+        let side = |on: bool, (item, motion): &(ItemId, Motion)| match on {
+            true => of(item, motion),
+            false => Offsets::IDENTITY,
+        };
+        let from = || side(from_on, &self.from);
+        let to = || side(to_on, &self.to);
         match track {
             Track::Pair { timing, .. } => {
                 let k = timing.progress(elapsed_ms).clamp(0.0, 1.0);
                 if k <= 0.0 {
-                    side(&self.from)
+                    from()
                 } else if k >= 1.0 {
-                    side(&self.to)
+                    to()
                 } else {
-                    side(&self.from).blend(&side(&self.to), k)
+                    from().blend(&to(), k)
                 }
             }
-            Track::Appear { .. } | Track::Through { .. } => side(&self.to),
-            Track::Disappear { .. } => side(&self.from),
+            Track::Appear { .. } | Track::Through { .. } => to(),
+            Track::Disappear { .. } => from(),
         }
     }
 }

@@ -383,14 +383,22 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   that shares a 3D scene's space
   ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md),
   `snapshot/groups.rs`) has no layer there: `Planner::collect` plans each of its
-  children (nested sharing groups in turn, up to `MAX_NESTING`) into the scene's own
-  pass, in the group item's place in stacking order, with its boxes and lights keyed by
-  that scene and the chain of group items (`GroupLink`s) it is placed through. As each
-  frame is drawn, every link is resolved as any item is (live values, then motion) and
-  the child's own resolved geometry is placed through them with
-  `jstream_protocol::GroupPose`, its opacity multiplied by theirs, so the scene's sort,
-  lights, models and focus take it as an item of the scene. A transition's ends place
-  each child through the links as planned, so it glides as a track of its own. A
+  children (nested sharing groups in turn, while fewer than `MAX_NESTING` groups hold
+  it) into the scene's own pass, in the group item's place in stacking order, with its
+  boxes and lights keyed by that scene and the chain of group items (`GroupLink`s) it is
+  placed through. A group shares a scene's space once: a second item of the scene
+  placing the same group draws it flat. As each frame is drawn, every link is resolved
+  as any item is (live values, then motion) and the child's own resolved geometry is
+  placed through them with `jstream_protocol::GroupPose`, its opacity multiplied by
+  theirs, so the scene's sort, lights, models and focus take it as an item of the
+  scene. A child with a legacy transform is placed as the box its transform draws for
+  its image (`groups::legacy_box`), as a transition's ends take it. A transition splits
+  the same groups as the pass (`Planner::visuals_into`, once per scene, the same nesting
+  count) and each child is a track of its own: its ends keep its place in its group's
+  space (`TrackGroups`), and each frame `sample_track` places them through the links as
+  they are then, with the child's own motion in its group's space
+  (`groups::resolved_track`), so the group's live values and motion move it while the
+  transition runs (`a_3d_groups_motion_moves_its_children_during_a_transition`). A
   scene whose family anchors its camera to such a group item (`PassCamera.anchor`) has
   its camera, after camera motion and the live aim, placed through that item the same
   way; `placed_camera` is that camera as committed, where a transition from the scene
@@ -520,8 +528,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
   with the new scene's items, one `jstream-render` `Track` per item (`plan`), and for
   a group that moves as one item within a family its children's tracks inside its
-  layer (`Inside`, ADR-0049 §3). A 3D group's children are tracks of their own, at
-  their placed geometries, and an end's camera is placed through its anchor
+  layer (`Inside`, ADR-0049 §3). A 3D group's children are tracks of their own, each
+  end placed through its groups as they are each frame (`Visual::groups`, paired as
+  `Visual::motion` is), and an end's camera is placed through its anchor
   (`camera_of`, ADR-0164); `check_via` checks a switch's path through keyframes
   (ADR-0166 decision 2), and `Run::orbit` is a `move` preset's `camera_path` of
   `orbit` (decision 3).
@@ -771,7 +780,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   flat group sits under, moving and fading with the group item, a camera anchored to
   the group riding with it, its children staying in its space through a Move, and an
   item shown with a Fade on a filtered 3D keyframe drawn through its camera, and an
-  effect setting changed after the first frame reaching a 3D card, in
+  effect setting changed after the first frame reaching a 3D card, a legacy-transform
+  child placed through its group; and, from the planned shot, a group's motion and a
+  child's own moving it in the group's space during a Move, and a Move splitting the
+  groups the pass splits, once per scene and as deep, in
   `src/tests/groups3d.rs`), the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
