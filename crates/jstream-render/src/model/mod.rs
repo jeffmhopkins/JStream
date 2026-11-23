@@ -14,7 +14,7 @@ use wgpu::util::DeviceExt;
 
 use crate::error::RenderError;
 use crate::gpu::Gpu;
-use crate::image::{Image, LAYER_FORMAT, Owner};
+use crate::image::{DEPTH_LAYER_FORMAT, Image, LAYER_FORMAT, Owner};
 use crate::mips::{Mips, Region};
 use crate::scene::Color;
 
@@ -884,7 +884,7 @@ impl ModelRuntime {
                 entry_point: Some("fs_depth"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: LAYER_FORMAT,
+                    format: DEPTH_LAYER_FORMAT,
                     blend: Some(wgpu::BlendState {
                         color: largest,
                         alpha: largest,
@@ -2035,10 +2035,10 @@ impl ModelRuntime {
                 detail: "the model was uploaded by another compositor".into(),
             });
         }
-        let Some(view) = target.target().filter(|_| target.owner().is(owner)) else {
+        let Some(view) = target.depth_target().filter(|_| target.owner().is(owner)) else {
             return Err(RenderError::Invalid {
                 what: "layer",
-                detail: "the target is not a layer this compositor made".into(),
+                detail: "the target is not a depth layer this compositor made".into(),
             });
         };
         let Some(camera) = draw.camera else {

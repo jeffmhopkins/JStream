@@ -561,6 +561,21 @@ impl Compositor {
         errors.close(image::layer(&self.maker(), width, height))
     }
 
+    /// A new depth layer of `width` by `height`: an [`Image`] of one channel
+    /// that [`Self::render_view_depth`] and [`Self::draw_model_depth`] draw `1 / w` into,
+    /// for a scene's view depth, a model's own depth and a light's shadow map. It is
+    /// read as any image is, red holding the value, and takes a quarter of a
+    /// [`Self::layer`]'s memory. Nothing else draws into one: a colour draw given a depth
+    /// layer, or a depth draw given a colour layer, is [`RenderError::Invalid`]. Its
+    /// contents are undefined until the first draw.
+    ///
+    /// # Errors
+    /// As for [`Self::layer`].
+    pub fn depth_layer(&self, width: u32, height: u32) -> Result<Image, RenderError> {
+        let errors = self.errors();
+        errors.close(image::depth_layer(&self.maker(), width, height))
+    }
+
     /// Composites `scene` into `target`, a [`Self::layer`] of the canvas size, replacing
     /// what it held. Like [`Self::render_image`], but the texture is reused, so a frame
     /// that redraws a nested scene allocates no texture. Earlier submits that placed
@@ -578,7 +593,7 @@ impl Compositor {
 
     /// [`Self::render_into`], its errors not yet collected.
     fn draw_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
-        let view = self.scene_target(scene, target)?;
+        let view = self.scene_target(scene, target, false)?;
         self.load(scene)?;
         // The submit lock is held from staging through the submit, as in `render`.
         let lock = self.gpu.submit.clone();
@@ -625,7 +640,7 @@ impl Compositor {
         Ok(())
     }
 
-    /// Draws `scene`'s view depth into `target`, a [`Self::layer`] of the canvas size,
+    /// Draws `scene`'s view depth into `target`, a [`Self::depth_layer`] of the canvas size,
     /// replacing what it held (ADR-0143 decision 4): red holds `1 / w`, which is `f / D`
     /// for the nearest thing at `D` along its camera's viewing axis, and every channel is
     /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
@@ -655,7 +670,7 @@ impl Compositor {
 
     /// [`Self::render_view_depth`], its errors not yet collected.
     fn draw_view_depth(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
-        let view = self.scene_target(scene, target)?;
+        let view = self.scene_target(scene, target, true)?;
         self.load(scene)?;
         let lock = self.gpu.submit.clone();
         let submitting = lock.lock();
@@ -667,18 +682,28 @@ impl Compositor {
                 label: Some("jstream-render-view-depth"),
             });
         self.record_mips(&mut encoder, scene);
+        // A layer whose content is known need only be emptied where that is, as a
+        // colour layer is (#1449).
+        let prior = target.content();
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("jstream-render-view-depth"),
                 color_attachments: &[Some(color_attachment(
                     view,
-                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    match prior {
+                        Some(_) => wgpu::LoadOp::Load,
+                        None => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    },
                 ))],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            if let Some(region) = prior {
+                let size = (scene.canvas.width(), scene.canvas.height());
+                self.wipe.record(&mut pass, region, size, true);
+            }
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             for draw in &self.draws {
                 let item = &scene.items[draw.index];
@@ -716,6 +741,14 @@ impl Compositor {
         self.record_release(&mut encoder);
         self.gpu.submit_work(encoder.finish());
         target.mark_changed();
+        // Outside what the scene's items reach the layer holds nothing, as a colour
+        // layer drawn over a transparent background does.
+        target.set_content(Some(self.drawn.map_or(crate::wipe::EMPTY, |rect| Region {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+        })));
         drop(submitting);
         self.staged.clear();
         Ok(())
@@ -726,7 +759,8 @@ impl Compositor {
     /// material's alpha is at least one half, the larger value winning. Only a model seen
     /// through a camera has depth there; without one this draws nothing. It doesn't know
     /// its item's visibility or opacity: the caller skips a hidden item, and one whose
-    /// opacity is under one half, as the cards' pass does.
+    /// opacity is under one half, as the cards' pass does. `target` is a
+    /// [`Self::depth_layer`].
     ///
     /// # Errors
     /// As for [`Self::draw_model`].
@@ -797,18 +831,29 @@ impl Compositor {
     }
 
     /// The view of `target` when it is a layer of this compositor, of `scene`'s canvas
-    /// size, that `scene` doesn't place.
+    /// size, that `scene` doesn't place: a depth layer with `depth`, a colour layer
+    /// without.
     fn scene_target<'t>(
         &self,
         scene: &Scene<'_>,
         target: &'t Image,
+        depth: bool,
     ) -> Result<&'t wgpu::TextureView, RenderError> {
-        let view = match target.target() {
+        let view = if depth {
+            target.depth_target()
+        } else {
+            target.target()
+        };
+        let view = match view {
             Some(view) if target.owner().is(&self.owner) => view,
             _ => {
                 return Err(RenderError::Invalid {
                     what: "layer",
-                    detail: "the target is not a layer this compositor made".into(),
+                    detail: if depth {
+                        "the target is not a depth layer this compositor made".into()
+                    } else {
+                        "the target is not a layer this compositor made".into()
+                    },
                 });
             }
         };
@@ -1071,7 +1116,7 @@ impl Compositor {
         {
             return Ok((colour.clone(), depth.clone()));
         }
-        let layers = (self.layer(width, height)?, self.layer(width, height)?);
+        let layers = (self.layer(width, height)?, self.depth_layer(width, height)?);
         self.model_focus.layers = Some(layers.clone());
         Ok(layers)
     }
@@ -2294,7 +2339,7 @@ impl Compositor {
         });
         if let Some(Start::Wipe(region)) = start {
             let size = (scene.canvas.width(), scene.canvas.height());
-            self.wipe.record(&mut pass, region, size);
+            self.wipe.record(&mut pass, region, size, false);
         }
         if draws.is_empty() {
             return;

@@ -109,8 +109,16 @@ and calls this crate.
   anything stays transparent. A face of another size, or a target that isn't four by
   two of them, is refused. The pipeline is made on the first resample.
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
-  draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
-  nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
+  draws a scene's depth into a canvas-sized depth layer, red holding `1 / w` (`f / D`) of the
+  nearest thing and 0 where nothing is. A **depth layer** (`Compositor::depth_layer`,
+  `ResourceCache::depth_layer`) is a layer of one channel (`R16Float`, the half float a
+  colour layer's red held, at a quarter of its memory): a view depth, a model's own depth
+  and a shadow map are each one. Only `render_view_depth` and `draw_model_depth` draw
+  into one, and they draw into nothing else: a depth draw given a colour layer, or any
+  other draw given a depth layer, is `RenderError::Invalid`. It is read as any image
+  (green and blue read 0 and alpha 1, which no reader uses). A depth layer whose content
+  is known is emptied only there before the scene's cards are drawn, as a colour layer is
+  (#1449), and afterwards its content is the cards' reach. It reuses the composite's prepared vertices and
   mips, drawing each visible card seen through a camera with `fs_depth`
   (`composite.wgsl`), which discards where the sampled alpha times opacity times the
   sharp edge coverage is under one half; the pipeline blends with `Max`, so the
@@ -174,7 +182,7 @@ and calls this crate.
   (from `layer`). The depth bound and cycle handling are the caller's
   ([jstream-core › Snapshots](../jstream-core/README.md#design)).
 - `ResourceCache` keeps what a caller draws every frame (uploads, imports of GPU
-  frames, and layers), keyed by the caller's IDs, so a frame that shows what the last
+  frames, layers and depth layers), keyed by the caller's IDs, so a frame that shows what the last
   one showed allocates no texture. `upload_drawn`, on a cache that
   `draw_uploads_small` allows it, holds an upload only items draw at the size they draw
   it, not its frame's (#1139). An import keeps its frame's `FrameSync` hold only
@@ -555,7 +563,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    bounded filter's reach past its input's, or unknown ([Filters](#filters)).
    `draw_model` sets its layer's too: the box, on the layer, of the eight corners of
    the model's bounds (`drawn_box`, a texel of margin), and `draw_model_depth` adds
-   that box to what its target held. So a small model's layer, its depth and its
+   that box to what its target held, which `render_view_depth` set to its cards' reach
+   (nothing, for the empty scene that clears a model's depth). So a small model's layer, its depth and its
    effects cost the model's box, not the canvas. A rigged model, whose pose can leave
    its bounds, and a model whose bounds reach behind the viewer have no box and are
    drawn whole (`a_models_layer_is_bounded_by_its_models_box`). A scene placing the layer as a 2D item
@@ -648,6 +657,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
+| `depth_layer` texture (`R16Float`) and its render-target view | The returned `Image`; `render_view_depth` and `draw_model_depth` reuse it |
 | Model pipelines (depth prepass, opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Sky pipelines (the frame's and the bright stars' table's), sampler, 1x1 stand-in picture, and the star table (281 by 64 `R32Uint`) with its 1x1 stand-in | Compositor, made on its first `draw_sky` or by `warm_3d`; a uniform and one or two bind groups per sky drawn (none for a call whose layer already holds the sky); the table rewritten by each draw of a sky with stars |
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
@@ -668,7 +678,9 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 image it draws, its passes, then `end_frame`. `upload` keyed by an ID reuses the entry when the
 caller's version and the size are unchanged, rewrites the same texture for a new
 version, and makes a new texture (retiring the old one) for a new size; `layer` reuses
-a layer of the same size. `end_frame` retires every entry the frame did not use (but one `keep_while` keeps),
+a layer of the same size, and `depth_layer` a depth layer of the same size, each making
+its own kind anew where the key held the other
+(`the_cache_keeps_depth_layers_apart_from_layers`). `end_frame` retires every entry the frame did not use (but one `keep_while` keeps),
 registers `Queue::on_submitted_work_done` for the frame (the frame fence: it records
 the newest finished frame in an atomic), polls the device once without blocking, and
 returns the retired images whose last frame has finished. A steady frame allocates
@@ -791,8 +803,8 @@ its layer is drawn instead.
 
 **Depth of field on models** ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
 When a `ModelDraw`'s camera has a focus, `draw_model` draws the model and its view depth
-(`1 / w`, as `draw_model_depth` draws it over a cleared layer) into two layers the
-compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
+(`1 / w`, as `draw_model_depth` draws it over a cleared depth layer) into a layer and a
+depth layer the compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
 the filter runtime, as an internal filter no chain can hold. Its five passes, sharing
 `focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl` takes the
 largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose radius
@@ -916,8 +928,8 @@ own, which is driven the same way
 3). `ModelDraw::shadows` holds up to `MAX_SHADOW_MAPS` (2) `ShadowMap`s: which of the
 lights casts it, the map, the light's view (`SceneCamera`) it was drawn through, and its
 softness. A map is a view depth drawn from the light, as `render_view_depth` draws cards
-and `draw_model_depth` draws models, into a square layer (`SHADOW_MAP_PX`, 2048, as the
-engine draws them), so its red is `1 / w` of the caster nearest the light. The draw
+and `draw_model_depth` draws models, into a square depth layer (`SHADOW_MAP_PX`, 2048, as
+the engine draws them: 8 MB a map), so its red is `1 / w` of the caster nearest the light. The draw
 takes each map's view into the model's viewing frame (`shadow_view`: the light's
 position and axes through `in_view` and `direction_in_view`, its focal length and
 principal point, and a filter radius of 0.75 to 12 map pixels by softness) after the
@@ -1707,7 +1719,9 @@ a focal length back seen half as far from the middle; a card at 0.4 opacity or h
 writes no depth and one at 0.6 does; a scene with no camera writes nothing; and a
 cube's own front face, through `draw_model_depth`, is nearer than the card behind it,
 and the same when its layer carries that depth and the cube isn't drawn there
-(`golden_view_depth_takes_the_depth_a_models_layer_carries`).
+(`golden_view_depth_takes_the_depth_a_models_layer_carries`). A depth layer is one
+channel and takes only the depth draws, which a colour layer refuses
+(`a_depth_layer_takes_only_depth_draws`).
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1
