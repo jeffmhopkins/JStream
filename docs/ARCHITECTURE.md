@@ -191,6 +191,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action, labels }]   chord → protocol action request
 ├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
+├── value_bindings [{ binding_id, kind, …, target }]   a control or data field → a setting, fader or send (ADR-0178)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -309,7 +310,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   names also removes
   that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
   the bindings it will remove, and a binding is never a delete blocker
-  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). A value
+  binding is the exception: it stays when its target goes and drives nothing until an
+  object with that ID is back ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders; it is one of the scene's options, set with
   `scene.set_options` ([ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4).
@@ -493,17 +496,17 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
-  and hotkey bindings (protocol 0.25) and controller bindings (protocol 0.96,
-  schema version 9), as the organisation bullet above describes.
+  and hotkey bindings (protocol 0.25), controller bindings (protocol 0.96,
+  schema version 9) and value bindings (protocol 0.168, schema version 18), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions for built-in kinds (a source or
   preset saved at another version is refused on load; a source or filter of an effect
   pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
   `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
-  `hotkeys`, `bindings` and `transitions`. The collection file saves everything built so far,
+  `hotkeys`, `bindings`, `value_bindings` and `transitions`. The collection file saves everything built so far,
   encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
-  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller bindings and
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -711,7 +714,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)),
   and since 0.160 a `data` modifier follows one field of a sender's live data, a number
   through a range or a text through a table of states
-  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
+  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3). Since 0.168
+  `width` and `height` stretch one axis of an item's box.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -757,6 +761,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   for a controller `Trigger` (a MIDI note, controller or program change), with the
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
+  `binding.set_value` and `binding.clear_value` (protocol 0.168,
+  [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
+  a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
+  setting, a fader or a send, drawn and heard without being stored; `midi.last_controls`
+  reports each input's latest control change, for learning one.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
@@ -1139,7 +1148,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1240,7 +1249,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   countdown and grouping recipes, fitting boxes to text, a custom shader or shader
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
-  `midi` one to follow a controller, a `data` one to follow a sender's live data)
+  `midi` one to follow a controller, a `data` one to follow a sender's live data, and a
+  value binding, `binding.set_value`, for a filter's or source's setting, a fader or a send)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live
@@ -1664,7 +1674,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   with a migration that refuses them in an older file. Version 16 (ADR-0164) adds a
   group's `share_space` and a scene's `camera_anchor`, refused the same way. Version 17
   (ADR-0171) adds motion modifiers that drive a setting of their item's source
-  (`property` `source` with its `source` target), refused the same way. `jstream-core`
+  (`property` `source` with its `source` target), refused the same way. Version 18
+  (ADR-0178) adds the `value_bindings` and motion modifiers on `width` and `height`,
+  refused the same way; a value binding loads without its target being looked up. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

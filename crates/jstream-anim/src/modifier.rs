@@ -39,11 +39,16 @@ pub enum Property {
     CropRight,
     /// Source pixels cut off the bottom edge, added.
     CropBottom,
+    /// The box's width alone about its centre: the value `v` multiplies it by `1 + v`
+    /// (ADR-0178).
+    Width,
+    /// The box's height alone about its centre, as [`Property::Width`].
+    Height,
 }
 
 impl Property {
     /// Every property, in wire order.
-    pub const ALL: [Property; 12] = [
+    pub const ALL: [Property; 14] = [
         Property::X,
         Property::Y,
         Property::Scale,
@@ -56,6 +61,8 @@ impl Property {
         Property::CropTop,
         Property::CropRight,
         Property::CropBottom,
+        Property::Width,
+        Property::Height,
     ];
 
     /// Its wire name.
@@ -73,6 +80,8 @@ impl Property {
             Property::CropTop => "crop_top",
             Property::CropRight => "crop_right",
             Property::CropBottom => "crop_bottom",
+            Property::Width => "width",
+            Property::Height => "height",
         }
     }
 
@@ -424,6 +433,8 @@ pub struct Offsets {
     pub opacity: f32,
     /// Added to each crop edge, in source pixels: left, top, right, bottom.
     pub crop: [f32; 4],
+    /// Multiplies the width and the height alone, after `scale` (ADR-0178).
+    pub size: [f32; 2],
 }
 
 impl Offsets {
@@ -438,6 +449,7 @@ impl Offsets {
         depth: 0.0,
         opacity: 1.0,
         crop: [0.0; 4],
+        size: [1.0; 2],
     };
 
     /// Whether it changes nothing.
@@ -461,9 +473,13 @@ impl Offsets {
             Property::CropTop => &mut self.crop[1],
             Property::CropRight => &mut self.crop[2],
             Property::CropBottom => &mut self.crop[3],
+            Property::Width => &mut self.size[0],
+            Property::Height => &mut self.size[1],
         };
         let next = match property {
-            Property::Scale | Property::Opacity => *slot * (1.0 + v),
+            Property::Scale | Property::Opacity | Property::Width | Property::Height => {
+                *slot * (1.0 + v)
+            }
             _ => *slot + v,
         };
         // Unchecked values near the float range can overflow the sum (or the cast to
@@ -481,6 +497,15 @@ impl Offsets {
     /// An item's scale with these offsets applied, never negative.
     pub fn scale_of(&self, scale: f32) -> f32 {
         (scale * self.scale).max(0.0)
+    }
+
+    /// A box's width and height with these offsets applied: `scale`, then each alone,
+    /// never negative.
+    pub fn size_of(&self, width: f32, height: f32) -> [f32; 2] {
+        [
+            (self.scale_of(width) * self.size[0]).max(0.0),
+            (self.scale_of(height) * self.size[1]).max(0.0),
+        ]
     }
 
     /// The blend from `self` (progress 0) to `to` (progress 1) at `progress`, which a
@@ -503,6 +528,10 @@ impl Offsets {
                 lerp(self.crop[1], to.crop[1]),
                 lerp(self.crop[2], to.crop[2]),
                 lerp(self.crop[3], to.crop[3]),
+            ],
+            size: [
+                lerp(self.size[0], to.size[0]),
+                lerp(self.size[1], to.size[1]),
             ],
         }
     }
@@ -629,7 +658,7 @@ mod tests {
         for p in Property::ALL {
             assert_eq!(Property::parse(p.as_str()), Some(p));
         }
-        assert_eq!(Property::parse("width"), None);
+        assert_eq!(Property::parse("skew"), None);
     }
 
     #[test]

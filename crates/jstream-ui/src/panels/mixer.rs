@@ -21,10 +21,12 @@ use crate::app::SessionContext;
 use crate::dock::PanelId;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::Fold;
+use crate::panels::learn::{FADER_THROW, Learn};
 use crate::panels::number::NumberField;
 use crate::store::plan_summary;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
+use jstream_control::protocol::ValueTarget;
 use jstream_control::protocol::{
     Action, AudioFollow, Batch, BusId, BusInfo, BusMeter, BusMonitor, Call, CallResult,
     DeleteTarget, Edit, Event, Finite32, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, MonitorTap,
@@ -1430,6 +1432,10 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
                     commit_gain,
                 )}
                 {mute_button(muted, move || set_audio(None, None, Some(!muted())))}
+                <Learn
+                    target=ValueTarget::SourceGain { source_id: id.get_value() }
+                    range=FADER_THROW
+                />
             </Show>
             <details class="routing">
                 <summary>"Routing"</summary>
@@ -1601,6 +1607,15 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
                 on:change=change_gain
             />
             " dB"
+            <Show when=move || gain().is_some()>
+                <Learn
+                    target=ids.with_value(|(source_id, bus_id)| ValueTarget::SendGain {
+                        source_id: source_id.clone(),
+                        bus_id: bus_id.clone(),
+                    })
+                    range=FADER_THROW
+                />
+            </Show>
         </li>
     }
     .into_any()
@@ -1757,6 +1772,7 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                 commit_gain,
             )}
             {mute_button(muted, toggle_mute)}
+            <Learn target=ValueTarget::BusGain { bus_id: id.get_value() } range=FADER_THROW />
             <details class="routing">
                 <summary>"More"</summary>
                 <label>

@@ -45,6 +45,8 @@ protocol's types (`Overrides`).
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), the `bindings`:
   each controller `Trigger` bound to the `Action` it fires
   ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)),
+  the `value_bindings` by ID, each a control or live-data field driving a number
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)),
   and the `transitions`: the presets, keyed by ID, and the default. A hotkey or
   controller binding always names objects that exist. A new state holds one preset, `cut`, as its default.
   Each `Output` has its own `Chains` too: a video chain, and an audio chain when it
@@ -499,6 +501,20 @@ that does not want to change the graph it has.
   `removed_bindings` lists them after `removed_hotkeys`, the inverse ends with a
   `binding.set` for each after the hotkeys', and `delete.plan` lists them, ordered by
   trigger. The touched set names the binding and the objects its action names.
+- **Value bindings** (`value.rs`, ADR-0178): `binding.set_value` sets one whole by its
+  `binding_id` (inverse `binding.clear_value`, or `binding.set_value` with the one it
+  replaced) after `ValueBinding::problem` (`invalid_argument` at `binding.<field>`), the
+  limit of 256 (at `binding`), and its target: `not_found` for a source, filter (found as
+  `filter.set_settings` finds it) or bus that doesn't exist, and `invalid_argument` at
+  `binding.target.param` for a setting its kind lacks, doesn't mark `live`, or that isn't
+  an `int`, `float` or `bool`. Last, the setter the engine will drive it with
+  (`value_edit`) is applied to a copy of the state, and a refusal (a `scene` source's
+  fader) is `invalid_argument` at `binding.target`; a send must already exist, since
+  `send.set` would make it. `binding.clear_value` is `not_found` (entity `binding`) for an
+  ID none has. Deleting what a value binding names leaves it in place, so its touched set
+  names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
+  a number's ends and whether it is whole, or a switch), `None` while it is missing, and
+  `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its
@@ -549,7 +565,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 16), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 18), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -599,7 +615,11 @@ while `false`, is `schema_version` 15. A group's `share_space` and a scene's
 `camera_anchor` (ADR-0164), each omitted while absent, are `schema_version` 16, the
 anchor set after the scene's items exist. Version 17 (ADR-0171) adds motion modifiers
 with `property` `source` and their `source` target, which drive a setting of the item's
-own source. Loading creates the folders top level first, then
+own source. Version 18 (ADR-0178) adds the `value_bindings`, ordered by ID and omitted
+when there are none, and motion modifiers with `property` `width` or `height`. Loading
+puts the value bindings in last, each after its own shape check, without looking up its
+target, so one whose target is gone or of a kind not installed loads as it was saved.
+Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -627,7 +647,8 @@ the engine's; this crate does no I/O.
   `srgb`, and 12 to 13 refuses a version 12 modifier that drives an effect setting,
   and 13 to 14 refuses a scene's `ptz_shots` in a version 13 file, 14 to 15 its
   `keep_warm`, 15 to 16 a group's `share_space` and a scene's `camera_anchor`, and 16 to
-  17 a version 16 modifier that drives a source setting),
+  17 a version 16 modifier that drives a source setting, and 17 to 18 a version 17
+  file's `value_bindings` and a `width` or `height` modifier),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.

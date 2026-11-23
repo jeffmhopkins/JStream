@@ -120,7 +120,7 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker, its transition presets, its hotkey bindings, its scene folders and
+  for the bus picker, its transition presets, its hotkey bindings, its value bindings, its scene folders and
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
   are its parent's with its overrides applied (effects included), `shown_items`, and the children of the
   groups in its tree likewise, `keyframe_children`, which `item_in` and the selection
@@ -199,7 +199,9 @@ Contents ([Design](#design) explains the choices):
   arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
-  `looks` table in `looks.rs`), the Add source dialog (`add_source.rs`:
+  `looks` table in `looks.rs`), the learn button beside a live setting, a fader or a send
+  (`learn.rs`, ADR-0178, whose control matching and learned binding are tested
+  natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -754,6 +756,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
+- **Controller learn** (`learn.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+  The properties form puts a learn button after the reset button of every setting its
+  kind marks `live` that is a number with both ends or a switch, for a source's settings
+  and a filter's; the mixer puts one after each channel's and bus's mute button, and after the dB
+  field of each send that exists. A
+  click reads `midi.last_controls` for a baseline, then every 150 ms for up to 15 s, and
+  binds the first input whose count of control changes grew with `binding.set_value`,
+  over the setting's whole range (a fader's over -60 to +6 dB), 50 ms smoothed, as
+  `learn_<hash of the target>`, so learning again replaces it. A bound button shows its
+  control (`CC 7`) and unbinds it on a click; a learning one says "Move…" and stops on a
+  click. An engine that reads no MIDI controls says so in the problem bar.
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
   its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
   (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source

@@ -293,7 +293,11 @@ text source's Font is picked by name from the fonts installed on the engine's ma
 first and "Other file…" for any other file. An asset path reads the path, then, in the desktop app
 when its root is the collection folder or an absolute path, a Browse… button, then
 where the path starts (Collection, App assets or Absolute); a file under the
-collection folder is stored relative to it.
+collection folder is stored relative to it. Beyond the prototype, every setting in the form
+that its kind marks live and that is a number with both ends or a switch has a learn
+button after its reset ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): click it and move a control on a MIDI controller, and that
+control drives the setting over its whole range; the button then shows the control (`CC 7`)
+and a click unbinds it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -344,7 +348,9 @@ has source filter chains (`filter.add`, `remove`, `set_enabled`, `set_settings`,
 ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); an FX button in the Outputs
 panel or on the Mixer's master card shows one in the panel (FL-07). A scene owns a video
 chain (FL-06), and so does each item: its effects (FL-09,
-[ADR-0065](adr/0065-scene-chains-and-item-effects.md)).
+[ADR-0065](adr/0065-scene-chains-and-item-effects.md)). Beyond the prototype, a filter's
+live settings have the same learn button as a source's ([Inspector](#inspector), [ADR-0178](adr/0178-value-bindings-drive-any-number.md)), on
+any chain, audio filters included.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -370,6 +376,9 @@ covers = ["crates/jstream-ui/src/panels/mixer.rs"]
 
 Spec: [panels › mixer](../design/ui-prototype/spec-panels.md#mixer-panel). The real mixer
 does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyond)).
+Beyond it too, each channel, bus and existing send has a learn button after its fader's
+mute or dB field ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): a MIDI control moved after a click drives that fader from -60 to
++6 dB.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|

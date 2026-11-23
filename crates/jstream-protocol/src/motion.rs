@@ -82,6 +82,11 @@ pub enum MotionProperty {
     CropRight,
     /// Source pixels cut from the bottom edge: added, never below 0.
     CropBottom,
+    /// The box's width alone about its centre, since 0.168 (ADR-0178): multiplied by
+    /// `1 + value`, after `scale`.
+    Width,
+    /// The box's height alone about its centre, since 0.168: as `width`.
+    Height,
     /// A number or colour setting of one of the item's own effects, which the
     /// modifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,
     /// kept within the range the effect's kind gives it and rounded for a whole-number
@@ -104,7 +109,7 @@ pub enum MotionProperty {
 
 impl MotionProperty {
     /// Every property, in the order above.
-    pub const ALL: [MotionProperty; 12] = [
+    pub const ALL: [MotionProperty; 14] = [
         MotionProperty::X,
         MotionProperty::Y,
         MotionProperty::Scale,
@@ -117,6 +122,8 @@ impl MotionProperty {
         MotionProperty::CropTop,
         MotionProperty::CropRight,
         MotionProperty::CropBottom,
+        MotionProperty::Width,
+        MotionProperty::Height,
     ];
 }
 
@@ -690,7 +697,7 @@ fn source_problem(
 
 impl MotionKind {
     /// The first parameter out of range, by wire name, with what it must be.
-    fn problem(&self) -> Option<(&'static str, &'static str)> {
+    pub(crate) fn problem(&self) -> Option<(&'static str, &'static str)> {
         let magnitude = |v: Finite32| (0.0..=MAX_MAGNITUDE).contains(&v.get());
         let frequency = |v: Finite32| v.get() > 0.0 && v.get() <= MAX_FREQUENCY_HZ;
         match *self {

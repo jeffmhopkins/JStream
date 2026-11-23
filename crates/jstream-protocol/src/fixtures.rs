@@ -34,7 +34,7 @@ const FINGERPRINT: &str = "3F:A1:07:C2:9B:44:E8:15:6D:0A:B3:72:C9:5E:21:8F:\
                            D4:66:0B:E7:13:A9:5C:F0:28:7D:B1:4E:93:C6:0F:52";
 use crate::{
     AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
-    SourceMeter,
+    SourceMeter, ValueBinding, ValueTarget,
 };
 use crate::{Bezier, DroppedOverride, ItemOverride, KeyframeTiming, OverrideField};
 use crate::{Binding, Chord, DeviceId, DeviceInfo, HotkeyBinding, Trigger};
@@ -655,6 +655,43 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::BindingClear {
             trigger: pad_trigger(),
+        },
+        // A value binding, then its removal (ADR-0178).
+        Edit::BindingSetValue {
+            binding: value_bindings().remove(0),
+        },
+        Edit::BindingClearValue {
+            binding_id: "grade_fader".into(),
+        },
+        // Value bindings on a source's setting, its fader and a send (ADR-0178).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "glow_knob".into(),
+                target: ValueTarget::SourceSetting {
+                    source_id: SourceId::new("src_cam"),
+                    param: "brightness".into(),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "mic_fader".into(),
+                target: ValueTarget::SourceGain {
+                    source_id: SourceId::new("src_mic"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "mic_send".into(),
+                target: ValueTarget::SendGain {
+                    source_id: SourceId::new("src_mic"),
+                    bus_id: BusId::new("bus_music"),
+                },
+                ..value_bindings().remove(0)
+            },
         },
         // A timeline, then its delete (ADR-0115).
         Edit::TimelineSet {
@@ -1399,6 +1436,51 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
                 output_id: OutputId::new("out_yt"),
             },
         ),
+    ]
+}
+
+/// The value bindings the fixtures report (ADR-0178): a fader on a scene filter's
+/// strength, and a DAW's track volume on a bus fader.
+fn value_bindings() -> Vec<ValueBinding> {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    vec![
+        ValueBinding {
+            binding_id: "grade_fader".into(),
+            input: MotionKind::Midi {
+                control: MotionMidiControl::Cc,
+                controller: Some(7),
+                channel: Some(1),
+                input: Some("Launch Control".into()),
+                smoothing_ms: 50,
+                curve: MotionCurve::Linear,
+                from: Finite32::ZERO,
+                to: Finite32::ONE,
+            },
+            target: ValueTarget::FilterSetting {
+                owner: FilterOwner::Scene {
+                    scene_id: SceneId::new("scn_1"),
+                },
+                filter_id: FilterId::new("flt_grade"),
+                param: "strength".into(),
+            },
+        },
+        ValueBinding {
+            binding_id: "music_volume".into(),
+            input: MotionKind::Data {
+                input: Some("Studio DAW".into()),
+                key: "track/2".into(),
+                field: "volume".into(),
+                range: [Finite32::ZERO, Finite32::ONE],
+                states: Default::default(),
+                smoothing_ms: 50,
+                curve: MotionCurve::Linear,
+                from: f(-60.0),
+                to: Finite32::ZERO,
+            },
+            target: ValueTarget::BusGain {
+                bus_id: BusId::new("bus_music"),
+            },
+        },
     ]
 }
 
@@ -2172,6 +2254,7 @@ pub(crate) fn queries() -> Vec<Query> {
             input: "Bitwig".into(),
             key: "track/0".into(),
         },
+        Query::MidiLastControls,
     ]
 }
 
@@ -3005,6 +3088,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             hotkeys: hotkey_bindings(),
             bindings: controller_bindings(),
+            value_bindings: value_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -3524,6 +3608,15 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 license_text: "About The Cisco-Provided Binary of OpenH264 Video Codec…".into(),
                 installed: false,
                 hardware_encoder: false,
+            }],
+        },
+        QueryResult::MidiLastControls {
+            controls: vec![crate::MidiControlInfo {
+                input: "Bitwig".into(),
+                channel: 1,
+                controller: 7,
+                value: 96,
+                count: 41,
             }],
         },
         QueryResult::DataList {

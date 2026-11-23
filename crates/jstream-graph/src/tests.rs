@@ -4224,6 +4224,7 @@ mod cameras;
 mod filters;
 mod keyframes;
 mod timelines;
+mod values;
 
 fn tone_create(id: &str) -> Edit {
     Edit::SourceCreate {

@@ -31,6 +31,8 @@ enum Object {
     Hotkey(Chord),
     /// A controller binding, by its trigger (ADR-0122).
     Binding(Trigger),
+    /// A value binding, by its ID (ADR-0178).
+    ValueBinding(String),
     Folder(FolderId),
     Label(LabelId),
     /// A timeline, whole: `timeline.set` writes all of it (ADR-0115).
@@ -558,6 +560,15 @@ impl Touched {
             }
             Edit::BindingClear { trigger } => {
                 self.exists.insert(Object::Binding(trigger.clone()));
+            }
+            // A value binding is left in place when what it names goes, so it uses
+            // nothing.
+            Edit::BindingSetValue { binding } => {
+                self.exists
+                    .insert(Object::ValueBinding(binding.binding_id.clone()));
+            }
+            Edit::BindingClearValue { binding_id } => {
+                self.exists.insert(Object::ValueBinding(binding_id.clone()));
             }
             // A timeline is written whole, so any two writes of it conflict, and a write
             // conflicts with deleting its scene.

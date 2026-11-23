@@ -1592,6 +1592,24 @@ impl Engine {
                     })
                     .collect(),
             }),
+            Query::MidiLastControls => Some(QueryResult::MidiLastControls {
+                controls: lock(&self.shared.state)
+                    .live
+                    .midi()
+                    .map(|midi| midi.last_controls())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(input, (count, channel, controller, value))| {
+                        jstream_protocol::MidiControlInfo {
+                            input,
+                            channel: channel + 1,
+                            controller,
+                            value,
+                            count,
+                        }
+                    })
+                    .collect(),
+            }),
             Query::DataGet { input, key } => Some(QueryResult::DataGet {
                 remote_value: self
                     .shared
@@ -2067,6 +2085,18 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn has_settings_copy(&self) -> bool {
         lock(&self.shared.state).shown.is_some()
+    }
+
+    /// The master bus's fader as the engine hears it: the collection's, or a value
+    /// binding's (ADR-0178).
+    #[cfg(test)]
+    pub(crate) fn drawn_master_gain(&self) -> f32 {
+        let state = lock(&self.shared.state);
+        let graph = state.shown.as_ref().unwrap_or(&state.graph);
+        graph
+            .state()
+            .bus(&jstream_protocol::BusId::master())
+            .map_or(f32::NAN, |bus| bus.gain_db().get())
     }
 
     /// A source's setting as the engine draws it, with open gestures' live values
@@ -4771,6 +4801,11 @@ struct State {
     /// Whether the live ticker thread is running: it sends coalesced `live.changed`
     /// events and releases committed live values ([`live_ticker`]).
     ticking: bool,
+    /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
+    driver: crate::value_bindings::ValueDriver,
+    /// Whether the `jstream-values` thread is running: it ticks [`State::driver`] while
+    /// the collection holds a value binding.
+    values_ticking: bool,
     /// The engine this state belongs to, for the live ticker.
     shared: Weak<Shared>,
     /// The program mixer's controls while it runs: it follows the collection's audio.
@@ -6819,7 +6854,13 @@ impl State {
     /// keyframe does not build a copy: it lives on [`graph`](Self::graph), which a
     /// settings copy carries because it clones the graph (ADR-0118).
     fn refresh_shown(&mut self) -> bool {
-        let settings = self.gestures.settings();
+        let mut settings = self.gestures.settings();
+        // The value bindings' settings, after the gestures': a moved control wins
+        // (ADR-0178).
+        settings.extend(self.driver.edits().iter().cloned());
+        if !self.values_ticking && self.graph.value_bindings().len() > 0 {
+            self.values_ticking = spawn_values(self.shared.clone());
+        }
         let had = self.shown.is_some();
         self.shown = if settings.is_empty() {
             None
@@ -7044,6 +7085,18 @@ impl State {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
         next
+    }
+
+    /// Follows the value bindings for one tick (ADR-0178) and, when the settings they
+    /// give changed, draws and hears the collection with them. Returns whether to keep
+    /// ticking: while the collection holds a binding or a value it drove is shown.
+    fn values_tick(&mut self, now: Instant, data: &jstream_sources::LiveData) -> bool {
+        let midi = self.live.midi();
+        let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
+        if changed && self.refresh_shown() {
+            self.redraw();
+        }
+        self.graph.value_bindings().len() > 0 || !self.driver.edits().is_empty()
     }
 
     /// Brings the program mixer in line with the collection's audio as drawn (the open
@@ -7468,6 +7521,32 @@ fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> 
         });
     if let Err(error) = &started {
         tracing::warn!(%error, "the tempo values could not start");
+    }
+    started.is_ok()
+}
+
+/// Starts the `jstream-values` thread: it ticks the value bindings (ADR-0178) every
+/// [`crate::value_bindings::EVERY`] until the collection holds none and nothing they
+/// drove is still shown, or the engine is gone. Returns whether it started; if it
+/// didn't, the next change of the collection tries again.
+fn spawn_values(shared: Weak<Shared>) -> bool {
+    let started = thread::Builder::new()
+        .name("jstream-values".into())
+        .spawn(move || {
+            loop {
+                thread::sleep(crate::value_bindings::EVERY);
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let mut state = lock(&engine.state);
+                if !state.values_tick(Instant::now(), &engine.data) {
+                    state.values_ticking = false;
+                    return;
+                }
+            }
+        });
+    if let Err(error) = &started {
+        tracing::warn!(%error, "the value bindings could not start");
     }
     started.is_ok()
 }

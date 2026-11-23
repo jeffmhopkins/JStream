@@ -18,7 +18,8 @@
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
 //! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
-//! controller (ADR-0168), how a `data` one follows a sender's live data (ADR-0171), and how to write a custom shader the Filters window's
+//! controller (ADR-0168), how a `data` one follows a sender's live data (ADR-0171), how a
+//! value binding puts one on any other number (ADR-0178), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -378,6 +379,19 @@ setting of it: any kind and clock works, its value is added to a number and kept
 within the setting's range, or added to a colour's red, green and blue as a fraction \
 of full (0.3 lightens it), so an `audio` modifier with `from` 0 and `to` 6 on a border's `width` \
 thickens it by up to 6 px on each beat. \
+To put a controller or a sender's field on anything else that takes a number (a filter \
+on a source, a scene, the master or an output, video or audio; a live setting of any \
+source; a source's or a bus's fader; a send), use a value binding: `binding.set_value` \
+with a `binding_id`, the `midi` or `data` fields a modifier takes (`kind`, `controller`, \
+`channel`, `input`, `smoothing_ms`, `curve`, `from`, `to`), and a `target` \
+(`source_setting` or `filter_setting` with its `param`, `source_gain`, `bus_gain`, \
+`send_gain`). Its value replaces the setting, in the setting's unit and kept within its \
+range (a fader in dB, so `from` -60 and `to` 0 is a usable throw; a `bool` is on at one \
+half), once the control first moves, so the project opens as saved; nothing is stored, \
+and `binding.clear_value` hands the setting back. Only `live` settings take one \
+(`kind.describe` marks them). An item's placement, effects and source settings and a \
+camera take modifiers instead, which add to what is stored. `width` and `height` stretch \
+an item's box alone, as `scale` does both. \
 For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
 scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
 `browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \

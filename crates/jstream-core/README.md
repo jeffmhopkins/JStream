@@ -384,7 +384,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -392,7 +392,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 
 - **Motion** (`motion.rs`,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
-  motion modifiers, turned into `jstream-anim`'s when the shot is planned.
+  motion modifiers, turned into `jstream-anim`'s when the shot is planned. A `width` or
+  `height` modifier stretches the item's box on one axis about its centre
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 7).
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
   modifier hearing the program mix, a bus or a source.
@@ -420,6 +422,16 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   it, each frame: a light's colour, intensity, range, cone and softness as it lights the
   scene, and a model's colour, metallic and roughness, or by material its glow, as it
   draws it. Nothing is stored.
+- **Value bindings** (`value_bindings.rs`,
+  [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)): `ValueDriver`
+  follows each value binding's control or data field with the modifiers' readers and
+  smoothing, and once its reading first differs from where it started, turns its mapped
+  value into its target's setter edit (`jstream_graph::value_edit`). A `jstream-values`
+  thread ticks it about 30 times a second while the collection holds a binding, and when
+  those edits change the engine redraws and re-routes audio through the shown graph, on
+  top of the open gestures' values ([Live values](#live-values)). A binding whose input
+  or range is unchanged across a batch keeps its follower; a missing target drives
+  nothing.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot; camera motion reads its
@@ -681,7 +693,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
-  `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`, `tests/mcp.rs`,
+  `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
+  `src/tests/value_bindings.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -926,7 +939,12 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   stays dropped once every source is built (#701)
   (`a_drawn_source_gets_a_scope_fed_from_its_mixer_input`); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
-  off closes its input and its meter and turning it on opens them again. The live
+  off closes its input and its meter and turning it on opens them again. Value bindings
+  (`src/tests/value_bindings.rs`, ADR-0178): a MIDI fader bound to the master drives the
+  gain the mixer is given, smoothed, only once it moves, while `state.get` keeps the
+  stored 0 dB and lists the binding, and clearing it gives the stored gain back; the
+  driver's own test (`value_bindings.rs`) waits for a control to move and follows it. A
+  `width` and `height` modifier stretching one side is `motion.rs`'s. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
   source built and rebuilt, drawn sharper when enlarged and left at its own size when a
   legacy scale of `1e35` overflows (`an_enlarged_text_item_draws_its_source_at_a_density`,
@@ -1345,6 +1363,12 @@ the render parameter channel, never through the collection:
   publishing a snapshot) when the setting values change, when a gesture ends and after
   every applied batch, undo and redo. No collection read shows it. A batch that
   deletes a source drops the live settings addressed to it.
+- **Value bindings** ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
+  add their setter edits to `shown` the same way, after the gestures' settings, so a
+  moved control wins over a gesture on the same setting; through them `shown` also
+  carries filter settings, faders and sends, which the mixer and the render snapshot
+  follow as they follow a stored change. The `jstream-values` thread rebuilds it when
+  those edits change, at most about 30 times a second.
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
@@ -3970,7 +3994,9 @@ with no lock at all, as are the live values on the parameter channel. `video.sna
 reads both under the collection lock and the snapshot thread only receives them. The
 `jstream-live` thread takes the collection lock only to send due `live.changed` events,
 release committed values and fire due timeline cues (each runs as its action's call
-would under that lock, [Timelines](#timelines)), and sleeps without it. The WASM plugins' registry lock
+would under that lock, [Timelines](#timelines)), and sleeps without it. The
+`jstream-values` thread does the same: it takes the collection lock for each tick, reads
+the MIDI state and the live data's watches (atomics) under it, and sleeps without it. The WASM plugins' registry lock
 and the host's lock are taken with no other engine lock held, and released before a
 plugin loads, before an event is emitted and before a subscription closes; under the
 registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
@@ -4033,7 +4059,8 @@ or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its 
 the host's error) and an `info` with how many effects it found. A `tempo.*` value the
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
 `warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
-answers; only its event is missing).
+answers; only its event is missing). A `jstream-values` thread that can't start is a
+`warn`; the value bindings then wait for the next batch to start it.
 
 <a id="audit-log"></a>
 ## Audit log

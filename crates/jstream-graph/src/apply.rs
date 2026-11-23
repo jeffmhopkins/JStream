@@ -412,6 +412,17 @@ fn move_item(
 }
 
 /// Applies one edit to `state` and returns the edits that undo it.
+/// Applies one edit as a batch with no running outputs would, for a check that
+/// works on a copy of the state.
+pub(crate) fn apply_one(
+    state: &mut State,
+    kinds: &Kinds,
+    edit: &Edit,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    apply_edit(state, kinds, edit, at, &BTreeSet::new())
+}
+
 fn apply_edit(
     state: &mut State,
     kinds: &Kinds,
@@ -438,6 +449,9 @@ fn apply_edit(
         return applied;
     }
     if let Some(applied) = crate::hotkey::apply(state, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::value::apply(state, kinds, edit, at) {
         return applied;
     }
     if let Some(applied) = crate::organise::apply(state, edit, at) {

@@ -220,6 +220,8 @@ pub struct State {
     pub(crate) hotkey_labels: BTreeMap<Chord, BTreeSet<LabelId>>,
     /// The controller bindings (ADR-0122), ordered by trigger.
     pub(crate) bindings: BTreeMap<Trigger, Action>,
+    /// The value bindings (ADR-0178), by ID.
+    pub(crate) value_bindings: BTreeMap<String, jstream_protocol::ValueBinding>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -252,6 +254,7 @@ impl Default for State {
             hotkeys: BTreeMap::new(),
             hotkey_labels: BTreeMap::new(),
             bindings: BTreeMap::new(),
+            value_bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),

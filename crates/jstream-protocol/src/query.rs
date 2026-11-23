@@ -2,7 +2,7 @@
 
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
-use crate::binding::Binding;
+use crate::binding::{Binding, MidiControlInfo, ValueBinding};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::clap::ClapScanInfo;
 use crate::command::{
@@ -265,6 +265,11 @@ pub enum Query {
         /// The key, as `data.list` gives it.
         key: String,
     },
+    /// Each MIDI input's latest control change (since 0.168, ADR-0178), by input name:
+    /// what a client that learns a controller for a value binding watches. Runtime
+    /// state, so no `rev`; an input that has sent no control change is left out.
+    #[serde(rename = "midi.last_controls")]
+    MidiLastControls,
     /// A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom
     /// `scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether
     /// one is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its
@@ -484,6 +489,7 @@ impl Query {
             Query::CaptureTargets => "capture.targets",
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
+            Query::MidiLastControls => "midi.last_controls",
             Query::DataList => "data.list",
             Query::DataGet { .. } => "data.get",
             Query::SceneCameraAim { .. } => "scene.camera_aim",
@@ -627,6 +633,10 @@ pub enum QueryResult {
         /// missing (from a server older than 0.96) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         bindings: Vec<Binding>,
+        /// Every value binding (ADR-0178), ordered by ID. Omitted when there are none,
+        /// and missing (from a server older than 0.168) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        value_bindings: Vec<ValueBinding>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -849,6 +859,12 @@ pub enum QueryResult {
         /// The senders heard, ordered by name, then address.
         senders: Vec<crate::JtunnelSenderInfo>,
     },
+    /// The result of `midi.last_controls` (0.168).
+    #[serde(rename = "midi.last_controls")]
+    MidiLastControls {
+        /// Each input's latest control change, ordered by input name.
+        controls: Vec<MidiControlInfo>,
+    },
     /// The result of `data.list` (0.140).
     #[serde(rename = "data.list")]
     DataList {
@@ -1003,6 +1019,7 @@ impl QueryResult {
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
+            QueryResult::MidiLastControls { .. } => "midi.last_controls",
             QueryResult::DataList { .. } => "data.list",
             QueryResult::DataGet { .. } => "data.get",
             QueryResult::SceneCameraAim { .. } => "scene.camera_aim",

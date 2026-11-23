@@ -25,6 +25,7 @@ use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::custom_shader::{self, ShaderEditor};
 use crate::panels::device_preview::{SavedPreview, Shows};
 use crate::panels::filter_presets::{preset_patch, presets};
+use crate::panels::learn::LearnOwner;
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::settings::{SettingsDialog, SettingsPage};
@@ -2014,9 +2015,10 @@ fn Editor(
             }
         });
     };
+    let learn = LearnOwner::Filter(owner.get_value(), filter_id.get_value());
     view! {
         <div class="filter-editor">
-            <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit />
+            <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit learn=learn />
         </div>
     }
 }
@@ -3283,18 +3285,20 @@ fn FilterPane(target: Target) -> impl IntoView {
     };
     let form = {
         let source_id = own_source(&target.with_value(|t| t.owner.clone()));
-        move || {
-            match descriptor.get() {
+        move || match descriptor.get() {
             None if problem.with(Option::is_some) => ().into_any(),
             None => view! { <p class="placeholder">"Loading…"</p> }.into_any(),
             Some(kind) if kind.params.is_empty() => {
                 view! { <p class="muted">"This filter has no settings."</p> }.into_any()
             }
-            Some(kind) => view! {
-                <Form kind=kind source_id=source_id.clone() settings=settings errors=errors commit=commit />
+            Some(kind) => {
+                let learn =
+                    target.with_value(|t| LearnOwner::Filter(t.owner.clone(), t.filter_id.clone()));
+                view! {
+                    <Form kind=kind source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn />
+                }
+                .into_any()
             }
-            .into_any(),
-        }
         }
     };
     // A follow camera's zoom keys (ADR-0112, ADR-0120): bound at once, as everywhere,

@@ -83,10 +83,15 @@ const V15: &str = include_str!("fixtures/v15.json");
 /// 1 must.
 const V16: &str = include_str!("fixtures/v16.json");
 
-/// A collection file at schema version 17, the current one: version 16 with a motion
-/// modifier on `i4` that drives a material's glow on its source (ADR-0171). The same
-/// rule applies once version 18 exists.
+/// A collection file at schema version 17: version 16 with a motion modifier on `i4`
+/// that drives a material's glow on its source (ADR-0171). It must keep loading as
+/// version 1 must.
 const V17: &str = include_str!("fixtures/v17.json");
+
+/// A collection file at schema version 18, the current one: version 17 with a value
+/// binding of a controller to the master's fader (ADR-0178). The same rule applies once
+/// version 19 exists.
+const V18: &str = include_str!("fixtures/v18.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -778,9 +783,60 @@ fn v17_graph() -> Graph {
     graph
 }
 
+/// [`v17_graph`] with a controller bound to the master's fader (ADR-0178).
+fn v18_graph() -> Graph {
+    use jstream_protocol::{
+        Finite32, MotionCurve, MotionKind, MotionMidiControl, ValueBinding, ValueTarget,
+    };
+    let mut graph = v17_graph();
+    let applied = graph.apply(
+        &[Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "master_fader".into(),
+                input: MotionKind::Midi {
+                    control: MotionMidiControl::Cc,
+                    controller: Some(7),
+                    channel: Some(1),
+                    input: None,
+                    smoothing_ms: 50,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::new(-60.0).expect("finite"),
+                    to: Finite32::ZERO,
+                },
+                target: ValueTarget::BusGain {
+                    bus_id: BusId::master(),
+                },
+            },
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v17_graph().to_collection_json(), V17);
+    assert_eq!(v18_graph().to_collection_json(), V18);
+}
+
+#[test]
+fn the_v18_fixture_loads_exactly() {
+    let expected = v18_graph();
+    let loaded = load(V18);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(16)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 18 adds value bindings (ADR-0178): one in a version 17 file is refused, as
+/// version 17 refused it.
+#[test]
+fn a_version_17_value_binding_is_refused() {
+    let mut value: Value = serde_json::from_str(V18).expect("the v18 fixture");
+    value["schema_version"] = json!(17);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 17, .. })
+    ));
 }
 
 #[test]

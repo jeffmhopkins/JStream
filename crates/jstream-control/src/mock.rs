@@ -87,6 +87,31 @@ impl MockEngine {
         Self::default()
     }
 
+    /// Has MIDI input `input` send control change `controller` at `value` on `channel`
+    /// (1 to 16), as `midi.last_controls` then reports it (ADR-0178).
+    pub fn move_control(&self, input: &str, channel: u8, controller: u8, value: u8) {
+        let mut state = lock(&self.shared);
+        let controls = &mut state.midi_controls;
+        match controls.iter_mut().find(|c| c.input == input) {
+            Some(control) => {
+                control.channel = channel;
+                control.controller = controller;
+                control.value = value;
+                control.count += 1;
+            }
+            None => {
+                controls.push(jstream_protocol::MidiControlInfo {
+                    input: input.to_owned(),
+                    channel,
+                    controller,
+                    value,
+                    count: 1,
+                });
+                controls.sort_by(|a, b| a.input.cmp(&b.input));
+            }
+        }
+    }
+
     /// Declares an output in the `stopped` state, so `output.start`, `output.stop` and
     /// `output.status` can name it, as `jstream_core::Engine::with_output` does. This
     /// changes no `rev` and emits no event. A declared output has no target, so it is not
@@ -294,6 +319,9 @@ struct Removed {
 #[derive(Default)]
 struct State {
     collection: Collection,
+    /// Each MIDI input's latest control change, which `midi.last_controls` reports and
+    /// [`MockEngine::move_control`] sets (ADR-0178).
+    midi_controls: Vec<jstream_protocol::MidiControlInfo>,
     /// Every output the engine knows (configured or declared), with its runtime state.
     outputs: BTreeMap<OutputId, OutputState>,
     /// The outputs [`MockEngine::with_output`] declared. They stay known whatever the
@@ -596,6 +624,9 @@ struct Collection {
     hotkey_labels: BTreeMap<Chord, Vec<LabelId>>,
     /// The controller bindings (ADR-0122), ordered by trigger.
     bindings: BTreeMap<Trigger, Action>,
+    /// The value bindings (ADR-0178), by ID. The mock checks their shape, not their
+    /// targets.
+    value_bindings: BTreeMap<String, jstream_protocol::ValueBinding>,
     /// The scene list's folders, in folder order (ADR-0024 §3).
     folders: Vec<jstream_protocol::FolderInfo>,
     /// The labels, in label order (ADR-0024 §4).
@@ -633,6 +664,7 @@ impl Default for Collection {
             hotkeys: BTreeMap::new(),
             hotkey_labels: BTreeMap::new(),
             bindings: BTreeMap::new(),
+            value_bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
         }
@@ -1493,6 +1525,7 @@ impl State {
                     .iter()
                     .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                     .collect(),
+                value_bindings: self.collection.value_bindings.values().cloned().collect(),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: self.collection.folders.clone(),
                 labels: self.collection.labels.clone(),
@@ -1537,6 +1570,9 @@ impl State {
             },
             // Nor any live data, which only the receiver fills (ADR-0171).
             Query::DataList => QueryResult::DataList { inputs: Vec::new() },
+            Query::MidiLastControls => QueryResult::MidiLastControls {
+                controls: self.midi_controls.clone(),
+            },
             Query::DataGet { .. } => QueryResult::DataGet { remote_value: None },
             Query::PtzList => QueryResult::PtzList {
                 cameras: Vec::new(),
@@ -2755,6 +2791,23 @@ impl Collection {
                     return Err(not_found(EntityKind::Binding, &trigger.to_string()));
                 };
                 vec![Edit::BindingSet { trigger, action }]
+            }
+            // The graph's shape check; the mock doesn't look up what it names.
+            Edit::BindingSetValue { binding } => {
+                if let Some((field, reason)) = binding.problem() {
+                    return Err(invalid(at, &format!("binding.{field}"), reason));
+                }
+                let id = binding.binding_id.clone();
+                match self.value_bindings.insert(id.clone(), binding) {
+                    Some(old) => vec![Edit::BindingSetValue { binding: old }],
+                    None => vec![Edit::BindingClearValue { binding_id: id }],
+                }
+            }
+            Edit::BindingClearValue { binding_id } => {
+                let Some(binding) = self.value_bindings.remove(&binding_id) else {
+                    return Err(not_found(EntityKind::Binding, &binding_id));
+                };
+                vec![Edit::BindingSetValue { binding }]
             }
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -4406,6 +4459,7 @@ mod tests {
                 sends,
                 hotkeys,
                 bindings,
+                value_bindings,
                 transitions,
                 folders,
                 labels,
@@ -4425,6 +4479,7 @@ mod tests {
                 sends,
                 hotkeys,
                 bindings,
+                value_bindings,
                 transitions,
                 folders,
                 labels,
@@ -4649,6 +4704,7 @@ mod tests {
                 master: Default::default(),
                 hotkeys: vec![],
                 bindings: vec![],
+                value_bindings: vec![],
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),
