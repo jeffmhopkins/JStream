@@ -177,8 +177,9 @@ and calls this crate.
   premultiplied sRGB-encoded colour while the items draw: each item encodes its colour
   (the shader's `ENCODED` override), the same blend states then give a browser's
   composite, and the backdrop modes mix the encoded values as they are. One decode pass
-  after the last item (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of the whole
-  target) leaves premultiplied linear light, so a canvas or a layer is linear either way.
+  after the last item (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of the target,
+  or over a transparent background of the box the items reached alone) leaves
+  premultiplied linear light, so a canvas or a layer is linear either way.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
@@ -534,7 +535,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    `ENCODED` override), and the backdrop modes mix the encoded colours directly. After
    the last item the whole target is copied into the backdrop and one fullscreen draw
    (`resolve.wgsl`'s `fs_decode`) writes it back as premultiplied linear, so steps 4 and
-   on, and a layer's reader, see linear light. The curves are written so that 1 encodes
+   on, and a layer's reader, see linear light. Over a transparent background the copy
+   and the draw cover only the box the items could reach (the one a layer keeps as its
+   content, #1070), and a pass that drew nothing has neither: every other texel is zero,
+   which is zero in both spaces (`a_browser_style_layer_is_decoded_only_where_it_drew`). The curves are written so that 1 encodes
    and decodes to exactly 1, so white survives nested scenes' round trips.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It samples the FP16 texel at its centre with a nearest sampler (the

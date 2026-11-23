@@ -1432,7 +1432,9 @@ target under the item. The collection's blending space picks where they mix
 overlay, difference and exclusion mix sRGB-encoded values. In `srgb`, a new
 collection's, the target holds premultiplied sRGB-encoded colour while the items draw,
 so every mode mixes as a browser does with the same blend states, and one decode pass
-after the last item turns it back into linear light. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
+after the last item turns it back into linear light: over a transparent background only
+over the box the items reached, and not at all when they reached nothing, since a zero
+texel decodes to itself. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
