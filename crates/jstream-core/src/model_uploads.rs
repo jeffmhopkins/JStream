@@ -113,8 +113,17 @@ impl ModelUploads {
         mut wanted: impl FnMut(&SourceId) -> bool,
         mut take: impl FnMut(SourceId, u64, GpuModel),
     ) {
+        let mut gone = false;
         if let Some((_, done)) = &self.thread {
-            for done in done.try_iter() {
+            loop {
+                let done = match done.try_recv() {
+                    Ok(done) => done,
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        gone = true;
+                        break;
+                    }
+                };
                 if self.asked.get(&done.source) != Some(&done.version) {
                     continue;
                 }
@@ -125,6 +134,19 @@ impl ModelUploads {
                         self.refused.insert(done.source, (done.version, error));
                     }
                 }
+            }
+        }
+        if gone {
+            // The thread ended with uploads owed, which only a panic in one does.
+            // They are refused, so their items fail and say so instead of waiting for
+            // good; a model asked for after this starts a new thread.
+            self.thread = None;
+            for (source, version) in std::mem::take(&mut self.asked) {
+                let error = RenderError::Invalid {
+                    what: "model",
+                    detail: "the jstream-models thread stopped before uploading it".into(),
+                };
+                self.refused.insert(source, (version, error));
             }
         }
         self.asked.retain(|source, _| wanted(source));
@@ -166,7 +188,24 @@ fn run(
     queued: &Receiver<Job>,
     finished: &Sender<Done>,
 ) {
-    for job in queued {
+    // The jobs taken off the queue and not yet uploaded, oldest first.
+    let mut waiting: std::collections::VecDeque<Job> = std::collections::VecDeque::new();
+    loop {
+        if waiting.is_empty() {
+            match queued.recv() {
+                Ok(job) => waiting.push_back(job),
+                Err(_) => return,
+            }
+        }
+        waiting.extend(queued.try_iter());
+        let Some(job) = waiting.pop_front() else {
+            continue;
+        };
+        // A newer model of the same source waits already: this one would be dropped
+        // when it came back, so it isn't uploaded.
+        if waiting.iter().any(|later| later.source == job.source) {
+            continue;
+        }
         let done = Done {
             version: job.model.version(),
             result: upload(&job.model),
@@ -223,5 +262,64 @@ mod tests {
         let next = Arc::new(Shape::Plane.model(Material::default()).expect("a plane"));
         assert_ne!(next.version(), model.version());
         assert!(matches!(uploads.ask(&source, &next), Ok(Asked::Coming)));
+    }
+
+    /// A model superseded while it waited is not uploaded, and uploads owed when the
+    /// thread dies are refused instead of awaited for good.
+    #[test]
+    fn a_superseded_job_is_skipped_and_a_dead_thread_refuses_what_it_owed() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        let (hold, held) = mpsc::channel::<()>();
+        let held = std::sync::Mutex::new(held);
+        let mut uploads = ModelUploads::new(move |_| {
+            // The first upload waits to be let go; the third panics.
+            match counted.fetch_add(1, Ordering::SeqCst) {
+                0 => {
+                    let _ = held.lock().expect("unpoisoned").recv();
+                }
+                2 => panic!("an upload that panics"),
+                _ => {}
+            }
+            Err(RenderError::Invalid {
+                what: "model",
+                detail: "refused".into(),
+            })
+        });
+        let plane = || Arc::new(Shape::Plane.model(Material::default()).expect("a plane"));
+        let (first, cam) = (SourceId::new("first"), SourceId::new("cam"));
+        let wait = |uploads: &mut ModelUploads| {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while uploads.busy() {
+                assert!(Instant::now() < deadline, "the thread never answered");
+                std::thread::sleep(Duration::from_millis(1));
+                uploads.finished(|_| true, |_, _, _| panic!("no upload succeeds here"));
+            }
+        };
+        // While the thread is busy with `first`, `cam` is asked for twice.
+        assert!(matches!(uploads.ask(&first, &plane()), Ok(Asked::Coming)));
+        let (old, new) = (plane(), plane());
+        assert!(matches!(uploads.ask(&cam, &old), Ok(Asked::Coming)));
+        assert!(matches!(uploads.ask(&cam, &new), Ok(Asked::Coming)));
+        hold.send(()).expect("the thread waits");
+        wait(&mut uploads);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "the older `cam` was skipped"
+        );
+
+        // The next upload panics: what was asked is refused, not awaited.
+        let doomed = plane();
+        assert!(matches!(uploads.ask(&cam, &doomed), Ok(Asked::Coming)));
+        wait(&mut uploads);
+        assert!(matches!(
+            uploads.ask(&cam, &doomed),
+            Err(RenderError::Invalid { .. })
+        ));
+        // And a new model starts a new thread.
+        assert!(matches!(uploads.ask(&cam, &plane()), Ok(Asked::Coming)));
+        wait(&mut uploads);
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
     }
 }

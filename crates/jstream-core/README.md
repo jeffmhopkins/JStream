@@ -2187,7 +2187,10 @@ waiting. Until then the item draws nothing, or the version it had, and both vers
 are held while the new one uploads
 (`a_model_uploaded_aside_draws_once_its_upload_is_back`). A refused upload fails its
 item as before and isn't asked for again until the model changes
-(`a_refused_upload_is_not_asked_for_again_until_the_model_changes`). The thread starts
+(`a_refused_upload_is_not_asked_for_again_until_the_model_changes`). The thread
+skips a model that a newer one of the same source already waits behind, and if it dies
+with uploads owed they are refused, not awaited
+(`a_superseded_job_is_skipped_and_a_dead_thread_refuses_what_it_owed`). The thread starts
 with the first model and ends with the `Chains`. Every other compositor (the snapshot
 thread's, a preview's) uploads where it draws. `Chains::keep_models` uploads the
 models the warm scenes show the same way and keeps them while they are kept, though no
