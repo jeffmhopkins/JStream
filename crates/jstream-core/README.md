@@ -405,7 +405,11 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   `data` modifier following one field of a sender's live data, a number through its
   `range` or a text through its `states`, read from the engine's `LiveData` (which
   reaches the planner with the loaded assets) by a shared watch, and smoothed by the
-  same follower; it reads 0 while the field is absent.
+  same follower; it reads 0 while the field is absent. One with `color_from` paints
+  instead (decision 5): the binding holds the field's `#rrggbb` text or its palette pick
+  as a colour, smoothed per channel, and `Bindings::tint` hands it to the colour settings
+  below, which take it in place of their own colour before the other modifiers add, and
+  never add it as a number.
 - **Driven effect settings** (`driven.rs`,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
   modifier adding to a number or colour setting of one of its item's effects each
@@ -416,7 +420,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   `source` modifier adding to a live setting of its item's own source as that item draws
   it, each frame: a light's colour, intensity, range, cone and softness as it lights the
   scene, and a model's colour, metallic and roughness, or by material its glow, as it
-  draws it. Nothing is stored.
+  draws it. Nothing is stored. A painting `data` modifier sets a light's colour, a
+  model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
+  `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot. A follow camera holds its

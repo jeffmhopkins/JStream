@@ -652,7 +652,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   for any), the message's Key, the Field within it (a dotted path, blank for the whole
   message), its States (`recording=1, playing=0.5`, for a field that is text) and its
   curve, with At 0 (off), At 1 (on), Number at 0, Number at 1 and Smoothing as its
-  fields, starting on the transport's `playing`, ADR-0171; not on a camera), that
+  fields, starting on the transport's `playing`, ADR-0171, and on an effect or source
+  setting a Colour choice, Lightens it, Its #rrggbb text or A palette by its text, with
+  the Palette (`recording=#ff2020, playing=#20ff40`) for the last, ADR-0171 decision 5,
+  cleared when it moves to a placement property; not on a camera), that
   kind's fields, when its time starts (in step, when shown, or when fired; not for
   audio, MIDI or data), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,

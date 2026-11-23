@@ -15,9 +15,9 @@ use super::number::NumberField;
 use crate::app::SessionContext;
 use crate::store::Studio;
 use jstream_control::protocol::{
-    Action, BusId, Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionCurve,
-    MotionKind, MotionMeasure, MotionMidiControl, MotionModifier, MotionProperty, MotionShape,
-    SceneId, SourceId,
+    Action, BusId, Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionColorFrom,
+    MotionCurve, MotionKind, MotionMeasure, MotionMidiControl, MotionModifier, MotionProperty,
+    MotionShape, SceneId, SourceId,
 };
 use leptos::prelude::*;
 
@@ -166,6 +166,8 @@ pub fn default_kind(name: &str, property: MotionProperty) -> Option<MotionKind> 
             curve: MotionCurve::Linear,
             from: finite(from),
             to: finite(to),
+            color_from: None,
+            palette: std::collections::BTreeMap::new(),
         });
     }
     if name == "MIDI" {
@@ -670,6 +672,94 @@ pub fn with_states(kind: &MotionKind, text: &str) -> Option<MotionKind> {
     Some(kind)
 }
 
+/// The ways a data modifier on a colour setting can colour it (ADR-0171 decision 5), as
+/// the Colour field names them.
+pub const COLOR_MODES: [(Option<MotionColorFrom>, &str); 3] = [
+    (None, "Lightens it"),
+    (Some(MotionColorFrom::Field), "Its #rrggbb text"),
+    (Some(MotionColorFrom::Palette), "A palette by its text"),
+];
+
+/// A data `kind`'s way of colouring, or `None` when it isn't data.
+pub fn color_from_of(kind: &MotionKind) -> Option<Option<MotionColorFrom>> {
+    match kind {
+        MotionKind::Data { color_from, .. } => Some(*color_from),
+        _ => None,
+    }
+}
+
+/// A data `kind` colouring its setting by `next`. A palette starts with a clip's
+/// recording and playing colours, so it is never empty, and goes when it isn't used.
+/// `None` when it isn't data or already does that.
+pub fn with_color_from(kind: &MotionKind, next: Option<MotionColorFrom>) -> Option<MotionKind> {
+    let mut kind = kind.clone();
+    let MotionKind::Data {
+        color_from,
+        palette,
+        ..
+    } = &mut kind
+    else {
+        return None;
+    };
+    if *color_from == next {
+        return None;
+    }
+    *color_from = next;
+    if next == Some(MotionColorFrom::Palette) {
+        if palette.is_empty() {
+            palette.insert("recording".into(), "#ff2020".into());
+            palette.insert("playing".into(), "#20ff40".into());
+        }
+    } else {
+        palette.clear();
+    }
+    Some(kind)
+}
+
+/// A data `kind`'s palette as the Palette field shows it: `text=#rrggbb` pairs, comma
+/// separated.
+pub fn palette_text(kind: &MotionKind) -> String {
+    let MotionKind::Data { palette, .. } = kind else {
+        return String::new();
+    };
+    palette
+        .iter()
+        .map(|(text, color)| format!("{text}={color}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// A data `kind` with the Palette field's `text` as its palette: each `text=#rrggbb`
+/// pair, its colour lower case; a pair that isn't one is left out. `None` when it isn't
+/// a palette, nothing is left, or it is the same.
+pub fn with_palette(kind: &MotionKind, text: &str) -> Option<MotionKind> {
+    let mut kind = kind.clone();
+    let MotionKind::Data {
+        color_from: Some(MotionColorFrom::Palette),
+        palette,
+        ..
+    } = &mut kind
+    else {
+        return None;
+    };
+    let next: std::collections::BTreeMap<String, String> = text
+        .split(',')
+        .filter_map(|pair| {
+            let (name, color) = pair.split_once('=')?;
+            let (name, color) = (name.trim(), color.trim().to_ascii_lowercase());
+            let hex = color.strip_prefix('#')?;
+            (!name.is_empty() && hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+                .then(|| (name.to_owned(), color.clone()))
+        })
+        .take(jstream_protocol::MAX_DATA_STATES)
+        .collect();
+    if next.is_empty() || *palette == next {
+        return None;
+    }
+    *palette = next;
+    Some(kind)
+}
+
 /// `kind`'s curve, when it is audio or MIDI.
 fn curve_of(kind: &MotionKind) -> Option<MotionCurve> {
     match kind {
@@ -833,9 +923,13 @@ pub fn MotionSection(
                                         return false;
                                     };
                                     m.property = p;
-                                    // A placement property names no effect or source setting.
+                                    // A placement property names no effect or source
+                                    // setting, so it has no colour to set either.
                                     m.effect = None;
                                     m.source = None;
+                                    if let Some(kind) = with_color_from(&m.kind, None) {
+                                        m.kind = kind;
+                                    }
                                     true
                                 });
                             }
@@ -1160,6 +1254,68 @@ pub fn MotionSection(
                                 on:change=move |event| {
                                     let text = event_target_value(&event);
                                     change(n, &|m| match with_states(&m.kind, &text) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            />
+                        </label>
+                    </Show>
+                    <Show when=move || at().is_some_and(|m| {
+                        color_from_of(&m.kind).is_some()
+                            && matches!(m.property, MotionProperty::Effect | MotionProperty::Source)
+                    })>
+                        <label class="select-field">
+                            <span class="field-label">"Colour"</span>
+                            <select
+                                aria-label="How it colours its setting"
+                                title="On a colour setting: lighten it by the level, or set it from the field's own #rrggbb text, or from a palette by the field's text"
+                                prop:value=move || at().and_then(|m| color_from_of(&m.kind)).and_then(|from| COLOR_MODES
+                                        .iter()
+                                        .find(|(f, _)| *f == from)
+                                        .map(|(_, name)| *name)).unwrap_or("")
+                                on:change=move |event| {
+                                    let name = event_target_value(&event);
+                                    let Some(next) = COLOR_MODES
+                                        .iter()
+                                        .find(|(_, n)| *n == name)
+                                        .map(|(f, _)| *f)
+                                    else {
+                                        return;
+                                    };
+                                    change(n, &|m| match with_color_from(&m.kind, next) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            >
+                                {COLOR_MODES
+                                    .iter()
+                                    .map(|(_, name)| view! { <option value=*name>{*name}</option> })
+                                    .collect_view()}
+                            </select>
+                        </label>
+                    </Show>
+                    <Show when=move || at().is_some_and(|m| {
+                        color_from_of(&m.kind) == Some(Some(MotionColorFrom::Palette))
+                    })>
+                        <label class="select-field">
+                            <span class="field-label">"Palette"</span>
+                            <input
+                                type="text"
+                                aria-label="The colour for each text"
+                                placeholder="recording=#ff2020, playing=#20ff40"
+                                title="Each text and the colour it sets, #rrggbb. A text not listed leaves the setting's own colour"
+                                prop:value=move || at().map(|m| palette_text(&m.kind)).unwrap_or_default()
+                                on:change=move |event| {
+                                    let text = event_target_value(&event);
+                                    change(n, &|m| match with_palette(&m.kind, &text) {
                                         Some(kind) => {
                                             m.kind = kind;
                                             true
@@ -1549,6 +1705,54 @@ mod tests {
         assert_eq!(with_data_path(&wiggle, "a", "b"), None);
         assert_eq!(with_states(&wiggle, "a=1"), None);
         assert_eq!(states_text(&wiggle), "");
+    }
+
+    /// ADR-0171 decision 5: a data row on a colour setting can set the colour from its
+    /// field's text or from a palette, and every choice is one the wire accepts.
+    #[test]
+    fn a_data_row_colours_its_setting_from_its_field_or_a_palette() {
+        let lamp = default_kind("DAW data", MotionProperty::Source).expect("a kind");
+        assert_eq!(color_from_of(&lamp), Some(None), "it lightens by default");
+        let hex = with_color_from(&lamp, Some(MotionColorFrom::Field)).expect("switched");
+        assert_eq!(color_from_of(&hex), Some(Some(MotionColorFrom::Field)));
+        assert_eq!(palette_text(&hex), "");
+        assert_eq!(with_color_from(&hex, Some(MotionColorFrom::Field)), None);
+        let picked = with_color_from(&hex, Some(MotionColorFrom::Palette)).expect("switched");
+        assert_eq!(palette_text(&picked), "playing=#20ff40, recording=#ff2020");
+        let custom = with_palette(
+            &picked,
+            "queued=#FFAA00, bad=red, =#000000, stopped=#101010",
+        )
+        .expect("a palette");
+        assert_eq!(palette_text(&custom), "queued=#ffaa00, stopped=#101010");
+        assert_eq!(with_palette(&custom, "nothing usable"), None, "never empty");
+        assert_eq!(
+            with_palette(&hex, "a=#000000"),
+            None,
+            "only a palette takes one"
+        );
+        let back = with_color_from(&custom, None).expect("switched");
+        assert_eq!(palette_text(&back), "", "the palette goes with it");
+
+        let row = |kind| MotionModifier {
+            property: MotionProperty::Source,
+            source: Some(jstream_control::protocol::MotionSetting {
+                param: "color".into(),
+                material: None,
+            }),
+            kind,
+            ..with_added(&[]).expect("room")[0].clone()
+        };
+        for kind in [lamp, hex, picked, custom, back] {
+            assert_eq!(
+                jstream_control::protocol::check_motion(&[row(kind.clone())]),
+                Ok(()),
+                "{kind:?}"
+            );
+        }
+        let wiggle = default_kind("Wiggle", MotionProperty::X).expect("a kind");
+        assert_eq!(color_from_of(&wiggle), None);
+        assert_eq!(with_color_from(&wiggle, Some(MotionColorFrom::Field)), None);
     }
 
     #[test]

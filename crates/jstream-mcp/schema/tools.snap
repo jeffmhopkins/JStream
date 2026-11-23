@@ -2239,6 +2239,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -2268,6 +2279,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -5608,6 +5626,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionColorFrom": {
+            "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+            "oneOf": [
+              {
+                "const": "field",
+                "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+                "type": "string"
+              },
+              {
+                "const": "palette",
+                "description": "The field's text picks a colour from `palette`.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionCurve": {
             "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
@@ -5972,6 +6005,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -6001,6 +6045,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -9496,6 +9547,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -9525,6 +9587,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -12865,6 +12934,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionColorFrom": {
+            "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+            "oneOf": [
+              {
+                "const": "field",
+                "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+                "type": "string"
+              },
+              {
+                "const": "palette",
+                "description": "The field's text picks a colour from `palette`.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionCurve": {
             "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
@@ -13229,6 +13313,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -13258,6 +13353,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -18663,6 +18765,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -18692,6 +18805,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -22032,6 +22152,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionColorFrom": {
+            "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+            "oneOf": [
+              {
+                "const": "field",
+                "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+                "type": "string"
+              },
+              {
+                "const": "palette",
+                "description": "The field's text picks a colour from `palette`.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionCurve": {
             "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
@@ -22396,6 +22531,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -22425,6 +22571,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -24305,6 +24458,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionColorFrom": {
+            "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+            "oneOf": [
+              {
+                "const": "field",
+                "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+                "type": "string"
+              },
+              {
+                "const": "palette",
+                "description": "The field's text picks a colour from `palette`.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionCurve": {
             "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
@@ -24669,6 +24837,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -24698,6 +24877,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -28267,6 +28453,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -28296,6 +28493,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -31632,6 +31836,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionColorFrom": {
+            "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+            "oneOf": [
+              {
+                "const": "field",
+                "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+                "type": "string"
+              },
+              {
+                "const": "palette",
+                "description": "The field's text picks a colour from `palette`.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionCurve": {
             "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
@@ -31996,6 +32215,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -32025,6 +32255,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -35060,6 +35297,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -35089,6 +35337,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -35282,6 +35537,21 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "triggered",
                 "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionColorFrom": {
+            "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+            "oneOf": [
+              {
+                "const": "field",
+                "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+                "type": "string"
+              },
+              {
+                "const": "palette",
+                "description": "The field's text picks a colour from `palette`.",
                 "type": "string"
               }
             ]
@@ -39152,6 +39422,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -39181,6 +39462,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [
@@ -42521,6 +42809,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionColorFrom": {
+            "description": "How a `data` modifier on a colour setting sets the colour, rather than lightening it\n(since 0.164, ADR-0171 decision 5).",
+            "oneOf": [
+              {
+                "const": "field",
+                "description": "The field is a `#rrggbb` text (or `#rrggbbaa`, its alpha ignored), taken as it is.",
+                "type": "string"
+              },
+              {
+                "const": "palette",
+                "description": "The field's text picks a colour from `palette`.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionCurve": {
             "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
@@ -42885,6 +43188,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
                 "properties": {
+                  "color_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/MotionColorFrom"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+                  },
                   "curve": {
                     "$ref": "#/$defs/MotionCurve",
                     "default": "linear",
@@ -42914,6 +43228,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind": {
                     "const": "data",
                     "type": "string"
+                  },
+                  "palette": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+                    "type": "object"
                   },
                   "range": {
                     "default": [

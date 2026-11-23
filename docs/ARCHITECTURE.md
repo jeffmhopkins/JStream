@@ -711,7 +711,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)),
   and since 0.160 a `data` modifier follows one field of a sender's live data, a number
   through a range or a text through a table of states
-  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
+  ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3), which since
+  0.164 can set a colour setting from the field, a `#rrggbb` text or a pick from a
+  palette (decision 5).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.

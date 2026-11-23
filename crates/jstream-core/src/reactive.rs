@@ -50,15 +50,26 @@
 //! previews show the controller too. A modifier ID that turns from audio to MIDI between
 //! plans gets a fresh state of its new kind.
 //!
+//! **Data-driven motion** (`reactive.rs`, ADR-0171 decisions 3 and 5): a `data` modifier
+//! is recorded the same way, on a watch of its field in the engine's `LiveData`, and its
+//! reading is mapped onto 0 to 1 (`DataMap`) and smoothed as a MIDI control is. One with
+//! `color_from` paints instead (`Paint`): the field's `#rrggbb` text or its palette pick
+//! is the colour, followed per channel with the same smoothing, and the binding holds it
+//! beside its level. While the field gives no colour it holds none, and the next colour
+//! lands at once. The shot lists such modifiers whether or not they are bound, so a
+//! colour setting never adds one as a number (`Bindings::tint`).
+//!
 //! Docs: docs/adr/0100-audio-reactive-motion-modifiers.md, docs/adr/0168-midi-controllers-drive-motion.md
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use jstream_anim::{Audio, Envelope, Measure, Midi, Smoothing};
 use jstream_media::MediaTime;
-use jstream_protocol::{BusId, ItemId, MotionKind, MotionMidiControl, MotionModifier, SourceId};
+use jstream_protocol::{
+    BusId, ItemId, MotionColorFrom, MotionKind, MotionMidiControl, MotionModifier, SourceId,
+};
 use jstream_sources::{
     AudioMeter, AudioScope, AudioScopes, DataCell, DataReading, DataWatch, LiveData, MidiInputs,
     MidiState,
@@ -178,6 +189,17 @@ pub(crate) struct DataMap {
     high: f64,
     /// Each text's value, by the text's hash, as a reading holds it.
     states: Vec<(u64, f32)>,
+    /// How it sets a colour, when it does (ADR-0171 decision 5).
+    paint: Option<Paint>,
+}
+
+/// How a `data` modifier's reading sets a colour (ADR-0171 decision 5).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Paint {
+    /// The field is a `#rrggbb` text, read as a colour.
+    Field,
+    /// The field's text picks a colour, straight sRGB 0 to 1, by the text's hash.
+    Palette(Vec<(u64, [f32; 3])>),
 }
 
 impl DataMap {
@@ -189,16 +211,30 @@ impl DataMap {
             field,
             range,
             states,
+            color_from,
+            palette,
             ..
         } = &modifier.kind
         else {
             return None;
         };
+        let paint = match color_from {
+            Some(MotionColorFrom::Field) => Some(Paint::Field),
+            Some(MotionColorFrom::Palette) => Some(Paint::Palette(
+                palette
+                    .iter()
+                    .filter_map(|(text, color)| {
+                        Some((jstream_sources::text_hash(text), hex_rgb(color)?))
+                    })
+                    .collect(),
+            )),
+            _ => None,
+        };
         let watch = DataWatch {
             input: input.clone(),
             key: key.clone(),
             field: field.clone(),
-            color: false,
+            color: paint == Some(Paint::Field),
         };
         let map = DataMap {
             low: f64::from(range[0].get()),
@@ -207,8 +243,24 @@ impl DataMap {
                 .iter()
                 .map(|(text, value)| (jstream_sources::text_hash(text), value.get()))
                 .collect(),
+            paint,
         };
         Some((watch, map))
+    }
+
+    /// The colour `reading` sets, straight sRGB 0 to 1, when it paints and the reading
+    /// gives one. Allocates nothing.
+    pub(crate) fn color(&self, reading: DataReading) -> Option<[f32; 3]> {
+        match (self.paint.as_ref()?, reading) {
+            (Paint::Field, DataReading::Color([r, g, b, _])) => {
+                Some([r, g, b].map(|c| f32::from(c) / 255.0))
+            }
+            (Paint::Palette(palette), DataReading::Text(hash)) => palette
+                .iter()
+                .find(|(h, _)| *h == hash)
+                .map(|(_, color)| *color),
+            _ => None,
+        }
     }
 
     /// `reading` as `0..=1`: a number through the range, a text through the table (0
@@ -235,6 +287,28 @@ impl DataMap {
             0.0
         }
     }
+}
+
+/// `#rrggbb` as straight sRGB 0 to 1.
+fn hex_rgb(color: &str) -> Option<[f32; 3]> {
+    let hex = color.strip_prefix('#').filter(|h| h.len() == 6)?;
+    let channel = |at: usize| {
+        u8::from_str_radix(hex.get(at..at + 2)?, 16)
+            .ok()
+            .map(|c| f32::from(c) / 255.0)
+    };
+    Some([channel(0)?, channel(2)?, channel(4)?])
+}
+
+/// Whether `modifier` paints a colour setting rather than adding to it.
+fn paints(modifier: &MotionModifier) -> bool {
+    matches!(
+        modifier.kind,
+        MotionKind::Data {
+            color_from: Some(MotionColorFrom::Field | MotionColorFrom::Palette),
+            ..
+        }
+    )
 }
 
 /// What a binding follows.
@@ -267,6 +341,19 @@ impl Input {
             Input::Midi { state, control, .. } => Some(control.read(state)),
             Input::Data { cell, map, .. } => Some(map.read(cell.read())),
         }
+    }
+
+    /// The colour a painting data input reads now: atomics only.
+    fn color(&self) -> Option<[f32; 3]> {
+        match self {
+            Input::Data { cell, map, .. } => map.color(cell.read()),
+            Input::Scope { .. } | Input::Midi { .. } => None,
+        }
+    }
+
+    /// Whether it paints a colour.
+    fn paints(&self) -> bool {
+        matches!(self, Input::Data { map, .. } if map.paint.is_some())
     }
 
     /// The smoothing parameters of a MIDI or data input.
@@ -324,6 +411,10 @@ pub(crate) struct Binding {
     /// preview shot's) reads its control as it is now, unsmoothed, so a preview shows
     /// the controller too.
     followed: AtomicBool,
+    /// A painting data binding's colour, straight sRGB, each channel as `f32` bits,
+    /// stored with `level`; `painted` says whether there is one (ADR-0171 decision 5).
+    color: [AtomicU32; 3],
+    painted: AtomicBool,
 }
 
 impl PartialEq for Binding {
@@ -340,7 +431,31 @@ impl Binding {
             input,
             level: AtomicU32::new(0),
             followed: AtomicBool::new(false),
+            color: [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)],
+            painted: AtomicBool::new(false),
         }
+    }
+
+    /// Its colour this tick, when it paints one: what a follower stored, or the field's
+    /// as it is now when none has.
+    fn color(&self) -> Option<[f32; 3]> {
+        if !self.followed.load(Ordering::Relaxed) {
+            return self.input.color();
+        }
+        self.painted.load(Ordering::Relaxed).then(|| {
+            self.color
+                .each_ref()
+                .map(|c| f32::from_bits(c.load(Ordering::Relaxed)))
+        })
+    }
+
+    fn store_color(&self, color: Option<[f32; 3]>) {
+        if let Some(color) = color {
+            for (cell, c) in self.color.iter().zip(color) {
+                cell.store(c.to_bits(), Ordering::Relaxed);
+            }
+        }
+        self.painted.store(color.is_some(), Ordering::Relaxed);
     }
 
     /// The scope it hears, when it is an audio binding.
@@ -373,6 +488,9 @@ impl Binding {
 pub(crate) struct Bindings {
     /// Each item's bindings, by modifier ID, in its list's order.
     by_item: BTreeMap<ItemId, Vec<(String, Binding)>>,
+    /// Each item's modifiers that paint a colour setting (ADR-0171 decision 5), bound or
+    /// not: such a modifier never adds to its setting as a number.
+    painting: BTreeSet<(ItemId, String)>,
 }
 
 impl Bindings {
@@ -399,6 +517,10 @@ impl Bindings {
         data: Option<&LiveData>,
     ) {
         for modifier in motion {
+            if paints(modifier) {
+                self.painting
+                    .insert((item.clone(), modifier.modifier_id.clone()));
+            }
             let Some(kind) = jstream_graph::anim_modifiers(std::slice::from_ref(modifier))
                 .pop()
                 // One that drives an effect setting (ADR-0138) follows as one that moves
@@ -475,6 +597,23 @@ impl Bindings {
         self.by_item.is_empty()
     }
 
+    /// For `item`'s modifier `modifier` that paints a colour setting (ADR-0171 decision
+    /// 5): the colour it sets this tick, or `None` while it has none to set. `None` for
+    /// a modifier that adds instead. Allocates nothing.
+    pub(crate) fn tint(&self, item: &ItemId, modifier: &str) -> Option<Option<[f32; 3]>> {
+        let painting = self
+            .painting
+            .iter()
+            .any(|(i, id)| i == item && id == modifier);
+        painting.then(|| {
+            self.by_item
+                .get(item)?
+                .iter()
+                .find(|(id, _)| id == modifier)
+                .and_then(|(_, binding)| binding.color())
+        })
+    }
+
     /// The level of `item`'s audio modifier `modifier` for the current tick, if the shot
     /// has it. Allocates nothing.
     pub(crate) fn level(&self, item: &ItemId, modifier: &str) -> Option<f32> {
@@ -532,6 +671,8 @@ enum Follow {
     Envelope(Envelope),
     /// A MIDI binding's smoothing (ADR-0168).
     Smoothing(Smoothing),
+    /// A painting data binding's colour, a smoothing per channel (ADR-0171 decision 5).
+    Paint([Smoothing; 3]),
 }
 
 impl Follow {
@@ -539,20 +680,21 @@ impl Follow {
     fn new(binding: &Binding) -> Self {
         match binding.input {
             Input::Scope { .. } => Follow::Envelope(Envelope::default()),
+            ref data if data.paints() => Follow::Paint([Smoothing::default(); 3]),
             Input::Midi { .. } | Input::Data { .. } => Follow::Smoothing(Smoothing::default()),
         }
     }
 
     /// Whether it is the state `binding` keeps.
     fn fits(&self, binding: &Binding) -> bool {
-        matches!(
-            (self, &binding.input),
-            (Follow::Envelope(_), Input::Scope { .. })
-                | (
-                    Follow::Smoothing(_),
-                    Input::Midi { .. } | Input::Data { .. }
-                )
-        )
+        match (self, &binding.input) {
+            (Follow::Envelope(_), Input::Scope { .. }) => true,
+            (Follow::Paint(_), input) => input.paints(),
+            (Follow::Smoothing(_), input @ (Input::Midi { .. } | Input::Data { .. })) => {
+                !input.paints()
+            }
+            _ => false,
+        }
     }
 }
 
@@ -619,6 +761,30 @@ impl Follower {
             else {
                 continue;
             };
+            if let Follow::Paint(channels) = follow {
+                let (Some(midi), color) = (binding.input.smoothed(), binding.input.color()) else {
+                    continue;
+                };
+                let shown = match color {
+                    Some(color) => {
+                        let mut shown = [0.0; 3];
+                        for ((out, smoothing), c) in
+                            shown.iter_mut().zip(channels.iter_mut()).zip(color)
+                        {
+                            *out = smoothing.advance(midi, c, dt_s);
+                        }
+                        Some(shown)
+                    }
+                    // No colour: the setting's own shows, and the next one lands at once.
+                    None => {
+                        *channels = [Smoothing::default(); 3];
+                        None
+                    }
+                };
+                binding.store_color(shown);
+                binding.store(0.0);
+                continue;
+            }
             let level = match (&binding.input, follow) {
                 (Input::Scope { audio, scope }, Follow::Envelope(envelope)) => {
                     let Some(Meter { meter, .. }) = self
@@ -1094,6 +1260,8 @@ mod tests {
                 curve: MotionCurve::Linear,
                 from: f(-1.0),
                 to: Finite32::ZERO,
+                color_from: None,
+                palette: std::collections::BTreeMap::new(),
             },
             clock: MotionClock::Engine,
             enabled: true,
@@ -1202,5 +1370,86 @@ mod tests {
             None,
         );
         assert!(none.is_empty());
+    }
+
+    /// ADR-0171 decision 5: a painting data binding holds the field's colour (a
+    /// `#rrggbb` text, or a palette's pick by its text), blended per channel over its
+    /// smoothing, and none while the field gives none; the shot names it as painting
+    /// even when it isn't bound, and a modifier that adds isn't.
+    #[test]
+    fn a_painting_data_binding_holds_its_fields_colour() {
+        let data = LiveData::new();
+        let item = ItemId::new("itm_lamp");
+        let heard: HeardScopes = Arc::default();
+        let paint = |id: &str, field: &str, from: MotionColorFrom, smoothing_ms: u32| {
+            let mut m = daw(id, None, ("track/1", field), [0.0, 1.0], &[], smoothing_ms);
+            m.property = MotionProperty::Source;
+            m.source = Some(jstream_protocol::MotionSetting {
+                param: "color".into(),
+                material: None,
+            });
+            if let MotionKind::Data {
+                color_from,
+                palette,
+                ..
+            } = &mut m.kind
+            {
+                *color_from = Some(from);
+                if from == MotionColorFrom::Palette {
+                    palette.insert("recording".into(), "#ff0000".into());
+                }
+            }
+            m
+        };
+        let motion = [
+            paint("hex", "color", MotionColorFrom::Field, 0),
+            paint("pick", "state", MotionColorFrom::Palette, 0),
+            paint("glide", "color", MotionColorFrom::Field, 1000),
+            daw("adds", None, ("track/1", "mute"), [0.0, 1.0], &[], 0),
+        ];
+        let mut unbound = Bindings::default();
+        unbound.record(&item, &motion, &heard, None, None);
+        assert_eq!(unbound.tint(&item, "hex"), Some(None), "painting, unbound");
+        assert_eq!(unbound.tint(&item, "adds"), None, "it adds");
+
+        let mut bindings = Bindings::default();
+        bindings.record(&item, &motion, &heard, None, Some(&data));
+        assert_eq!(bindings.tint(&item, "hex"), Some(None), "nothing sent yet");
+        data.put(
+            "DAW",
+            "track/1",
+            br##"{"color": "#336699", "state": "recording"}"##,
+            0,
+        )
+        .expect("taken");
+        let close = |got: Option<Option<[f32; 3]>>, want: [f32; 3]| {
+            let got = got.flatten().expect("a colour");
+            got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-3)
+        };
+        // A preview reads it as it is.
+        assert!(close(bindings.tint(&item, "hex"), [0.2, 0.4, 0.6]));
+        let mut follower = Follower::default();
+        follower.follow(&bindings, at_ms(0));
+        assert!(close(bindings.tint(&item, "hex"), [0.2, 0.4, 0.6]));
+        assert!(close(bindings.tint(&item, "pick"), [1.0, 0.0, 0.0]));
+        assert!(
+            close(bindings.tint(&item, "glide"), [0.2, 0.4, 0.6]),
+            "the first colour lands at once"
+        );
+        data.put(
+            "DAW",
+            "track/1",
+            br##"{"color": "#ffffff", "state": "stopped"}"##,
+            10,
+        )
+        .expect("taken");
+        follower.follow(&bindings, at_ms(1000));
+        assert!(close(bindings.tint(&item, "hex"), [1.0; 3]), "0 ms jumps");
+        let glide = bindings.tint(&item, "glide").flatten().expect("a colour");
+        assert!(
+            glide[0] > 0.2 && glide[0] < 1.0,
+            "a second's smoothing is part way: {glide:?}"
+        );
+        assert_eq!(bindings.tint(&item, "pick"), Some(None), "not listed: none");
     }
 }
