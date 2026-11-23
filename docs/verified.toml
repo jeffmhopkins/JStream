@@ -7101,7 +7101,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "Re-read:
 stamp = { hash = "b3:b563d5871ad1dce2", by = "agent:claude", note = "Specs now pick the Filters tab and use recordCalls for the colour source's preview; no harness change." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
-stamp = { hash = "b3:682e578d6ef869ac", by = "agent:lane-d", note = "scene-cameras.spec.js no longer turns a Follow pointer check on (ADR-0120 made it a filter): it checks the Add Follow pointer… button and measures the Roll field instead of From the right; the tests list says so, the harness is unchanged." }
+stamp = { hash = "b3:30a05dca4c965c31", by = "agent:claude", note = "Only the scene-cameras readout pattern changed (field of view added); mock daemon, fixtures and helpers are untouched." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:50da5e21dbd6910d", by = "agent:claude", note = "Specs now pick the Filters tab and use recordCalls for the colour source's preview; no harness change." }
@@ -7230,7 +7230,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "The Proj
 stamp = { hash = "b3:b563d5871ad1dce2", by = "agent:claude", note = "Updated properties, scene-filters and filters spec descriptions for the title/subtitle, the Settings | Filters segments with counts, and a colour source's own picture by source_id." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
-stamp = { hash = "b3:682e578d6ef869ac", by = "agent:lane-d", note = "scene-cameras.spec.js no longer turns a Follow pointer check on (ADR-0120 made it a filter): it checks the Add Follow pointer… button and measures the Roll field instead of From the right; the tests list says so, the harness is unchanged." }
+stamp = { hash = "b3:30a05dca4c965c31", by = "agent:claude", note = "scene-cameras.spec.js now expects the readout's field of view (· N°) that #1633 added; the 3D scenes bullet says the Alt-drag shows the camera's readout without spelling its text, so it holds. The outputs and codec bullets stay as this PR left them." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:50da5e21dbd6910d", by = "agent:claude", note = "Updated properties, scene-filters and filters spec descriptions for the title/subtitle, the Settings | Filters segments with counts, and a colour source's own picture by source_id." }
