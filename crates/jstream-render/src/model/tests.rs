@@ -2008,12 +2008,13 @@ fn golden_model_a_near_part_blurs_over_a_far_one_but_never_the_reverse() {
     );
     let outside = rgb(&on_far, edge as u32 - 3, 50);
     assert!(outside[0] > 40, "the soft block didn't spread: {outside:?}");
-    // Far from the block, the in-focus slab is untouched.
-    assert_near(rgb(&on_far, 50, 20), rgb(&plain, 50, 20), (50, 20));
+    // Past the block's blur, the in-focus slab is untouched. The blur's rim on this row
+    // is at x = 54, and a wide blur's rim is soft by a few pixels (ADR-0193).
+    assert_near(rgb(&on_far, 40, 20), rgb(&plain, 40, 20), (40, 20));
 }
 /// ADR-0165: one non-finite pixel in a model's layer (a NaN from a degenerate normal, or a
 /// channel past the half-float range) stays one pixel. The gather spreads each pixel over
-/// up to 48 others, and the smoothing over 25, so unchecked it would mark a whole disc of
+/// up to 48 others, and the smoothing and the resolve over more, so unchecked it would mark a whole disc of
 /// a defocused model with black dots.
 #[test]
 fn golden_model_depth_of_field_keeps_a_non_finite_pixel_to_itself() {
@@ -2079,6 +2080,67 @@ fn golden_model_depth_of_field_keeps_a_non_finite_pixel_to_itself() {
             }
         }
     }
+}
+
+/// ADR-0193: the gather of what spreads wide is drawn at half the layer's size, and a
+/// blur too slight for that size is still drawn at the layer's own. Stripes one pixel
+/// wide, 0.6 px out of focus, are softened and still there.
+#[test]
+fn golden_model_depth_of_field_gathers_at_half_size_and_keeps_a_slight_blur_fine() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // Every pixel at the framing distance, 1 / w = 1, and the focus four times as far:
+    // a circle of confusion of three times the camera's blur.
+    let camera = focused_camera(framing_distance() * 4.0, 0.2);
+    let view = camera.view(canvas()).expect("a view");
+    let colour: Vec<[f32; 4]> = (0..WIDTH * HEIGHT)
+        .map(|at| {
+            let v = if (at % WIDTH).is_multiple_of(2) {
+                0.1
+            } else {
+                0.9
+            };
+            [v, v, v, 1.0]
+        })
+        .collect();
+    let depth = vec![[1.0, 0.0, 0.0, 1.0]; (WIDTH * HEIGHT) as usize];
+    let maker = opened.compositor.maker();
+    let colour =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &colour).expect("the colour uploads");
+    let depth =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &depth).expect("the depth uploads");
+    let mut focus = crate::filter::VideoFilter::of(
+        super::focus::KIND,
+        Box::new(super::focus::ModelFocus::default()),
+    );
+    focus.set_depth(Some(crate::filter::ViewDepth {
+        view: Some(view),
+        ..crate::filter::ViewDepth::new(std::sync::Arc::new(depth), view.focal_px())
+    }));
+    let out = opened
+        .compositor
+        .apply_filter(&mut focus, &colour, crate::filter::FilterClock::default())
+        .expect("the passes draw");
+    // The scratch layers in the order the passes take them: tiles, reach, packed, then
+    // the gathered layer and its smoothed copy.
+    for gathered in &focus.scratch().kept()[3..5] {
+        assert_eq!(
+            (gathered.width(), gathered.height()),
+            (WIDTH / 2, HEIGHT / 2)
+        );
+    }
+    let sharp = crate::filter::testing::read(&mut opened, &colour);
+    let shot = crate::filter::testing::read(&mut opened, &out);
+    let contrast = |shot: &Snapshot| {
+        i32::from(rgb(shot, WIDTH / 2 + 1, HEIGHT / 2)[0])
+            - i32::from(rgb(shot, WIDTH / 2, HEIGHT / 2)[0])
+    };
+    let (before, after) = (contrast(&sharp), contrast(&shot));
+    assert!(
+        after > 12 && after < before - 40,
+        "stripes {before} apart before, {after} after"
+    );
 }
 
 /// Draws an unlit white plane with `texture` (ADR-0107 decision 5) and reads it back.

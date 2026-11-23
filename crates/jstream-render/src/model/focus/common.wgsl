@@ -1,4 +1,4 @@
-// Depth of field on a model's layer (ADR-0165). Shared by its five passes: the camera's
+// Depth of field on a model's layer (ADR-0165). Shared by its first five passes: the camera's
 // focus as a `w` (`focus_px / f`) and its far blur in canvas pixels. A view depth texel
 // holds `1 / w = f / D`, 0 where the model isn't; there the circle of confusion is 0 and
 // the pixel is infinitely far.
@@ -33,4 +33,17 @@ fn finite(c: vec4<f32>) -> vec4<f32> {
     let all_ones = (bits & vec4<u32>(0x7f800000u)) == vec4<u32>(0x7f800000u);
     let fraction = (bits & vec4<u32>(0x007fffffu)) != vec4<u32>(0u);
     return select(clamp(c, vec4<f32>(-65504.0), vec4<f32>(65504.0)), vec4<f32>(0.0), all_ones & fraction);
+}
+
+// The share of a blur of radius `r` the gather spreads, at half size; the resolve spreads
+// the rest at full size (resolve.wgsl has this too).
+fn wide(r: f32) -> f32 {
+    return smoothstep(0.75, 2.0, r);
+}
+
+// The pixel of the layer that texel `texel` of the half-size gather stands for: one corner of its block of two
+// by two, the other corner on every other texel.
+fn chosen(texel: vec2<i32>, size: vec2<i32>) -> vec2<i32> {
+    let corner = (texel.x + texel.y) & 1;
+    return min(texel * 2 + vec2<i32>(corner), size - vec2<i32>(1));
 }

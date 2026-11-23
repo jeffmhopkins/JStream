@@ -1358,9 +1358,11 @@ mid-stinger leaves through the camera each item had. A camera with a depth of fi
 distance from the focus plane in the same draw: a disc of taps from the item's mips, its
 edge softened to match, with no extra pass or target. A 3D model is blurred by its own
 depth as its layer is drawn ([ADR-0165](adr/0165-depth-of-field-on-models.md)): its colour
-and view depth are drawn first, then five fullscreen passes gather each pixel's
+and view depth are drawn first, then six passes gather each pixel's
 neighbours whose circle of confusion reaches it, so a soft near part spreads over a
-sharp far one and the silhouette softens outward.
+sharp far one and the silhouette softens outward. The wide blurs are gathered at half
+the layer's size and the slight ones at its own
+([ADR-0193](adr/0193-depth-of-field-on-models-gathers-at-half-size.md)).
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version, for the
 program stage by a thread of its own, which also keeps the warm scenes' models
 uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and drawn

@@ -200,4 +200,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0185](0185-how-reflections-landed-off-by-default.md) | How reflection probes and screen-space reflections landed, off by default | accepted | agent |  |
 | [ADR-0189](0189-screen-space-reflections-march-at-half-size.md) | Screen-space reflections march at half the picture's size | accepted | agent |  |
 | [ADR-0192](0192-cheaper-sampling-in-3d-scenes.md) | Cheaper sampling in 3D scenes: fewer reads where they change little | accepted | agent |  |
+| [ADR-0193](0193-depth-of-field-on-models-gathers-at-half-size.md) | Depth of field on models gathers at half the layer's size | accepted | agent |  |
 <!-- @generated end adr-index -->

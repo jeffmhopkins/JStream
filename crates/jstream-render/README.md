@@ -654,7 +654,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
-| Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
+| Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
@@ -793,20 +793,32 @@ its layer is drawn instead.
 When a `ModelDraw`'s camera has a focus, `draw_model` draws the model and its view depth
 (`1 / w`, as `draw_model_depth` draws it over a cleared layer) into two layers the
 compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
-the filter runtime, as an internal filter no chain can hold. Its five passes, sharing
-`focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl` takes the
-largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose radius
-reaches each tile, `pack.wgsl` puts each pixel's `1 / w` beside its tile's reach `R`, and
-`gather.wgsl` reads 48 taps on a golden-angle spiral over a disc of radius `R`, turned
-per pixel. A tap adds its colour times `R² / (48 r²)` where its own radius `r` reaches
-the pixel, a tap farther than the pixel reaching no farther than the pixel's own radius,
-so a soft near part spreads over a sharp far one and never the reverse. Taps narrower
-than the spacing `R / √48` add nothing, and the pixel's own colour goes under what
-spread over it; taps on a sharp nearer part scale a soft farther pixel's sum up by the
-share left. Empty pixels are infinitely far, so a silhouette softens outward. Last,
-`smooth.wgsl` replaces each pixel whose own radius is 1.5 px or more by the mean of its
-5 × 5 neighbours weighted by their own softness, which evens out the gather's grain.
-Both read colours through `finite`, NaN as 0 and infinity as the half-float maximum, so
+the filter runtime, as an internal filter no chain can hold. Its six passes, the first
+five sharing `focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl`
+takes the largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose
+radius reaches each tile, and `pack.wgsl` puts each pixel's `1 / w` beside its tile's
+reach `R`. The blur is then drawn as two layers
+([ADR-0193](../../docs/adr/0193-depth-of-field-on-models-gathers-at-half-size.md)): a
+pixel of radius `r` spreads in the wide one by the share `wide(r)`, 0 under 0.75 px and
+1 from 2 px, and in the narrow one by the rest. `gather.wgsl` draws the wide layer at
+half the layer's size, each texel for one pixel of its block of two by two, the corner
+alternating. It reads 48 taps on a golden-angle spiral over a disc of radius `R`, turned
+per pixel, from the full-size colour and depth. A tap adds its colour times
+`wide(r) R² / (48 r²)` where its own radius `r` reaches the pixel, a tap farther than the
+pixel reaching no farther than the pixel's own radius, so a soft near part spreads over
+a sharp far one and never the reverse. Taps narrower than the spacing `R / √48` add
+nothing; taps on a sharp nearer part scale a soft farther pixel's sum up by the share
+left. Empty pixels are infinitely far, so a silhouette softens outward. `smooth.wgsl`,
+at half size too, replaces each texel whose pixel's radius is 1.5 px or more by a mean of
+its 5 × 5 neighbours, weighted by their own softness and by a cone one and a half tap
+spacings wide (at most 0.4 of the radius), which evens out the gather's grain. Last,
+`resolve.wgsl`, at the layer's size and drawn with the shader-source prelude for its
+three textures, takes the wide layer from the 3 × 3 texels around the pixel, each
+weighted by how near its pixel is and how alike that pixel's radius is to this one's,
+and spreads the narrow layer itself: each of the 3 × 3 pixels around gives its share
+`1 - wide(r)` (all of it under the tap spacing), over itself alone at radius 0 up to all
+nine at about 1.8 px. The narrow layer goes under the wide one.
+All three read colours through `finite`, NaN as 0 and infinity as the half-float maximum, so
 one non-finite pixel isn't spread into a disc of dots.
 Where `R`
 is under half a pixel the pixel is copied, so a model in focus draws exactly as without
