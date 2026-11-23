@@ -56,6 +56,8 @@ windows = { workspace = true, features = [
     "Graphics_Capture",
     "Graphics_DirectX",
     "Graphics_DirectX_Direct3D11",
+    # D3DKMTSetProcessSchedulingPriorityClass: the process's GPU scheduling class.
+    "Wdk_Graphics_Direct3D",
     "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_Devices_FunctionDiscovery",
     "Win32_Devices_Properties",

@@ -1392,15 +1392,21 @@ bright point blurs into a soft glow. While the `screen_space_reflections` switch
 scenes start their video chain with a screen-space reflection pass, before their own
 filters: each model writes a surface (its normal,
 BRDF and the environment's reflection it added) in the same draw as its layer, the
-scene's surface buffer merges the nearest of them, and each pixel of
-a scene-lit model follows its reflected ray through the view depth, putting what the
-picture shows where it hits in place of that reflection. The layer is then placed flat
+scene's surface buffer merges the nearest of them, and one pixel in each block of two
+by two of a scene-lit model follows its reflected ray through the view depth to what the
+picture shows where it hits ([ADR-0189](adr/0189-screen-space-reflections-march-at-half-size.md));
+each of the model's pixels then takes what the marched pixels near it on the same
+surface found, in place of that reflection. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
 each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
 oriented by the light's item's turn, tilt and rotation
-([ADR-0182](adr/0182-a-sky-follows-its-items-tilt-and-roll.md)),
+([ADR-0182](adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), or laid out anew around
+the scene's straight ahead as a warp aimed there starts, cross-fading for half a second
+from the sky before ([ADR-0187](adr/0187-a-warp-can-travel-straight-ahead.md)), and
+showing a flat picture pinned near its straight ahead that changes as each warp ends
+([ADR-0188](adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
 with nebulae and a galaxy band baked once per seed into cube maps
 ([ADR-0174](adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md))
 and procedural stars laid out about the direction of travel,
@@ -1414,7 +1420,8 @@ jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter tha
 gets the scene's view depth: one more draw of its cards, and each model's depth layer
 copied in (the one its layer carries, so a model's triangles aren't drawn again; none
 for a model under half opacity), into
-a half-float canvas layer holding `1 / w` of the nearest thing, the larger value
+a one-channel half-float canvas layer (a depth layer, as a model's depth and a shadow
+map are too) holding `1 / w` of the nearest thing, the larger value
 winning, drawn only for such a filter.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
@@ -1425,7 +1432,9 @@ target under the item. The collection's blending space picks where they mix
 overlay, difference and exclusion mix sRGB-encoded values. In `srgb`, a new
 collection's, the target holds premultiplied sRGB-encoded colour while the items draw,
 so every mode mixes as a browser does with the same blend states, and one decode pass
-after the last item turns it back into linear light. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
+after the last item turns it back into linear light: over a transparent background only
+over the box the items reached, and not at all when they reached nothing, since a zero
+texel decodes to itself. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter

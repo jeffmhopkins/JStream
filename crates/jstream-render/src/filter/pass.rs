@@ -929,7 +929,7 @@ impl Ctx<'_> {
             multiview_mask: None,
         });
         if let Some(region) = wipe {
-            self.wipe.record(&mut pass, region, size);
+            self.wipe.record(&mut pass, region, size, false);
         }
         match cut {
             // Nothing to draw: the pass only clears.
