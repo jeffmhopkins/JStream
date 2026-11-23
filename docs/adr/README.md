@@ -204,4 +204,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0189](0189-screen-space-reflections-march-at-half-size.md) | Screen-space reflections march at half the picture's size | accepted | agent |  |
 | [ADR-0190](0190-moving-values-tick-at-frame-pace.md) | Values tick at a frame's pace while one is moving | accepted | agent |  |
 | [ADR-0192](0192-cheaper-sampling-in-3d-scenes.md) | Cheaper sampling in 3D scenes: fewer reads where they change little | accepted | agent |  |
+| [ADR-0195](0195-the-engine-runs-at-top-priority.md) | The engine runs at top priority: the highest GPU scheduling class and a high CPU priority class by default | accepted | agent |  |
 <!-- @generated end adr-index -->

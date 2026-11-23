@@ -17,8 +17,9 @@
 //!
 //! # Tests
 //!
-//! The GPU scheduling class the `JSTREAM_GPU_PRIORITY` variable names (`normal` unless
-//! it names another, and a value that names none), the file-dialog filter (which
+//! The GPU and CPU priority classes the `JSTREAM_GPU_PRIORITY` and `JSTREAM_CPU_PRIORITY`
+//! variables name (the defaults, a lower class, a value that names none, no realtime
+//! on the CPU, and the fallback from realtime to high), the file-dialog filter (which
 //! extensions a row keeps, All files beside them, which
 //! paths may start the dialog, and the suggested file name), the clock conversion, the
 //! stream helpers (format choice, sample copies, packet flags, positions across a
