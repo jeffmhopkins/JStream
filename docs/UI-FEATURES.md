@@ -511,7 +511,7 @@ mockups.
 <a id="keyboard"></a>
 ## Keyboard
 <!-- @section
-covers = ["crates/jstream-ui/src/canvas/mod.rs", "crates/jstream-ui/src/canvas/transform.rs", "crates/jstream-ui/src/hotkeys.rs", "crates/jstream-ui/src/bindings.rs", "crates/jstream-ui/src/panels/triggers.rs"]
+covers = ["crates/jstream-ui/src/canvas/mod.rs", "crates/jstream-ui/src/canvas/transform.rs", "crates/jstream-ui/src/hotkeys.rs"]
 -->
 
 Spec: [workspace › keyboard shortcuts](../design/ui-prototype/spec-workspace.md#keyboard-shortcuts).
