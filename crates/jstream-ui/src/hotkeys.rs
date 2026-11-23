@@ -9,6 +9,11 @@
 //! `item.toggle`, `item.show` and `item.hide` of the item (ADR-0101), which show and hide
 //! it with its own appear and disappear effects.
 //!
+//! A chord whose action has a release ([`Action::on_release`], ADR-0207: push-to-talk,
+//! push-to-mute, a channel held on or off) runs that release when its key goes up, or
+//! when the page loses the focus or is hidden while it is held, so a key never stays
+//! held down by a key-up the page didn't hear ([`Held`]).
+//!
 //! A chord may end in the wheel (`Ctrl+WheelUp`, ADR-0112 §3): while the page has the
 //! focus, each notch of a bound wheel chord runs its action once ([`WheelNotches`]),
 //! and the browser's own use of it (Ctrl+wheel zooms the page) is prevented.
@@ -222,6 +227,38 @@ pub fn bind_edits(collection: &Collection, action: &Action, chord: &Chord) -> Ve
     edits
 }
 
+/// The held keys whose bound action runs something on release (ADR-0207): a
+/// `push_to_talk` or `push_to_mute` mute, or a `channel.switch` hold, keyed by the
+/// chord's last key (`KeyboardEvent.code`), so letting go of that key releases it
+/// whichever modifier went up first.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Held {
+    keys: Vec<(String, Action)>,
+}
+
+impl Held {
+    /// Notes that the key `code` was pressed and ran `action`: if it has a release, the
+    /// key now holds it.
+    pub fn press(&mut self, code: &str, action: &Action) {
+        if let Some(release) = action.on_release() {
+            self.keys.retain(|(key, _)| key != code);
+            self.keys.push((code.to_owned(), release));
+        }
+    }
+
+    /// The release the key `code` held, now it went up.
+    pub fn release(&mut self, code: &str) -> Option<Action> {
+        let at = self.keys.iter().position(|(key, _)| key == code)?;
+        Some(self.keys.remove(at).1)
+    }
+
+    /// Every release still held, oldest first: the page stopped hearing keys (it lost
+    /// the focus or was hidden), so no key-up will come.
+    pub fn release_all(&mut self) -> Vec<Action> {
+        self.keys.drain(..).map(|(_, release)| release).collect()
+    }
+}
+
 /// Whether a key press belongs to what has the focus: a text field, a select or an
 /// editable element types it.
 fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
@@ -254,6 +291,7 @@ fn overlay_open() -> bool {
 pub fn Hotkeys() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
+    let held = StoredValue::new(Held::default());
     let keys = window_event_listener(leptos::ev::keydown, move |event| {
         if event.default_prevented() || event.repeat() || typed_in_field(&event) || overlay_open() {
             return;
@@ -268,9 +306,30 @@ pub fn Hotkeys() -> impl IntoView {
             return;
         };
         event.prevent_default();
+        held.update_value(|held| held.press(&event.code(), &action));
         if let Some(s) = session.get() {
             studio.act(&s, action);
         }
+    });
+    // A held key's release (ADR-0207): its key going up, or the page losing the keys.
+    let release = move |releases: Vec<Action>| {
+        if let Some(s) = session.get() {
+            for action in releases {
+                studio.act(&s, action);
+            }
+        }
+    };
+    let up = window_event_listener(leptos::ev::keyup, move |event| {
+        if let Some(action) = held.try_update_value(|held| held.release(&event.code())).flatten() {
+            event.prevent_default();
+            release(vec![action]);
+        }
+    });
+    let blur = window_event_listener(leptos::ev::blur, move |_| {
+        release(held.try_update_value(Held::release_all).unwrap_or_default());
+    });
+    let hidden = window_event_listener(leptos::ev::pagehide, move |_| {
+        release(held.try_update_value(Held::release_all).unwrap_or_default());
     });
     let wheel = wheel_listener(move |event, notches| {
         if event.default_prevented() || overlay_open() {
@@ -318,6 +377,9 @@ pub fn Hotkeys() -> impl IntoView {
     });
     on_cleanup(move || {
         keys.remove();
+        up.remove();
+        blur.remove();
+        hidden.remove();
         wheel.remove();
     });
 }
@@ -515,6 +577,39 @@ mod tests {
             },
         )];
         assert_eq!(default_zoom_edits(&collection, &a), None);
+    }
+
+    #[test]
+    fn a_held_key_releases_on_its_key_up_or_when_the_page_loses_the_keys() {
+        use jstream_control::protocol::{BusId, MuteTo, SourceId};
+        let talk = Action::SourceMute {
+            source_id: SourceId::new("mic"),
+            to: MuteTo::PushToTalk,
+        };
+        let mut held = Held::default();
+        // A toggle has no release: nothing is held.
+        held.press(
+            "KeyT",
+            &Action::BusMute {
+                bus_id: BusId::master(),
+                to: MuteTo::Toggle,
+            },
+        );
+        assert_eq!(held, Held::default());
+        held.press("KeyM", &talk);
+        assert_eq!(held.release("KeyX"), None);
+        assert_eq!(
+            held.release("KeyM"),
+            Some(Action::SourceMute {
+                source_id: SourceId::new("mic"),
+                to: MuteTo::Muted,
+            })
+        );
+        assert_eq!(held.release("KeyM"), None, "released once");
+        held.press("KeyM", &talk);
+        held.press("KeyM", &talk);
+        assert_eq!(held.release_all().len(), 1, "one key holds one release");
+        assert!(held.release_all().is_empty());
     }
 
     #[test]

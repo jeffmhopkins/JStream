@@ -28,6 +28,7 @@ pub mod labels;
 pub mod learn;
 pub mod looks;
 pub mod mixer;
+pub mod mute_keys;
 pub mod motion;
 pub mod number;
 pub mod outputs;

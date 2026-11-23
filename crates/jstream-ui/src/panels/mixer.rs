@@ -21,7 +21,8 @@ use crate::app::SessionContext;
 use crate::dock::PanelId;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::Fold;
-use crate::panels::learn::{FADER_THROW, Learn};
+use crate::panels::learn::{FADER_THROW, Learn, SWITCH};
+use crate::panels::mute_keys::{MuteKeys, MuteOf};
 use crate::panels::number::NumberField;
 use crate::store::plan_summary;
 use crate::workspace::DockState;
@@ -1432,6 +1433,13 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
                     commit_gain,
                 )}
                 {mute_button(muted, move || set_audio(None, None, Some(!muted())))}
+                <MuteKeys of=MuteOf::Source(id.get_value()) label=untrack(name) />
+                <Learn
+                    target=ValueTarget::SourceMute { source_id: id.get_value() }
+                    range=SWITCH
+                    label=format!("{} mute", untrack(name))
+                    current=Signal::derive(move || Some(if muted() { 1.0 } else { 0.0 }))
+                />
                 <Learn
                     target=ValueTarget::SourceGain { source_id: id.get_value() }
                     range=FADER_THROW
@@ -1776,6 +1784,13 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                 commit_gain,
             )}
             {mute_button(muted, toggle_mute)}
+            <MuteKeys of=MuteOf::Bus(id.get_value()) label=untrack(name) />
+            <Learn
+                target=ValueTarget::BusMute { bus_id: id.get_value() }
+                range=SWITCH
+                label=format!("{} mute", untrack(name))
+                current=Signal::derive(move || Some(if muted() { 1.0 } else { 0.0 }))
+            />
             <Learn
                 target=ValueTarget::BusGain { bus_id: id.get_value() }
                 range=FADER_THROW
