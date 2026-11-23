@@ -974,8 +974,12 @@ impl Compositor {
     /// fit, so a steady frame makes neither.
     ///
     /// Everything a draw reads is taken now: its live texture's and panoramas' mip
-    /// chains are built here, and its lights, shadow maps, drives and pose are kept as
-    /// they are. The pass that draws it writes its materials' drives, so nothing else
+    /// chains are built here, and its lights, shadow maps and drives are kept as they
+    /// are. Its pose is not: the palette is the uploaded model's
+    /// ([`Self::pose_model`]), shared by every draw of it, so the model must still be
+    /// posed the same when the pass draws it. Were a pose ever a draw's own, this
+    /// would have to keep it as it keeps the drives. The pass that draws it writes its
+    /// materials' drives, so nothing else
     /// may draw the same uploaded model with other drives between that pass's recording
     /// and its submit, which one call of [`Self::render_into`] or [`Self::render`]
     /// spans.

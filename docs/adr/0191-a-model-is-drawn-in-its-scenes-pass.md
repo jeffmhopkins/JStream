@@ -88,7 +88,8 @@ effect.
 
 **5. The engine chooses per model, each frame.** When it draws a model's box it makes
 the draw ready instead of drawing the layer, unless:
-- the item has effects, whose chain reads the layer;
+- a chain reads the layer: the item's effects, or its source's video filters
+  (ADR-0107 decision 6);
 - a transition is running, whose tracks place layers;
 - `prepare_model` returns nothing (decision 1);
 - more than one pass showed the model in the frame before.

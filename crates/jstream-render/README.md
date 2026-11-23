@@ -836,7 +836,9 @@ frame's uniform into a buffer of the draw's own (the one `recycle`, last frame's
 the same item, held, when it has one), where `draw_model` writes the model runtime's
 shared one. It keeps the order of the blended primitives and the values each material
 is driven to, since those are written to the uploaded model's own buffers and another
-placement of the model may be drawn in between. It returns `None`, and the caller draws
+placement of the model may be drawn in between. It keeps no pose: the palette is the
+uploaded model's, the same for every draw of it, so the model must be posed the same
+when the pass draws it. It returns `None`, and the caller draws
 the layer, for a compositor that mixes encoded colour and for a camera with a depth of
 field, which blurs the layer. A pass records an item's `PreparedModel` between the
 draws around it, into the pass's own encoder: it ends the pass it is in, writes the
