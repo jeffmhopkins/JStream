@@ -5545,9 +5545,11 @@ mod tests {
         let size = FrameSize::new(4, 2).expect("size");
         let ahead = encode_targets(&gpu, &context, size);
         assert_eq!(ahead.len(), encode_ring_len());
+        // Addresses only: a clone of a target's sync would hold it, so the ring would
+        // not hand it out.
         let syncs: Vec<_> = ahead
             .iter()
-            .map(|t| std::sync::Arc::clone(t.sync()))
+            .map(|t| std::sync::Arc::as_ptr(t.sync()).cast::<()>())
             .collect();
         let feed = Feed {
             mix: None,
@@ -5579,11 +5581,7 @@ mod tests {
             .next(&refuses, Some(&context), size, None)
             .expect("ring")
             .expect("a target");
-        assert!(
-            syncs
-                .iter()
-                .any(|sync| std::sync::Arc::ptr_eq(sync, first.sync()))
-        );
+        assert!(syncs.contains(&std::sync::Arc::as_ptr(first.sync()).cast::<()>()));
 
         frames.add(feed, tap(encode_targets(&gpu, &context, size)), |garbage| {
             assert!(matches!(garbage, Garbage::Targets(_)));
