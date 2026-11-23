@@ -1496,6 +1496,31 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .jtunnel-add { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .jtunnel-state { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 12px; color: var(--muted); }
 .jtunnel-add input { flex: 1 1 10rem; width: auto; }
+/* Settings › Keys & MIDI (panels/triggers.rs): a row per trigger, its actions as chips. */
+.keys-and-midi { display: grid; gap: 0.6rem; }
+.trigger-toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.trigger-filter { flex: 1 1 12rem; width: auto; }
+.trigger-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.trigger-row { display: grid; grid-template-columns: minmax(7rem, max-content) 1fr auto; align-items: center; gap: 6px 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.trigger-row:last-child { border-bottom: 0; }
+.trigger-row > .action-picker { grid-column: 1 / -1; }
+.trigger-when { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trigger-row[data-kind="midi"] .trigger-when { color: var(--text-soft); }
+.trigger-does { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.trigger-action { display: inline-flex; align-items: center; gap: 2px; padding: 1px 2px 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--raised); font-size: 12px; }
+.trigger-action .icon-button { padding: 0 5px; min-width: 0; background: none; border: 0; color: var(--muted); }
+.trigger-action .icon-button:hover { color: var(--text); }
+.trigger-buttons { display: inline-flex; gap: 4px; }
+.trigger-new { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); }
+.trigger-new > .settings-check-note { flex-basis: 100%; margin: 0; }
+.midi-trigger-form select { width: auto; }
+.midi-trigger-form input[type="number"] { width: 5.5rem; }
+.midi-trigger-form input[type="text"] { flex: 1 1 8rem; width: auto; }
+.action-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; flex: 1 1 100%; }
+.action-picker select { width: auto; max-width: 100%; }
+.action-amount { display: inline-flex; align-items: center; gap: 2px; }
+.action-amount input { width: 5rem; }
+.action-preview { flex: 1 1 10rem; color: var(--muted); font-size: 12px; }
 .ptz-controller-setting { display: grid; gap: 0.6rem; margin: 14px 0; }
 .ptz-controller-add { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .ptz-controller-add input { flex: 1 1 10rem; width: auto; }

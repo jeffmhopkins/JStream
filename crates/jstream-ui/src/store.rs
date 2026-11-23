@@ -52,8 +52,12 @@ pub struct Collection {
     pub labels: Vec<LabelInfo>,
     /// The master stage's chains, which apply to everything leaving JStream (ADR-0080).
     pub master: FilterChains,
-    /// Every hotkey binding, ordered by chord (ADR-0024 §5).
+    /// Every hotkey binding, ordered by chord (ADR-0024 §5), then by the order a chord's
+    /// actions were bound (ADR-0208).
     pub hotkeys: Vec<HotkeyBinding>,
+    /// Every controller binding (ADR-0122), ordered by trigger, then by the order a
+    /// trigger's actions were bound (ADR-0208).
+    pub bindings: Vec<jstream_control::protocol::Binding>,
     /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
     pub folders: Vec<FolderInfo>,
     /// The transition presets and which one is the default.
@@ -81,6 +85,7 @@ impl Collection {
                 labels,
                 master,
                 hotkeys,
+                bindings,
                 folders,
                 transitions,
                 value_bindings,
@@ -125,6 +130,7 @@ impl Collection {
                     labels,
                     master: master.filters,
                     hotkeys,
+                    bindings,
                     folders,
                     transitions: *transitions,
                     value_bindings,
@@ -320,12 +326,29 @@ impl Collection {
             .collect()
     }
 
-    /// The action bound to `chord`, if any, and this version knows it.
+    /// The first action bound to `chord`, if any, and this version knows it.
     pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
+        self.hotkey_actions(chord).into_iter().next()
+    }
+
+    /// Every action bound to `chord` that this version knows, in the order they were
+    /// bound: what a press runs (ADR-0208).
+    pub fn hotkey_actions(&self, chord: &Chord) -> Vec<Action> {
         self.hotkeys
             .iter()
-            .find(|binding| &binding.chord == chord)
-            .and_then(HotkeyBinding::action)
+            .filter(|binding| &binding.chord == chord)
+            .filter_map(HotkeyBinding::action)
+            .collect()
+    }
+
+    /// Every action bound to the controller trigger `trigger` that this version knows,
+    /// in the order they were bound (ADR-0208).
+    pub fn trigger_actions(&self, trigger: &jstream_control::protocol::Trigger) -> Vec<Action> {
+        self.bindings
+            .iter()
+            .filter(|binding| &binding.trigger == trigger)
+            .filter_map(jstream_control::protocol::Binding::action)
+            .collect()
     }
 
     /// The scenes the scene list shows, in display order: groups are left out

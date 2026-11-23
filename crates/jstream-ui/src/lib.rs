@@ -18,6 +18,7 @@
 pub mod about;
 pub mod agents;
 pub mod app;
+pub mod bindings;
 pub mod browse;
 pub mod canvas;
 pub mod clap_plugins;

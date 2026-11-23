@@ -248,8 +248,8 @@ fn overlay_open() -> bool {
         .is_some()
 }
 
-/// Runs the collection's hotkeys while the page has the focus: a bound chord sends its
-/// action, as an `action` call, and the browser's own use of the key (F5 reloads) is
+/// Runs the collection's hotkeys while the page has the focus: a bound chord sends each
+/// of its actions, in the order they were bound (ADR-0208), as `action` calls, and the browser's own use of the key (F5 reloads) is
 /// prevented. Nothing runs while a dialog or a menu is open. Mounted once, in the shell.
 #[component]
 pub fn Hotkeys() -> impl IntoView {
@@ -262,15 +262,18 @@ pub fn Hotkeys() -> impl IntoView {
         let Some(chord) = of_event(&event) else {
             return;
         };
-        let Some(action) = studio
+        let actions = studio
             .collection
-            .with_untracked(|c| c.as_ref().and_then(|c| c.hotkey(&chord)))
-        else {
+            .with_untracked(|c| c.as_ref().map(|c| c.hotkey_actions(&chord)))
+            .unwrap_or_default();
+        if actions.is_empty() {
             return;
-        };
+        }
         event.prevent_default();
         if let Some(s) = session.get() {
-            studio.act(&s, action);
+            for action in actions {
+                studio.act(&s, action);
+            }
         }
     });
     let wheel = wheel_listener(move |event, notches| {
@@ -291,9 +294,11 @@ pub fn Hotkeys() -> impl IntoView {
                 modifiers.3,
                 direction,
             )?;
-            studio
+            let actions = studio
                 .collection
-                .with_untracked(|c| c.as_ref().and_then(|c| c.hotkey(&chord)))
+                .with_untracked(|c| c.as_ref().map(|c| c.hotkey_actions(&chord)))
+                .unwrap_or_default();
+            (!actions.is_empty()).then_some(actions)
         };
         let delta = wheel_delta(event.delta_x(), event.delta_y(), modifiers.2);
         let direction = if delta < 0.0 {
@@ -303,7 +308,7 @@ pub fn Hotkeys() -> impl IntoView {
         } else {
             return;
         };
-        let Some(action) = bound(direction) else {
+        let Some(actions) = bound(direction) else {
             // Not bound this way: the page scrolls or zooms as it would.
             notches.reset();
             return;
@@ -313,7 +318,9 @@ pub fn Hotkeys() -> impl IntoView {
         let turned = notches.turn(delta, event.delta_mode());
         if let Some(s) = session.get() {
             for _ in 0..turned.unsigned_abs() {
-                studio.act(&s, action.clone());
+                for action in &actions {
+                    studio.act(&s, action.clone());
+                }
             }
         }
     });
