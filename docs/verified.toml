@@ -8891,9 +8891,6 @@ stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.
 ["UI-FEATURES#keyboard"."body"]
 stamp = { hash = "b3:d5a92854b670d2f2", by = "agent:bindings", note = "Re-read KB-07 (every action in bind order) and added KB-08 for Settings › Keys & MIDI; covers gained bindings.rs and triggers.rs." }
 
-["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/bindings.rs"]
-stamp = { hash = "b3:9a210ac86dc5ecb5", by = "agent:bindings", note = "Re-read KB-07 (every action in bind order) and added KB-08 for Settings › Keys & MIDI; covers gained bindings.rs and triggers.rs." }
-
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Re-read: the mod.rs change only passes a shape instead of a model's bounds to outline and hit; no key binding changed" }
 
@@ -8902,9 +8899,6 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/hotkeys.rs"]
 stamp = { hash = "b3:8e9a85b7f7be745b", by = "agent:bindings", note = "Re-read KB-07 (every action in bind order) and added KB-08 for Settings › Keys & MIDI; covers gained bindings.rs and triggers.rs." }
-
-["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/panels/triggers.rs"]
-stamp = { hash = "b3:034c96cb009bbba0", by = "agent:bindings", note = "Re-read KB-07 (every action in bind order) and added KB-08 for Settings › Keys & MIDI; covers gained bindings.rs and triggers.rs." }
 
 ["UI-FEATURES#menus"."body"]
 stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited CM-02: the Duplicate opener is off for several items or in a keyframe; checked against item_menu.rs." }
