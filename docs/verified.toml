@@ -660,7 +660,7 @@ stamp = { hash = "b3:14735e63fd22f1bd", by = "agent:release-alpha8", note = "The
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:0b7d4239714ff3d2", by = "agent:claude", note = "Re-read against the regenerated tools.snap, which only gains the two studio.set_rendering fields in its schema; the MCP design holds." }
+stamp = { hash = "b3:bc636f4b0c3b92c3", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: tools.snap's schema now says the switch defaults to false; the MCP design holds." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:96106669045242ba", by = "agent:release-alpha8", note = "The noun list matches the 44 tools in tools.snap including CC PR 3 value bindings' midi tool, and the guidance list carries #1629's hologram and the value-binding entry; the tools/list size now says about 1.45 MB, the compact JSON of tools.snap after CC PR 3 value bindings and #1631. | kept from the merged side: Re-read against the one-line guidance fix: the data-modifier paragraph no longer says a camera takes none, which ADR-0176 changed; the section's summary of the guidance still holds." }
@@ -720,7 +720,7 @@ stamp = { hash = "b3:2c9c7a071e1efde2", by = "agent:dxc-packaging", note = "Re-r
 stamp = { hash = "b3:66bf6e4a1c776796", by = "agent:linux-decoders", note = "NOTICE.txt now also covers symphonia's AAC-LC decoder; it still says JStream holds no AAC patent licence and names Via LA, as ADR-0062 and ADR-0160 require" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:36e82da63fe7870d", by = "agent:release-alpha8", note = "Version 18 (#1609's scene reflections) and version 19 (CC PR 3 value bindings' value_bindings and width/height modifiers) appear in the order the combined MIGRATIONS runs them, v17_to_v18 then v18_to_v19, and a value binding loads without its target being looked up, as persist/mod.rs does." }
+stamp = { hash = "b3:5e8045eb9c4ba1f9", by = "agent:claude", note = "Edited the 3D rendering switches bullet: rendering.json now also keeps the screen-space switch and steps (decision 4); an unreadable file reads as the defaults, every switch on but screen-space reflections, a switch left out takes its default, steps left out are 32; checked against rendering_file.rs and RenderFeatures::DEFAULT." }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
@@ -807,7 +807,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:469e300ae477e5ef", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:acf93b0767aff354", by = "agent:claude", note = "Updated the Reflections bullet to name the 0.172 screen-space reflections and studio.set_rendering's new switch and steps; checked against rendering.rs, the snapshots, mock.rs and version.rs." }
+stamp = { hash = "b3:b64f69f32ce3f706", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the Reflections bullet: studio.set_rendering turns probes off and screen-space reflections, off by default, on app-wide." }
 
 ["ARCH#protocol"."dep:crates/jstream-protocol/README.md#compatibility"]
 stamp = { hash = "b3:6a335377526ad0f3", by = "agent:claude", note = "Re-read after merging #1611: the motion paragraph now says since 0.160 for the data modifier; #1611's 0.156 looks text is main's and unchanged." }
@@ -861,7 +861,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:0c6da0ab9e06cc5f", by = "agent:claude", note = "Updated the Reflections bullet to name the 0.172 screen-space reflections and studio.set_rendering's new switch and steps; checked against rendering.rs, the snapshots, mock.rs and version.rs." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:905aaffb80c5e84e", by = "agent:claude", note = "Updated the Reflections bullet to name the 0.172 screen-space reflections and studio.set_rendering's new switch and steps; checked against rendering.rs, the snapshots, mock.rs and version.rs." }
+stamp = { hash = "b3:b9852ee83cd2608e", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the Reflections bullet: studio.set_rendering turns probes off and screen-space reflections, off by default, on app-wide." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -990,10 +990,10 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:f46a9df39e0812ab", by = "agent:claude", note = "Updated the Reflections bullet to name the 0.172 screen-space reflections and studio.set_rendering's new switch and steps; checked against rendering.rs, the snapshots, mock.rs and version.rs." }
+stamp = { hash = "b3:04b97ddd39957e1a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the Reflections bullet: studio.set_rendering turns probes off and screen-space reflections, off by default, on app-wide." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/rendering.rs"]
-stamp = { hash = "b3:5efc0e9d058daee2", by = "agent:claude", note = "Updated the Reflections bullet to name the 0.172 screen-space reflections and studio.set_rendering's new switch and steps; checked against rendering.rs, the snapshots, mock.rs and version.rs." }
+stamp = { hash = "b3:2e9de9da9e2b2653", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the Reflections bullet: studio.set_rendering turns probes off and screen-space reflections, off by default, on app-wide." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -1671,7 +1671,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Re-read the mock and capture-item parts against the mock's new device controls and the controls lines in capture targets; nothing there describes that output, so it holds." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:77dfcf7c8b4cf7c4", by = "agent:claude", note = "Re-read against run/tests.rs's updated studio get golden (screen_space_reflections and screen_space_steps in rendering): the CLI prints the engine's answer as is, as the design says." }
+stamp = { hash = "b3:63812383a5d53244", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: the CLI prints the engine's studio.get as is, and its golden shows the switch off; holds." }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:1c9936a59c9c02c5", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
@@ -1701,7 +1701,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Re-read: capture targets output stays in run.rs; it now adds a line per camera control, which the purpose's contents list needs no change for (#1196)." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:77dfcf7c8b4cf7c4", by = "agent:claude", note = "Re-read against run/tests.rs, whose studio get golden now shows the two new rendering fields: the CLI's purpose holds." }
+stamp = { hash = "b3:63812383a5d53244", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: the studio get golden in run/tests.rs now shows screen_space_reflections false; the purpose holds." }
 
 ["CRATE-jstream-cli#usage"."body"]
 stamp = { hash = "b3:1fb8e51769db6783", by = "agent:release-thread", note = "bench now adds a bench_fade_<pid> fade preset when the default fade is asked for and the collection has none, and deletes it after; usage's Bench paragraph says so. Re-read usage against that: it still holds." }
@@ -1725,7 +1725,7 @@ stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Ed
 stamp = { hash = "b3:2cb539e27e97f517", by = "agent:claude", note = "Checked the mock bullet on studio.set_rendering: it now names the invalid_argument for a screen_space_steps outside SCREEN_SPACE_STEPS before the probe-size refusal, matching mock.rs and the engine; the rest of the mock's rules are unchanged." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:acf93b0767aff354", by = "agent:claude", note = "Re-read again after ARCH protocol's Reflections bullet gained the 0.172 screen-space text: the mock's studio.set_rendering refusals (steps, then probe size) still match it." }
+stamp = { hash = "b3:b64f69f32ce3f706", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: the mock starts from RenderFeatures::default(), now DEFAULT, and its refusals are unchanged; holds." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -2181,7 +2181,7 @@ stamp = { hash = "b3:0848b06d8659b67d", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:15c3e173441f74c3", by = "agent:smooth-paths", note = "keyframes.rs gains path, refusal and orbit tests under the keyframe scenes it already lists; the rest are constructor fields" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/rendering.rs"]
-stamp = { hash = "b3:1c39c503b4a37b21", by = "agent:claude", note = "Re-read the test file list: the new steps test sits in src/tests/rendering.rs, which is already listed; the chain test is a unit test in chain.rs." }
+stamp = { hash = "b3:cd17cec087f59b8f", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: tests/mcp.rs and tests/rendering.rs expect the default with the switch off; the test list holds." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/source_sizes.rs"]
 stamp = { hash = "b3:c269cab1b6da11ab", by = "agent:claude", note = "tests gain depth: None on size events and a_model_reports_its_depth_beside_its_size in source_sizes.rs; the tests list's description of source_sizes.rs still holds." }
@@ -2211,7 +2211,7 @@ stamp = { hash = "b3:ce8c055c7c5a5a81", by = "agent:claude-1555", note = "#1555:
 stamp = { hash = "b3:05a828f592c4ddf3", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/tests/mcp.rs"]
-stamp = { hash = "b3:42fa486dde007a7c", by = "agent:claude", note = "Re-read against tests/mcp.rs, whose studio.get expectation gains the two screen-space fields: the integration test list holds." }
+stamp = { hash = "b3:e8486d1fc5a51cb4", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: tests/mcp.rs and tests/rendering.rs expect the default with the switch off; the test list holds." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/tests/scenarios.rs"]
 stamp = { hash = "b3:ba27dae8f7be423f", by = "agent:claude-1555", note = "#1555: scenarios.rs passes a drop count to capture_drops; windows_gpu.rs only rewords a log line; listed tests unchanged" }
@@ -2238,7 +2238,7 @@ stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:acf93b0767aff354", by = "agent:claude", note = "Re-read again after ARCH protocol's Reflections bullet gained the 0.172 screen-space text: the crate design's threading and lock rules are unaffected." }
+stamp = { hash = "b3:b64f69f32ce3f706", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: re-read after the dependency's text changed; the crate design holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
@@ -2376,10 +2376,10 @@ stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audi
 stamp = { hash = "b3:87c9cee0695d955b", by = "agent:claude", note = "Re-read against engine.rs's steps refusal: the change logs and stores nothing new beyond the rendering switches already kept in rendering.json; the section holds. | merge: #1636 (ADR-0181) added naming the JTunnel senders' params in engine.rs: start_jtunnel resets and sends the names under the state lock, and each collection change renames them through name_jtunnel_params; nothing of it touches the rendering switches or this branch's steps refusal. Re-read the privacy section after the merge: it holds with both changes (main's own PR already described the naming where this section covers it). | kept from the merged side: no microphone or privacy-screen behaviour changed | kept from the merged side: engine.rs gained Engine::prime_scenes and plan_every_scene, called from with_backends and after a collection is opened; priming plans each scene with look_quiet and draws with no captures, so it opens no microphone, webcam or capture and makes no source shown or heard; the section's statement of when audio inputs open holds. | merge: engine.rs's train changes (gpu-stack priming, #1628 JTunnel stop, CC PR 3 value bindings, #1620 program following) leave privacy.set and privacy.get untouched, and a value binding only drives a send's or fader's number, so a webcam no bus hears still never records." }
 
 ["CRATE-jstream-core#program-scene"."body"]
-stamp = { hash = "b3:f7de1d116ea39831", by = "agent:claude", note = "Checked the 3D rendering switches paragraph: it now names the invalid_argument for a screen_space_steps outside SCREEN_SPACE_STEPS, ahead of the probe-size refusal, as Engine::rendering_call does; the transitions text holds, and the Snapshots section says a reflective scene's chain shows it as one picture in a transition." }
+stamp = { hash = "b3:a7c7e20cc89953fd", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the rendering switches paragraph: a switch the file leaves out takes its default, on but screen-space reflections off; checked against rendering_file.rs and its test." }
 
 ["CRATE-jstream-core#program-scene"."dep:crates/jstream-protocol/README.md#transitions"]
-stamp = { hash = "b3:f35191e573a8fa13", by = "agent:claude", note = "Checked the 3D rendering switches paragraph: it now names the invalid_argument for a screen_space_steps outside SCREEN_SPACE_STEPS, ahead of the probe-size refusal, as Engine::rendering_call does; the transitions text holds, and the Snapshots section says a reflective scene's chain shows it as one picture in a transition." }
+stamp = { hash = "b3:0a42cd50335792f2", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the rendering switches paragraph: a switch the file leaves out takes its default, on but screen-space reflections off; checked against rendering_file.rs and its test." }
 
 ["CRATE-jstream-core#program-scene"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:f9654126762fade3", by = "agent:smooth-paths", note = "This PR (transition.rs): Run.orbit from a move preset's camera_path, Running.via, check_via, and with_timing keeps via. Merge: main's #1591 places a scene's committed camera through its anchor (SceneCamera::placed, camera_of); a via path's stop cameras come from the same placed committed camera as the Move's destination, so an anchored camera rides along on a path too, and the program-scene text holds" }
@@ -2583,7 +2583,7 @@ stamp = { hash = "b3:10c130fe918d94d6", by = "agent:plugin-uninstall", note = "r
 stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: jstream-server's Design gained TCP_NODELAY on accepted connections (#1440); the daemon's design (one engine, per-platform backends) depends on no socket options and still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:36e82da63fe7870d", by = "agent:release-alpha8", note = """gpu-stack's priming opens the GPU context on the snapshot thread to compile the collection's scenes, and the text already names this as the exception to "creating the backends opens no device"; #1609's probe cap in rendering.json and the schema 18/19 entries from #1609 and CC PR 3 value bindings don't change the daemon's role of naming the rendering, warm and collection files.""" }
+stamp = { hash = "b3:5e8045eb9c4ba1f9", by = "agent:claude", note = "Re-read after ARCH persistence's rendering.json bullet changed (defaults, the screen-space switch off): the daemon's 3D rendering file paragraph names the file and holds." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:7f92a178a393bbc2", by = "agent:mac-e2e", note = "Cargo.toml change is only the jstream-render dev-dependency comment (Linux-only use in the harness); Live on macOS still matches serve.rs's macos_backends, which the harness now mirrors" }
@@ -4527,7 +4527,7 @@ stamp = { hash = "b3:732ef725f18b2ffb", by = "agent:release-alpha8", note = "Re-
 stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:f46a9df39e0812ab", by = "agent:claude", note = "Re-read against query.rs's reflections doc change: no call's shape or answer changed." }
+stamp = { hash = "b3:04b97ddd39957e1a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: only query.rs's reflections doc changed; no call changes." }
 
 ["CRATE-jstream-protocol#camera-aim"."body"]
 stamp = { hash = "b3:beaf081f013c6b07", by = "agent:ptz-builder", note = "new section for camera_aim.rs: the actions, the query, the checks, binding and plugin classes, matching the code; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4554,7 +4554,7 @@ stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:0c6da0ab9e06cc5f", by = "agent:claude", note = "Re-read against the regenerated protocol.snap and examples.snap: the change adds two optional, serde-defaulted fields to RenderFeatures and RenderFeaturesChange, a minor change under R-API-001, and the version is 0.172." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:905aaffb80c5e84e", by = "agent:claude", note = "Re-read against the regenerated protocol.snap and examples.snap: the change adds two optional, serde-defaulted fields to RenderFeatures and RenderFeaturesChange, a minor change under R-API-001, and the version is 0.172." }
+stamp = { hash = "b3:b9852ee83cd2608e", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: protocol.snap's schema default for screen_space_reflections is now false; still an additive 0.172 field, and older clients that leave it out keep it off." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
@@ -4590,7 +4590,7 @@ stamp = { hash = "b3:c3a6d1571ca05444", by = "agent:claude", note = "Renumbered 
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:f46a9df39e0812ab", by = "agent:claude", note = "Re-read against query.rs: no call or query type changed, only SceneOptions' reflections doc; the calls list holds." }
+stamp = { hash = "b3:04b97ddd39957e1a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: only query.rs's reflections doc changed; holds." }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/settings.rs"]
 stamp = { hash = "b3:12085313843efe02", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -4683,7 +4683,7 @@ stamp = { hash = "b3:2031d27ef862a130", by = "agent:claude", note = "Edited: Hot
 stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to filter.rs, output.rs, hotkey.rs, encoder.rs, mix.rs, audio.rs, organise.rs, query.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#contents-state"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:f46a9df39e0812ab", by = "agent:claude", note = "Re-read against query.rs: only the reflections option's doc changed, to say it also gives screen-space reflections since 0.172; the state contents list holds." }
+stamp = { hash = "b3:04b97ddd39957e1a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: query.rs's reflections doc now says screen-space reflections need the switch, off by default; the contents list holds." }
 
 ["CRATE-jstream-protocol#design"."body"]
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now the preface plus Envelope and versioning and Tagging; the other subsections moved out unchanged as their own sections. Re-read: the envelope, handshake, message size, semver rule and tagging hold against envelope.rs, version.rs (can_serve) and lib.rs, the narrowed covers; depends_on keeps R-API-001 and R-API-002, which these two subsections cite; ADR-0013, R-ARCH-006 and R-API-004 moved with the subsections that cite them (#calls, #batches); the schema files moved to #compatibility" }
@@ -4797,7 +4797,7 @@ stamp = { hash = "b3:2249708b28f2012e", by = "agent:release-alpha8", note = "#16
 stamp = { hash = "b3:bb0455875be60a6d", by = "agent:release-alpha8", note = "#1631 raised MAX_MOTION_MODIFIERS to 32 and CC PR 3 value bindings added width/height and their multiply-after-scale rule; item.set_motion's refusal text still said one over 8, so it now says 32 as check_motion does, and #1631's midi/data camera text and #1620's colour-from text agree with motion.rs." }
 
 ["CRATE-jstream-protocol#organisation"."body"]
-stamp = { hash = "b3:67f1a3a67a5f1d96", by = "agent:claude", note = "Checked the scene options paragraph: reflections since 0.172 also lets scene-lit models reflect what is on screen, matching the engine's with_screen_reflections condition." }
+stamp = { hash = "b3:20616f57d663f9d1", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the reflections option text to say on-screen reflections need the switch, off by default." }
 
 ["CRATE-jstream-protocol#organisation"."file:crates/jstream-protocol/src/geometry/camera.rs"]
 stamp = { hash = "b3:29622b5c7fe4520a", by = "agent:claude", note = "Re-read against round 2 of ADR-0176 (0.167: SceneCamera.autofocus, CameraProperty autofocus, MAX_MOTION_MODIFIERS 32): the section makes no claim about camera focus or the modifier cap that the change contradicts; its covered files changed only by the new field, the 32 cap or test literals." }
@@ -4968,10 +4968,10 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:f46a9df39e0812ab", by = "agent:claude", note = "Re-read against rendering.rs (two new RenderFeatures fields and SCREEN_SPACE_STEPS), its lib.rs export, query.rs's reflections doc and version.rs at 0.172: the crate's purpose holds." }
+stamp = { hash = "b3:04b97ddd39957e1a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: rendering.rs gains RenderFeatures::DEFAULT and query.rs's reflections doc says the switch is off by default; the purpose holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/rendering.rs"]
-stamp = { hash = "b3:5efc0e9d058daee2", by = "agent:claude", note = "Re-read against rendering.rs (two new RenderFeatures fields and SCREEN_SPACE_STEPS), its lib.rs export, query.rs's reflections doc and version.rs at 0.172: the crate's purpose holds." }
+stamp = { hash = "b3:2e9de9da9e2b2653", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: rendering.rs gains RenderFeatures::DEFAULT and query.rs's reflections doc says the switch is off by default; the purpose holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -5013,7 +5013,7 @@ stamp = { hash = "b3:c3a6d1571ca05444", by = "agent:claude", note = "Renumbered 
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:f46a9df39e0812ab", by = "agent:claude", note = "Checked state.get's rendering text: it names the screen-space switch and steps since 0.172; query.rs's reflections doc matches the organisation text." }
+stamp = { hash = "b3:04b97ddd39957e1a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: the state.get rendering text names the switch and steps without a default, and query.rs's doc now says off by default; holds." }
 
 ["CRATE-jstream-protocol#shared-values"."body"]
 stamp = { hash = "b3:1a6b4bf810de3cb0", by = "agent:claude", note = "Edited: the tempo.* bullet says a page reads them only with page_api_tempo, never through page_api_values." }
@@ -5031,7 +5031,7 @@ stamp = { hash = "b3:8faf499b9753a233", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:101ccc1b506e13ce", by = "agent:claude", note = "Edited: TimelineInfo.labels since 0.100, checked for existence and repeats at timeline.labels and kept ordered by ID (ADR-0133), linking the organisation section; checked against timeline.rs and the graph's timeline.rs." }
 
 ["CRATE-jstream-protocol#transitions"."body"]
-stamp = { hash = "b3:f35191e573a8fa13", by = "agent:claude", note = "Checked the studio.set_rendering bullet: the two new fields, their defaults (on, 32), SCREEN_SPACE_STEPS 16/32/64 and the invalid_argument on screen_space_steps match rendering.rs, the engine and the mock." }
+stamp = { hash = "b3:0a42cd50335792f2", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited studio.set_rendering's text: all on until set but screen_space_reflections (RenderFeatures::DEFAULT), and a file or server that leaves it out reads it as off; matches rendering.rs and its test." }
 
 ["CRATE-jstream-protocol#transitions"."file:crates/jstream-protocol/src/transition.rs"]
 stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Section now says a move takes camera_path (line default, orbit) and scene.switch's via passes through family keyframes on one curve, with its errors (ADR-0166)" }
@@ -6228,7 +6228,7 @@ stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "This branch
 stamp = { hash = "b3:2cb539e27e97f517", by = "agent:claude", note = "Re-read against the control design's new mock refusal for screen_space_steps: the server forwards calls to the control trait and its own checks are unchanged." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:acf93b0767aff354", by = "agent:claude", note = "Re-read against the control design's new mock refusal for screen_space_steps: the server forwards calls to the control trait and its own checks are unchanged." }
+stamp = { hash = "b3:b64f69f32ce3f706", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: re-read after the control design's dependency change; the server is unaffected." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the server's Host, Origin and token checks are unchanged" }
@@ -6672,7 +6672,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:9a4a3bec46863b0a", by = "agent:claude", note = "Checked the scene dialog's Reflections paragraph: updated it to say the info tip also covers models reflecting what is on screen and the Settings switch, as scene_properties.rs's tip now reads; the rest holds against the control design." }
+stamp = { hash = "b3:b5ea75b36a4e368e", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the scene dialog paragraph: its tip says models reflect what is on screen with Screen-space reflections turned on in Settings, matching scene_properties.rs." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:2cb539e27e97f517", by = "agent:claude", note = "Checked the scene dialog's Reflections paragraph: updated it to say the info tip also covers models reflecting what is on screen and the Settings switch, as scene_properties.rs's tip now reads; the rest holds against the control design." }
@@ -6837,7 +6837,7 @@ stamp = { hash = "b3:ec30f3508ad6ec18", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:abf87e5531cd427b", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:4ffc2470afc7538b", by = "agent:claude", note = "Checked the scene dialog's Reflections paragraph: updated it to say the info tip also covers models reflecting what is on screen and the Settings switch, as scene_properties.rs's tip now reads; the rest holds against the control design." }
+stamp = { hash = "b3:5ccf63441f361da9", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the scene dialog paragraph: its tip says models reflect what is on screen with Screen-space reflections turned on in Settings, matching scene_properties.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:8bffe645d7f19b51", by = "agent:claude", note = "Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes" }
@@ -6873,7 +6873,7 @@ stamp = { hash = "b3:a5d166b3880cdb96", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:3e35d148593c0cf0", by = "agent:ptz-builder", note = """ADR-0153 §3: added desktop_ptz and set_ptz to host.rs, the ptz_controllers.rs bullet, ptz and setPtz to the global's list, and the Devices page's "Accept a PTZ controller" paragraph""" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/rendering.rs"]
-stamp = { hash = "b3:8a9b8c143f91e9b0", by = "agent:claude", note = "Checked the scene dialog's Reflections paragraph: updated it to say the info tip also covers models reflecting what is on screen and the Settings switch, as scene_properties.rs's tip now reads; the rest holds against the control design." }
+stamp = { hash = "b3:515b49e6d44c5d5e", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the scene dialog paragraph: its tip says models reflect what is on screen with Screen-space reflections turned on in Settings, matching scene_properties.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/screenshot.rs"]
 stamp = { hash = "b3:cb07004e872fb0bf", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
@@ -7071,7 +7071,7 @@ stamp = { hash = "b3:ec30f3508ad6ec18", by = "agent:claude", note = "The outputs
 stamp = { hash = "b3:abf87e5531cd427b", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:4ffc2470afc7538b", by = "agent:claude", note = "Checked the 3D rendering bullet against rendering.rs: six switches including Screen-space reflections, the probe cap and the Reflection quality select through reflection_steps; the scene properties tip text matches scene_properties.rs." }
+stamp = { hash = "b3:5ccf63441f361da9", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: rendering.rs's info for the switch says it is off until turned on and may cost a modest GPU its frame rate, and the scene dialog's tip says on-screen reflections need it; the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:8bffe645d7f19b51", by = "agent:claude", note = "Re-read: the crate's purpose is unchanged by the canvas camera mode and 3D item tools" }
@@ -7107,7 +7107,7 @@ stamp = { hash = "b3:a5d166b3880cdb96", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:3e35d148593c0cf0", by = "agent:ptz-builder", note = "ADR-0153 §3: the UI gains the Devices page's PTZ controller setting, which the design section covers; the purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/rendering.rs"]
-stamp = { hash = "b3:8a9b8c143f91e9b0", by = "agent:claude", note = "Checked the 3D rendering bullet against rendering.rs: six switches including Screen-space reflections, the probe cap and the Reflection quality select through reflection_steps; the scene properties tip text matches scene_properties.rs." }
+stamp = { hash = "b3:515b49e6d44c5d5e", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: rendering.rs's info for the switch says it is off until turned on and may cost a modest GPU its frame rate, and the scene dialog's tip says on-screen reflections need it; the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/screenshot.rs"]
 stamp = { hash = "b3:cb07004e872fb0bf", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
@@ -7815,7 +7815,7 @@ stamp = { hash = "b3:57db58043cad8447", by = "agent:claude", note = "Step 1 keep
 stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The deps only added Settings › 3D rendering and its file; going live is unchanged. | merge: the desktop usage dep gained #1580 (projects default to Documents\JStream, screenshots say where they saved, ADR-0163, paths::user_folder); going live holds. | merge: #1590 renamed settings in the desktop usage and UI-FEATURES header sections this depends on; #1590 already updated the names this section uses, and the 3D rendering page needs no getting-started step | merge: merged #1597 (a DAW's JTunnel state as live data: data.list, data.get, NetworkProfile state counters, ADR-0171, protocol 0.140); its desktop usage input gains jtunnel.json's state flag; this section names neither it nor the 3D rendering page and holds | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Going live steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold. | kept from the merged side: Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds.''' }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:e40ff5f84e49d405", by = "agent:claude", note = "Re-read against UI-FEATURES' header change: the 3D rendering page's new switch and select don't touch going live; holds." }
+stamp = { hash = "b3:43dbe0e3d6a65bff", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: UI-FEATURES' header now says Screen-space reflections is off by default; going live is unaffected." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:7772c9dad1fb9aa3", by = "agent:claude", note = "Step 1 keeps Stream picked on the Kind control, the key shows only as Saved, step 2 says nothing changes until Save, and Edit… and New… replace Edit encoder… and Edit mix… (C16)." }
@@ -7827,7 +7827,7 @@ stamp = { hash = "b3:23d99288d10a6118", by = "agent:claude", note = "Pick Record
 stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The deps only added Settings › 3D rendering and its file; recording is unchanged. | merge: the desktop usage dep gained #1580 (projects default to Documents\JStream, screenshots say where they saved, ADR-0163, paths::user_folder); recording holds. | merge: #1590 renamed settings in the desktop usage and UI-FEATURES header sections this depends on; #1590 already updated the names this section uses, and the 3D rendering page needs no getting-started step | merge: merged #1597 (a DAW's JTunnel state as live data: data.list, data.get, NetworkProfile state counters, ADR-0171, protocol 0.140); its desktop usage input gains jtunnel.json's state flag; this section names neither it nor the 3D rendering page and holds | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Recording steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold. | kept from the merged side: Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds.''' }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:e40ff5f84e49d405", by = "agent:claude", note = "Re-read against UI-FEATURES' header change: recording steps are unaffected; holds." }
+stamp = { hash = "b3:43dbe0e3d6a65bff", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: UI-FEATURES' header now says Screen-space reflections is off by default; recording is unaffected." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:7772c9dad1fb9aa3", by = "agent:claude", note = "Pick Record on Add output's Kind control in place of a Recording (MP4) option; the rest of the section holds." }
@@ -7851,13 +7851,13 @@ stamp = { hash = "b3:741d1e68f59f3ed4", by = "agent:release-alpha8", note = "The
 stamp = { hash = "b3:3546004f22bc2a80", by = "agent:claude", note = "Step 3 now tells a newcomer about the 3D Depth and Turn tools and camera mode (K, drags, wheel zoom, Save view, Esc), matching UI-FEATURES#canvas" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
-stamp = { hash = "b3:bc0c4224b514bd72", by = "agent:claude", note = "Re-read against UI-FEATURES' header and dialogs changes (the new switch, the quality select and the Reflections tip): the getting-started scene steps don't describe those and still hold." }
+stamp = { hash = "b3:074cf8b86cce068a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: UI-FEATURES' header and dialog text changed (the switch off by default, the tip); the getting-started steps don't cover them and hold." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#docking"]
 stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:e40ff5f84e49d405", by = "agent:claude", note = "Re-read against UI-FEATURES' header and dialogs changes (the new switch, the quality select and the Reflections tip): the getting-started scene steps don't describe those and still hold." }
+stamp = { hash = "b3:43dbe0e3d6a65bff", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: UI-FEATURES' header and dialog text changed (the switch off by default, the tip); the getting-started steps don't cover them and hold." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:eb0be18275af4cb2", by = "agent:claude", note = "Re-read: the learn buttons added to the inspector and mixer sections are beyond a first scene; the walkthrough holds. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
@@ -8031,10 +8031,10 @@ stamp = { hash = "b3:92af4dc02f396840", by = "agent:claude", note = "New section
 stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "R-API-002 now points at PEOPLE_ONLY and DEPRECATED in jstream-mcp tools.rs instead of naming youtube as the one exception; rest of the section unchanged" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:36e82da63fe7870d", by = "agent:release-alpha8", note = "ARCH protocol's 0.165 to 0.168 bumps (#1609, #1631, CC PR 3 value bindings) are additions and the cap rise from 8 to 32 refuses nothing accepted before, so they are minor under R-API-001; schema 18 (#1609) and 19 (CC PR 3 value bindings) each ship a migration, v17_to_v18 and v18_to_v19, as R-API-003 requires." }
+stamp = { hash = "b3:5e8045eb9c4ba1f9", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: ARCH protocol's Reflections bullet changed wording; an additive minor field, so R-API-001 holds." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:acf93b0767aff354", by = "agent:claude", note = "Re-read against ARCH protocol's Reflections bullet now naming 0.172's screen-space reflections: an additive minor change (two optional, defaulted fields), so R-API-001's semver rule holds as written." }
+stamp = { hash = "b3:b64f69f32ce3f706", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: ARCH protocol's Reflections bullet changed wording; an additive minor field, so R-API-001 holds." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:9b1de3f0c0d6da7f", by = "agent:dxc-packaging", note = "R-DEP-001 now names the DXC DLLs as a shipped binary under Microsoft's terms beside the CEF exception (ADR-0175); the other rules are unchanged" }
@@ -8625,7 +8625,7 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:1dc6ee5d77d78342", by = "agent:claude", note = "Re-read: store.rs only gains value_bindings; the canvas is unchanged. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
 
 ["UI-FEATURES#dialogs"."body"]
-stamp = { hash = "b3:bc0c4224b514bd72", by = "agent:claude", note = "Checked DL-03's Reflections text against scene_properties.rs: since 0.172 models also reflect what is on screen and the tip points at Settings › 3D rendering." }
+stamp = { hash = "b3:074cf8b86cce068a", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited DL-03: models reflect what is on screen with Screen-space reflections turned on in Settings › 3D rendering, as the tip says." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "dialog.rs's Info now picks the side its details open on; the dialog rows hold." }
@@ -8637,7 +8637,7 @@ stamp = { hash = "b3:beb5beb8909eae52", by = "agent:release-alpha8", note = "DL-
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude-ui-features", note = "panels/confirm.rs: Confirm is the inline delete confirmation showing the plan summary, the only dialog-like UI today, which DL-01 keeps; the rest (DL-02 Properties tab, DL-06 add-under-list) live in other panels as the notes say." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:4ffc2470afc7538b", by = "agent:claude", note = "Checked DL-03's Reflections text against scene_properties.rs: since 0.172 models also reflect what is on screen and the tip points at Settings › 3D rendering." }
+stamp = { hash = "b3:5ccf63441f361da9", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited DL-03: models reflect what is on screen with Screen-space reflections turned on in Settings › 3D rendering, as the tip says." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Re-read: source_properties.rs passes LearnOwner::Source to the form; the dialog list holds, and the inspector section describes the button." }
@@ -8667,7 +8667,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "FL-11 now
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = "With the hologram follow-up's Transmission, Steady, Broken signal and Amber presets FL-11 names every kind filter_presets.rs gives presets, and the text below the table describes CC PR 3 value bindings' learn button on any chain's live settings, wired through LearnOwner::Filter in both forms." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:e40ff5f84e49d405", by = "agent:claude", note = "Checked HD settings' 3D rendering page text: six switches with Screen-space reflections, Probe resolution and Reflection quality defaulting to Medium, as rendering.rs builds them." }
+stamp = { hash = "b3:43dbe0e3d6a65bff", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the 3D rendering page text: all on until changed but Screen-space reflections, which is off." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:3638d6f3cd7938fe", by = "agent:ui-design", note = "HD-02/HD-03 now say the shown panel and current layout are checked (menuitemradio for layouts), matching header.rs; About/Updates/Settings/libraries Close turned secondary, which no row states otherwise." }

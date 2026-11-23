@@ -854,8 +854,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
   A keyframe scene shows neither, since it draws its parent's. A scene's own dialog
   that isn't a group's has a Reflections check under Output, sent in `scene.set_options`,
-  whose info tip says what reflects what inside a reflection probe's box, that models
-  also reflect what is on screen, and that Settings › 3D rendering can turn either off
+  whose info tip says what reflects what inside a reflection probe's box, and that with
+  Screen-space reflections turned on in Settings › 3D rendering models also reflect what
+  is on screen
   ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decisions 2 and 4). A group's dialog has a
   Share the 3D space check, sent in `scene.set_options`, and a scene's own camera, when

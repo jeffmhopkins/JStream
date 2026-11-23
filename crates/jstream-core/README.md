@@ -1519,7 +1519,7 @@ call names takes its value
 collection lock released, saves them in the file the host named with
 `Engine::with_rendering_file` (`rendering_file.rs`, `rendering.json` in the data folder
 for the desktop app and the daemon), which the next start reads back. A file that can't
-be read is logged and read as none, and a switch it leaves out is on. `studio.get`
+be read is logged and read as none, and a switch it leaves out takes its default (on, but screen-space reflections off). `studio.get`
 reports them as `rendering`. Every plan reads them (see *Snapshots*).
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its

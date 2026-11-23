@@ -39,7 +39,11 @@ fn the_switches_are_set_one_at_a_time_and_kept_in_their_file() {
         .with_cpu_compositor()
         .with_rendering_file(&file);
     let control = connected(&engine);
-    assert_eq!(rendering(&control), Some(RenderFeatures::ALL), "all on");
+    assert_eq!(
+        rendering(&control),
+        Some(RenderFeatures::DEFAULT),
+        "the defaults"
+    );
     set(
         &control,
         RenderFeaturesChange {
@@ -57,7 +61,7 @@ fn the_switches_are_set_one_at_a_time_and_kept_in_their_file() {
     let off = RenderFeatures {
         shadows: false,
         floor_reflections: false,
-        ..RenderFeatures::ALL
+        ..RenderFeatures::DEFAULT
     };
     assert_eq!(rendering(&control), Some(off), "each change keeps the rest");
     drop(control);
@@ -88,7 +92,7 @@ fn a_probe_resolution_cap_is_one_of_the_face_sizes() {
     );
     let capped = RenderFeatures {
         max_probe_resolution: 256,
-        ..RenderFeatures::ALL
+        ..RenderFeatures::DEFAULT
     };
     assert_eq!(rendering(&control), Some(capped));
     let refused = block_on(control.call(Call::Action {

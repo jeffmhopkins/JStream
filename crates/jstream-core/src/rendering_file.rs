@@ -77,9 +77,9 @@ mod tests {
             load(&path),
             Some(RenderFeatures {
                 ambient_occlusion: false,
-                ..RenderFeatures::ALL
+                ..RenderFeatures::DEFAULT
             }),
-            "a switch the file leaves out is on"
+            "a switch the file leaves out takes its default"
         );
         std::fs::write(&path, "not json").expect("written");
         assert_eq!(load(&path), None, "unparsable");

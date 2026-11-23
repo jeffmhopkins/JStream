@@ -159,3 +159,8 @@ The decisions stand. Where the delivery departs from their text:
     composite has no mip chain at that point.
   - A scene with this pass has a chain, so a transition shows it as one picture, as it
     shows any scene with filters (ADR-0065 §6).
+  - Its switch, `screen_space_reflections`, is off until turned on, and a file or server
+    that leaves it out reads as off: the one exception to "a switch a later version adds
+    is on". Measured on an integrated GPU, a 3D scene at 1080p30 went from about 21 ms of
+    GPU time a frame to about 39 ms with it on, so on by default would have dropped
+    existing reflective scenes below their frame rate.

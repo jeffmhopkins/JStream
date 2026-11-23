@@ -125,7 +125,7 @@ fn an_mcp_agent_drives_the_engine_in_process() {
                 "floor_reflections": true,
                 "reflection_probes": true,
                 "max_probe_resolution": 512,
-                "screen_space_reflections": true,
+                "screen_space_reflections": false,
                 "screen_space_steps": 32
             }
         })

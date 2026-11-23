@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 /// A switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a
 /// scene, light or filter asks for; on, each scene gets what it asks for. No switch
 /// changes the collection, so turning one back on restores every scene as it was. Every
-/// switch is on until `studio.set_rendering` turns it off.
+/// switch but `screen_space_reflections` is on until `studio.set_rendering` changes it
+/// ([`RenderFeatures::DEFAULT`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct RenderFeatures {
     /// Shadow maps (ADR-0151 decision 3). Off, no light casts a shadow, whatever its
@@ -40,8 +41,9 @@ pub struct RenderFeatures {
     pub max_probe_resolution: u32,
     /// Screen-space reflections (ADR-0170 decision 4, since 0.172), one extra pass over
     /// each scene whose `reflections` is on. Off, its surfaces reflect their probes and
-    /// environment only.
-    #[serde(default = "on")]
+    /// environment only. Off until turned on, since it costs a frame budget's worth on a
+    /// modest GPU.
+    #[serde(default)]
     pub screen_space_reflections: bool,
     /// How many steps a screen-space reflection's ray takes through the view depth: one
     /// of [`SCREEN_SPACE_STEPS`] (since 0.172). More finds thinner things, at more cost.
@@ -70,12 +72,19 @@ fn max_probe() -> u32 {
 
 impl Default for RenderFeatures {
     fn default() -> Self {
-        Self::ALL
+        Self::DEFAULT
     }
 }
 
 impl RenderFeatures {
-    /// Every switch on: what the engine draws until `studio.set_rendering` changes it.
+    /// What the engine draws until `studio.set_rendering` changes it: every switch on but
+    /// `screen_space_reflections`, and the largest probe faces at the middle step count.
+    pub const DEFAULT: Self = Self {
+        screen_space_reflections: false,
+        ..Self::ALL
+    };
+
+    /// Every switch on.
     pub const ALL: Self = Self {
         shadows: true,
         ambient_occlusion: true,
@@ -197,16 +206,17 @@ mod tests {
     }
 
     #[test]
-    fn a_switch_an_older_server_leaves_out_reads_as_on() {
+    fn a_switch_an_older_server_leaves_out_reads_as_its_default() {
         let read: RenderFeatures = serde_json::from_str(r#"{"shadows":false}"#).expect("parses");
         assert_eq!(
             read,
             RenderFeatures {
                 shadows: false,
-                ..RenderFeatures::ALL
+                ..RenderFeatures::DEFAULT
             }
         );
         assert!(read.reflection_probes && read.max_probe_resolution == 512);
-        assert!(read.screen_space_reflections && read.screen_space_steps == 32);
+        assert!(!read.screen_space_reflections && read.screen_space_steps == 32);
+        assert_eq!(RenderFeatures::default(), RenderFeatures::DEFAULT);
     }
 }

@@ -1386,7 +1386,7 @@ pub struct SceneOptions {
     /// `scene`-lit model or lit card inside a `reflection_probe`'s box reflects the
     /// probe's capture of the scene, by its own roughness and metalness, in place of
     /// the environment; since 0.172 a `scene`-lit model also reflects what is on screen
-    /// (decision 4). Off, the scene's probes capture nothing and its surfaces reflect
+    /// while the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect
     /// only the environment, as before. A keyframe scene is drawn as its parent, which
     /// decides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.
     #[serde(skip_serializing_if = "is_false")]

@@ -4141,7 +4141,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\n(decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -12080,7 +12080,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\n(decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -21965,7 +21965,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\n(decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -32294,7 +32294,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\n(decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -38711,7 +38711,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\n(decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {
@@ -43984,7 +43984,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "boolean"
                   },
                   "reflections": {
-                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\n(decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+                    "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
                     "type": "boolean"
                   },
                   "scene_id": {

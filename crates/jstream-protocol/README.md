@@ -1567,7 +1567,7 @@ scene's `scene`-lit models and lit cards reflect each other through its
 `reflection_probe` items, each by its own roughness and metalness
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decision 2), and since 0.172 lets its `scene`-lit models reflect what is on screen
-(decision 4). `scene.set_options` replaces them all the
+while the `screen_space_reflections` switch, off by default, is on (decision 4). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
 parent and is refused, and `keep_warm` and `reflections`, which its parent decides and
 are refused, and `state.get` reports them flattened beside the scene's other
@@ -1743,11 +1743,11 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   reflect their probes and environment only. `screen_space_steps` is how many steps a
   screen-space reflection's ray takes: 16, 32 or 64 (`SCREEN_SPACE_STEPS`, the default
   32), and any other count is `invalid_argument` on `screen_space_steps`. All are on
-  until set. An application setting, like
+  until set but `screen_space_reflections`, which is off (`RenderFeatures::DEFAULT`). An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
-  reads as on, a cap it leaves out as 512, and steps it leaves out as 32.
+  reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, and steps it leaves out as 32.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),

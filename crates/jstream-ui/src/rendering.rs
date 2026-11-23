@@ -92,7 +92,7 @@ impl Switch {
                 "Each capture draws its scene six times, as often as the probe refreshes. Off, no probe captures, and surfaces reflect only the environment."
             }
             Switch::ScreenSpaceReflections => {
-                "Each frame draws its scene's models once more and traces a ray per pixel. Off, surfaces reflect only their probes and the environment."
+                "Each frame draws its scene's models once more and traces a ray per pixel, which can cost a modest GPU its frame rate. Off until turned on, surfaces reflect only their probes and the environment."
             }
         }
     }
@@ -379,7 +379,11 @@ mod tests {
             client_name: "test".into(),
         }))
         .expect("hello");
-        assert_eq!(now(read(&control)), Ok(Some(RenderFeatures::ALL)), "all on");
+        assert_eq!(
+            now(read(&control)),
+            Ok(Some(RenderFeatures::DEFAULT)),
+            "the defaults"
+        );
         now(set(&control, Switch::Shadows.change(false))).expect("set");
         now(set(&control, Switch::VolumetricFog.change(false))).expect("set");
         let read = now(read(&control)).expect("read").expect("reported");
@@ -388,7 +392,7 @@ mod tests {
             RenderFeatures {
                 shadows: false,
                 volumetric_fog: false,
-                ..RenderFeatures::ALL
+                ..RenderFeatures::DEFAULT
             },
             "each change keeps the other switches"
         );
@@ -424,7 +428,10 @@ mod tests {
         now(set(&control, super::reflection_steps(64))).expect("set");
         let read = now(read(&control)).expect("read").expect("reported");
         assert_eq!(read.screen_space_steps, 64);
-        assert!(read.screen_space_reflections, "the switches are kept");
+        assert!(
+            !read.screen_space_reflections,
+            "the switch is kept, off by default"
+        );
         assert!(now(set(&control, super::reflection_steps(20))).is_err());
         assert_eq!(super::steps_label(16), "Low");
         assert_eq!(super::steps_label(64), "High");

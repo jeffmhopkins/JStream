@@ -972,7 +972,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                                         />
                                         <span>"Reflections"</span>
                                     </label>
-                                    <Info text="In a 3D scene, models lit by the scene and lit cards inside a reflection probe's box reflect what the probe sees, each by its own roughness and metalness, and the models also reflect what is on screen. Settings › 3D rendering can turn either off everywhere." />
+                                    <Info text="In a 3D scene, models lit by the scene and lit cards inside a reflection probe's box reflect what the probe sees, each by its own roughness and metalness. With Screen-space reflections turned on in Settings › 3D rendering, the models also reflect what is on screen." />
                                 </div>
                             </div>
                         </Show>
