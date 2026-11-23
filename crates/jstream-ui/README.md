@@ -37,7 +37,7 @@ Contents ([Design](#design) explains the choices):
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, on in the desktop app only, and
   About), the stats
-  readout (the program's frame rate, the frames dropped since the page connected and the
+  readout (the program's frame rate, the frames the outputs dropped while they ran and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
 - **Projects** (`project.rs`, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)):
@@ -1180,8 +1180,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Outputs. Record starts every stopped or failed recording output and, while any runs,
   becomes "Stop recording", which stops them; with no recording output it is disabled.
   The stats readout reads "60 fps · 0 dropped · CPU 3%" from `stats.tick`. The dropped
-  count is captured, rendered and encoded frames dropped since the first tick this page
-  saw, starting over when the engine restarts. The frame rate and CPU (`Load`) come from
+  count is captured, rendered and encoded frames dropped in the intervals that began with
+  an output running (the tick's `outputs` not empty), counted from when outputs began
+  running after none did, and shown only while one runs: what drops while only previews
+  use the pipeline is no stream's loss (#1690). A tick of an engine restart counts
+  nothing. The frame rate and CPU (`Load`) come from
   the last two ticks' `load` (protocol 0.48): program frames over the elapsed time,
   shown only while the program drew some, and CPU time over the elapsed time and the
   logical CPUs, "<1%" below half a percent, left out when the engine reads none. Undo and
@@ -1210,9 +1213,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   read that one arrived during is made again rather than applied, so a row never steps
   back to an older state. Since
   #1206 the dock is a compact list: the header has the health (a dot and a word, the
-  detail on hover; it sums `stats.tick`'s drop totals over the last five ticks, and a
-  `seq` that doesn't increase or a total that shrinks, an engine restart, starts it
-  over), Start all and, while any output runs, Stop all (`all_outputs`: every stopped
+  detail on hover; it sums `stats.tick`'s drop totals over the last five ticks,
+  counting an interval only when it began with an output running and reading "Idle"
+  while none runs, so a preview's drops never show as a stream's (#1690), and a `seq`
+  that doesn't increase or a total that shrinks, an engine restart, starts it over), Start all and, while any output runs, Stop all (`all_outputs`: every stopped
   output that can start, of any kind, and every running one). The program output's row ("master") comes
   first, then a row per output with its kind icon, ID, a summary (host, file name or
   "Webcam", then the encoder's name), a ⚠ for a cleartext key, its state badge, Start or
