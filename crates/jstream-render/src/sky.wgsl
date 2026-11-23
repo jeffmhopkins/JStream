@@ -428,7 +428,8 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     // Going into warp the deep sky blurs along the streaks and is gone by a quarter of
     // the way. Coming out it returns sooner, squeezed toward straight ahead, and rushes
     // back out to its place as the warp collapses: a zoom, blurred along its rush. The
-    // two blend by how much it is dropping, so arriving at a cruise doesn't snap.
+    // two blend by how much it is dropping, so arriving at a cruise, or at rest, doesn't
+    // snap.
     let deep = mix(1.0 - smoothstep(0.0, 0.25, warp), 1.0 - smoothstep(0.15, 0.55, warp), dropping);
     let zoom = 3.0 * smoothstep(0.0, 0.55, warp) * dropping;
     let rushing = dropping > 0.0;
