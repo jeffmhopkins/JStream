@@ -2846,3 +2846,265 @@ fn a_surface_reads_the_live_texture_its_layer_shows() {
         "drawn alone {alone:?}, with the layer {with:?}"
     );
 }
+
+/// The largest difference between two snapshots' channels, and where.
+fn furthest(a: &Snapshot, b: &Snapshot) -> (u8, (u32, u32)) {
+    let mut worst = (0, (0, 0));
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let (p, q) = (
+                a.pixel(x, y).expect("inside"),
+                b.pixel(x, y).expect("inside"),
+            );
+            let far = (0..4).map(|c| p[c].abs_diff(q[c])).max().unwrap_or(0);
+            if far > worst.0 {
+                worst = (far, (x, y));
+            }
+        }
+    }
+    worst
+}
+
+/// ADR-0191: a model drawn in its scene's pass shows what its layer, composited at full
+/// opacity in the normal blend, would have: over a card under it, under a card over it,
+/// lit by the studio rig, with a see-through material, in a 3D scene whose later card
+/// its depth hides, and in a 2D scene.
+#[test]
+fn golden_model_drawn_in_the_pass_matches_its_layer() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let blue = compositor
+        .upload_rgba8(1, 1, &[0, 0, 255, 255])
+        .expect("a pixel uploads");
+    let white = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let glass = Shape::Sphere
+        .model(Material {
+            base_color: [1.0, 0.6, 0.2, 0.5],
+            alpha_mode: AlphaMode::Blend,
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let solid = Shape::Sphere
+        .model(Material {
+            base_color: [0.9, 0.3, 0.2, 1.0],
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let models = [
+        compositor.upload_model(&coloured_cube()).expect("uploads"),
+        compositor.upload_model(&glass).expect("uploads"),
+        compositor.upload_model(&solid).expect("uploads"),
+    ];
+    let framing = SceneCamera {
+        depth_sort: false,
+        ..SceneCamera::framing(canvas())
+    };
+    let mut geometry = boxed(80.0, 50.0, 40.0);
+    geometry.depth_px = finite(30.0);
+    geometry.turn_deg = finite(25.0);
+    geometry.tilt_deg = finite(-15.0);
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+    let empty = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    let mut seen = 0;
+    for (model, lighting) in [
+        (&models[0], Lighting::Unlit),
+        (&models[1], Lighting::Studio),
+        (&models[2], Lighting::Studio),
+    ] {
+        for camera in [Some(framing), None] {
+            let draw = ModelDraw {
+                model,
+                geometry,
+                camera,
+                lighting,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                texture: None,
+                reflection: None,
+                probe: None,
+                materials: &[],
+            };
+            let carried = camera.is_some().then_some(&depth);
+            if carried.is_some() {
+                compositor
+                    .render_view_depth(&empty, &depth)
+                    .expect("the depth clears");
+                compositor
+                    .draw_model_depth(&draw, &depth)
+                    .expect("the model's depth draws");
+            }
+            // A card under the model, the model, and a card over half of it that sits
+            // behind it in 3D, where its depth hides the card.
+            let under = Item {
+                camera,
+                ..crate::tests::item(
+                    &blue,
+                    Placement::Geometry(boxed(70.0, 50.0, 60.0)),
+                    Crop::NONE,
+                    1.0,
+                )
+            };
+            let mut behind = boxed(100.0, 50.0, 50.0);
+            behind.depth_px = finite(-20.0);
+            let over = Item {
+                camera,
+                ..crate::tests::item(&white, Placement::Geometry(behind), Crop::NONE, 0.5)
+            };
+            compositor
+                .draw_model(&draw, &layer)
+                .expect("the model draws");
+            let layered = render(
+                compositor,
+                &[
+                    under,
+                    Item {
+                        camera,
+                        depth: carried,
+                        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+                    },
+                    over,
+                ],
+            );
+            let prepared = compositor
+                .prepare_model(&draw, (WIDTH, HEIGHT), None, None)
+                .expect("the model is made ready")
+                .expect("nothing needs a layer");
+            let direct = render(
+                compositor,
+                &[
+                    under,
+                    Item {
+                        camera,
+                        depth: carried,
+                        model: Some(&prepared),
+                        ..crate::tests::item(&white, Placement::Layer(geometry), Crop::NONE, 1.0)
+                    },
+                    over,
+                ],
+            );
+            let (far, at) = furthest(&layered, &direct);
+            assert!(
+                far <= 1,
+                "a model drawn in the pass differs from its layer by {far} at {at:?}"
+            );
+            // The model is there, and so are both cards.
+            assert_ne!(rgb(&direct, 80, 50), [0, 0, 255]);
+            assert_eq!(rgb(&direct, 45, 50), [0, 0, 255]);
+            seen += 1;
+
+            // Made ready again from the last one, and into a layer after all, it is
+            // what `draw_model` draws.
+            let again = compositor
+                .prepare_model(&draw, (WIDTH, HEIGHT), None, Some(prepared))
+                .expect("the model is made ready")
+                .expect("nothing needs a layer");
+            let own = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+            compositor
+                .draw_prepared(&again, &own)
+                .expect("the prepared model draws into a layer");
+            assert_eq!(own.content(), layer.content());
+            let place = |image| {
+                [Item {
+                    camera,
+                    ..crate::tests::item(image, Placement::Layer(geometry), Crop::NONE, 1.0)
+                }]
+            };
+            let (far, at) = furthest(
+                &render(compositor, &place(&layer)),
+                &render(compositor, &place(&own)),
+            );
+            assert!(
+                far == 0,
+                "a prepared model's layer differs by {far} at {at:?}"
+            );
+        }
+    }
+    assert_eq!(seen, 6);
+}
+
+/// ADR-0191: an item can carry a model only where its layer would have been composited
+/// as it is drawn: a layer placement at full opacity in the normal blend, on a canvas
+/// of the size it was made ready for, once per uploaded model.
+#[test]
+fn a_model_in_the_pass_is_refused_where_it_needs_its_layer() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let white = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
+    let geometry = boxed(80.0, 50.0, 40.0);
+    let draw = ModelDraw {
+        model: &cube,
+        geometry,
+        camera: None,
+        lighting: Lighting::Unlit,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        texture: None,
+        reflection: None,
+        probe: None,
+        materials: &[],
+    };
+    let ready = |compositor: &mut Compositor, size| {
+        compositor
+            .prepare_model(&draw, size, None, None)
+            .expect("the model is made ready")
+            .expect("nothing needs a layer")
+    };
+    let prepared = ready(compositor, (WIDTH, HEIGHT));
+    let second = ready(compositor, (WIDTH, HEIGHT));
+    let small = ready(compositor, (WIDTH / 2, HEIGHT));
+    let carried = |model| Item {
+        model: Some(model),
+        ..crate::tests::item(&white, Placement::Layer(geometry), Crop::NONE, 1.0)
+    };
+    let cases: [Vec<Item<'_>>; 5] = [
+        vec![Item {
+            opacity: 0.5,
+            ..carried(&prepared)
+        }],
+        vec![Item {
+            blend: crate::BlendMode::Additive,
+            ..carried(&prepared)
+        }],
+        vec![Item {
+            placement: Placement::Geometry(geometry),
+            ..carried(&prepared)
+        }],
+        vec![carried(&small)],
+        vec![carried(&prepared), carried(&second)],
+    ];
+    for items in &cases {
+        let scene = Scene {
+            canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+            background: Color::rgb(0.0, 0.0, 0.0),
+            items,
+        };
+        assert!(matches!(
+            compositor.render(&scene, true),
+            Err(crate::RenderError::Invalid { what: "model", .. })
+        ));
+    }
+    // A hidden one draws nothing, and the scene is still valid.
+    let hidden = [Item {
+        visible: false,
+        ..carried(&prepared)
+    }];
+    assert_eq!(count(&render(compositor, &hidden), [0, 0, 0]), 16_000);
+}

@@ -54,7 +54,12 @@ and calls this crate.
   camera has a depth of field ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
-  at the model's centre.
+  at the model's centre. A model nothing reads the layer of is shaded in its scene's
+  pass instead ([ADR-0191](../../docs/adr/0191-a-model-is-drawn-in-its-scenes-pass.md)):
+  `Compositor::prepare_model` makes the same draw ready without drawing it (a
+  `PreparedModel`), and the item that would place the layer carries it (`Item::model`),
+  so the pass draws the model's fragments where the layer's would have been blended.
+  `Compositor::draw_prepared` draws one into a layer after all, for whatever needs it.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
   `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
   `Environment`, the camera, the stars, the deep sky, the warp and travel, and an opacity) into a canvas-sized layer, every
@@ -514,7 +519,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    `depth_on`, makes the scene depth target (`Depth32Float`, kept per canvas size) and,
    the first time, `DepthPipelines` (every blend pipeline in both spaces again, tested
    `GreaterEqual` or `Always`, and `depth_writer`). The pass clears it to 0 (it starts
-   cleared rather than wiped then), the model's layer draws untested and then
+   cleared rather than wiped then), the model's layer (or the model, where its item
+   carries its draw, ADR-0191) draws untested and then
    `fs_write_depth` writes `NEAR_W` times its depth image's `1 / w` where that isn't 0,
    loaded texel for texel, and every other item tests its own `NEAR_W / w` (the vertex
    shader's clip z, `min(NEAR_W, w)`) against it without writing
@@ -823,6 +829,29 @@ one non-finite pixel isn't spread into a disc of dots.
 Where `R`
 is under half a pixel the pixel is copied, so a model in focus draws exactly as without
 depth of field, and a camera without one skips all of it.
+
+**Models in a pass** (ADR-0191). `prepare_model(draw, size, surface, recycle)` does all
+of `draw_model` but the pass: it checks the draw, takes what it binds, and writes the
+frame's uniform into a buffer of the draw's own (the one `recycle`, last frame's draw of
+the same item, held, when it has one), where `draw_model` writes the model runtime's
+shared one. It keeps the order of the blended primitives and the values each material
+is driven to, since those are written to the uploaded model's own buffers and another
+placement of the model may be drawn in between. It returns `None`, and the caller draws
+the layer, for a compositor that mixes encoded colour and for a camera with a depth of
+field, which blurs the layer. A pass records an item's `PreparedModel` between the
+draws around it, into the pass's own encoder: it ends the pass it is in, writes the
+materials, records the model's passes (depth prepass, opaque, blended, and the surface
+beside it when it was prepared with one) loading the target, and opens the pass again
+for the items after it, so the whole composite is still one submit. The item's own
+quad isn't drawn; where the item carries a depth (`Item::depth`) that is written as it
+is for a layer. The model tests against the runtime's private depth buffer, cleared for
+it, so it is hidden by nothing in the pass, as its layer wasn't. `prepare` refuses, as
+`RenderError::Invalid`, an item whose draw wasn't prepared for the canvas's size, that
+isn't a `Placement::Layer` at opacity 1 in the normal blend, or that follows an item
+carrying a draw of the same uploaded model (`PreparedModel::shares_model`): one submit
+holds one set of a model's material values. The picture is the layer's to within the
+rounding of the blend the layer path adds
+(`golden_model_drawn_in_the_pass_matches_its_layer`).
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
@@ -1766,7 +1795,13 @@ plane; a model's layer sorts with a card by the model's depth, whatever the stac
 order; a normal map tilted up its texture lights the same, toward the key light, when
 the placement mirrors the model, and seen from behind (a double-sided plane turned 180°)
 lights as the front of the opposite tilt, while an unmapped plane's back lights as its
-front; a model draws into layers of three sizes in a row (the
+front; a model carried by its item is drawn by the pass as its layer would be blended,
+unlit, lit, blended, through a camera and with its surface beside it, and one drawn
+into a layer from its `PreparedModel` matches `draw_model`
+(`golden_model_drawn_in_the_pass_matches_its_layer`); an item that carries one where
+it needs its layer is refused
+(`a_model_in_the_pass_is_refused_where_it_needs_its_layer`); a model draws into layers
+of three sizes in a row (the
 depth target follows the layer); and a primitive past the adapter's buffer limit is
 refused with `RenderError::Invalid`. Scene lights (ADR-0143), each through the framing
 camera: a point light to the right lights a sphere's right side and leaves its left

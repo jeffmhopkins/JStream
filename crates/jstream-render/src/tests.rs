@@ -122,6 +122,7 @@ pub(crate) fn item<'a>(
         camera: None,
         depth_run: 0,
         depth: None,
+        model: None,
     }
 }
 

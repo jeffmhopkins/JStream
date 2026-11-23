@@ -745,6 +745,9 @@ pub(crate) struct Chains {
     /// The model items whose surface was drawn with their layer since the chains last
     /// began a frame (ADR-0170 decision 4): the surface buffer merges theirs.
     pub(crate) surfaced: BTreeSet<(jstream_protocol::SceneId, jstream_protocol::ItemId)>,
+    /// The model draws made ready for their scenes' passes (ADR-0191), and how the
+    /// passes have shown them.
+    pub(crate) direct: crate::snapshot::DirectModels,
     /// The items whose effects layer failed to be made or drawn and has been logged, so
     /// one that keeps failing logs once; a frame it draws clears it.
     box_warned: BTreeSet<ChainOwner>,
@@ -868,6 +871,7 @@ impl Chains {
         }
         self.failed.clear();
         self.surfaced.clear();
+        self.direct.begin();
         self.staged.clear();
         self.drawn.clear();
         let used = std::mem::take(&mut self.models_used);
@@ -5748,6 +5752,196 @@ mod tests {
                 "a flat item in the same pose covers the same cells\nflat:\n{flat}"
             );
         }
+    }
+
+    /// What [`carried`] reads: the pixels, and the two counts.
+    type Carried = (Vec<[u8; 4]>, (u64, u64));
+
+    /// `shot` drawn once a frame with each of `mixes` mixes in turn, on one compositor:
+    /// the pixel at each of `points` in the last frame, and how many times a pass's
+    /// item carried a model and how many made-ready draws went into their layer
+    /// (ADR-0191) over all the frames. `None` where the machine has no adapter.
+    fn carried(shot: &Shot, mixes: &[usize], points: &[(u32, u32)]) -> Option<Carried> {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let mut compositor = gpu()?;
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let canvas = shot.canvas().expect("canvas");
+        let mut read = Vec::new();
+        for &mixes in mixes {
+            cache.begin_frame();
+            for _ in 0..mixes {
+                let output = snapshot::compose(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (shot, MediaTime::zero(Timebase::MILLIS)),
+                    snapshot::View::default(),
+                    &LiveParams::default(),
+                    &NoCaptures,
+                    snapshot::DrawAt::read(canvas),
+                )
+                .expect("compose");
+                let pixels = output.pixels().expect("read back");
+                read = points
+                    .iter()
+                    .map(|&(x, y)| pixels.pixel(x, y).expect("a pixel"))
+                    .collect();
+            }
+            drop(cache.end_frame(&compositor));
+        }
+        Some((read, chains.direct.counts.get()))
+    }
+
+    /// ADR-0191: a model with nothing over its layer is shaded in its scene's pass,
+    /// every frame, and never into its layer.
+    #[test]
+    fn a_plain_model_is_drawn_in_its_scenes_pass() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        let Some((pixels, counts)) = carried(
+            &model_shot(&graph, "plane"),
+            &[1, 1, 1],
+            &[(8, 18), (48, 18)],
+        ) else {
+            return;
+        };
+        assert_eq!(counts, (3, 0), "carried by its pass each frame");
+        assert_eq!(pixels[0], WHITE, "the plane is drawn in its box");
+        assert_eq!(pixels[1], [0, 0, 0, 255], "and nowhere else");
+    }
+
+    /// ADR-0191: what a pass can't draw of a model in place keeps the layer. An item
+    /// under full opacity or in another blend has its made-ready draw drawn into its
+    /// layer, which the pass places as before; an item with effects, and a canvas that
+    /// mixes encoded colour, never make one ready.
+    #[test]
+    fn a_model_that_needs_its_layer_keeps_it() {
+        let placed_model = || {
+            let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+            apply(&mut graph, vec![hide("logo")]);
+            graph
+        };
+        let mut graph = placed_model();
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetOpacity {
+                item_id: ItemId::new("cam"),
+                scene_id: None,
+                opacity: jstream_protocol::Finite32::new(0.5).expect("finite"),
+            }],
+        );
+        let Some((pixels, counts)) = carried(&model_shot(&graph, "plane"), &[1, 1], &[(8, 18)])
+        else {
+            return;
+        };
+        assert_eq!(counts, (0, 2), "half opaque: its layer, blended");
+        // Half of white in linear light.
+        assert!(
+            pixels[0][0].abs_diff(188) <= 2,
+            "its layer at half opacity: {:?}",
+            pixels[0]
+        );
+        let mut graph = placed_model();
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetBlend {
+                item_id: ItemId::new("cam"),
+                blend: jstream_protocol::BlendMode::Screen,
+            }],
+        );
+        let (pixels, counts) =
+            carried(&model_shot(&graph, "plane"), &[1], &[(8, 18)]).expect("an adapter");
+        assert_eq!(counts, (0, 1), "another blend: its layer");
+        assert_eq!(pixels[0], WHITE);
+        let mut graph = placed_model();
+        apply(
+            &mut graph,
+            vec![vignette(FilterOwner::Item {
+                item_id: ItemId::new("cam"),
+            })],
+        );
+        let (pixels, counts) =
+            carried(&model_shot(&graph, "plane"), &[1], &[(16, 18)]).expect("an adapter");
+        assert_eq!(counts, (0, 0), "effects read its layer, drawn as it was");
+        assert_eq!(pixels[0], WHITE);
+        let mut graph = placed_model();
+        apply(
+            &mut graph,
+            vec![Edit::CanvasSetBlending {
+                blending: jstream_protocol::Blending::Srgb,
+            }],
+        );
+        let (pixels, counts) =
+            carried(&model_shot(&graph, "plane"), &[1], &[(8, 18)]).expect("an adapter");
+        assert_eq!(counts, (0, 0), "encoded colour is mixed from its layer");
+        assert_eq!(pixels[0], WHITE);
+    }
+
+    /// ADR-0191: two items showing one model draw one upload, whose materials one
+    /// submit can drive only one way, so a pass carries the first and places the
+    /// second's layer. Both are drawn.
+    #[test]
+    fn two_items_of_one_model_are_drawn_in_one_pass() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        let mut right = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(56.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(16.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        right.fit_mode = jstream_protocol::FitMode::Stretch;
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("again"),
+                    source_id: SourceId::new("cam"),
+                    transform: None,
+                    geometry: Some(right),
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let Some((pixels, counts)) = carried(
+            &model_shot(&graph, "plane"),
+            &[1, 1],
+            &[(8, 18), (40, 18), (56, 18)],
+        ) else {
+            return;
+        };
+        assert_eq!(
+            counts,
+            (2, 2),
+            "one carried and one in its layer, each frame"
+        );
+        assert_eq!(pixels[0], WHITE, "the first item's model");
+        assert_eq!(pixels[1], [0, 0, 0, 255], "between them");
+        assert_eq!(pixels[2], WHITE, "the second item's model");
+    }
+
+    /// ADR-0191: a model two passes show in a frame is shaded once. The first frame
+    /// carries it in the first pass and draws its layer for the second; after that its
+    /// layer is drawn up front, as ADR-0107 draws it, until a frame shows it once
+    /// again.
+    #[test]
+    fn a_model_two_passes_show_is_shaded_once_a_frame() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        let shot = model_shot(&graph, "plane");
+        let Some((pixels, counts)) = carried(&shot, &[2], &[(8, 18)]) else {
+            return;
+        };
+        assert_eq!(counts, (1, 1), "carried once, then its layer");
+        assert_eq!(pixels[0], WHITE, "the second mix shows its layer");
+        let (pixels, counts) = carried(&shot, &[2, 2, 2], &[(8, 18)]).expect("an adapter");
+        assert_eq!(counts, (1, 1), "drawn into its layer up front after that");
+        assert_eq!(pixels[0], WHITE);
+        // One pass again: the frame after still draws its layer, then it is carried.
+        let (pixels, counts) = carried(&shot, &[2, 2, 1, 1, 1], &[(8, 18)]).expect("an adapter");
+        assert_eq!(counts, (3, 1), "carried again once one pass shows it");
+        assert_eq!(pixels[0], WHITE);
     }
 
     /// `cam`, cropped to the middle half of its frame and stretched over the canvas.

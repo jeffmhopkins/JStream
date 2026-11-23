@@ -55,9 +55,11 @@ use crate::profile::{DrawMeter, Phase};
 use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
+mod direct;
 mod groups;
 mod probes;
 
+pub(crate) use direct::DirectModels;
 pub(crate) use groups::placed_camera;
 use groups::{GroupLink, Groups};
 pub(crate) use probes::{ProbeRun, ProbeState};
@@ -6182,6 +6184,7 @@ pub(crate) fn compose_metered(
                             camera: None,
                             depth_run: 0,
                             depth: None,
+                            model: None,
                         }
                     })
                     .collect();
@@ -6266,8 +6269,9 @@ pub(crate) fn compose_metered(
             }
             let started = Instant::now();
             meter.gpu_unit_pass(compositor, &pass.scene);
-            let camera = fill_items(
+            let camera = direct::fill_shown(
                 &mut items,
+                compositor,
                 (cache, chains),
                 (shot, pass),
                 (at, canvas),
@@ -6294,8 +6298,9 @@ pub(crate) fn compose_metered(
                 transition.background(at, shot.blending)
             }
             (Some(root), None) => {
-                let camera = fill_items(
+                let camera = direct::fill_shown(
                     &mut items,
+                    compositor,
                     (cache, chains),
                     (shot, root),
                     (at, canvas),
@@ -6501,8 +6506,9 @@ fn run_chains(
                     (live, captures),
                 )?;
                 let mut items = Vec::new();
-                let camera = fill_items(
+                let camera = direct::fill_shown(
                     &mut items,
+                    compositor,
                     (&*cache, &*chains),
                     (shot, pass),
                     (at, canvas),
@@ -6721,6 +6727,7 @@ fn draw_box(
         camera: None,
         depth_run: 0,
         depth: None,
+        model: None,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
         what: "item box",
@@ -6843,6 +6850,7 @@ fn light_card(
                 camera: None,
                 depth_run: 0,
                 depth: None,
+                model: None,
             }];
             let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
                 what: "item box",
@@ -7015,6 +7023,18 @@ fn draw_model(
         |m| shot.tint(&boxed.item, m),
     );
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
+    // A model whose layer nothing has to read is made ready for its scene's pass to
+    // draw (ADR-0191), with the buffers of the frame before's draw.
+    let direct = match owner {
+        ChainOwner::Item(scene, item) => Some((scene.clone(), item.clone())),
+        _ => None,
+    }
+    .filter(|_| !shot.chains.contains_key(owner) && shot.transition.is_none());
+    let recycle = direct
+        .as_ref()
+        .and_then(|model| chains.direct.recycle(model));
+    let direct = direct.filter(|model| chains.direct.wanted(model));
+    let mut ready = None;
     // What the scene's probes saw, inside one (ADR-0170 decision 3), unless it opts out.
     let probe = (lit && shown.reflections)
         .then(|| {
@@ -7053,9 +7073,21 @@ fn draw_model(
                 Some([normal, brdf, reflected])
             });
             surfaced = surface.is_some();
-            let layered = match surface {
-                Some(surface) => compositor.draw_model_with_surface(&draw, layer, surface),
-                None => compositor.draw_model(&draw, layer),
+            let size = (layer.width(), layer.height());
+            let prepared = match &direct {
+                Some(_) => compositor.prepare_model(&draw, size, surface, recycle),
+                None => Ok(None),
+            };
+            let layered = match (prepared, surface) {
+                (Ok(Some(prepared)), _) => {
+                    ready = Some(prepared);
+                    Ok(())
+                }
+                (Ok(None), Some(surface)) => {
+                    compositor.draw_model_with_surface(&draw, layer, surface)
+                }
+                (Ok(None), None) => compositor.draw_model(&draw, layer),
+                (Err(error), _) => Err(error),
             };
             Some(layered.and_then(
                 |()| match depth_key.as_ref().and_then(|key| cache.get(key)) {
@@ -7074,6 +7106,22 @@ fn draw_model(
     chains.shadowed = shadowed;
     if let (true, Some(Ok(())), ChainOwner::Item(scene, item)) = (surfaced, &drawn, owner) {
         chains.surfaced.insert((scene.clone(), item.clone()));
+    }
+    if let (Some(Ok(())), ChainOwner::Item(scene, item)) = (&drawn, owner) {
+        let model = (scene.clone(), item.clone());
+        match ready {
+            Some(prepared) => {
+                // Its layer isn't drawn: one that holds an earlier frame's picture is
+                // emptied, so nothing that reads it shows the model where it was.
+                if chains.direct.takes_old_picture(&model)
+                    && let Some(layer) = cache.get(key)
+                {
+                    clear(compositor, layer)?;
+                }
+                chains.direct.keep(model, prepared);
+            }
+            None => chains.direct.drew_layer(&model),
+        }
     }
     match drawn {
         Some(result) => result,
@@ -7374,6 +7422,7 @@ fn draw_shadows(
             cast.extend(items.iter().map(|item| Item {
                 camera: item.camera.map(|_| from),
                 depth: None,
+                model: None,
                 ..*item
             }));
             let seen = scene(map_canvas, Color::TRANSPARENT, &cast);
@@ -7586,6 +7635,7 @@ fn draw_reflection(
             image,
             camera: Some(mirrored),
             depth: None,
+            model: None,
             ..*item
         });
     }
@@ -8134,13 +8184,7 @@ fn fill_items<'a>(
     (live, captures): (&LiveParams, &dyn Captures),
 ) -> Option<SceneCamera> {
     let size = [canvas.width() as f32, canvas.height() as f32];
-    let camera = moved_camera(
-        live.camera(pass),
-        pass.camera.as_ref(),
-        (shot, at, shot.pass_shown(pass)),
-        (live, captures),
-        chains,
-    );
+    let camera = pass_camera(chains, (shot, pass), at, (live, captures));
     items.clear();
     items.extend(
         pass.layers
@@ -8148,6 +8192,23 @@ fn fill_items<'a>(
             .filter_map(|layer| layer_item(layer, (cache, chains), shot, (at, size), live, camera)),
     );
     camera
+}
+
+/// The camera `pass` is seen through at `at`, as it moves this frame; `None` in a 2D
+/// scene.
+fn pass_camera(
+    chains: &Chains,
+    (shot, pass): (&Shot, &Pass),
+    at: MediaTime,
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Option<SceneCamera> {
+    moved_camera(
+        live.camera(pass),
+        pass.camera.as_ref(),
+        (shot, at, shot.pass_shown(pass)),
+        (live, captures),
+        chains,
+    )
 }
 
 /// Puts `pass`'s sky backdrop under `items` (ADR-0167) when [`draw_sky`] drew it this
@@ -8187,6 +8248,7 @@ fn under_sky<'a>(
             camera: None,
             depth_run: 0,
             depth: None,
+            model: None,
         },
     );
 }
@@ -8224,6 +8286,7 @@ fn layer_item<'a>(
                 camera,
                 depth_run: 0,
                 depth: None,
+                model: None,
             });
         }
         let (placement, crop) = live.apply(layer);
@@ -8268,6 +8331,7 @@ fn layer_item<'a>(
             camera,
             depth_run: 0,
             depth,
+            model: None,
         })
     }
 }
@@ -8671,6 +8735,7 @@ fn fill_tracks<'a>(
                     // A stinger's items sort on their own, over the scenes under them.
                     depth_run: transition.cameras.depth_run(track, *seen),
                     depth: None,
+                    model: None,
                 })
             }),
     );
@@ -8705,6 +8770,7 @@ fn fill_tracks<'a>(
                 camera: None,
                 depth_run: 0,
                 depth: None,
+                model: None,
             },
         );
         under += 1;
@@ -8842,6 +8908,7 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         camera: None,
         depth_run: 0,
         depth: None,
+        model: None,
     }
 }
 
