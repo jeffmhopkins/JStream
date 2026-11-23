@@ -434,6 +434,16 @@ pub(crate) fn upload_frame(maker: &Maker<'_>, frame: &VideoFrame) -> Result<Imag
     upload_planes(maker, &planes, to)
 }
 
+/// [`upload_frame`] into a texture of `to` texels, the frame's size or smaller each way,
+/// as [`upload_into`] holds one. The image is placed at the frame's size.
+pub(crate) fn upload_frame_into(
+    maker: &Maker<'_>,
+    frame: &VideoFrame,
+    to: (u32, u32),
+) -> Result<Image, RenderError> {
+    upload_planes(maker, &Planes::opaque(frame)?, to)
+}
+
 fn upload_planes(
     maker: &Maker<'_>,
     planes: &Planes<'_>,

@@ -194,7 +194,8 @@ and calls this crate.
   frames, layers and depth layers), keyed by the caller's IDs, so a frame that shows what the last
   one showed allocates no texture. `upload_drawn`, on a cache that
   `draw_uploads_small` allows it, holds an upload only items draw at the size they draw
-  it, not its frame's (#1139). An import keeps its frame's `FrameSync` hold only
+  it, not its frame's (#1139), and `upload_frame_drawn` does the same for a CPU video
+  frame (a capture's). An import keeps its frame's `FrameSync` hold only
   for the frame that draws it, so the platform can reuse the texture afterwards. An image no frame references is freed only after the GPU has finished the
   last frame that used it, and the cache hands it back as `Reclaimed` so the caller
   picks the thread that drops it
@@ -415,7 +416,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    once and stored on `Image`.
 
    An upload's texture can also be **smaller than its frame** (`upload_rgba8_into`, for
-   `ResourceCache::upload_drawn`, #1139): the dispatch then covers the smaller texture,
+   `ResourceCache::upload_drawn`, and `upload_frame_into`, for
+   `ResourceCache::upload_frame_drawn`, #1139): the dispatch then covers the smaller texture,
    and each texel is the mean of the frame's texels under it (integer bounds, at least
    one each way), averaged in premultiplied linear light, as a box filter draws them. A
    rewrite of such an upload converts the frame into the same smaller texture.
@@ -727,7 +729,9 @@ replaced or retired and hands it back in `Reclaimed`, so the cache never drops t
 last reference on its thread.
 
 `upload_drawn` (#1139, ADR-0117 §2) is `upload` for a frame only items draw, so its
-texels need be no finer than its draws sample them. Each `render` notes on the image how
+texels need be no finer than its draws sample them. `upload_frame_drawn` is the same for
+`upload_frame`'s CPU video frame, choosing its size the same way, so a capture shown
+small (a webcam in a small box) is converted from NV12 straight into the small texture. Each `render` notes on the image how
 much of its frame's resolution each item needed (`Image::record_draw`: the texture's
 share of the frame over the texels per canvas pixel along the item's less minified axis,
 and all of it for a 3D placement). On a cache where `draw_uploads_small` is on (off by
@@ -1976,7 +1980,11 @@ version refills it, whole again once drawn large, a quarter again once drawn sma
 whole once placed in 3D, and a new key starts at its planned need; a still drawn small
 every tick and large every other tick stays whole when planned for both (and changes
 size without the plan), and a key held small given a whole upload of a frame the held
-size is made again, not refilled; without
+size is made again, not refilled; through `upload_frame_drawn`, a 512² NV12 frame is
+whole on its first frame, a quarter each way once drawn at an eighth, refilled in place
+by a new frame and showing its colour, whole again once drawn large, at its planned need
+for a new key, made whole again by `upload_frame`, and always whole on a cache that
+doesn't allow it; without
 `draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
 `destroyed`; a device destroyed while the copier reads 4K frames from it frees nothing
@@ -2083,8 +2091,9 @@ a hardware GPU.
 - **Small sources.** A 2D item drawn small samples a chain built from its whole crop
   every frame its source changes, so a 1080p camera in a small box costs a chain of up
   to an eighth of its size each way and its rebuild, which reads every source texel once. An upload only items draw is held at the size they draw it
-  (`ResourceCache::upload_drawn`, #1139), so its chain is small too; an import (a
-  capture, a page) is not, beyond `MAX_SKIP` levels. One crop can now hold a chain at
+  (`ResourceCache::upload_drawn`, and `upload_frame_drawn` for a capture's CPU frame,
+  #1139), so its chain is small too; an import (a capture on the GPU path, a page) is
+  not, beyond `MAX_SKIP` levels. One crop can now hold a chain at
   each of the four starting levels, as many as an image keeps (`MAX_CHAINS`), so several
   crops of one image drawn small at once, or a zoom through 2×, 4× and 8×, can push each
   other's chains out and build them again.

@@ -32,7 +32,10 @@
 //!   frames are copied (NV12, I420) or converted to NV12 (YUY2, with each chroma sample
 //!   averaging the two rows of its block) on that thread by `jstream_platform::yuv`, the
 //!   converter Linux's V4L2 backend uses too, into the same single-slot
-//!   mailbox as display capture. Their colour is what the type declares, else BT.601
+//!   mailbox as display capture. A copied frame is written in one pass, into the memory
+//!   of a frame the engine handed back (`CaptureStream::recycle`) or of one the mailbox
+//!   replaced before render took it, so a camera at a steady size allocates no frame
+//!   after its first few. Their colour is what the type declares, else BT.601
 //!   below 720 lines and BT.709 from there, in limited range.
 //! - **Threads:** `devices`, `formats` and `open` join the calling thread to the
 //!   multithreaded apartment for the call, as `WasapiAudio` does, and the capture thread

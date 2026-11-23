@@ -168,6 +168,16 @@ pub trait CaptureStream: Send {
     fn pointer(&self) -> Option<PointerPosition> {
         None
     }
+
+    /// Hands back a frame [`latest`](CaptureStream::latest) returned, once the caller
+    /// is done with it, so a backend that fills CPU frames can fill its memory again
+    /// instead of allocating and freeing megabytes for every frame. The caller need not
+    /// call it, and may hand back any surface; the default drops it.
+    ///
+    /// Must not block, as `latest` (R-RT-002).
+    fn recycle(&mut self, surface: VideoSurface) {
+        drop(surface);
+    }
 }
 
 /// A capture stream's counters, reported in `stats.tick`.

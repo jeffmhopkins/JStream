@@ -1467,7 +1467,8 @@ frame to frame, keyed by the caller's IDs, and hands an image back for freeing o
 after the GPU has finished the last frame that used it (see
 [Threads › State to RT threads](#threading)). The program stage's and the preview's caches hold
 a source's frame that only items draw at the size those items draw it, not the frame's
-(#1139), so a 1080p still in a small box keeps a small texture, and a still image keeps
+(#1139), so a 1080p still in a small box keeps a small texture, as does a capture's CPU
+frame (a 1080p webcam shown as a small picture), and a still image keeps
 no decoded copy once the program stage has uploaded it: the `jstream-stills` thread lets
 go of it then and decodes the file again when a draw needs it, so a render tick never
 decodes, and the program stage's cache keeps the still's texture while no mix draws it,
