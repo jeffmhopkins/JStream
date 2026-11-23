@@ -2416,3 +2416,5 @@ input[type="checkbox"].toggle:checked::after { left: 14px; background: #fff; }
 .looks-row input[type="text"], .looks-row input[type="number"] { min-width: 0; width: 100%; }
 .looks-color { display: flex; gap: 4px; align-items: center; }
 .looks-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Camera mode's text buttons in a 3D scene's tool bar. */
+.canvas-tool.canvas-tool-text { width: auto; padding: 0 8px; font-size: 12px; white-space: nowrap; }

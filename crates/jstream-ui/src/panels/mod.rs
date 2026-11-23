@@ -30,7 +30,7 @@ pub mod number;
 pub mod outputs;
 pub mod properties;
 pub mod scene_properties;
-mod scenes;
+pub(crate) mod scenes;
 pub mod source_properties;
 mod sources;
 pub mod stats;

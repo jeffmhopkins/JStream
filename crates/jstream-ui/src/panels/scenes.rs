@@ -370,7 +370,7 @@ struct Modifiers {
 }
 
 /// The name a new keyframe scene of a scene with `count` of them gets.
-fn keyframe_name(count: usize) -> String {
+pub(crate) fn keyframe_name(count: usize) -> String {
     format!("Keyframe {}", count + 1)
 }
 
