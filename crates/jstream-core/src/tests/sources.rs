@@ -1184,6 +1184,9 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    lanes: Vec::new(),
+                    starts: Vec::new(),
+                    stops: Vec::new(),
                     labels: Vec::new(),
                     timeline_id: TimelineId::new("t"),
                     name: String::new(),
@@ -1200,6 +1203,9 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    lanes: Vec::new(),
+                    starts: Vec::new(),
+                    stops: Vec::new(),
                     labels: Vec::new(),
                     timeline_id: TimelineId::new("kicker"),
                     name: String::new(),
@@ -1214,6 +1220,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
     assert!(plays(&engine, 0), "the first frame");
     block_on(control.call(Call::Action {
         action: Action::TimelinePlay {
+            delay_ms: None,
             timeline_id: TimelineId::new("t"),
         },
     }))
@@ -1221,6 +1228,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
     clock.advance(700);
     block_on(control.call(Call::Action {
         action: Action::TimelinePlay {
+            delay_ms: None,
             timeline_id: TimelineId::new("kicker"),
         },
     }))

@@ -305,11 +305,18 @@ pub struct ValueBinding {
     /// Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII
     /// letters, digits, `_` and `-`.
     pub binding_id: String,
-    /// What it reads: a `midi` or `data` modifier's kind and parameters.
+    /// What it reads: a `midi`, `data` or (since 0.169) `channel` modifier's kind and
+    /// parameters.
     #[serde(flatten)]
     pub input: MotionKind,
     /// What it drives.
     pub target: ValueTarget,
+    /// A channel whose value, 0 to 1, sets how much it drives (ADR-0183 decision 7,
+    /// since 0.169): its mapped value is pulled toward `from` as
+    /// `from + (value - from) * amount`. A channel the collection doesn't hold drives it
+    /// fully. Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
 }
 
 impl ValueBinding {
@@ -321,12 +328,15 @@ impl ValueBinding {
         }
         if !matches!(
             self.input,
-            MotionKind::Midi { .. } | MotionKind::Data { .. }
+            MotionKind::Midi { .. } | MotionKind::Data { .. } | MotionKind::Channel { .. }
         ) {
             return Some((
                 "kind".into(),
-                "a value binding reads a `midi` control or a `data` field".into(),
+                "a value binding reads a `midi` control, a `data` field or a `channel`".into(),
             ));
+        }
+        if let Some(reason) = crate::motion::amount_problem(self.amount.as_deref()) {
+            return Some(("amount".into(), reason.into()));
         }
         if let Some((field, reason)) = self.input.problem() {
             return Some((field.into(), reason.into()));

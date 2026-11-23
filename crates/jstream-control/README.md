@@ -108,7 +108,7 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends, hotkey, controller and value bindings, folders and labels in memory, with an
+mixes, buses, sends, hotkey, controller and value bindings, channels, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -188,6 +188,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - value bindings (ADR-0178): `binding.set_value`'s `ValueBinding::problem` only, since
     the mock describes no kinds' settings, and `binding.clear_value` of an unknown ID.
     `midi.last_controls` answers the controls `MockEngine::move_control` moved.
+  - channels (ADR-0183): `channel.set`'s `ChannelInfo::problem`, `channel.delete` of an
+    unknown ID, and `channel.values`, which answers each channel at its default (its
+    `off_value` while off) with no driver, since the mock follows no controls.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;

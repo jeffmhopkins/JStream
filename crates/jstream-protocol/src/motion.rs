@@ -218,6 +218,10 @@ pub enum MotionMidiControl {
     PitchBend,
     /// The channel pressure (aftertouch), 0 to 127, as 0 to 1.
     Pressure,
+    /// A note held, since 0.169 (ADR-0183): 1 while the note `controller` names is held
+    /// (a note-on with a velocity above 0, until its note-off), 0 otherwise, so a pad
+    /// gates what follows it.
+    Note,
     /// A control this version of the protocol doesn't know, from a newer server. Never
     /// sent; the engine refuses it in an edit with `invalid_argument` and draws a stored
     /// one as still.
@@ -342,7 +346,8 @@ pub enum MotionKind {
         /// What it follows. Default `cc`.
         #[serde(default)]
         control: MotionMidiControl,
-        /// The controller number, 0 to 127, with `control` `cc` and only then.
+        /// The controller number, 0 to 127, with `control` `cc`, or the note number with
+        /// `note` (since 0.169), and only then.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         controller: Option<u8>,
         /// The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:
@@ -421,6 +426,27 @@ pub enum MotionKind {
         /// text 1 to 100 bytes; a text not listed sets nothing. Default none.
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         palette: BTreeMap<String, String>,
+    },
+    /// Follows a channel (ADR-0183, since 0.169): the named channel's value, 0 to 1,
+    /// followed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`, as a
+    /// `midi` modifier maps its controller. A channel the collection doesn't hold reads
+    /// 0, so the item rests at `from`.
+    Channel {
+        /// The channel, by its `channel_id`.
+        channel_id: String,
+        /// How long it takes to follow a new value, in milliseconds, `0..=10000`, as a
+        /// `midi` modifier's. Default 50; 0 jumps.
+        #[serde(default = "default_smoothing_ms")]
+        smoothing_ms: u32,
+        /// How the 0 to 1 value is bent. Default `linear`.
+        #[serde(default)]
+        curve: MotionCurve,
+        /// Its value at 0, in the property's unit, within `-100000..=100000`. Default 0.
+        #[serde(default)]
+        from: Finite32,
+        /// Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1.
+        #[serde(default = "default_to")]
+        to: Finite32,
     },
     /// A one-shot decaying shake, since 0.84 (#1107):
     /// `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from
@@ -531,6 +557,11 @@ pub struct MotionModifier {
     /// Whether it applies. Default `true`; omitted when `true`.
     #[serde(default = "enabled", skip_serializing_if = "is_true")]
     pub enabled: bool,
+    /// A channel whose value, 0 to 1, multiplies what it adds (ADR-0183 decision 7,
+    /// since 0.169), so one control sets how much another applies. A channel the
+    /// collection doesn't hold applies it fully. Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
 }
 
 /// The longest effect parameter name a [`MotionEffect`] takes, in bytes.
@@ -658,6 +689,9 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
         }
         if let Some((param, reason)) = m.kind.problem() {
             return Err(problem(field(param), reason));
+        }
+        if let Some(reason) = amount_problem(m.amount.as_deref()) {
+            return Err(problem(field("amount"), reason));
         }
         if matches!(
             m.kind,
@@ -805,6 +839,13 @@ impl MotionKind {
                 (from, to),
             )
             .or_else(|| color_problem(color_from, palette)),
+            MotionKind::Channel {
+                ref channel_id,
+                smoothing_ms,
+                curve,
+                from,
+                to,
+            } => channel_problem(channel_id, smoothing_ms, curve, (from, to)),
             MotionKind::Wiggle {
                 amplitude,
                 frequency_hz,
@@ -925,6 +966,39 @@ fn audio_problem(
     }
 }
 
+/// A `channel` modifier's first parameter out of range (ADR-0183 decision 5).
+fn channel_problem(
+    channel_id: &str,
+    smoothing_ms: u32,
+    curve: MotionCurve,
+    (from, to): (Finite32, Finite32),
+) -> Option<(&'static str, &'static str)> {
+    let end = |v: Finite32| v.get().abs() <= MAX_MAGNITUDE;
+    if crate::channel::check_channel_id(channel_id).is_err() {
+        Some((
+            "channel_id",
+            "must be 1 to 64 bytes of ASCII letters, digits, `_` and `-`",
+        ))
+    } else if smoothing_ms > MAX_ENVELOPE_MS {
+        Some(("smoothing_ms", "must be within 0..=10000"))
+    } else if curve == MotionCurve::Unknown {
+        Some(("curve", "is not one this version of the protocol knows"))
+    } else if !end(from) {
+        Some(("from", "must be within -100000..=100000"))
+    } else if !end(to) {
+        Some(("to", "must be within -100000..=100000"))
+    } else {
+        None
+    }
+}
+
+/// Whether `amount` names a well-formed channel, if it names one.
+pub(crate) fn amount_problem(amount: Option<&str>) -> Option<&'static str> {
+    amount
+        .filter(|id| crate::channel::check_channel_id(id).is_err())
+        .map(|_| "must name a channel: 1 to 64 bytes of ASCII letters, digits, `_` and `-`")
+}
+
 /// A `midi` modifier's first parameter out of range (ADR-0168).
 fn midi_problem(
     control: MotionMidiControl,
@@ -942,8 +1016,11 @@ fn midi_problem(
         (MotionMidiControl::Cc, None) => {
             return Some(("controller", "a `cc` control needs its controller number"));
         }
-        (MotionMidiControl::Cc, Some(n)) if n > 127 => {
+        (MotionMidiControl::Cc | MotionMidiControl::Note, Some(n)) if n > 127 => {
             return Some(("controller", "must be 0 to 127"));
+        }
+        (MotionMidiControl::Note, None) => {
+            return Some(("controller", "a `note` control needs its note number"));
         }
         (MotionMidiControl::PitchBend | MotionMidiControl::Pressure, Some(_)) => {
             return Some(("controller", "only a `cc` control has it"));
@@ -1104,6 +1181,7 @@ mod tests {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }
     }
 

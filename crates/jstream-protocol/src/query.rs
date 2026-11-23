@@ -4,6 +4,7 @@ use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::binding::{Binding, MidiControlInfo, ValueBinding};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
+use crate::channel::{ChannelInfo, ChannelValueInfo};
 use crate::clap::ClapScanInfo;
 use crate::command::{
     BlendMode, Blending, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind,
@@ -270,6 +271,10 @@ pub enum Query {
     /// state, so no `rev`; an input that has sent no control change is left out.
     #[serde(rename = "midi.last_controls")]
     MidiLastControls,
+    /// Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by
+    /// ID. Runtime state, so no `rev`.
+    #[serde(rename = "channel.values")]
+    ChannelValues,
     /// A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom
     /// `scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether
     /// one is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its
@@ -490,6 +495,7 @@ impl Query {
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
             Query::MidiLastControls => "midi.last_controls",
+            Query::ChannelValues => "channel.values",
             Query::DataList => "data.list",
             Query::DataGet { .. } => "data.get",
             Query::SceneCameraAim { .. } => "scene.camera_aim",
@@ -637,6 +643,11 @@ pub enum QueryResult {
         /// and missing (from a server older than 0.168) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         value_bindings: Vec<ValueBinding>,
+        /// Every channel (ADR-0183), ordered by ID. Omitted when there are none, and
+        /// missing (from a server older than 0.169) parses as empty.
+        // Boxed, as `master` is, to keep a call's result small.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        channels: Box<Vec<ChannelInfo>>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -707,6 +718,10 @@ pub enum QueryResult {
         /// it is now. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         timelines: Vec<PlayingTimeline>,
+        /// The timelines waiting to play after a delay (ADR-0184, since 0.170), ordered
+        /// by ID. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        waiting: Vec<crate::WaitingTimeline>,
         /// The scenes drawn through one of their keyframe scenes where they are placed
         /// (ADR-0116, since 0.88), ordered by scene. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -865,6 +880,12 @@ pub enum QueryResult {
         /// Each input's latest control change, ordered by input name.
         controls: Vec<MidiControlInfo>,
     },
+    /// The result of `channel.values` (0.169).
+    #[serde(rename = "channel.values")]
+    ChannelValues {
+        /// Each channel's value, ordered by ID.
+        channels: Vec<ChannelValueInfo>,
+    },
     /// The result of `data.list` (0.140).
     #[serde(rename = "data.list")]
     DataList {
@@ -1020,6 +1041,7 @@ impl QueryResult {
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
             QueryResult::MidiLastControls { .. } => "midi.last_controls",
+            QueryResult::ChannelValues { .. } => "channel.values",
             QueryResult::DataList { .. } => "data.list",
             QueryResult::DataGet { .. } => "data.get",
             QueryResult::SceneCameraAim { .. } => "scene.camera_aim",

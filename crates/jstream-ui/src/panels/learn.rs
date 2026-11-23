@@ -117,6 +117,7 @@ pub fn learned(control: &MidiControlInfo, target: &ValueTarget, range: (f64, f64
             to: end(range.1),
         },
         target: target.clone(),
+        amount: None,
     }
 }
 

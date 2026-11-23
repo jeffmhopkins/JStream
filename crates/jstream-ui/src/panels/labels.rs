@@ -1149,6 +1149,9 @@ mod tests {
             collection.scenes.push(keyframe);
         }
         collection.scenes[0].timelines = vec![TimelineInfo {
+            lanes: Vec::new(),
+            starts: Vec::new(),
+            stops: Vec::new(),
             labels: vec![LabelId::new("l1")],
             timeline_id: TimelineId::new("t1"),
             name: "Cues".into(),

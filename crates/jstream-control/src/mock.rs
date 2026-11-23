@@ -627,6 +627,8 @@ struct Collection {
     /// The value bindings (ADR-0178), by ID. The mock checks their shape, not their
     /// targets.
     value_bindings: BTreeMap<String, jstream_protocol::ValueBinding>,
+    /// The channels (ADR-0183), by ID.
+    channels: BTreeMap<String, jstream_protocol::ChannelInfo>,
     /// The scene list's folders, in folder order (ADR-0024 §3).
     folders: Vec<jstream_protocol::FolderInfo>,
     /// The labels, in label order (ADR-0024 §4).
@@ -665,6 +667,7 @@ impl Default for Collection {
             hotkey_labels: BTreeMap::new(),
             bindings: BTreeMap::new(),
             value_bindings: BTreeMap::new(),
+            channels: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
         }
@@ -1537,6 +1540,7 @@ impl State {
                     .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                     .collect(),
                 value_bindings: self.collection.value_bindings.values().cloned().collect(),
+                channels: Box::new(self.collection.channels.values().cloned().collect()),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: self.collection.folders.clone(),
                 labels: self.collection.labels.clone(),
@@ -1555,6 +1559,7 @@ impl State {
                     .collect(),
             },
             Query::StudioGet => QueryResult::StudioGet {
+                waiting: Vec::new(),
                 program_scene: self.program.clone(),
                 preview_scene: self.preview.clone(),
                 timelines: Vec::new(),
@@ -1583,6 +1588,24 @@ impl State {
             Query::DataList => QueryResult::DataList { inputs: Vec::new() },
             Query::MidiLastControls => QueryResult::MidiLastControls {
                 controls: self.midi_controls.clone(),
+            },
+            // No control moves a channel here: each reads as it starts (ADR-0183).
+            Query::ChannelValues => QueryResult::ChannelValues {
+                channels: self
+                    .collection
+                    .channels
+                    .values()
+                    .map(|channel| jstream_protocol::ChannelValueInfo {
+                        channel_id: channel.channel_id.clone(),
+                        value: if channel.on {
+                            channel.default
+                        } else {
+                            channel.off_value
+                        },
+                        on: channel.on,
+                        driver: None,
+                    })
+                    .collect(),
             },
             Query::DataGet { .. } => QueryResult::DataGet { remote_value: None },
             Query::PtzList => QueryResult::PtzList {
@@ -2819,6 +2842,23 @@ impl Collection {
                     return Err(not_found(EntityKind::Binding, &binding_id));
                 };
                 vec![Edit::BindingSetValue { binding }]
+            }
+            // The graph's shape check; the mock doesn't look for cycles (ADR-0183).
+            Edit::ChannelSet { channel } => {
+                if let Some((field, reason)) = channel.problem() {
+                    return Err(invalid(at, &format!("channel.{field}"), &reason));
+                }
+                let id = channel.channel_id.clone();
+                match self.channels.insert(id.clone(), channel) {
+                    Some(old) => vec![Edit::ChannelSet { channel: old }],
+                    None => vec![Edit::ChannelDelete { channel_id: id }],
+                }
+            }
+            Edit::ChannelDelete { channel_id } => {
+                let Some(channel) = self.channels.remove(&channel_id) else {
+                    return Err(not_found(EntityKind::Channel, &channel_id));
+                };
+                vec![Edit::ChannelSet { channel }]
             }
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -4471,6 +4511,7 @@ mod tests {
                 hotkeys,
                 bindings,
                 value_bindings,
+                channels,
                 transitions,
                 folders,
                 labels,
@@ -4491,6 +4532,7 @@ mod tests {
                 hotkeys,
                 bindings,
                 value_bindings,
+                channels,
                 transitions,
                 folders,
                 labels,
@@ -4716,6 +4758,7 @@ mod tests {
                 hotkeys: vec![],
                 bindings: vec![],
                 value_bindings: vec![],
+                channels: Box::default(),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),

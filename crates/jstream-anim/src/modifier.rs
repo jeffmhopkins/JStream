@@ -562,6 +562,20 @@ pub fn evaluate_with(
     triggered: impl Fn(&str) -> Option<f64>,
     heard: impl Fn(&str) -> Option<f32>,
 ) -> Offsets {
+    evaluate_scaled(modifiers, engine_s, shown_s, triggered, heard, |_| 1.0)
+}
+
+/// As [`evaluate_with`], with each modifier's value multiplied by `amount` of its ID
+/// before it is applied: what an `amount` channel sets (ADR-0183 decision 7). An amount
+/// of 1 applies it as it is, 0 not at all.
+pub fn evaluate_scaled(
+    modifiers: &[Modifier],
+    engine_s: f64,
+    shown_s: Option<f64>,
+    triggered: impl Fn(&str) -> Option<f64>,
+    heard: impl Fn(&str) -> Option<f32>,
+    amount: impl Fn(&str) -> f32,
+) -> Offsets {
     let mut out = Offsets::IDENTITY;
     for m in modifiers {
         let t = match m.clock {
@@ -576,7 +590,16 @@ pub fn evaluate_with(
             Kind::Audio(_) | Kind::Midi(_) => heard(&m.id).unwrap_or(0.0),
             _ => 0.0,
         };
-        out.add(m.property, m.value_heard(t, envelope));
+        let scale = f64::from(amount(&m.id));
+        let value = m.value_heard(t, envelope);
+        out.add(
+            m.property,
+            if scale == 1.0 || !scale.is_finite() {
+                value
+            } else {
+                value * scale
+            },
+        );
     }
     out
 }
@@ -1028,6 +1051,20 @@ mod tests {
         };
         assert_eq!(up.opacity_of(0.9), 1.0);
         assert_eq!(up.scale_of(1.0), 0.0);
+    }
+
+    #[test]
+    fn an_amount_scales_each_modifier_by_its_id() {
+        let mods = [
+            modifier("a", Property::X, sine(4.0, 4000.0)),
+            modifier("b", Property::Y, sine(4.0, 4000.0)),
+        ];
+        let half = |id: &str| if id == "a" { 0.5 } else { 1.0 };
+        let out = evaluate_scaled(&mods, 1.0, None, |_| None, |_| None, half);
+        assert!(close(f64::from(out.x), 2.0), "a at half: {}", out.x);
+        assert!(close(f64::from(out.y), 4.0), "b as it is: {}", out.y);
+        let off = evaluate_scaled(&mods, 1.0, None, |_| None, |_| None, |_| 0.0);
+        assert_eq!((off.x, off.y), (0.0, 0.0));
     }
 
     #[test]
