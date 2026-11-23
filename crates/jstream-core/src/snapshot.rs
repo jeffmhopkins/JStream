@@ -7164,6 +7164,9 @@ fn light_scene(
         );
     }
     if receives && !shadowed.is_empty() && chains.shadows_of(scene_id).is_none() {
+        // The first model drawn draws the maps of every model that casts, so the
+        // models drawn after it this frame are made ready for that first.
+        ready_casting_models(compositor, (&mut *cache, &mut *chains), shot, scene_id);
         let maps = draw_shadows(
             compositor,
             (&mut *cache, &mut *chains),
@@ -7179,6 +7182,58 @@ fn light_scene(
         chains.drew_shadows(scene_id, maps);
     }
     (lights, shadowed)
+}
+
+/// Makes ready, for the shadow maps the first model drawn in scene `scene_id` draws
+/// this frame (ADR-0151 decision 3), every model the scene's pass shows: its upload
+/// ([`Chains::upload_model`]) and its layer, which [`depth_models`] reads its
+/// placement through. Without this a model drawn later in the frame, or not drawn
+/// before, casts no shadow in that frame: the first frame of a scene with two models
+/// would be lit as if only the first one drawn were there. An upload that fails or is
+/// still coming leaves its model out, as its own draw reports.
+fn ready_casting_models(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    shot: &Shot,
+    scene_id: &SceneId,
+) {
+    let Some(pass) = scene_pass(shot, scene_id) else {
+        return;
+    };
+    for layer in &pass.layers {
+        if !layer.boxed.is_some_and(|boxed| boxed.model) {
+            continue;
+        }
+        let GpuKey::ItemBox(scene, item) = &layer.image else {
+            continue;
+        };
+        let Some(boxed) = shot
+            .boxes
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))
+        else {
+            continue;
+        };
+        let SourceRef::Frame(source) = &boxed.source else {
+            continue;
+        };
+        let Some(shown) = shot
+            .frames
+            .get(source)
+            .and_then(|frame| frame.model.as_ref())
+        else {
+            continue;
+        };
+        if chains
+            .upload_model(compositor, source, &shown.model)
+            .is_err()
+        {
+            continue;
+        }
+        let [width, height] = boxed.boxed.layer;
+        if let Err(error) = cache.layer(compositor, &layer.image, width, height) {
+            tracing::debug!(%scene, %item, %error, "a model's layer isn't ready for the shadow maps");
+        }
+    }
 }
 
 /// The shadow maps drawn for scene `scene_id` this run, as a receiver reads them.
