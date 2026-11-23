@@ -760,3 +760,143 @@ fn a_browser_style_frame_is_resolved_from_its_encoded_target() {
         assert_ne!(straight.pixel(9, 10), straight.pixel(6, 7));
     }
 }
+
+/// What a layer shows when it is placed alone on a 32x32 canvas.
+fn shown(compositor: &mut Compositor, layer: &Image) -> Snapshot {
+    let nothing = solid(compositor, 1, 1, [0, 0, 0, 0]);
+    let items = [
+        item(layer, Placement::IDENTITY, Crop::NONE, 1.0),
+        item(&nothing, Placement::IDENTITY, Crop::NONE, 1.0),
+    ];
+    let scene = Scene {
+        canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+        background: Color::BLACK,
+        items: &items,
+    };
+    let output = compositor.render(&scene, true).expect("render");
+    output.pixels().expect("invariant: read back").clone()
+}
+
+/// A layer that still holds the very draw it is asked for is left as it is
+/// (ADR-0194), and is drawn again when anything it shows has changed: an image's
+/// texels, an item's place or opacity, the background, the blending space, or the
+/// layer itself.
+#[test]
+fn a_layer_is_drawn_again_only_when_what_it_draws_has_changed() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    let red = solid(compositor, 2, 2, [255, 0, 0, 255]);
+    let layer = compositor.layer(32, 32).expect("layer");
+    let mut kept = 0;
+    // Draws the red square at `x` with `opacity` over `background`, and says whether
+    // the layer was left as it was.
+    let mut draw = |compositor: &mut Compositor, x: f32, opacity: f32, background: Color| {
+        let items = [item(
+            &red,
+            at([x, 6.0], [4.0, 4.0], 0.0),
+            Crop::NONE,
+            opacity,
+        )];
+        let scene = Scene {
+            canvas,
+            background,
+            items: &items,
+        };
+        compositor
+            .render_into(&scene, &layer)
+            .expect("into the layer");
+        let was = kept;
+        kept = compositor.kept_layers();
+        kept > was
+    };
+    let clear = Color::TRANSPARENT;
+    assert!(!draw(compositor, 4.0, 1.0, clear), "the first draw");
+    assert!(draw(compositor, 4.0, 1.0, clear), "the same again");
+    assert!(draw(compositor, 4.0, 1.0, clear), "and again");
+    super::near(&shown(compositor, &layer), 6, 8, [255, 0, 0, 255], 0);
+    // Moved: drawn, and nothing is left where it was.
+    assert!(!draw(compositor, 20.0, 1.0, clear), "moved");
+    let moved = shown(compositor, &layer);
+    super::near(&moved, 22, 8, [255, 0, 0, 255], 0);
+    super::near(&moved, 6, 8, [0, 0, 0, 255], 0);
+    assert!(draw(compositor, 20.0, 1.0, clear), "the same again");
+    assert!(!draw(compositor, 20.0, 0.5, clear), "faded");
+    assert!(
+        !draw(compositor, 20.0, 0.5, Color::BLACK),
+        "another background"
+    );
+    assert!(draw(compositor, 20.0, 0.5, Color::BLACK), "the same again");
+    // The image's texels changed.
+    compositor
+        .rewrite_rgba8(&red, &[0, 0, 255, 255].repeat(4))
+        .expect("rewrite");
+    assert!(!draw(compositor, 20.0, 0.5, Color::BLACK), "new texels");
+    assert!(!draw(compositor, 20.0, 1.0, clear), "opaque again");
+    super::near(&shown(compositor, &layer), 22, 8, [0, 0, 255, 255], 0);
+    // The blending space changed.
+    compositor.set_blending(Blending::Srgb);
+    assert!(!draw(compositor, 20.0, 1.0, clear), "another space");
+    assert!(draw(compositor, 20.0, 1.0, clear), "the same again");
+    // Something else drew into the layer since.
+    let scene = Scene {
+        canvas,
+        background: Color::rgb(0.0, 1.0, 0.0),
+        items: &[],
+    };
+    compositor.render_into(&scene, &layer).expect("green");
+    assert!(!draw(compositor, 20.0, 1.0, clear), "after another draw");
+    let again = shown(compositor, &layer);
+    super::near(&again, 22, 8, [0, 0, 255, 255], 0);
+    super::near(&again, 6, 8, [0, 0, 0, 255], 0);
+}
+
+/// A scene that places a layer is drawn again when that layer was, and kept when it
+/// was kept: a nested scene that did not change costs its parents nothing either.
+#[test]
+fn a_parent_is_kept_while_the_layers_it_places_are() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    let red = solid(compositor, 2, 2, [255, 0, 0, 255]);
+    let child = compositor.layer(32, 32).expect("child");
+    let parent = compositor.layer(32, 32).expect("parent");
+    let frame = |compositor: &mut Compositor, x: f32| {
+        let before = compositor.kept_layers();
+        let items = [item(&red, at([x, 6.0], [4.0, 4.0], 0.0), Crop::NONE, 1.0)];
+        let scene = Scene {
+            canvas,
+            background: Color::TRANSPARENT,
+            items: &items,
+        };
+        compositor.render_into(&scene, &child).expect("child");
+        let placed = [item(
+            &child,
+            at([0.0, 8.0], [1.0, 1.0], 0.0),
+            Crop::NONE,
+            1.0,
+        )];
+        let scene = Scene {
+            canvas,
+            background: Color::BLACK,
+            items: &placed,
+        };
+        compositor.render_into(&scene, &parent).expect("parent");
+        compositor.kept_layers() - before
+    };
+    assert_eq!(frame(compositor, 4.0), 0, "the first frame draws both");
+    assert_eq!(
+        frame(compositor, 4.0),
+        2,
+        "an unchanged frame draws neither"
+    );
+    assert_eq!(frame(compositor, 12.0), 0, "a moved item draws both");
+    assert_eq!(frame(compositor, 12.0), 2);
+    let seen = shown(compositor, &parent);
+    super::near(&seen, 14, 16, [255, 0, 0, 255], 0);
+    super::near(&seen, 6, 16, [0, 0, 0, 255], 0);
+}

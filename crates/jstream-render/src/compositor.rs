@@ -53,6 +53,64 @@ struct Draw {
     whole: bool,
 }
 
+/// What a layer's last [`Compositor::render_into`] drew into it, kept on the layer
+/// ([`Image::drawn_as`]) so the same draw of unchanged images is not made again
+/// (ADR-0194).
+#[derive(Default)]
+pub(crate) struct Drawn {
+    /// The layer's generation once it was drawn: any write since moves it on.
+    at: u64,
+    blending: Blending,
+    background: [u32; 4],
+    /// The vertices as they were written: each item's place, texture coordinates,
+    /// opacity, alpha mode, edges and blur.
+    vertices: Vec<u8>,
+    draws: Vec<DrawnDraw>,
+}
+
+/// One draw of a [`Drawn`]: what its vertices don't say.
+#[derive(PartialEq)]
+struct DrawnDraw {
+    first_vertex: u32,
+    vertex_count: u32,
+    /// The image and the texels it held.
+    image: image::Seen,
+    /// Its mip chain, by identity: kept weakly, so no other chain takes its place.
+    mips: Option<WeakMips>,
+    blend: BlendMode,
+    rect: Option<Rect>,
+}
+
+/// A mip chain remembered without keeping it, equal only to itself.
+struct WeakMips(std::sync::Weak<Mips>);
+
+impl PartialEq for WeakMips {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ptr_eq(&other.0)
+    }
+}
+
+impl DrawnDraw {
+    fn of(draw: &Draw, item: &crate::Item<'_>) -> Self {
+        Self {
+            first_vertex: draw.first_vertex,
+            vertex_count: draw.vertex_count,
+            image: item.image.seen(),
+            mips: draw
+                .mips
+                .as_ref()
+                .map(|mips| WeakMips(Arc::downgrade(mips))),
+            blend: draw.blend,
+            rect: draw.rect,
+        }
+    }
+}
+
+/// A background colour as the bits compared for [`Drawn`].
+fn background_bits(color: crate::Color) -> [u32; 4] {
+    [color.r, color.g, color.b, color.a].map(f32::to_bits)
+}
+
 /// Texels of the target: `x`, `y`, `width`, `height`, none of them past its edge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Rect {
@@ -180,6 +238,9 @@ pub struct Compositor {
     /// How many sets of targets were made, for tests.
     #[cfg(test)]
     targets_made: usize,
+    /// How many [`Self::render_into`] calls left their layer as it was, for tests.
+    #[cfg(test)]
+    kept_layers: usize,
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
@@ -557,8 +618,8 @@ impl Compositor {
     /// Sets the space every scene this compositor draws from now on mixes in: the
     /// project's [`Blending`] (ADR-0126). A new compositor mixes in linear light. In
     /// [`Blending::Srgb`] each composite target holds sRGB-encoded colour while its
-    /// items draw, and one pass decodes it after the last, so what a render leaves is
-    /// premultiplied linear light either way.
+    /// items draw. A layer's is decoded by one pass after the last, so a layer holds
+    /// premultiplied linear light either way; a frame's own is decoded by its resolve.
     pub fn set_blending(&mut self, blending: Blending) {
         self.blending = blending;
     }
@@ -579,6 +640,12 @@ impl Compositor {
     #[cfg(test)]
     pub(crate) fn resolved_layer(&self) -> bool {
         self.resolved_layer
+    }
+
+    /// How many [`Self::render_into`] calls left their layer as it was.
+    #[cfg(test)]
+    pub(crate) fn kept_layers(&self) -> usize {
+        self.kept_layers
     }
 
     /// How many sets of targets [`Self::render`] has made, and how many are kept aside.
@@ -666,7 +733,17 @@ impl Compositor {
     /// [`Self::render_into`], its errors not yet collected.
     fn draw_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
         let view = self.scene_target(scene, target, false)?;
-        self.load(scene)?;
+        self.ready(scene)?;
+        // A layer that still holds this very draw is left as it is (ADR-0194): the
+        // same vertices over the same images, none of them changed since.
+        if self.holds(scene, target) {
+            #[cfg(test)]
+            {
+                self.kept_layers += 1;
+            }
+            return Ok(());
+        }
+        self.load_ready(scene)?;
         // The submit lock is held from staging through the submit, as in `render`.
         let lock = self.gpu.submit.clone();
         let submitting = lock.lock();
@@ -687,6 +764,7 @@ impl Compositor {
         self.record_release(&mut encoder);
         self.gpu.submit_work(encoder.finish());
         target.mark_changed();
+        self.note_drawn(scene, target);
         // Outside what the items reached the layer holds its clear colour, which is
         // nothing when that is transparent: a scene placing it draws only over the rest.
         let content = (scene.background.a == 0.0).then(|| {
@@ -1863,6 +1941,8 @@ impl Compositor {
             renders: 0,
             #[cfg(test)]
             targets_made: 0,
+            #[cfg(test)]
+            kept_layers: 0,
             vertices: Vec::new(),
             vertex_buffer,
             draws: Vec::new(),
@@ -2248,8 +2328,60 @@ impl Compositor {
     /// stages the frame holds after this and every other step that can fail, so an
     /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
+        self.ready(scene)?;
+        self.load_ready(scene)
+    }
+
+    /// The first half of [`Self::load`]: validates `scene` and builds its vertices and
+    /// draws, writing nothing to the GPU.
+    fn ready(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         color::validate(scene.background)?;
-        self.prepare(scene)?;
+        self.prepare(scene)
+    }
+
+    /// Whether `target` still holds exactly what drawing `scene`, readied
+    /// ([`Self::ready`]), would leave in it (ADR-0194): its last
+    /// [`Self::render_into`] drew the same vertices, of the same images in the same
+    /// modes over the same background in the same space, nothing has written to it
+    /// since, and none of those images has changed. A scene with a model's depth is
+    /// always drawn: its pass also writes the depth target.
+    fn holds(&self, scene: &Scene<'_>, target: &Image) -> bool {
+        let drawn = target.drawn_as();
+        let Some(drawn) = drawn.as_ref() else {
+            return false;
+        };
+        drawn.at == target.generation()
+            && drawn.blending == self.blending
+            && drawn.background == background_bits(scene.background)
+            && drawn.vertices == self.vertices
+            && drawn.draws.len() == self.draws.len()
+            && drawn.draws.iter().zip(&self.draws).all(|(was, draw)| {
+                let item = &scene.items[draw.index];
+                item.depth.is_none() && *was == DrawnDraw::of(draw, item)
+            })
+    }
+
+    /// Records on `target` what was just drawn into it and marked, for [`Self::holds`].
+    /// The lists it kept before are refilled, so a steady frame allocates nothing.
+    fn note_drawn(&self, scene: &Scene<'_>, target: &Image) {
+        let mut kept = target.drawn_as();
+        let mut drawn = kept.take().unwrap_or_default();
+        drawn.at = target.generation();
+        drawn.blending = self.blending;
+        drawn.background = background_bits(scene.background);
+        drawn.vertices.clear();
+        drawn.vertices.extend_from_slice(&self.vertices);
+        drawn.draws.clear();
+        drawn.draws.extend(
+            self.draws
+                .iter()
+                .map(|draw| DrawnDraw::of(draw, &scene.items[draw.index])),
+        );
+        *kept = Some(drawn);
+    }
+
+    /// The second half of [`Self::load`]: what the readied scene needs on the GPU.
+    fn load_ready(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         self.ensure_vertex_buffer()?;
         if self.blending == Blending::Srgb || self.draws.iter().any(|draw| draw.rect.is_some()) {
             self.ensure_backdrop(scene.canvas.width(), scene.canvas.height());

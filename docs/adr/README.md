@@ -205,6 +205,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0190](0190-moving-values-tick-at-frame-pace.md) | Values tick at a frame's pace while one is moving | accepted | agent |  |
 | [ADR-0192](0192-cheaper-sampling-in-3d-scenes.md) | Cheaper sampling in 3D scenes: fewer reads where they change little | accepted | agent |  |
 | [ADR-0193](0193-depth-of-field-on-models-gathers-at-half-size.md) | Depth of field on models gathers at half the layer's size | accepted | agent |  |
+| [ADR-0194](0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md) | A layer is drawn again only when what it draws has changed | accepted | agent |  |
 | [ADR-0195](0195-the-engine-runs-at-top-priority.md) | The engine runs at top priority: the highest GPU scheduling class and a high CPU priority class by default | accepted | agent |  |
 | [ADR-0197](0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md) | 3D models draw with fewer pixels while the GPU is short of time | accepted | agent |  |
 | [ADR-0198](0198-an-arrival-can-be-a-planet-with-its-sun.md) | An arrival can be several pictures pinned around one another, the last lighting the scene | accepted | agent |  |
