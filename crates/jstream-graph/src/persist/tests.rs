@@ -593,9 +593,11 @@ fn fixture_graph() -> Graph {
                 audio_buses: vec![BusId::master()],
             },
             Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("F1"),
             },
             Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("Ctrl+Digit1"),
             },
             Edit::CanvasSetBlending {
@@ -603,11 +605,10 @@ fn fixture_graph() -> Graph {
             },
         ]
         .into_iter()
-        .chain(
-            parity::bindings()
-                .into_iter()
-                .map(|b| Edit::BindingClear { trigger: b.trigger }),
-        )
+        .chain(parity::bindings().into_iter().map(|b| Edit::BindingClear {
+            action: None,
+            trigger: b.trigger,
+        }))
         .collect::<Vec<_>>(),
         None,
     );
@@ -1773,7 +1774,7 @@ fn clone_links_round_trip() {
 #[test]
 fn hotkeys_round_trip() {
     let mut graph = fixture_graph();
-    assert_eq!(graph.state().hotkeys().len(), 0);
+    assert_eq!(graph.state().hotkeys().count(), 0);
     let applied = graph.apply(
         &[
             Edit::HotkeySet {

@@ -509,6 +509,7 @@ pub fn collection() -> Batch {
                 },
             },
             Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("Ctrl+Digit1"),
             },
             Edit::HotkeySet {
@@ -525,7 +526,10 @@ pub fn collection() -> Batch {
                     output_id: OutputId::new("yt"),
                 },
             },
-            Edit::BindingClear { trigger: sustain() },
+            Edit::BindingClear {
+                action: None,
+                trigger: sustain(),
+            },
             Edit::BindingSet {
                 trigger: sustain(),
                 action: start_yt(),
@@ -1779,11 +1783,22 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             ),
         ),
         (
+            // A chord runs several actions (ADR-0208), but not the same one twice.
             Batch::single(Edit::HotkeySet {
                 chord: Chord::new("F1"),
-                action: start_yt(),
+                action: switch_to_a(),
             }),
             ProtocolError::AlreadyExists {
+                entity: EntityKind::Hotkey,
+                id: "F1".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::HotkeyClear {
+                chord: Chord::new("F1"),
+                action: Some(start_yt()),
+            }),
+            ProtocolError::NotFound {
                 entity: EntityKind::Hotkey,
                 id: "F1".into(),
             },
@@ -1839,6 +1854,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         ),
         (
             Batch::single(Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("F2"),
             }),
             ProtocolError::NotFound {
@@ -1846,7 +1862,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "F2".into(),
             },
         ),
-        // Controller bindings (ADR-0122): valid triggers, one binding per trigger, and
+        // Controller bindings (ADR-0122): valid triggers, one equal action per trigger, and
         // the hotkeys' rules for the action.
         (
             Batch::single(Edit::BindingSet {
@@ -1865,9 +1881,19 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         (
             Batch::single(Edit::BindingSet {
                 trigger: pad(),
-                action: start_yt(),
+                action: switch_to_a(),
             }),
             ProtocolError::AlreadyExists {
+                entity: EntityKind::Binding,
+                id: "MIDI note 36 on channel 10".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::BindingClear {
+                trigger: pad(),
+                action: Some(start_yt()),
+            }),
+            ProtocolError::NotFound {
                 entity: EntityKind::Binding,
                 id: "MIDI note 36 on channel 10".into(),
             },
@@ -1910,6 +1936,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         ),
         (
             Batch::single(Edit::BindingClear {
+                action: None,
                 trigger: Trigger::MidiNote {
                     note: 36,
                     channel: None,

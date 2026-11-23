@@ -1860,7 +1860,7 @@ pub(crate) fn HotkeyRow(
                     class="icon-button"
                     title=title.clone()
                     aria-label=title
-                    on:click=move |_| send(vec![Edit::HotkeyClear { chord: chord.clone() }])
+                    on:click=move |_| send(vec![Edit::HotkeyClear { action: None, chord: chord.clone() }])
                 >
                     "×"
                 </button>

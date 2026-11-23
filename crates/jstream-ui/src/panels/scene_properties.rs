@@ -286,7 +286,10 @@ pub fn scene_edits(
         };
         let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
-            edits.push(Edit::HotkeyClear { chord });
+            edits.push(Edit::HotkeyClear {
+                action: None,
+                chord,
+            });
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
@@ -1227,6 +1230,7 @@ mod tests {
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
                 Edit::HotkeyClear {
+                    action: None,
                     chord: Chord::new("F1")
                 },
                 Edit::HotkeySet {
@@ -1242,6 +1246,7 @@ mod tests {
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", None)),
             Ok(vec![Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("F1")
             }])
         );

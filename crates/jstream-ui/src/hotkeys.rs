@@ -212,6 +212,7 @@ pub fn bind_edits(collection: &Collection, action: &Action, chord: &Chord) -> Ve
     let mut edits = Vec::new();
     if bound.is_some() {
         edits.push(Edit::HotkeyClear {
+            action: None,
             chord: chord.clone(),
         });
     }

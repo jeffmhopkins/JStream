@@ -1352,7 +1352,10 @@ pub fn Scenes() -> impl IntoView {
             let edits = chords
                 .get_untracked()
                 .into_iter()
-                .map(|chord| Edit::HotkeyClear { chord })
+                .map(|chord| Edit::HotkeyClear {
+                    action: None,
+                    chord,
+                })
                 .collect();
             send_all(edits);
         };

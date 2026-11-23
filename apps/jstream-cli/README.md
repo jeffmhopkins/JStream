@@ -158,7 +158,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   item's opacity (above 1 a gain on its light, protocol 0.83) and blend mode; the engine
   draws every mode (protocol 0.47), in the collection's blending space.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
-  `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
+  `scene.switch`, `output.start`, `output.stop`, `output.toggle` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
   A `scene.switch` bound here names no transition preset (MCP and the WebSocket API
   can bind one), and the `hotkeys:` table lists a bound preset after the scene.

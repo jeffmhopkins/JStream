@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 97a3e3e9c265241f0d7d5fd78b9eaf9c0b6cc3959d6487fe758b5be32bc9b604 # shrinks to batches = [[ItemAdd { scene_id: SceneId("s0"), item_id: ItemId("a"), source_id: SourceId("c0"), transform: None, geometry: None, opacity: None, blend: None }, HotkeySet { chord: Chord("Ctrl+Digit1"), action: SceneSwitch { scene_id: SceneId("s0"), preset_id: None, via: [] } }], [HotkeySet { chord: Chord("Ctrl+Digit1"), action: SceneSwitch { scene_id: SceneId("s1"), preset_id: None, via: [] } }, ItemAdd { scene_id: SceneId("s0"), item_id: ItemId("i3"), source_id: SourceId("c0"), transform: None, geometry: None, opacity: None, blend: None }], [SceneDelete { scene_id: SceneId("s0") }]]

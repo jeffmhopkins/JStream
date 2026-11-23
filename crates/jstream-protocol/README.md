@@ -384,7 +384,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.172 because a scene whose `reflections` is on also reflects
+`PROTOCOL_VERSION` is 0.182 because a key chord or a controller trigger can run several
+actions: `hotkey.set` and `binding.set` add an action to a chord or trigger already
+bound (refusing only an equal one), `hotkey.clear` and `binding.clear` take an optional
+`action`, and `output.toggle` starts a stopped output and stops a running one
+([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
