@@ -221,6 +221,8 @@ fn panel_view(panel: PanelId) -> AnyView {
         ),
         PanelId::Stats => view! { <StreamStats /> }.into_any(),
         PanelId::Agent => view! { <AgentActivity /> }.into_any(),
+        PanelId::Channels => view! { <crate::panels::channels::Channels /> }.into_any(),
+        PanelId::Sequence => view! { <crate::panels::sequence::Sequence /> }.into_any(),
     }
 }
 

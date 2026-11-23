@@ -455,7 +455,10 @@ that does not want to change the graph it has.
   `timeline.delete` or by the old timeline; `timeline.delete` finds it by ID alone
   (`State::timeline`) and is undone by `timeline.set`. The objects a cue names are not
   checked, and no delete edits a timeline: a cue naming a deleted object stays, inert. A
-  deleted scene's inverse restores its timelines (`timeline::restore`).
+  deleted scene's inverse restores its timelines (`timeline::restore`). A timeline's
+  `lanes`, `starts` and `stops` (ADR-0184) are checked by `TimelineInfo::problem` alone:
+  the channels, scenes, keyframes and timelines they name are taken whether or not they
+  exist, and the collection file saves them from schema version 21.
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
   folder, and `label.delete` while a source, a scene, a hotkey binding or a timeline
   (`labels`, in that order) carries the label, listing them as `blockers`; their
@@ -475,7 +478,7 @@ that does not want to change the graph it has.
   `action.value`), a wheel chord (`Chord::is_wheel`, ADR-0112 §3) bound to an action
   that doesn't take steps (`Action::takes_steps`; `invalid_argument` on `action.type`),
   and the objects the action names
-  (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
+  (`not_found`; a channel's actions name their channel, ADR-0183). Each is undone by the other. A rebind is `hotkey.clear` then
   `hotkey.set` in one batch. `hotkey.set_labels` (ADR-0133) sets a binding's labels,
   whole: the binding must exist, then each label, each once (`checked_labels`); an
   empty list removes them, and the inverse sets the old ones. Clearing or removing a
@@ -518,6 +521,14 @@ that does not want to change the graph it has.
   names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
   a number's ends and whether it is whole, or a switch), `None` while it is missing, and
   `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
+- **Channels** (`channel.rs`, ADR-0183): `channel.set` sets one whole by its
+  `channel_id` (inverse `channel.delete`, or `channel.set` with the one it replaced)
+  after `ChannelInfo::problem` (`invalid_argument` at `channel.<field>`), the limit of
+  256 (at `channel`), and no cycle through its `channel` inputs (at `channel.inputs`).
+  `channel.delete` is `not_found` (entity `channel`) for an ID none has, and leaves what
+  reads the channel in place. `Graph::channels` and `Graph::channel` read them; the
+  collection file saves them in `channels` (schema version 20) and loads them before
+  the value bindings.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its

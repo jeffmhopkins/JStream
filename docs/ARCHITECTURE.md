@@ -184,14 +184,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          camera?, camera_anchor?, camera_motion[], camera_follow?, ptz_shots[], timelines[], filters { video[] }, items[] }   flat display order
+│                          camera?, camera_anchor?, camera_motion[], camera_follow?, ptz_shots[], timelines[] (cues, lanes, starts, stops), filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action, labels }]   chord → protocol action request
 ├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
-├── value_bindings [{ binding_id, kind, …, target }]   a control or data field → a setting, fader or send (ADR-0178)
+├── value_bindings [{ binding_id, kind, …, target, amount? }]   a control or data field → a setting, fader or send (ADR-0178)
+├── channels       [{ channel_id, name, inputs, combine, fades, curve, on, … }]   controls → one live 0..1 value (ADR-0183)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -499,16 +500,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), controller bindings (protocol 0.96,
-  schema version 9) and value bindings (protocol 0.168, schema version 19), as the organisation bullet above describes.
+  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions for built-in kinds (a source or
   preset saved at another version is refused on load; a source or filter of an effect
   pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
   `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
-  `hotkeys`, `bindings`, `value_bindings` and `transitions`. The collection file saves everything built so far,
+  `hotkeys`, `bindings`, `value_bindings`, `channels` and `transitions`. The collection file saves everything built so far,
   encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
-  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings and
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller and value bindings, channels and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -720,6 +721,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3), which since
   0.164 can set a colour setting from the field, a `#rrggbb` text or a pick from a
   palette (decision 5). Since 0.168 `width` and `height` stretch one axis of an item's box.
+  Since 0.169 a `channel` modifier follows a channel, a `note` control reads a held note,
+  and a modifier's `amount` names a channel that scales it
+  ([ADR-0183](adr/0183-virtual-control-channels.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -770,6 +774,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
   setting, a fader or a send, drawn and heard without being stored; `midi.last_controls`
   reports each input's latest control change, for learning one.
+  `channel.set` and `channel.delete` (protocol 0.169,
+  [ADR-0183](adr/0183-virtual-control-channels.md)) set and remove a channel: up to eight
+  `midi`, `data` or `channel` readings combined, averaged, faded, curved and switched
+  into one live value, 0 to 1, that a `channel` modifier or value binding follows and an
+  `amount` scales by; `channel.set_value`, `channel.nudge` and `channel.switch` move it
+  with no `rev`, and `channel.values` reads every channel's level.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
@@ -857,7 +867,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a timeline action. The objects a cue names aren't checked, so a deleted one leaves the
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
-  `source.restart` reloads a page or plays a file from its start.
+  `source.restart` reloads a page or plays a file from its start. Since 0.170
+  ([ADR-0184](adr/0184-sequences-lanes-and-triggers.md)) a timeline with `lanes` is a
+  sequence: each lane moves one channel through points as one more input of it, from
+  the channel's value when it starts where it has no point at 0, so nothing jumps; its
+  `starts` and `stops` play or stop it when a channel crosses a level or switches, a
+  scene goes on or off program, a keyframe loads or is left, or another timeline
+  starts, ends or loops; and `timeline.play` takes a `delay_ms`, with the waits listed
+  in `studio.get`'s `waiting`.
 - **A media clock a client can hold** (protocol 0.134,
   [ADR-0172](adr/0172-a-media-clock-a-client-can-hold-and-step.md)): `clock.hold`
   stops the engine's media clock, the one every animation and snapshot reads,
@@ -1161,7 +1178,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `channel`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1263,7 +1280,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
   `midi` one to follow a controller, a `data` one to follow a sender's live data, and a
-  value binding, `binding.set_value`, for a filter's or source's setting, a fader or a send)
+  value binding, `binding.set_value`, for a filter's or source's setting, a fader or a send,
+  and a channel, `channel.set`, gathering controls into one value anything follows)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), the hologram effect, borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live
@@ -1381,6 +1399,8 @@ picture shows where it hits in place of that reflection. The layer is then place
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
 each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
+oriented by the light's item's turn, tilt and rotation
+([ADR-0182](adr/0182-a-sky-follows-its-items-tilt-and-roll.md)),
 with nebulae and a galaxy band baked once per seed into cube maps
 ([ADR-0174](adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md))
 and procedural stars laid out about the direction of travel,
@@ -1718,7 +1738,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (`property` `source` with its `source` target), refused the same way. Version 18
   (ADR-0170) adds a scene's `reflections`, refused the same way, and version 19
   (ADR-0178) the `value_bindings` and motion modifiers on `width` and `height`, refused
-  the same way; a value binding loads without its target being looked up. `jstream-core`
+  the same way; a value binding loads without its target being looked up. Version 20
+  (ADR-0183) adds `channels`, an `amount` on a modifier or value binding, the `channel`
+  motion kind and the `note` MIDI control, each refused the same way, and version 21
+  (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
+  `delay_ms`, refused the same way. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

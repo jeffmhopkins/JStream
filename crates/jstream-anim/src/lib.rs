@@ -55,7 +55,7 @@ pub use keyframe::{
 pub use midi::{Midi, Smoothing};
 pub use modifier::{
     Clock, InvalidModifier, Kind, MAX_MODIFIERS, Modifier, Offsets, Property, Shape, check_list,
-    evaluate, evaluate_with,
+    evaluate, evaluate_scaled, evaluate_with,
 };
 pub use switch::{Motion, Step, plan_switch};
 pub use timeline::{

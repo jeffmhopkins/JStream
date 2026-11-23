@@ -1183,6 +1183,9 @@ mod tests {
         let timeline = |labels: &[&str]| Edit::TimelineSet {
             scene_id: SceneId::new("a"),
             timeline: TimelineInfo {
+                lanes: Vec::new(),
+                starts: Vec::new(),
+                stops: Vec::new(),
                 labels: ids(labels),
                 timeline_id: TimelineId::new("t1"),
                 name: "Cues".into(),

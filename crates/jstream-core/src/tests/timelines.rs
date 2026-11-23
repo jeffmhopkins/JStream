@@ -84,6 +84,9 @@ fn timeline(id: &str, duration_ms: u32, looping: TimelineLoop, cues: Vec<Timelin
     Edit::TimelineSet {
         scene_id: SceneId::new("a"),
         timeline: TimelineInfo {
+            lanes: Vec::new(),
+            starts: Vec::new(),
+            stops: Vec::new(),
             labels: Vec::new(),
             timeline_id: TimelineId::new(id),
             name: String::new(),
@@ -96,6 +99,7 @@ fn timeline(id: &str, duration_ms: u32, looping: TimelineLoop, cues: Vec<Timelin
 
 fn play(id: &str) -> Action {
     Action::TimelinePlay {
+        delay_ms: None,
         timeline_id: TimelineId::new(id),
     }
 }

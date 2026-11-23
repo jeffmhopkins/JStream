@@ -279,6 +279,9 @@ pub struct LiveData {
     /// Counts every change to any sender's messages, so a reader that draws from many
     /// keys (a `grid` source) can tell nothing changed with one atomic load.
     changes: Arc<AtomicU64>,
+    /// The channels' values (ADR-0183), carried beside the data so every reader that
+    /// planning hands live data to can find a channel's cell too.
+    channels: crate::ChannelLevels,
 }
 
 impl std::fmt::Debug for LiveData {
@@ -496,6 +499,12 @@ impl LiveData {
             from,
         });
         cell
+    }
+
+    /// The channels' cells (ADR-0183), which the engine's channel ticker stores.
+    #[must_use]
+    pub fn channels(&self) -> &crate::ChannelLevels {
+        &self.channels
     }
 
     /// How many watches someone still holds.

@@ -64,7 +64,10 @@ and calls this crate.
   when one of them differs, so a camera that holds still pays for its sky once
   (`a_layer_that_holds_the_sky_is_not_drawn_again`). Each pixel looks along its ray from the
   camera (its axes, principal point and focal length, never its position) into the
-  gradient or the panorama spun by the turn. Over it go nebulae and a galaxy band
+  gradient or the panorama, oriented by the light's turn, tilt and roll: `Environment::sky_axes`
+  takes the camera's axes back through that rotation on the CPU, so the shaders, and a
+  scene-lit model's reads of the sky, need no turn of their own
+  ([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)). Over it go nebulae and a galaxy band
   (`DeepSky`: warped fractal value noise on the direction, baked once per seed into two
   cube maps of 1024² faces by `sky_deep.wgsl` and read along the direction,
   [ADR-0174](../../docs/adr/0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md);
@@ -899,9 +902,9 @@ are ignored and the frame is the one ADR-0107 draws.
 **Driven materials** ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
 decision 4). `ModelDraw::materials` holds `MaterialDrive`s, each adding to every
 material or to the file's materials of one name: to the base colour, lightened in sRGB;
-to metallic and roughness, each within 0 and 1; and by name to the glow's colour, scaled
-by its own brightness, and its strength, a multiplier 1 at rest within 0 and
-`MAX_EMISSIVE_STRENGTH` (64). A drive can also set the base colour (`set_color`) or the
+to metallic and roughness, each within 0 and 1; to the glow's strength, a multiplier 1
+at rest within 0 and `MAX_EMISSIVE_STRENGTH` (64); and by name to the glow's colour,
+scaled by its own brightness. A drive can also set the base colour (`set_color`) or the
 glow's colour at its own brightness (`set_emissive`) before the others add, the last
 one that sets winning (ADR-0171 decision 5). The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
@@ -929,15 +932,17 @@ more than 0.2%; outside the map is lit. A shadowed light's light is scaled by th
 
 **Environment** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 9). `ModelDraw::environment` is the scene's sky (`Environment`: sky, horizon
-and ground colours, an intensity, a turn about the vertical, and maybe a picture), used
+and ground colours, an intensity, its turn, tilt and roll, and maybe a picture), used
 only with `lights`. It is packed after the shadow maps (`environment_values`: the
-colours as linear light times the intensity, the turn in radians, how the picture
-stores alpha or -1 for none, whether the lights hold an ambient one at any intensity
-(`SceneLighting::has_ambient`), and the camera's axes, which take a viewing-frame
-direction back to the scene's space), and the picture is bound beside the maps (binding
+colours as linear light times the intensity, how the picture stores alpha or -1 for
+none, whether the lights hold an ambient one at any intensity
+(`SceneLighting::has_ambient`), and the camera's axes with the sky's turn, tilt and roll
+undone (`Environment::sky_axes`,
+[ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), which take a
+viewing-frame direction to the sky's own axes), and the picture is bound beside the maps (binding
 3, with the model's repeating sampler at 4; white without). In `model.wgsl` it replaces
 the studio gradient for the ambient and reflected terms: `sky` turns the direction into
-the scene's space and spins it by the turn, then reads the gradient (horizon to sky by
+the sky's axes, then reads the gradient (horizon to sky by
 the square root of the height up, horizon to ground over a quarter of the way down) or
 the panorama (`panorama`: its centre ahead along -z, up at its top, decoded by the
 filters' `to_premul_linear` from `filter/colour.wgsl`, which the model shader is built

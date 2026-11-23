@@ -13,6 +13,7 @@ mod audio;
 mod binding;
 mod camera_aim;
 mod camera_motion;
+mod channel;
 mod clap;
 mod command;
 mod data;
@@ -72,6 +73,11 @@ pub use camera_aim::{
 pub use camera_motion::{
     CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_POINTER_KIND, FOLLOW_ZOOM_RANGE,
     FOLLOW_ZOOM_STEP, MAX_FOLLOW_MARGIN_PCT, check_camera_motion, follow_pointer_descriptor,
+};
+pub use channel::{
+    ChannelCombine, ChannelDriver, ChannelInfo, ChannelSwitch, ChannelValueInfo,
+    MAX_CHANNEL_AVERAGE_MS, MAX_CHANNEL_FADE_MS, MAX_CHANNEL_ID_LEN, MAX_CHANNEL_INPUTS,
+    MAX_CHANNEL_NAME_LEN, MAX_CHANNELS, check_channel_id,
 };
 pub use clap::{ClapFailed, ClapFolder, ClapFound, ClapScanInfo};
 pub use command::{
@@ -181,9 +187,11 @@ pub use rendering::{PROBE_RESOLUTIONS, RenderFeatures, RenderFeaturesChange, SCR
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use timeline::{
-    MAX_CUES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,
-    MIN_LOOP_MS, PlayingTimeline, TimelineChange, TimelineCue, TimelineInfo, TimelineLoop,
-    check_timeline_id,
+    ChannelEdge, KeyframeEdge, LaneCurve, LanePoint, LaneTarget, MAX_CUES, MAX_LANE_POINTS,
+    MAX_LANES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,
+    MAX_TRIGGER_DELAY_MS, MAX_TRIGGERS, MIN_LOOP_MS, PlayingTimeline, SceneEdge, TimelineChange,
+    TimelineCue, TimelineEdge, TimelineInfo, TimelineLane, TimelineLoop, TimelineTrigger,
+    WaitingTimeline, check_timeline_id,
 };
 pub use transition::{
     Bezier, CAMERA_ORBIT, CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition,

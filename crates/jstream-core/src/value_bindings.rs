@@ -1,8 +1,8 @@
 //! Value bindings as the engine applies them
 //! ([ADR-0178](../../../docs/adr/0178-value-bindings-drive-any-number.md)).
 //!
-//! A value binding reads a MIDI control or a live-data field as a `midi` or `data`
-//! motion modifier reads it (`reactive::Control` and `reactive::DataMap`), follows it
+//! A value binding reads a MIDI control, a live-data field or a channel as a `midi`,
+//! `data` or `channel` motion modifier reads it (the readers in `channels.rs`), follows it
 //! with the same one-pole [`Smoothing`] and maps it with the same [`Midi`] parameters.
 //! The engine's `jstream-values` thread ticks the [`ValueDriver`] about 30 times a
 //! second while the collection holds a binding. Each tick turns every moved binding's
@@ -20,6 +20,8 @@
 //! replaces the target's, kept within the target's range. Changing only a binding's
 //! target or mapping keeps its smoothing and whether it has moved. A binding whose
 //! target is missing drives nothing. Removing a binding shows the stored value again.
+//! A binding with an `amount` moves from its `from` by that channel's level
+//! ([ADR-0183](../../../docs/adr/0183-virtual-control-channels.md) decision 7).
 //!
 //! Docs: docs/adr/0178-value-bindings-drive-any-number.md
 
@@ -29,45 +31,20 @@ use std::time::{Duration, Instant};
 
 use jstream_anim::{Midi, Smoothing};
 use jstream_graph::Graph;
-use jstream_protocol::{
-    Edit, MotionClock, MotionKind, MotionModifier, MotionProperty, ValueBinding,
-};
-use jstream_sources::{DataCell, LiveData, MidiInputs, MidiState};
-
-use crate::reactive::{Control, DataMap};
+use jstream_protocol::{Edit, ValueBinding};
+use jstream_sources::{LiveData, MidiInputs};
 
 /// How often the engine ticks the driver while the collection holds a binding: about
 /// 30 times a second, the rate a gesture's `live.changed` events go out at.
 pub(crate) const EVERY: Duration = Duration::from_micros(33_334);
 
-/// What one binding reads.
-#[derive(Debug)]
-enum Reader {
-    Midi {
-        state: Arc<MidiState>,
-        control: Control,
-    },
-    Data {
-        cell: Arc<DataCell>,
-        map: DataMap,
-    },
-}
-
-impl Reader {
-    /// What it reads now, as `0..=1`: atomics only.
-    fn read(&self) -> f32 {
-        match self {
-            Reader::Midi { state, control } => control.read(state),
-            Reader::Data { cell, map } => map.read(cell.read()),
-        }
-    }
-}
-
 /// One binding as the driver follows it.
 #[derive(Debug)]
 struct Driven {
     binding: ValueBinding,
-    reader: Reader,
+    reader: crate::channels::ReaderOf,
+    /// The channel that sets how much it drives (ADR-0183 decision 7), if it names one.
+    amount: Option<Arc<jstream_sources::ChannelCell>>,
     midi: Midi,
     smoothing: Smoothing,
     /// What it read when the driver started following it.
@@ -121,9 +98,16 @@ impl ValueDriver {
             let Some(range) = graph.value_range(&driven.binding.target) else {
                 continue;
             };
-            if let Some(edit) =
-                jstream_graph::value_edit(&driven.binding.target, range, driven.midi.value(level))
-            {
+            // Pulled toward `from` by its amount; a channel that doesn't exist drives it
+            // fully.
+            let amount = driven
+                .amount
+                .as_ref()
+                .and_then(|cell| cell.read())
+                .map_or(1.0, f64::from);
+            let from = driven.midi.from;
+            let value = from + (driven.midi.value(level) - from) * amount;
+            if let Some(edit) = jstream_graph::value_edit(&driven.binding.target, range, value) {
                 edits.push(edit);
             }
         }
@@ -144,6 +128,7 @@ impl ValueDriver {
                 Some(driven) if driven.binding == *binding && !driven.unresolved => {}
                 // The same control with another target or mapping: it keeps following.
                 Some(driven) if driven.binding.input == binding.input && !driven.unresolved => {
+                    driven.amount = binding.amount.as_ref().map(|id| data.channels().cell(id));
                     driven.binding = binding.clone();
                 }
                 _ => {
@@ -165,53 +150,13 @@ impl ValueDriver {
 /// `binding` as the driver follows it, or `None` when it reads MIDI and the engine has
 /// no MIDI inputs, or reads something this version can't.
 fn follow(binding: &ValueBinding, midi: Option<&MidiInputs>, data: &LiveData) -> Option<Driven> {
-    // The reactive readers take a modifier; a value binding reads as one would.
-    let modifier = MotionModifier {
-        modifier_id: binding.binding_id.clone(),
-        property: MotionProperty::X,
-        effect: None,
-        source: None,
-        kind: binding.input.clone(),
-        clock: MotionClock::default(),
-        enabled: true,
-    };
-    let jstream_anim::Kind::Midi(params) =
-        jstream_graph::anim_modifiers(std::slice::from_ref(&modifier))
-            .pop()?
-            .kind
-    else {
-        return None;
-    };
-    let mut unresolved = false;
-    let reader = match &binding.input {
-        MotionKind::Midi { input, .. } => {
-            let control = Control::of(&modifier)?;
-            let inputs = midi?;
-            let state = match input {
-                Some(name) => match inputs.input(name) {
-                    Some(state) => state,
-                    None => {
-                        unresolved = true;
-                        Arc::new(MidiState::new())
-                    }
-                },
-                None => inputs.any(),
-            };
-            Reader::Midi { state, control }
-        }
-        MotionKind::Data { .. } => {
-            let (watch, map) = DataMap::of(&modifier)?;
-            Reader::Data {
-                cell: data.watch(&watch),
-                map,
-            }
-        }
-        _ => return None,
-    };
+    let params = crate::channels::mapping(&binding.input)?;
+    let (reader, unresolved) = crate::channels::reader(&binding.input, midi, data)?;
     let rest = reader.read();
     Some(Driven {
         binding: binding.clone(),
         reader,
+        amount: binding.amount.as_ref().map(|id| data.channels().cell(id)),
         midi: params,
         smoothing: Smoothing::default(),
         rest,
@@ -248,6 +193,7 @@ mod tests {
                 target: ValueTarget::BusGain {
                     bus_id: BusId::new(bus),
                 },
+                amount: None,
             },
         }
     }

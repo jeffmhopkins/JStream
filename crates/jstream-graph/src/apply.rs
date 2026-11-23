@@ -464,6 +464,9 @@ fn apply_edit(
     if let Some(applied) = crate::value::apply(state, kinds, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::channel::apply(state, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::organise::apply(state, edit, at) {
         return applied;
     }

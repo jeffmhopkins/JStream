@@ -233,7 +233,8 @@ several shots as one switch with `via`, an orbiting `move` preset (`camera_path`
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
 [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a sky all around a 3D set as an
 environment light with `backdrop` on, with `stars`, `nebula`, a `galaxy` band or a
-panorama `image`, and a `warp` that ramps itself over `warp_ramp_s`
+panorama `image`, and a `warp` that ramps itself over `warp_ramp_s` (motion modifiers on
+the light's item may drive its numbers and colours)
 ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)), a rig moved as one by a group
 that shares the set's space (`share_space`), and a camera riding with it
 (`scene.set_camera_anchor`, ignored under a follow camera,
@@ -270,7 +271,12 @@ setting can set the colour from a `#rrggbb` field or a `palette` (`color_from`),
 no motion list, a filter's or a source's setting, a fader or a send, a value binding
 (`binding.set_value`), which replaces the value once its control moves, with `width` and
 `height` modifiers to stretch an item,
-[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), a timed
+[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), a channel
+(`channel.set`) that gathers controls into one switched, faded value anything can follow
+or be scaled by with `amount`, its `channel.*` actions reversible
+([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), a sequence (a timeline
+with `lanes`) that moves channels from wherever they are and the `starts` and `stops`
+that play it, with `delay_ms` ([ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
 ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), one label on an

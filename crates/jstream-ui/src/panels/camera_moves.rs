@@ -105,6 +105,7 @@ pub fn with_added(list: &[CameraMotionModifier]) -> Option<Vec<CameraMotionModif
         kind: sized_kind("Wiggle", gentle(property))?,
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     });
     Some(next)
 }
@@ -477,6 +478,7 @@ mod tests {
             kind: named,
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }];
         assert_eq!(
             jstream_control::protocol::check_camera_motion(&list),

@@ -1655,6 +1655,9 @@ impl Engine {
                     })
                     .collect(),
             }),
+            Query::ChannelValues => Some(QueryResult::ChannelValues {
+                channels: lock(&self.shared.state).channels.values(),
+            }),
             Query::MidiLastControls => Some(QueryResult::MidiLastControls {
                 controls: lock(&self.shared.state)
                     .live
@@ -4960,9 +4963,16 @@ struct State {
     ticking: bool,
     /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
     driver: crate::value_bindings::ValueDriver,
-    /// Whether the `jstream-values` thread is running: it ticks [`State::driver`] while
-    /// the collection holds a value binding.
+    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`] and
+    /// [`State::driver`] while the collection holds a channel or a value binding.
     values_ticking: bool,
+    /// The channels' live values (ADR-0183): never stored.
+    channels: crate::channels::ChannelDriver,
+    /// The program scene the channels last saw, so a scene's channels start again when
+    /// it goes on program.
+    channels_program: Option<SceneId>,
+    /// The timelines waiting on a delay, and the triggers' state (ADR-0184).
+    sequences: crate::sequences::Sequences,
     /// What the collection last named the JTunnel senders' modulation params
     /// (ADR-0181), so the receiver hears of a change only.
     jtunnel_names: crate::jtunnel::names::ParamNames,
@@ -5332,6 +5342,7 @@ impl State {
                 wake,
             );
         }
+        self.sequences.restart();
         for timeline_id in self.timelines.ids() {
             if let Some(playing) = self.timelines.stop(&timeline_id) {
                 self.subscribers.emit(
@@ -5489,6 +5500,22 @@ impl State {
             client_id.clone(),
             request_id.clone(),
         );
+        // ADR-0184: a play replaces a wait, its lanes take their channels from where
+        // they are, and a trigger on its start fires on the next values tick.
+        self.sequences.cancel(timeline_id);
+        if !info.lanes.is_empty()
+            && let Some(engine) = self.shared.upgrade()
+        {
+            // A channel the collection has just gained is followed before a lane takes it.
+            let midi = self.live.midi();
+            self.channels
+                .keep(&self.graph, midi.as_deref(), &engine.data);
+        }
+        self.channels
+            .lanes_start(timeline_id, &info, start, from_ms.is_some());
+        self.sequences
+            .timeline_event(timeline_id, jstream_protocol::TimelineEdge::Starts);
+        self.wake_values();
         self.subscribers.emit(
             &Event::TimelineChanged {
                 timeline_id: timeline_id.clone(),
@@ -5553,6 +5580,7 @@ impl State {
             });
         };
         let schedule = crate::timelines::schedule(info);
+        self.sequences.cancel(timeline_id);
         if let Some(playing) = self.timelines.stop(timeline_id) {
             let position =
                 schedule.position(playing.started_ns, crate::timelines::ns(self.action_now()));
@@ -5617,7 +5645,7 @@ impl State {
     fn cue_retarget(action: &Action) -> Option<&jstream_protocol::TimelineId> {
         match action {
             Action::TimelineStop { timeline_id }
-            | Action::TimelinePlay { timeline_id }
+            | Action::TimelinePlay { timeline_id, .. }
             | Action::TimelineSeek { timeline_id, .. } => Some(timeline_id),
             _ => None,
         }
@@ -5788,7 +5816,59 @@ impl State {
             _ => current == Some(started_ns),
         };
         if holds {
+            match change {
+                jstream_protocol::TimelineChange::Ended => {
+                    // ADR-0184: its lanes end on their last values, and hold them.
+                    if let Some((_, info)) = self.graph.state().timeline(timeline_id) {
+                        let end = f64::from(info.duration_ms);
+                        self.channels.lanes_at(timeline_id, end, 0);
+                    }
+                    self.sequences
+                        .timeline_event(timeline_id, jstream_protocol::TimelineEdge::Ends);
+                }
+                jstream_protocol::TimelineChange::Looped => self
+                    .sequences
+                    .timeline_event(timeline_id, jstream_protocol::TimelineEdge::Loops),
+                _ => {}
+            }
             self.subscribers.emit(step, wake);
+        }
+    }
+
+    /// `timeline.play` with a `delay_ms` (ADR-0184): it plays when the wait is over,
+    /// from the values thread's tick. Fails with `not_found` for a timeline the
+    /// collection doesn't hold.
+    fn timeline_wait(
+        &mut self,
+        timeline_id: &jstream_protocol::TimelineId,
+        delay_ms: u32,
+    ) -> Result<(), ProtocolError> {
+        let Some((scene, _)) = self.graph.state().timeline(timeline_id) else {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Timeline,
+                id: timeline_id.to_string(),
+            });
+        };
+        let scene_id = scene.id().clone();
+        self.sequences
+            .wait(timeline_id, scene_id, delay_ms, Instant::now());
+        self.wake_values();
+        Ok(())
+    }
+
+    /// Whether the `jstream-values` thread has work: a value binding, a channel, a
+    /// timeline trigger or a wait.
+    fn needs_values(&self) -> bool {
+        self.graph.value_bindings().len() > 0
+            || self.graph.channels().len() > 0
+            || self.sequences.is_waiting()
+            || crate::sequences::Sequences::has_triggers(&self.graph)
+    }
+
+    /// Starts the `jstream-values` thread if it has work and isn't running.
+    fn wake_values(&mut self) {
+        if !self.values_ticking && self.needs_values() {
+            self.values_ticking = spawn_values(self.shared.clone());
         }
     }
 
@@ -5989,6 +6069,9 @@ impl State {
             done?;
             return Ok(CallResult::action());
         }
+        if let Some((field, reason)) = action.play_problem() {
+            return Err(ProtocolError::invalid_argument(field, reason));
+        }
         if jstream_protocol::camera_aim_scene(&action).is_some() {
             self.aim_camera(client_id, &action)?;
             return Ok(CallResult::action());
@@ -6080,8 +6163,14 @@ impl State {
                 self.trigger_motion(&item_id, modifier_id.as_deref())?;
                 return Ok(CallResult::action());
             }
-            Action::TimelinePlay { timeline_id } => {
-                self.timeline_play(client_id, request_id, &timeline_id, None, wake)?;
+            Action::TimelinePlay {
+                timeline_id,
+                delay_ms,
+            } => {
+                match delay_ms {
+                    Some(delay) if delay > 0 => self.timeline_wait(&timeline_id, delay)?,
+                    _ => self.timeline_play(client_id, request_id, &timeline_id, None, wake)?,
+                }
                 return Ok(CallResult::action());
             }
             Action::TimelineSeek { timeline_id, at_ms } => {
@@ -6090,6 +6179,12 @@ impl State {
             }
             Action::TimelineStop { timeline_id } => {
                 self.timeline_stop(&timeline_id, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::ChannelSetValue { .. }
+            | Action::ChannelSwitch { .. }
+            | Action::ChannelNudge { .. } => {
+                self.channel_action(&action)?;
                 return Ok(CallResult::action());
             }
             Action::SceneSetKeyframe {
@@ -6304,6 +6399,7 @@ impl State {
                             let (_, info) = self.graph.state().timeline(id)?;
                             Some(crate::timelines::schedule(info))
                         }),
+                    waiting: self.sequences.waiting(Instant::now()),
                     keyframes: self
                         .graph
                         .placed_keyframes()
@@ -7053,9 +7149,7 @@ impl State {
         // The value bindings' settings, after the gestures': a moved control wins
         // (ADR-0178).
         settings.extend(self.driver.edits().iter().cloned());
-        if !self.values_ticking && self.graph.value_bindings().len() > 0 {
-            self.values_ticking = spawn_values(self.shared.clone());
-        }
+        self.wake_values();
         let had = self.shown.is_some();
         self.shown = if settings.is_empty() {
             None
@@ -7282,16 +7376,146 @@ impl State {
         next
     }
 
+    /// Runs a channel action (ADR-0183): checks it as a binding would, and sets the
+    /// channel's live value or switch. The `jstream-values` thread, which it starts if it
+    /// isn't running, carries it to what follows the channel on its next tick.
+    fn channel_action(&mut self, action: &Action) -> Result<(), ProtocolError> {
+        if let Some((field, reason)) = action.channel_problem() {
+            return Err(ProtocolError::invalid_argument(field, reason));
+        }
+        let now = Instant::now();
+        // A channel the collection has just gained is followed before it is set.
+        if let Some(engine) = self.shared.upgrade() {
+            let midi = self.live.midi();
+            self.channels
+                .keep(&self.graph, midi.as_deref(), &engine.data);
+        }
+        let missing = |channel_id: &str| ProtocolError::NotFound {
+            entity: EntityKind::Channel,
+            id: channel_id.to_owned(),
+        };
+        let done = match action {
+            Action::ChannelSetValue {
+                channel_id,
+                value,
+                fade_ms,
+            } => self
+                .channels
+                .set_value(channel_id, value.get(), *fade_ms, now)
+                .map_err(|_| missing(channel_id)),
+            Action::ChannelNudge {
+                channel_id,
+                by,
+                fade_ms,
+            } => self
+                .channels
+                .nudge(channel_id, by.get(), *fade_ms, now)
+                .map_err(|_| missing(channel_id)),
+            Action::ChannelSwitch { channel_id, to } => self
+                .channels
+                .switch(channel_id, *to)
+                .map_err(|_| missing(channel_id)),
+            _ => Ok(()),
+        };
+        self.wake_values();
+        done
+    }
+
     /// Follows the value bindings for one tick (ADR-0178) and, when the settings they
     /// give changed, draws and hears the collection with them. Returns whether to keep
     /// ticking: while the collection holds a binding or a value it drove is shown.
-    fn values_tick(&mut self, now: Instant, data: &jstream_sources::LiveData) -> bool {
+    fn values_tick(
+        &mut self,
+        now: Instant,
+        data: &jstream_sources::LiveData,
+        wake: &mut Vec<Waker>,
+    ) -> Option<std::time::Duration> {
+        // The timelines whose wait is over play first (ADR-0184), then every playing
+        // timeline's lanes move to where it is now.
+        for id in self.sequences.due(now) {
+            let by = ClientId::new(crate::history::ENGINE_CLIENT);
+            let _ = self.timeline_play(&by, &RequestId::new("wait"), &id, None, wake);
+        }
+        let clock_ns = crate::timelines::ns(self.live.now());
+        for id in self.timelines.ids() {
+            let Some((_, info)) = self.graph.state().timeline(&id) else {
+                continue;
+            };
+            if info.lanes.is_empty() {
+                continue;
+            }
+            let Some(playing) = self.timelines.get(&id) else {
+                continue;
+            };
+            let position = crate::timelines::schedule(info).position(playing.started_ns, clock_ns);
+            self.channels.lanes_at(&id, position.ms, position.pass);
+        }
         let midi = self.live.midi();
+        // The channels first (ADR-0183), so a value binding reads this tick's values. A
+        // scene's channels start again when it goes on program.
+        if self.channels_program.as_ref() != self.studio.program() {
+            self.channels_program = self.studio.program().cloned();
+            if let Some(program) = &self.channels_program {
+                self.channels.scene_live(program);
+            }
+        }
+        self.channels.tick(&self.graph, midi.as_deref(), data, now);
         let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
         if changed && self.refresh_shown() {
             self.redraw();
         }
-        self.graph.value_bindings().len() > 0 || !self.driver.edits().is_empty()
+        // The triggers last, so a channel trigger sees this tick's value.
+        let program = self.studio.program().cloned();
+        let orders = self.sequences.check(
+            &self.graph,
+            program.as_ref(),
+            |id| self.channels.level(id),
+            now,
+        );
+        let by = ClientId::new(crate::history::ENGINE_CLIENT);
+        for order in orders {
+            match order {
+                crate::sequences::Order::Play {
+                    timeline_id,
+                    delay_ms: 0,
+                } => {
+                    let _ = self.timeline_play(
+                        &by,
+                        &RequestId::new("trigger"),
+                        &timeline_id,
+                        None,
+                        wake,
+                    );
+                }
+                crate::sequences::Order::Play {
+                    timeline_id,
+                    delay_ms,
+                } => {
+                    let _ = self.timeline_wait(&timeline_id, delay_ms);
+                }
+                crate::sequences::Order::Stop { timeline_id } => {
+                    let _ = self.timeline_stop(&timeline_id, wake);
+                }
+            }
+        }
+        let busy =
+            self.needs_values() || !self.driver.edits().is_empty() || !self.channels.is_empty();
+        if !busy {
+            return None;
+        }
+        // ADR-0184 rule 7: about a frame at 60 fps while a lane plays, so a fade has no
+        // visible steps.
+        let timelines = &self.timelines;
+        Some(
+            if self
+                .channels
+                .lanes_playing(|id| timelines.get(id).is_some())
+            {
+                std::time::Duration::from_micros(16_667)
+            } else {
+                crate::value_bindings::EVERY
+            },
+        )
     }
 
     /// Brings the program mixer in line with the collection's audio as drawn (the open
@@ -7745,16 +7969,26 @@ fn spawn_values(shared: Weak<Shared>) -> bool {
     let started = thread::Builder::new()
         .name("jstream-values".into())
         .spawn(move || {
+            let mut every = crate::value_bindings::EVERY;
             loop {
-                thread::sleep(crate::value_bindings::EVERY);
+                thread::sleep(every);
                 let Some(engine) = shared.upgrade() else {
                     return;
                 };
-                let mut state = lock(&engine.state);
-                if !state.values_tick(Instant::now(), &engine.data) {
-                    state.values_ticking = false;
-                    return;
+                let mut wake = Vec::new();
+                {
+                    let mut state = lock(&engine.state);
+                    match state.values_tick(Instant::now(), &engine.data, &mut wake) {
+                        Some(next) => every = next,
+                        None => {
+                            state.values_ticking = false;
+                            drop(state);
+                            wake.into_iter().for_each(Waker::wake);
+                            return;
+                        }
+                    }
                 }
+                wake.into_iter().for_each(Waker::wake);
             }
         });
     if let Err(error) = &started {

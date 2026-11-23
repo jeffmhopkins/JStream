@@ -61,7 +61,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
   `send.remove`, `hotkey.set`, `hotkey.set_labels`,
-  `hotkey.clear`, `binding.set`, `binding.clear`, `binding.set_value`, `binding.clear_value`, `transition.create`, `transition.update`, `transition.delete`,
+  `hotkey.clear`, `binding.set`, `binding.clear`, `binding.set_value`, `binding.clear_value`, `channel.set`, `channel.delete`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
@@ -86,7 +86,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
-  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
+  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
@@ -130,6 +130,13 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   a trigger and its action as reads report it; since 0.168 a `ValueBinding`, a control
   or live-data field driving a `ValueTarget` (ADR-0178), and `MidiControlInfo`, an
   input's latest control change. See [Controller bindings](#bindings).
+- **Channels** (`channel.rs`, since 0.169,
+  [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelInfo`, a named
+  value 0 to 1 that up to `MAX_CHANNEL_INPUTS` (8) `midi`, `data` or `channel` inputs
+  drive, combined by `ChannelCombine`, averaged, faded, curved and switched on or off
+  (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch`, and
+  `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
+  [Controller bindings](#bindings).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -169,7 +176,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
   `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `midi.last_controls` (since 0.168, with `MidiControlInfo` in `binding.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
-  `pack.read`, `values.list`, `label.members` (since 0.100,
+  `pack.read`, `values.list`, `channel.values` (since 0.169, with `ChannelValueInfo` in `channel.rs`), `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
   0.113, `NetworkProfile` and `NetworkInputProfile`, since 0.120
@@ -228,6 +235,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MAX_DATA_STATE_LEN` (100)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3),
   and since 0.164 sets a colour from its field with `MotionColorFrom` (decision 5).
+  Since 0.169 `MotionKind::Channel` follows a channel, `MotionMidiControl::Note` reads a
+  held note as 1, and a modifier's `amount` names a channel that scales it
+  ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -378,7 +388,21 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
-decision 4); 0.168 because a value binding (`binding.set_value` and
+decision 4); 0.170 because a timeline gains `lanes`, each moving a channel
+through points as it plays, starting from the channel's value where it has no point at
+0, and `starts` and `stops`, triggers that play or stop it when a channel crosses a level
+or switches, a scene goes on or off program, a keyframe loads or is left, or another
+timeline starts, ends or loops; `timeline.play` gains `delay_ms`, `studio.get` lists the
+timelines `waiting`, and `ChannelDriver` gains `sequence`
+([ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md));
+0.169 because a channel (`channel.set` and `channel.delete`,
+listed in `state.get`'s `channels`) is a named live value, 0 to 1, that MIDI controls,
+live-data fields, other channels and the `channel.set_value`, `channel.switch` and
+`channel.nudge` actions set, `channel.values` reports, and the new `channel` motion kind
+follows; a motion modifier, a camera's and a value binding take an `amount` channel that
+scales them, and `MotionMidiControl` gains `note`, read as 1 while held
+([ADR-0183](../../docs/adr/0183-virtual-control-channels.md));
+0.168 because a value binding (`binding.set_value` and
 `binding.clear_value`, listed in `state.get`'s `value_bindings`) has a MIDI control or a
 live-data field drive a live setting of any source or filter, a fader or a send,
 `midi.last_controls` reports each input's latest control change for a client that
@@ -1528,6 +1552,36 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
   count}` for each MIDI input that has sent a control change, for a client that learns
   one: the control whose `count` grows is the one moved.
+- A value binding's input may also be `kind` `channel` (since 0.169), and its optional
+  `amount` names a channel that scales it: its value is `from + (value - from) ×
+  amount`, so a channel at 0 holds it at `from` (a missing channel scales by 1).
+
+Channels (0.169, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)) gather
+controls into one live value, 0 to 1, that anything bindable follows, listed in
+`state.get`'s `channels` by ID (at most `MAX_CHANNELS`, 256).
+- **`ChannelInfo {channel_id, name, scene_id?, default, inputs, combine, average_ms,
+  rise_ms, fall_ms, curve, on, off_value}`**: up to 8 `inputs`, each the fields a `midi`,
+  `data` (without `color_from`) or `channel` modifier takes; `combine` is `latest` (the
+  input that moved last, the default), `max`, `min`, `sum`, `product` or `average`;
+  then, in order, the switch (`on` false holds `off_value`), a moving average over
+  `average_ms` (≤ 10,000), a linear fade up over `rise_ms` and down over `fall_ms` (each
+  ≤ 60,000), and the `curve`. `ChannelInfo::problem` refuses another kind, an input that
+  reads the channel itself, and anything a modifier's own check refuses, as
+  `channel.<field>`.
+- **`channel.set {channel}`** sets one whole (inverse `channel.delete`, or `channel.set`
+  with the old). The collection also refuses `channel` inputs that lead back to it
+  through others (at `channel.inputs`) and a 257th (at `channel`). A channel, scene or
+  amount it names that doesn't exist is taken. **`channel.delete {channel_id}`** removes
+  one, or is `not_found` (entity `channel`); what reads it stays, reading 0 (an
+  `amount`, 1).
+- Its value is live and never stored: it starts at `default`, and a channel with a
+  `scene_id` goes back to its default each time that scene goes on program.
+- **`channel.set_value {channel_id, value, fade_ms?}`** (0 to 1),
+  **`channel.nudge {channel_id, by, fade_ms?}`** (-1 to 1) and **`channel.switch
+  {channel_id, to}`** (`on`, `off`, `toggle`) change it until an input moves again
+  (`fade_ms` ≤ 60,000). A hotkey, a controller binding and a timeline cue may run them.
+- **`channel.values`** answers `ChannelValueInfo {channel_id, value, on, driver?}` for
+  each channel, where `driver` is `{by: "input", index}` or `{by: "action"}`.
 
 <a id="organisation"></a>
 ## Folders, labels and scene options
@@ -1809,7 +1863,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   parses as empty), every controller binding (`bindings`, ordered by trigger; omitted
   when there are none, so missing, also from a pre-0.96 server, parses as empty), every
   value binding (`value_bindings`, ordered by ID; omitted when there are none, so
-  missing, also from a pre-0.168 server, parses as empty), the
+  missing, also from a pre-0.168 server, parses as empty), every channel (`channels`,
+  ordered by ID; omitted when there are none, so missing, also from a pre-0.169 server,
+  parses as empty), the
   master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
@@ -1860,7 +1916,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16. Since 0.87 `timelines` lists the timelines playing, each with its
   scene, its `position_ms` and its `pass` ([Timelines](#timelines)), omitted while none
-  plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
+  plays, and since 0.170 `waiting` the timelines waiting on a `delay_ms`
+  (`WaitingTimeline`, with `due_in_ms`), omitted while none waits. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
@@ -1901,6 +1958,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   address). Listing a sender trusts it with nothing. `on` false and no senders while
   the receiver is off, the default. Runtime state, so no `rev`. A plugin can't read it
   (the person's LAN addresses).
+- `channel.values` (0.169,
+  [ADR-0183](../../docs/adr/0183-virtual-control-channels.md) decision 6): each channel's
+  live level, ordered by ID, as `ChannelValueInfo {channel_id, value, on, driver?}`:
+  `driver` is the input that set it last (`{by: "input", index}`) or an action (`{by:
+  "action"}`), absent while it rests at its default. Runtime state, so no `rev`.
 - `midi.last_controls` (0.168,
   [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md) decision 6): each
   MIDI input that has sent a control change, ordered by name, as `MidiControlInfo
@@ -2571,7 +2633,7 @@ a scoped `Control`, which checks every call against the plugin's grant before it
 the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 
 - **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
-  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey, binding and studio
+  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey, binding, channel and studio
   edits, among them a scene's folder, metadata and transitions, a source's metadata, a
   hotkey binding's labels (ADR-0133), an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
@@ -2579,10 +2641,11 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
-  `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
+  `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, and `channel.set_value`,
+  `channel.nudge` and `channel.switch`, ADR-0183) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
-  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), creating, deleting and retargeting outputs, their encoders and stream
+  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), `channel.values` (what the person plays, ADR-0183), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` and `studio.set_rendering` (application settings), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2912,7 +2975,8 @@ after 1.0:
   0.94 adds `file` the same way: only an error answering `collection.new` or
   `collection.save_as` names it.
   0.96 adds `binding` the same way, named only by an error answering a `binding.*`
-  edit.
+  edit. 0.169 adds `channel` the same way, named only by an error answering a
+  `channel.*` edit or action.
   0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
@@ -3045,10 +3109,10 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   `source` takes a `source`, and it needs one (`motion.<n>.source`). It changes how this
   item draws its source, and nothing is stored. A `light` takes `color`, `intensity`
   (0 to 64), `range_px`, `cone_deg` (1 to 170), `softness` and `shadow_softness` (0 to
-  1). A `model` takes `color` (its base colour), `metallic` and `roughness` (0 to 1) on
+  1). A `model` takes `color` (its base colour), `metallic` and `roughness` (0 to 1) and
+  `emissive_strength` (a multiplier of the glow, 1 at rest, kept within 0 to 64) on
   every material, or with `material` on the file's materials of that name, which also
-  take `emissive` (the glow's colour) and `emissive_strength` (a multiplier of the
-  glow, 1 at rest, kept within 0 to 64). Numbers and colours change as an `effect`
+  take `emissive` (the glow's colour). Numbers and colours change as an `effect`
   setting's do. One naming a setting the source doesn't have, or a material its model
   doesn't have, adds nothing; it never moves the box. `source` is omitted for every other
   property, and a client before 0.145 reads the property as `Unknown`.
@@ -3110,8 +3174,25 @@ Since 0.87 a scene holds timelines
   are kept ordered by ID ([Folders, labels and scene options](#organisation)).
 - **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
   `scene.set_keyframe` (since 0.88, [Keyframe tracks](#keyframe-tracks)), `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
-  `source.restart`, and `timeline.play`, `timeline.stop` and `timeline.seek`. None is an
+  `source.restart`, `timeline.play`, `timeline.stop` and `timeline.seek`, and since 0.169
+  `channel.set_value`, `channel.switch` and `channel.nudge`. None is an
   edit, so playing a timeline adds nothing to an undo history.
+- **Lanes** (since 0.170, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)):
+  a timeline with `lanes` is a sequence. Each `TimelineLane` moves one channel
+  (`target: {channel}`) through `points` (`LanePoint {at_ms, value, curve}`, at most 256,
+  in time order, each `at_ms` at most `duration_ms`, `value` 0 to 1, `LaneCurve`
+  `linear`, `ease_in`, `ease_out`, `ease_in_out` or `hold`), and `on` false mutes it; at
+  most 32 (`MAX_LANES`). `TimelineLane::value_at` is the shared shape: a lane with no
+  point at 0 eases from the value it is given (the channel's when the timeline starts)
+  to its first point, and holds its last point after it. A lane is one more input of
+  its channel ([Channels](#bindings)); the last timeline started wins a channel.
+- **Triggers** (since 0.170): `starts` and `stops`, at most 16 each (`MAX_TRIGGERS`), each
+  a `TimelineTrigger` tagged by `type`: `channel {channel_id, edge (rises, falls, on,
+  off), level?}`, `scene {scene_id, edge (shown, hidden)}`, `keyframe {scene_id,
+  keyframe_id?, edge (loads, leaves)}` or `timeline {timeline_id, edge (starts, ends,
+  loops)}`, each with a `delay_ms` of at most 60,000 (`MAX_TRIGGER_DELAY_MS`). They fire
+  on a change only. `TimelineInfo::problem` refuses a timeline naming itself and a
+  `starts` on a channel one of its own lanes drives.
 - **Edits:** `timeline.set {scene_id, timeline}` stores one whole, new or in place of
   the scene's own, and is undone by `timeline.delete` or by `timeline.set` with the old
   one. An ID another scene holds is `already_exists`. `timeline.delete {timeline_id}`
@@ -3119,8 +3200,10 @@ Since 0.87 a scene holds timelines
   are not checked: a cue naming a deleted object stays, inert, and fails when it fires.
   Plugins may not use either edit (`never`), since cues run actions the edit class
   can't.
-- **Playing** is studio state, like the program scene. `timeline.play {timeline_id}`
-  plays from the start, `timeline.seek {timeline_id, at_ms}` from `at_ms`, running at
+- **Playing** is studio state, like the program scene. `timeline.play {timeline_id,
+  delay_ms?}` plays from the start, after `delay_ms` (since 0.170, at most 60,000;
+  `studio.get` lists the wait in `waiting` as `WaitingTimeline {timeline_id, scene_id,
+  due_in_ms}`, another play starts it again and `timeline.stop` cancels it), `timeline.seek {timeline_id, at_ms}` from `at_ms`, running at
   once the last cue before it for each state it sets (`Action::cue_state`: the program
   scene, one placement's visibility, one shared value), and `timeline.stop` stops it
   where it is. A cue runs as its call would, credited to the client that started the

@@ -4379,6 +4379,7 @@ mod tests {
                 },
                 clock: jstream_protocol::MotionClock::Engine,
                 enabled: true,
+                amount: None,
             }],
         };
         // The light's intensity driven to 0 puts it out; its colour to black, too.

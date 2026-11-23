@@ -222,6 +222,8 @@ pub struct State {
     pub(crate) bindings: BTreeMap<Trigger, Action>,
     /// The value bindings (ADR-0178), by ID.
     pub(crate) value_bindings: BTreeMap<String, jstream_protocol::ValueBinding>,
+    /// The channels (ADR-0183), by ID.
+    pub(crate) channels: BTreeMap<String, jstream_protocol::ChannelInfo>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -255,6 +257,7 @@ impl Default for State {
             hotkey_labels: BTreeMap::new(),
             bindings: BTreeMap::new(),
             value_bindings: BTreeMap::new(),
+            channels: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),

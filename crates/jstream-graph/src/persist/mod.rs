@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 19;
+pub const SCHEMA_VERSION: u32 = 21;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -65,7 +65,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
     v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16, v16_to_v17, v17_to_v18,
-    v18_to_v19,
+    v18_to_v19, v19_to_v20, v20_to_v21,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -474,6 +474,72 @@ fn v16_to_v17(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Version 21 adds a timeline's `lanes`, `starts` and `stops`, and `timeline.play`'s
+/// `delay_ms` (ADR-0184). A version 20 file has none of them, so it upgrades unchanged;
+/// any of them there is refused, as version 20 refused it.
+fn v20_to_v21(value: &mut Value) -> Result<(), String> {
+    fn walk(value: &Value) -> Result<(), String> {
+        match value {
+            Value::Object(map) => {
+                if map.contains_key("timeline_id")
+                    && ["lanes", "starts", "stops"]
+                        .iter()
+                        .any(|key| map.contains_key(*key))
+                {
+                    return Err("a version 20 timeline has no `lanes`, `starts` or `stops`".into());
+                }
+                if map.get("type").and_then(Value::as_str) == Some("timeline.play")
+                    && map.contains_key("delay_ms")
+                {
+                    return Err("a version 20 `timeline.play` has no `delay_ms`".into());
+                }
+                map.values().try_for_each(walk)
+            }
+            Value::Array(list) => list.iter().try_for_each(walk),
+            _ => Ok(()),
+        }
+    }
+    walk(value)
+}
+
+/// Version 20 adds channels (`channels`), the `channel` motion kind, the `note` MIDI
+/// control and a modifier's or value binding's `amount` (ADR-0183). A version 19 file has
+/// none of them, so it upgrades unchanged; any of them there is refused, as version 19
+/// refused it.
+fn v19_to_v20(value: &mut Value) -> Result<(), String> {
+    if value.get("channels").is_some() {
+        return Err("a version 19 file has no `channels`".into());
+    }
+    // Every motion modifier and value binding: an object with a `modifier_id` or a
+    // `binding_id`, wherever the file keeps it.
+    fn walk(value: &Value) -> Result<(), String> {
+        match value {
+            Value::Object(map) => {
+                if map.contains_key("modifier_id") || map.contains_key("binding_id") {
+                    if map.contains_key("amount") {
+                        return Err("a version 19 modifier or value binding has no `amount`".into());
+                    }
+                    // The motion is the object itself (a flattened modifier), its
+                    // `kind`, or a value binding's `input`.
+                    let motions = [Some(value), map.get("kind"), map.get("input")];
+                    for motion in motions.into_iter().flatten() {
+                        if motion.get("kind").and_then(Value::as_str) == Some("channel") {
+                            return Err("a version 19 file has no `channel` motion".into());
+                        }
+                        if motion.get("control").and_then(Value::as_str) == Some("note") {
+                            return Err("a version 19 file has no `note` MIDI control".into());
+                        }
+                    }
+                }
+                map.values().try_for_each(walk)
+            }
+            Value::Array(list) => list.iter().try_for_each(walk),
+            _ => Ok(()),
+        }
+    }
+    walk(value)
+}
+
 /// Version 19 adds value bindings (`value_bindings`) and motion modifiers on an item's
 /// width or height alone (ADR-0178). A version 18 file has neither, so it upgrades
 /// unchanged; either there is refused, as version 18 refused it.
@@ -628,6 +694,11 @@ struct File {
     /// kind not installed, is kept, as the collection keeps it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     value_bindings: Vec<jstream_protocol::ValueBinding>,
+    /// Channels (ADR-0183), ordered by ID; omitted when there are none. Loaded as
+    /// saved, without looking up what they name; only a cycle through their `channel`
+    /// inputs is refused.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    channels: Vec<jstream_protocol::ChannelInfo>,
     /// Transition presets and the default (ADR-0029); omitted while they are the one
     /// `cut` preset a new collection starts with, so such a collection saves as it did
     /// before presets existed.
@@ -1230,6 +1301,7 @@ impl Graph {
                 })
                 .collect(),
             value_bindings: state.value_bindings.values().cloned().collect(),
+            channels: state.channels.values().cloned().collect(),
         };
         let mut json = serde_json::to_string_pretty(&file).expect(
             "invariant: the file holds only strings, finite numbers, bools, and maps with \
@@ -1308,6 +1380,14 @@ impl Graph {
             applied.map_err(|error| LoadError::Invalid {
                 object,
                 error: Box::new(error),
+            })?;
+        }
+        for channel in &file.channels {
+            crate::channel::load(&mut graph.state, channel).map_err(|error| {
+                LoadError::Invalid {
+                    object: format!("channel `{}`", channel.channel_id),
+                    error: Box::new(error),
+                }
             })?;
         }
         for binding in &file.value_bindings {

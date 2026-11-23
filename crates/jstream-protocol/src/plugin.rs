@@ -97,6 +97,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("data.get", N),
     // What the person plays on their controllers (ADR-0178), as their DAW's state is.
     ("midi.last_controls", N),
+    // A channel's value follows the person's controllers (ADR-0183), as they are.
+    ("channel.values", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),
@@ -184,6 +186,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // A value binding drives a setting live and stores only itself (ADR-0178).
     ("binding.set_value", Class(E)),
     ("binding.clear_value", Class(E)),
+    // A channel is a collection object that stores only itself (ADR-0183).
+    ("channel.set", Class(E)),
+    ("channel.delete", Class(E)),
     ("timeline.set", N),
     ("timeline.delete", N),
     ("output.create", N),
@@ -275,6 +280,11 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("timeline.play", N),
     ("timeline.stop", N),
     ("timeline.seek", N),
+    // A channel's value moves what follows it as a live value does, never stored
+    // (ADR-0183), so setting one is the live class's.
+    ("channel.set_value", Class(L)),
+    ("channel.switch", Class(L)),
+    ("channel.nudge", Class(L)),
     ("source.restart", Class(L)),
     // Holding the media clock stops every animation for every client (ADR-0172); a
     // plugin never does.
