@@ -1366,7 +1366,10 @@ the layer's size and the slight ones at its own
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version, for the
 program stage by a thread of its own, which also keeps the warm scenes' models
 uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and drawn
-per placement into a canvas-sized layer, through the scene's camera or the item's own
+per placement into a canvas-sized layer (or one with fewer pixels that stands for the
+canvas, while the program's GPU is short of time,
+[ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)),
+through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
 lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,

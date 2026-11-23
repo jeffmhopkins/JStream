@@ -52,6 +52,9 @@ and calls this crate.
   placement changes its materials, `ModelDraw::materials`)
   into a canvas-sized layer with its own depth test, blurred by its own depth when the
   camera has a depth of field ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
+  The layer may have fewer pixels than the canvas it stands for, its extent
+  ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)):
+  the model is placed on the extent's canvas and the layer holds the same picture, less sharp.
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
@@ -672,7 +675,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
 | Surface pipelines (a model drawn into a surface buffer, the layer pipelines with a surface beside the layer, and the merge) and the buffer's depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another; a bind group per merge |
-| Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
+| Model depth targets (`Depth32Float`) | The sizes of the last two layers a model was drawn into (a model drawn with fewer pixels than its canvas alternates with draws at the canvas's size, ADR-0197); a layer of a third size replaces the one used longest ago, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized, two of half the canvas) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -844,6 +847,11 @@ one non-finite pixel isn't spread into a disc of dots.
 Where `R`
 is under half a pixel the pixel is copied, so a model in focus draws exactly as without
 depth of field, and a camera without one skips all of it.
+The blur and its 64-pixel cap count in canvas pixels. For a target with fewer pixels
+than its extent ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)),
+the kept layers are the target's size and stand for the same canvas, and both are scaled
+by the target's width over its extent's, so the blur covers as much of the picture
+(`golden_model_drawn_with_fewer_pixels_is_as_soft_out_of_focus`).
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
@@ -1023,7 +1031,9 @@ surface into three layers of the layer's size, cleared first; then
 ([ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)) where
 they are nearer than what it holds (`surface_merge.wgsl`, one full-screen triangle cut
 to the box the model drew in, its depth `1 / w` squeezed into 0..1), so a model isn't
-shaded twice for it. `Compositor::draw_model_surface(draw, targets)` draws a model
+shaded twice for it. The layers may be smaller than the buffer, for a model drawn with
+fewer pixels than its canvas (ADR-0197): each of the buffer's texels takes the layers'
+texel it falls in, unfiltered, and the box is grown to the buffer's texels it covers. `Compositor::draw_model_surface(draw, targets)` draws a model
 straight into the buffer instead (`fs_surface`, writing the same depth), for one whose
 layer drew no surface. `fs`, `fs_with_surface` and `fs_surface` share `shade`, so the
 buffer holds what the model's layer was shaded with: the shading normal in the viewing frame and `1 / w`;

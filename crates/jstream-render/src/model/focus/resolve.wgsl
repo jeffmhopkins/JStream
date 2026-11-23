@@ -17,6 +17,7 @@
 struct Params {
     focus_w: f32,
     blur: f32,
+    max_blur: f32,
 }
 
 @group(0) @binding(3) var<uniform> p: Params;
@@ -24,7 +25,8 @@ struct Params {
 @group(0) @binding(5) var packed_tex: texture_2d<f32>;
 @group(0) @binding(6) var gathered_tex: texture_2d<f32>;
 
-// common.wgsl's, which this pass's prelude can't share.
+// common.wgsl's, which this pass's prelude can't share: the cap in canvas pixels, and
+// `p.max_blur` the layer's own (fewer when it is drawn smaller, ADR-0197).
 const MAX_BLUR: f32 = 64.0;
 const TAPS: f32 = 48.0;
 
@@ -32,7 +34,7 @@ fn coc(inverse_w: f32) -> f32 {
     if inverse_w <= 0.0 {
         return 0.0;
     }
-    return min(p.blur * abs(1.0 - p.focus_w * inverse_w), MAX_BLUR);
+    return min(p.blur * abs(1.0 - p.focus_w * inverse_w), min(p.max_blur, MAX_BLUR));
 }
 
 fn finite(c: vec4<f32>) -> vec4<f32> {

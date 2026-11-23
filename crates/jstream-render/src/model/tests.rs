@@ -2909,3 +2909,113 @@ fn a_surface_reads_the_live_texture_its_layer_shows() {
         "drawn alone {alone:?}, with the layer {with:?}"
     );
 }
+
+/// [`draw`], into a layer `percent` of the canvas's width and of its height that stands
+/// for the whole canvas (ADR-0197), placed over it.
+fn draw_at(
+    compositor: &mut Compositor,
+    model: &Model,
+    geometry: ItemGeometry,
+    camera: Option<SceneCamera>,
+    percent: u32,
+) -> Snapshot {
+    let uploaded = compositor.upload_model(model).expect("the model uploads");
+    let mut layer = compositor
+        .layer(WIDTH * percent / 100, HEIGHT * percent / 100)
+        .expect("a layer");
+    layer.set_extent(FrameSize::new(WIDTH, HEIGHT).expect("non-zero"));
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera,
+                lighting: Lighting::Unlit,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                materials: &[],
+                texture: None,
+                reflection: None,
+                probe: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    render(compositor, &items)
+}
+
+/// ADR-0197: a model drawn into a layer with half the canvas's pixels each way, which
+/// stands for the whole canvas, shows where it does at full size: the same inside, and
+/// an edge within two pixels of the sharp one.
+#[test]
+fn golden_model_drawn_with_fewer_pixels_shows_in_the_same_place() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let model = two_boxes([
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]),
+        ([0.0, 0.0, 0.0], [0.1, 0.1, 0.01], [255, 0, 0]),
+    ]);
+    let geometry = boxed(80.0, 50.0, 40.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let full = draw_at(compositor, &model, geometry, camera, 100);
+    let plain = draw(compositor, &model, geometry, camera, Lighting::Unlit);
+    assert_eq!(full.rgba(), plain.rgba(), "at 100 nothing changes");
+    let half = draw_at(compositor, &model, geometry, camera, 50);
+    let edges = |shot: &Snapshot| {
+        let row = red_row(shot, 50);
+        let left = row
+            .iter()
+            .position(|&r| r > 128)
+            .expect("the slab is drawn");
+        let right = row
+            .iter()
+            .rposition(|&r| r > 128)
+            .expect("the slab is drawn");
+        (left, right)
+    };
+    let (sharp, soft) = (edges(&full), edges(&half));
+    assert!(
+        sharp.0.abs_diff(soft.0) <= 2 && sharp.1.abs_diff(soft.1) <= 2,
+        "edges at full size {sharp:?}, at half {soft:?}"
+    );
+    assert_near(rgb(&half, 80, 50), rgb(&full, 80, 50), (80, 50));
+    assert_near(rgb(&half, 10, 10), [0, 0, 0], (10, 10));
+}
+
+/// ADR-0197 with ADR-0165: depth of field on a model drawn with half the pixels blurs
+/// over as much of the picture as at full size, not twice as much.
+#[test]
+fn golden_model_drawn_with_fewer_pixels_is_as_soft_out_of_focus() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let model = two_boxes([
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]),
+        ([0.0, 0.0, 0.0], [0.1, 0.1, 0.01], [255, 0, 0]),
+    ]);
+    let geometry = boxed(80.0, 50.0, 40.0);
+    // Focused four times as far: the slab blurs by 16 * 3/4 = 12 canvas pixels.
+    let camera = Some(focused_camera(framing_distance() * 4.0, 16.0));
+    let ramp = |shot: &Snapshot| {
+        red_row(shot, 50)[..80]
+            .iter()
+            .filter(|&&r| r > 10 && r < 245)
+            .count()
+    };
+    let full = ramp(&draw_at(compositor, &model, geometry, camera, 100));
+    let half = ramp(&draw_at(compositor, &model, geometry, camera, 50));
+    assert!(full >= 8, "the edge ramps at full size: {full} pixels");
+    assert!(
+        half.abs_diff(full) <= full / 3 + 2,
+        "the edge ramps over {half} canvas pixels at half size, {full} at full"
+    );
+}
