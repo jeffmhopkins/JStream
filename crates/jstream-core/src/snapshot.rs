@@ -1594,6 +1594,22 @@ impl Shot {
         })
     }
 
+    /// The cameras the sky backdrops of the running transition's ends, the scene it
+    /// leaves's first, are seen through `elapsed_ms` into it, or `None` without one, for
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn sky_cameras(
+        &self,
+        elapsed_ms: f32,
+    ) -> Option<(Option<SceneCamera>, Option<SceneCamera>)> {
+        self.transition.as_ref().map(|t| {
+            (
+                t.cameras.sky_camera(true, elapsed_ms),
+                t.cameras.sky_camera(false, elapsed_ms),
+            )
+        })
+    }
+
     /// The settings each chain a running Move blends draws with `elapsed_ms` after its
     /// start (ADR-0127), or `None` without a transition.
     #[cfg(test)]
@@ -2228,6 +2244,32 @@ pub(crate) fn on_screen(
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Vec<Visual> {
+    on_screen_until_end(graph, running, now, look, assets, false).unwrap_or_default()
+}
+
+/// [`on_screen`] while `running` still runs at `now`; `None` once it has ended, though
+/// no plan has let it go yet ([`Planning::finished`]). A switch then starts from the
+/// program scene itself, which is all that is on screen: what an ended transition
+/// leaves is the scene at rest, and taken from the screen it would be its tracks, a
+/// whole scene's picture among them, seen through no camera (#1598, #1632).
+pub(crate) fn still_on_screen(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Option<Vec<Visual>> {
+    on_screen_until_end(graph, running, now, look, assets, true)
+}
+
+fn on_screen_until_end(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+    until_end: bool,
+) -> Option<Vec<Visual>> {
     let state = graph.state();
     let mut shot = Shot {
         canvas: state.canvas(),
@@ -2241,17 +2283,30 @@ pub(crate) fn on_screen(
         quiet: false,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
+    // Ended as [`plan_with`] finds it.
+    if until_end && end_time(running.start, planned.end_ms).is_none_or(|end| now >= end) {
+        return None;
+    }
     let cameras = planner.track_cameras(running, pairs);
     let elapsed_ms = running.elapsed_ms(now);
-    planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
-        Seen::Held {
-            // A whole scene's picture was drawn flat.
-            camera: (!visual.is_whole_scene())
-                .then(|| cameras.camera(track, visual.seen, elapsed_ms))
-                .flatten(),
-            depth_run: cameras.depth_run(track, visual.seen),
-        }
-    })
+    let planner = &planner;
+    Some(
+        planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
+            let camera = match &visual.image {
+                // A whole scene's picture is drawn flat, already seen through its own
+                // scene's camera (ADR-0180 decision 2): what a Move from it moves
+                // from, not the framing camera of a 2D side.
+                SourceRef::Scene(scene) if visual.is_whole_scene() => planner
+                    .camera(scene)
+                    .and_then(|camera| camera.placed(state.canvas())),
+                _ => cameras.camera(track, visual.seen, elapsed_ms),
+            };
+            Seen::Held {
+                camera,
+                depth_run: cameras.depth_run(track, visual.seen),
+            }
+        }),
+    )
 }
 
 fn canvas_size(canvas: Canvas) -> [f32; 2] {

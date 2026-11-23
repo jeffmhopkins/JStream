@@ -769,7 +769,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   bound, cycles) and its pixels through two levels in `snapshot.rs`, 3D groups drawn
   through `video.snapshot` (a sharing group's child sorting in front of a scene item a
   flat group sits under, moving and fading with the group item, a camera anchored to
-  the group riding with it, its children staying in its space through a Move, and an
+  the group riding with it, its children staying in its space through a Move, also one
+  started after a Fade onto the scene ended but before a plan let it go, and an
   item shown with a Fade on a filtered 3D keyframe drawn through its camera, and an
   effect setting changed after the first frame reaching a 3D card, in
   `src/tests/groups3d.rs`), the render
@@ -1576,7 +1577,11 @@ and a switch back shows them again (`restart_on_show`) and they rest meanwhile, 
 nothing else asks for a plan before it (#1185). A switch while a transition runs samples it at the switch time
 (`snapshot::on_screen`, the function the render thread draws with) and starts the new
 one from those items, so nothing jumps
-([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A switch to the scene already on program, even
+([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A transition that has ended
+though no plan has let it go yet (the clock held, [ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)) isn't sampled:
+`snapshot::still_on_screen` finds it ended, and the switch, `set_keyframe` and
+`item.show` start from the program scene at rest, as after the plan that lets it go
+(#1598, #1632). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
 
 A `stinger` pairs nothing: what is on screen shows until its `cut_ms` (at most the
@@ -1647,7 +1652,9 @@ own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
 `TrackCameras.overlay_run`), so they sort among themselves and stay over the scenes
 under them and over a stinger they cut short. A switch that cuts a transition short takes what is on screen with the
 camera each item was seen through and the depth run it sorted in (`Seen::Held`): it
-leaves through that camera, a stinger's items still over what they covered, and only a
+leaves through that camera, a stinger's items still over what they covered (a whole
+scene's picture, drawn flat, holds its scene's own camera, which drew it, so a Move
+from it starts there and not at the framing camera of a 2D side), and only a
 screen seen through one camera (a Move cut short) moves it toward the new scene's, for
 every track; one seen through several (a Fade or stinger between cameras) makes the
 switch a Fade (`transition::shared_camera`).
