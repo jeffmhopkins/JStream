@@ -8121,12 +8121,24 @@ fn draw_sky_of(
                 picture: pinned(arrival),
             }
         };
+    // The new sky shows at `shown * faded`, over the leaving one; drawing the leaving one
+    // at `shown * (1 - faded) / (1 - shown * faded)` makes them `shown * faded` of the new
+    // and `shown * (1 - faded)` of the old, `shown` in all, whatever the backdrop's
+    // opacity, so nothing pops when the leaving sky is dropped.
+    let shown = opacity * fade;
+    let faded = state.faded_in(at.as_secs_f64());
     let mut left = None;
     if let (Some(leaving), Some(under)) = (state.leaving, cache.get(&leaving_key)) {
+        let behind = shown * faded;
+        let under_opacity = if behind < 1.0 {
+            (shown * (1.0 - faded) / (1.0 - behind)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         compositor.draw_sky(
             &draw(
                 leaving.angles,
-                (opacity * fade, 0.0, leaving.travel, 0.0),
+                (under_opacity, 0.0, leaving.travel, 0.0),
                 leaving.arrival,
             ),
             under,
@@ -8136,12 +8148,7 @@ fn draw_sky_of(
     compositor.draw_sky(
         &draw(
             state.angles(warp_aiming(&environment, sky)),
-            (
-                opacity * fade * state.faded_in(at.as_secs_f64()),
-                state.warp,
-                state.travel,
-                state.dropping,
-            ),
+            (shown * faded, state.warp, state.travel, state.dropping),
             state.arrival,
         ),
         target,

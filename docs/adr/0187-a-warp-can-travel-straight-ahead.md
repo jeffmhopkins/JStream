@@ -91,7 +91,10 @@ it; after a warp they keep their own orientation relative to the vehicle.
   - **State.** The rotation is render-thread state, like the warp's travel: a snapshot or
     a new render context starts with none, so it shows the sky as its item turns it, or
     laid out ahead if it is at warp. Two render contexts that draw one scene each keep
-    their own.
+    their own. The state is kept by scene for the render context's life, so a scene
+    removed and made again under the same id keeps the rotation until its next warp
+    starts or it is set back to `sky`; and setting `ahead` during a warp takes effect
+    when the next warp starts.
   - **Cost.** For the half second of a cross-fade, the backdrop is drawn twice, into two
     canvas layers.
   - A sun or other light in the vehicle's groups keeps turning with the groups, so after
