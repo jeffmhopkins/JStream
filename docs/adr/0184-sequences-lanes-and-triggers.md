@@ -67,7 +67,8 @@ from there to its first point along that point's curve. "Lights down" is then on
 (0 at 3 s), and it works from any level. A position or a camera move driven through a
 channel glides from where it is, with no jump. Each pass of a loop after the first starts
 from the lane's last point. A seek moves each lane to its value at that time, from the
-value it started from, which a seek keeps.
+value it started from, which a seek keeps unless a control or action has taken the
+channel since.
 
 **4. At the end, channels hold.** When a `once` timeline ends, each lane sets its last
 point's value and holds it. A stopped timeline's lanes hold where they are.

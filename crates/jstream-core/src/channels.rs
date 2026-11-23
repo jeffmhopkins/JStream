@@ -28,7 +28,8 @@
 //! channel: under `latest` a control moved, an action or a later timeline's lane takes
 //! it over. A lane with no point at 0 starts from the channel's value at that moment
 //! (before its curve), so nothing jumps; a seek keeps the value the timeline's lane
-//! started from, so scrubbing doesn't jump either; each pass of a loop after the first starts
+//! started from (unless a control or action took the channel since), so scrubbing
+//! doesn't jump either; each pass of a loop after the first starts
 //! from the lane's last point. When the timeline ends or stops, the lane holds its last
 //! value. The channel's own switch, averaging, fade and curve apply after the lane.
 //!
@@ -420,8 +421,23 @@ impl ChannelDriver {
             // A seek keeps where this timeline's lane started from, so scrubbing a
             // playing sequence never jumps (ADR-0184 decision 3). A play, or a seek
             // that takes the channel from something else, starts from the value now.
+            // A control or action that moved since the lane last did took the channel,
+            // so the lane is no longer the one holding it.
+            let newer = followed
+                .inputs
+                .iter()
+                .filter(|input| input.moved)
+                .map(|input| input.changed)
+                .chain(followed.action.map(|action| action.changed))
+                .max();
             let from = match &followed.lane {
-                Some(held) if seek && held.timeline_id == *timeline_id => held.from,
+                Some(held)
+                    if seek
+                        && held.timeline_id == *timeline_id
+                        && newer.is_none_or(|changed| changed < held.changed) =>
+                {
+                    held.from
+                }
                 _ => followed.faded.unwrap_or(followed.value),
             };
             followed.lane = Some(Lane {
@@ -1126,6 +1142,16 @@ mod tests {
         assert!(
             (rig.value("c").unwrap_or(0.0) - 1.0).abs() < 1e-5,
             "a play starts from the value now"
+        );
+        rig.driver.lanes_at(&down.timeline_id, 500.0, 0);
+        rig.tick(60);
+        rig.driver.set_value("c", 0.8, None, rig.at(70)).ok();
+        rig.tick(70);
+        rig.driver.lanes_start(&down.timeline_id, &down, 0, true);
+        rig.tick(80);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.8).abs() < 1e-5,
+            "a seek after an action took the channel starts from the value now"
         );
     }
 }

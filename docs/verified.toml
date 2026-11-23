@@ -1983,13 +1983,13 @@ stamp = { hash = "b3:4c313edf233da586", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:7555920d25b26a7d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-motion"."body"]
-stamp = { hash = "b3:1e58df1672b6e50d", by = "agent:claude", note = "Channels bullet now says a seek keeps the lane's start value; lanes_start gained the seek flag and a seek unit test." }
+stamp = { hash = "b3:46ef2654ed0674ac", by = "agent:claude", note = "lane bullet now says a seek keeps the lane's start unless a control or action took the channel since; matches lanes_start" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/aim.rs"]
 stamp = { hash = "b3:250c6e6ada6ca966", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the Live aim bullet (aim.rs) and its covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/channels.rs"]
-stamp = { hash = "b3:cfe2c57340aa0c6c", by = "agent:claude", note = "Channels bullet now says a seek keeps the lane's start value; lanes_start gained the seek flag and a seek unit test." }
+stamp = { hash = "b3:ab7ef61bb83bd546", by = "agent:claude", note = "lane bullet now says a seek keeps the lane's start unless a control or action took the channel since; matches lanes_start" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/driven.rs"]
 stamp = { hash = "b3:6cd45e61e61a2c66", by = "agent:claude", note = "Re-read: the Data-driven motion bullet now describes painting bindings and Bindings::tint, and Driven source settings names set_color and set_emissive and effects, matching reactive.rs, sourced.rs and driven.rs." }

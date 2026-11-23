@@ -460,7 +460,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   channels back to their defaults when that scene goes on program. `channel.set_value`,
   `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
   reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
-  more input (ADR-0184): it starts from the channel's value (a seek keeps that start), the last timeline started
+  more input (ADR-0184): it starts from the channel's value (a seek keeps that start, unless a control or action took the channel since), the last timeline started
   wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
   modifier's or camera modifier's `amount` scales its value as it applies
   (`jstream_anim::evaluate_scaled`).
