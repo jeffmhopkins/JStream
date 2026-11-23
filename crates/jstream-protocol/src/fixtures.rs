@@ -694,6 +694,35 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..value_bindings().remove(0)
             },
         },
+        // Switches a binding drives, on at one half (ADR-0207).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "mic_mute".into(),
+                target: ValueTarget::SourceMute {
+                    source_id: SourceId::new("src_mic"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "music_mute".into(),
+                target: ValueTarget::BusMute {
+                    bus_id: BusId::new("bus_music"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "logo_shown".into(),
+                target: ValueTarget::ItemVisible {
+                    item_id: ItemId::new("itm_1"),
+                    scene_id: Some(SceneId::new("scn_1")),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
         // A channel, then its delete (ADR-0183).
         Edit::ChannelSet {
             channel: channels().remove(0),
@@ -2178,8 +2207,37 @@ pub(crate) fn actions() -> Vec<Action> {
             by: Finite32::new(-0.1).expect("finite"),
             fade_ms: None,
         },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::HoldOn,
+        },
+        Action::ChannelSwitch {
+            channel_id: "power".into(),
+            to: crate::ChannelSwitch::HoldOff,
+        },
         Action::SourceRestart {
             source_id: SourceId::new("src_1"),
+        },
+        // Mutes (ADR-0207): every way, on a source and on a bus.
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::Muted,
+        },
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::Unmuted,
+        },
+        Action::SourceMute {
+            source_id: SourceId::new("src_mic"),
+            to: crate::MuteTo::PushToTalk,
+        },
+        Action::BusMute {
+            bus_id: BusId::new("bus_music"),
+            to: crate::MuteTo::Toggle,
+        },
+        Action::BusMute {
+            bus_id: BusId::master(),
+            to: crate::MuteTo::PushToMute,
         },
         // The media clock, held and stepped to render frame by frame (ADR-0172).
         Action::ClockHold,

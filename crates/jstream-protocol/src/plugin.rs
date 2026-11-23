@@ -286,6 +286,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("channel.switch", Class(L)),
     ("channel.nudge", Class(L)),
     ("source.restart", Class(L)),
+    // A mute, as `source.set_audio` and `bus.set_fader` set it (ADR-0207).
+    ("source.mute", Class(E)),
+    ("bus.mute", Class(E)),
     // Holding the media clock stops every animation for every client (ADR-0172); a
     // plugin never does.
     ("clock.hold", N),

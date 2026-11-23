@@ -384,7 +384,14 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.172 because a scene whose `reflections` is on also reflects
+`PROTOCOL_VERSION` is 0.179 because a source's or bus's mute can be set by an action,
+`source.mute` and `bus.mute`, whose `to` (`MuteTo`) mutes, unmutes, toggles, or holds it
+for push to talk or push to mute; `channel.switch` gains `hold_on` and `hold_off`; a key
+or note bound to one of those runs `Action::on_release` when it is let go; and a value
+binding can drive a mute or a placement's visibility as a switch (`ValueTarget`'s
+`source_mute`, `bus_mute` and `item_visible`)
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)); 0.172 because a
+scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
