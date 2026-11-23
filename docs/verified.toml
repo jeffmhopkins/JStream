@@ -7305,7 +7305,7 @@ stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note 
 stamp = { hash = "b3:9b386547acd2bc1d", by = "agent:claude", note = "New channels.spec.js uses connect and rev from fixtures.js unchanged; polish.spec.js only lists two more panels. Harness unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/clap-plugins.spec.js"]
-stamp = { hash = "b3:5f4b408edbb1a7f7", by = "agent:claude", note = "Re-read against the spec changes (video-settings, clap-plugins, plugins, menus) and the new pairing.spec.js, which routes the WebSocket as the other specs do; the harness itself is unchanged." }
+stamp = { hash = "b3:813065aff7813e93", by = "agent:claude", note = "clap-plugins.spec.js only scopes its Program output filters click to the Outputs panel, since the master card's funnel now has the same name; no harness change" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/clipboard.spec.js"]
 stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "clipboard.spec.js: only the doc comments rename Scene objects to Sources; it uses connect and rev as the harness describes, so the harness holds." }
@@ -7437,7 +7437,7 @@ stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note 
 stamp = { hash = "b3:9b386547acd2bc1d", by = "agent:claude", note = "Tests list adds Channels (channels.spec.js) and Polish now says thirteen panels; both specs pass locally against the mock daemon." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/clap-plugins.spec.js"]
-stamp = { hash = "b3:5f4b408edbb1a7f7", by = "agent:claude", note = "Edited Plugins, Audio plugins, Menus, Video settings and keyframes lines and added Pairing; each matches its spec after this change." }
+stamp = { hash = "b3:813065aff7813e93", by = "agent:claude", note = "clap-plugins.spec.js's entry still holds: it opens the program output's chain from the Outputs panel, now scoped there since the master card's funnel shares the name" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/clipboard.spec.js"]
 stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "clipboard.spec.js: only the doc comments rename Scene objects to Sources; it uses connect and rev as the harness describes, and the Tests list, which names no Scene objects any more, holds." }
