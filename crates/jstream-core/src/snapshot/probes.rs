@@ -421,6 +421,10 @@ fn capture(
             live,
             (&mut lights, &mut shadowed),
         );
+        // The arrival picture's light (ADR-0188), as `light_scene` adds it.
+        if let Some(light) = super::arrival_light((shot, cache, chains), scene_id, at, live) {
+            lights.push(light);
+        }
         for shown in &models {
             let Some(target) =
                 cache.get(&GpuKey::ProbeModel(shown.scene.clone(), shown.item.clone()))

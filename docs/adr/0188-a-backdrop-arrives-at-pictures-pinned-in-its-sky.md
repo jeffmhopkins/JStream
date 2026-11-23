@@ -56,10 +56,10 @@ probe, a nested scene or a capture is left out.
 
 **3. One at a time, picked at random as a warp ends.** The render thread's per-scene sky
 state keeps the picture shown and where it is pinned. It shows one from the first frame.
-While the warp is at or above a quarter, where the deep sky has gone (ADR-0167 decision
-5), it shows none. Once it shows none and the warp is still or dropping, it picks another
+While the deep sky has gone at warp (ADR-0167 decision 5), it shows none. On the first
+step that the deep sky shows again with the warp still or dropping, it picks another, once,
 by a hash of the sky's seed and how many it has picked, not the one it showed last when
-there is another. A warp aimed ahead (ADR-0187) leaves the picture with the sky it
+there is another, and keeps it. A warp aimed ahead (ADR-0187) leaves the picture with the sky it
 cross-fades from, so the new layout shows none until the warp drops out.
 
 **4. Where.** It is pinned near the sky's straight ahead, where the warp ends: up to 9
@@ -77,9 +77,11 @@ backdrop only: what the sky lights or a model reflects doesn't show it.
 where the backdrop shows it, in the average colour of its opaque pixels, at the
 environment light's intensity times its item's opacity times `sky_picture_light`, faded
 as the picture is. The colour is taken on the CPU once per frame version, from at most
-about 4096 of its pixels; a picture whose pixels aren't at hand (a GPU texture, or a
-still whose pixels the program stage has let go) shines white until they are. It counts
-toward the lights a model is lit by (ADR-0143) after the scene's own.
+about 4096 of its pixels, for the picture shown only, from the frame after it is picked,
+while it is still faint; until then it adds no light. A picture whose pixels aren't at
+hand (a GPU texture, or a still whose pixels the program stage has let go) shines white
+until they are. It counts toward the lights a model is lit by (ADR-0143) after the
+scene's own, in a reflection probe's capture too.
 
 <a id="consequences"></a>
 ## Consequences

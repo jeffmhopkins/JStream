@@ -846,15 +846,21 @@ impl SkyState {
     }
 
     /// Picks the arrival picture after a step (ADR-0188): of `pictures`, none while the
-    /// warp is past where the deep sky is gone, and a new one at random by `seed` once
-    /// none shows and the warp is still or dropping, pinned near straight ahead.
+    /// deep sky is gone ([`deep_shown`]), and a new one at random by `seed` once none is
+    /// picked, the deep sky shows and the warp is still or dropping, pinned near straight
+    /// ahead.
     fn arrive(&mut self, pictures: usize, seed: u32) {
         if pictures == 0 {
             self.drop_arrival();
             return;
         }
-        if self.warp >= DEEP_GONE_AT {
+        // Tied to what the backdrop shows: none once the deep sky is gone, and one
+        // picked once, on the first step it shows again, so a drop out of warp picks
+        // exactly one.
+        let shown = deep_shown(self.warp, self.dropping);
+        if shown <= 0.0 {
             self.drop_arrival();
+            return;
         }
         if self.arrival.is_some() || (self.warp > 0.0 && self.dropping <= 0.0) {
             return;
@@ -1001,8 +1007,9 @@ pub(crate) struct Chains {
     /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it, and how
     /// far its stars have travelled at warp.
     pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyState>>,
-    /// The average colour of each arrival picture (ADR-0188), straight sRGB, with the
-    /// version of the frame it was taken from: the colour its light shines in.
+    /// The average colour of each arrival picture a backdrop shows now (ADR-0188),
+    /// straight sRGB, with the version of the frame it was taken from: the colour its
+    /// light shines in. A picture no longer shown is let go.
     pub(crate) picture_means: BTreeMap<SourceId, (u64, [f32; 3])>,
     /// Each 3D scene's view depth (ADR-0143 decision 4), as its composite last drew it,
     /// with the frame of the chains' run that drew it: a scene's depth-reading filters
@@ -4555,12 +4562,32 @@ mod tests {
         assert!(sky.arrival.is_none(), "gone at warp {}", sky.warp);
         sky.step(4, 11.5, (1.0, 1.0), SKY_AIM, (3, 7));
         assert!(sky.arrival.is_none(), "none at full warp");
-        // Dropping out: another picture, not the one it left.
-        sky.step(5, 11.6, (0.0, 1.0), SKY_AIM, (3, 7));
-        let next = sky.arrival.expect("a new picture as it drops");
+        // Dropping out, frame by frame: none while the deep sky is gone, then exactly
+        // one other picture, picked as it starts to show and kept to the end.
+        let mut next = None;
+        for i in 0..120_u32 {
+            sky.step(
+                5 + u64::from(i),
+                11.5 + f64::from(i + 1) / 60.0,
+                (0.0, 1.0),
+                SKY_AIM,
+                (3, 7),
+            );
+            let shown = crate::chain::deep_shown(sky.warp, sky.dropping);
+            match (next, sky.arrival) {
+                (None, None) => assert!(shown <= 0.0, "none though it shows at {}", sky.warp),
+                (None, Some(picked)) => {
+                    assert!(shown > 0.0);
+                    next = Some(picked);
+                }
+                (Some(kept), now) => assert_eq!(now, Some(kept), "picked again at {}", sky.warp),
+            }
+        }
+        assert_eq!(sky.warp, 0.0, "dropped out");
+        let next = next.expect("a new picture as it drops");
         assert_ne!(next.index, first.index);
         // Without pictures, none.
-        sky.step(6, 11.7, (0.0, 1.0), SKY_AIM, (0, 7));
+        sky.step(200, 14.0, (0.0, 1.0), SKY_AIM, (0, 7));
         assert!(sky.arrival.is_none());
         // Aimed ahead, the picture goes with the sky it cross-fades from.
         let aimed = crate::chain::WarpAiming {
@@ -4694,6 +4721,18 @@ mod tests {
             centre[0] > 200 && centre[1] < 30 && centre[2] < 30,
             "the picture ahead: {centre:?}"
         );
+        // Its colour is taken from the frame after it is picked: only the shown one's is.
+        assert!(
+            chains.picture_means.is_empty(),
+            "none averaged before a pick"
+        );
+        draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&shot, &LiveParams::default()),
+            &[(CANVAS.0 / 2, CANVAS.1 / 2)],
+        );
+        assert_eq!(chains.picture_means.len(), 1, "only the shown one");
         let light = snapshot::arrival_light(
             (&shot, &cache, &chains),
             &main,

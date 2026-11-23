@@ -1087,16 +1087,6 @@ impl Transitioning {
     }
 }
 
-impl Shot {
-    /// Whether `source` is an arrival picture of an environment light in the shot
-    /// (ADR-0188).
-    fn is_arrival_picture(&self, source: &SourceId) -> bool {
-        self.sky_pictures
-            .values()
-            .any(|pictures| pictures.contains(source))
-    }
-}
-
 impl Default for Shot {
     /// No scene: the primary display's capture fills the output.
     fn default() -> Self {
@@ -6029,11 +6019,17 @@ pub(crate) fn compose_metered(
     chains.cameras().sweep(at);
     let uploads = Instant::now();
     let mut planned = None;
+    // The arrival pictures shown now (ADR-0188): only theirs light a scene, so only
+    // theirs are averaged.
+    let arriving = shown_arrivals(shot, chains);
+    chains
+        .picture_means
+        .retain(|source, _| arriving.contains(source));
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
         };
-        if shot.is_arrival_picture(source) {
+        if arriving.contains(source) {
             note_picture_mean(chains, (source, frame), view.program);
         }
         let started = Instant::now();
@@ -8188,10 +8184,8 @@ pub(crate) fn arrival_light(
     let rotation = crate::warp_aim::from_angles(state.angles(warp_aiming(&environment, sky)));
     let d = arrival.direction;
     let from = [0, 1, 2].map(|r| (0..3).map(|k| rotation[r][k] * d[k]).sum::<f64>());
-    let [r, g, b] = chains
-        .picture_means
-        .get(source)
-        .map_or([1.0; 3], |(_, mean)| *mean);
+    // Its colour is taken in the frame after it is picked, while it is still faint.
+    let [r, g, b] = chains.picture_means.get(source)?.1;
     Some(jstream_render::SceneLight {
         kind: jstream_render::LightKind::Directional,
         position: [0.0; 3],
@@ -8238,6 +8232,22 @@ fn note_picture_mean(chains: &mut Chains, (source, frame): (&SourceId, &Frame), 
     chains
         .picture_means
         .insert(source.clone(), (frame.version, mean.unwrap_or([1.0; 3])));
+}
+
+/// The sources of the arrival pictures the scenes' backdrops show now (ADR-0188), as
+/// their sky state picked them.
+fn shown_arrivals(shot: &Shot, chains: &Chains) -> BTreeSet<SourceId> {
+    if shot.sky_pictures.is_empty() {
+        return BTreeSet::new();
+    }
+    let skies = chains.skies.borrow();
+    skies
+        .iter()
+        .filter_map(|(scene, state)| {
+            let (placed, _, _) = first_environment(shot, scene).0?;
+            arrival_source(shot, placed, state.arrival?).cloned()
+        })
+        .collect()
 }
 
 /// The average colour of the opaque parts of straight-alpha sRGB `rgba`, straight sRGB,

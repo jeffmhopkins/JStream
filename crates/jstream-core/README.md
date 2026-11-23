@@ -1886,12 +1886,13 @@ With arrival pictures
 ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
 planning puts the frames of the visible items of the light's `sky_pictures` scene in the
 shot (`Shot::sky_pictures`, by the light's source), and the state keeps the picture shown
-and where it is pinned (`Arrival`), none from a quarter warp up and another, at random,
-once the warp is still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
-`draw_sky_of` passes it to the backdrop, the upload loop takes each picture's average
-colour once per version (`note_picture_mean`, kept in `Chains::picture_means`), and
-`light_scene` adds a directional light from it in that colour (`arrival_light`,
-`an_arrival_picture_shows_ahead_and_lights_the_scene`).
+and where it is pinned (`Arrival`): none while the deep sky is gone at warp
+(`deep_shown`), and another, at random, picked once as it starts to show again with the
+warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
+`draw_sky_of` passes it to the backdrop, the upload loop takes the shown picture's average
+colour once per version (`note_picture_mean`, kept in `Chains::picture_means` for the
+shown pictures only), and `light_scene` and a probe's capture add a directional light from
+it in that colour (`arrival_light`, `an_arrival_picture_shows_ahead_and_lights_the_scene`).
 Its stars, star brightness, nebula, galaxy band and colours are drawn as those
 modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
