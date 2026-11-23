@@ -14,7 +14,7 @@ use wgpu::util::DeviceExt;
 
 use crate::error::RenderError;
 use crate::gpu::Gpu;
-use crate::image::{Image, LAYER_FORMAT, Owner};
+use crate::image::{DEPTH_LAYER_FORMAT, Image, LAYER_FORMAT, Owner};
 use crate::mips::{Mips, Region};
 use crate::scene::Color;
 
@@ -32,6 +32,11 @@ const LIGHT_BYTES: u64 = 64;
 pub const MAX_SHADOW_MAPS: usize = 2;
 /// A shadow map's width and height, in pixels (ADR-0151 decision 3).
 pub const SHADOW_MAP_PX: u32 = 2048;
+/// Where a material's bind group holds the sampler of its normal, surface, occlusion and
+/// emissive maps, after its five textures.
+const DETAIL_SAMPLER_BINDING: u32 = 7;
+/// That sampler's anisotropy: the base colour's is 16.
+const DETAIL_ANISOTROPY: u16 = 4;
 /// Bytes of one shadow map's view in the frame uniform: four `vec4`.
 const SHADOW_BYTES: u64 = 64;
 /// Bytes of the environment in the frame uniform: six `vec4`.
@@ -614,6 +619,8 @@ pub(crate) struct ModelRuntime {
     /// Its depth, kept across the models drawn into one set of targets.
     surface_depth: Option<(u32, u32, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
+    /// The sampler of a material's normal, surface, occlusion and emissive maps.
+    detail_sampler: wgpu::Sampler,
     frame: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
     /// 1x1 stand-ins for a texture a material doesn't have: white for colour, occlusion
@@ -694,6 +701,12 @@ impl ModelRuntime {
                 texture_entry(4),
                 texture_entry(5),
                 texture_entry(6),
+                wgpu::BindGroupLayoutEntry {
+                    binding: DETAIL_SAMPLER_BINDING,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
         let pose_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -884,7 +897,7 @@ impl ModelRuntime {
                 entry_point: Some("fs_depth"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: LAYER_FORMAT,
+                    format: DEPTH_LAYER_FORMAT,
                     blend: Some(wgpu::BlendState {
                         color: largest,
                         alpha: largest,
@@ -959,6 +972,19 @@ impl ModelRuntime {
             anisotropy_clamp: 16,
             ..Default::default()
         });
+        // The maps that shape the light, not the picture: a quarter of the taps across a
+        // grazing surface, where their detail is lost in the shading anyway.
+        let detail_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("jstream-render-model-detail-sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            anisotropy_clamp: DETAIL_ANISOTROPY,
+            ..Default::default()
+        });
         let frame = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-model-frame"),
             size: FRAME_BYTES,
@@ -1013,6 +1039,7 @@ impl ModelRuntime {
             with_surface,
             surface_depth: None,
             sampler,
+            detail_sampler,
             frame,
             frame_bind,
             white,
@@ -1035,6 +1062,7 @@ impl ModelRuntime {
             material_layout: self.material_layout.clone(),
             pose_layout: self.pose_layout.clone(),
             sampler: self.sampler.clone(),
+            detail_sampler: self.detail_sampler.clone(),
             white: self.white.clone(),
             flat_normal: self.flat_normal.clone(),
         }
@@ -1055,6 +1083,7 @@ pub(crate) struct UploadKit {
     material_layout: wgpu::BindGroupLayout,
     pose_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    detail_sampler: wgpu::Sampler,
     white: wgpu::TextureView,
     flat_normal: wgpu::TextureView,
 }
@@ -1149,6 +1178,10 @@ impl UploadKit {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: DETAIL_SAMPLER_BINDING,
+                    resource: wgpu::BindingResource::Sampler(&self.detail_sampler),
                 },
             ];
             for (i, view) in views.iter().enumerate() {
@@ -1455,6 +1488,10 @@ impl ModelRuntime {
                         binding: 1,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: DETAIL_SAMPLER_BINDING,
+                        resource: wgpu::BindingResource::Sampler(&self.detail_sampler),
+                    },
                 ];
                 for (i, own) in m.views.iter().enumerate() {
                     entries.push(wgpu::BindGroupEntry {
@@ -1557,6 +1594,10 @@ impl ModelRuntime {
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::Sampler(&self.sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: DETAIL_SAMPLER_BINDING,
+                resource: wgpu::BindingResource::Sampler(&self.detail_sampler),
             },
         ];
         for (i, view) in views.iter().enumerate() {
@@ -2035,10 +2076,10 @@ impl ModelRuntime {
                 detail: "the model was uploaded by another compositor".into(),
             });
         }
-        let Some(view) = target.target().filter(|_| target.owner().is(owner)) else {
+        let Some(view) = target.depth_target().filter(|_| target.owner().is(owner)) else {
             return Err(RenderError::Invalid {
                 what: "layer",
-                detail: "the target is not a layer this compositor made".into(),
+                detail: "the target is not a depth layer this compositor made".into(),
             });
         };
         let Some(camera) = draw.camera else {

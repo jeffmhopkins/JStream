@@ -7459,7 +7459,7 @@ impl State {
                 self.channels.scene_live(program);
             }
         }
-        self.channels.tick(&self.graph, midi.as_deref(), data, now);
+        let settling = self.channels.tick(&self.graph, midi.as_deref(), data, now);
         let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
         if changed && self.refresh_shown() {
             self.redraw();
@@ -7504,12 +7504,16 @@ impl State {
             return None;
         }
         // ADR-0184 rule 7: about a frame at 60 fps while a lane plays, so a fade has no
-        // visible steps.
+        // visible steps; and ADR-0190: the same while a channel's value or a binding's
+        // setting is still moving (a control turned, its smoothing settling), so smoothed
+        // motion has none either.
         let timelines = &self.timelines;
         Some(
-            if self
-                .channels
-                .lanes_playing(|id| timelines.get(id).is_some())
+            if settling
+                || changed
+                || self
+                    .channels
+                    .lanes_playing(|id| timelines.get(id).is_some())
             {
                 std::time::Duration::from_micros(16_667)
             } else {

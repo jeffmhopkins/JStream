@@ -6597,7 +6597,7 @@ fn run_chains(
                 meter.gpu_unit_pass(compositor, &pass.scene);
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 if let Some(depth) = &pass.view_depth {
-                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                    cache.depth_layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
                 if pass.surface {
                     for key in surface_keys(&pass.scene) {
@@ -7081,7 +7081,7 @@ fn draw_model(
         (ChainOwner::Item(scene, item), Some(_)) => {
             let key = GpuKey::ModelDepth(scene.clone(), item.clone());
             let [width, height] = boxed.boxed.layer;
-            cache.layer(compositor, &key, width, height)?;
+            cache.depth_layer(compositor, &key, width, height)?;
             Some(key)
         }
         _ => None,
@@ -7195,7 +7195,7 @@ fn draw_model(
     }
 }
 
-/// Makes `layer` transparent all over.
+/// Makes `layer` transparent all over; a depth layer holds nothing (infinitely far).
 ///
 /// # Errors
 /// What the compositor reports for the pass.
@@ -7205,7 +7205,12 @@ fn clear(compositor: &mut Compositor, layer: &jstream_render::Image) -> Result<(
         what: "layer",
         detail: format!("a layer of {width}x{height}"),
     })?;
-    compositor.render_into(&scene(size, Color::TRANSPARENT, &[]), layer)
+    let empty = scene(size, Color::TRANSPARENT, &[]);
+    if layer.is_depth_layer() {
+        compositor.render_view_depth(&empty, layer)
+    } else {
+        compositor.render_into(&empty, layer)
+    }
 }
 
 /// What model `source`, as `shown`, shows on its surfaces and reflects this frame
@@ -7278,6 +7283,9 @@ fn light_scene(
         );
     }
     if receives && !shadowed.is_empty() && chains.shadows_of(scene_id).is_none() {
+        // The first model drawn draws the maps of every model that casts, so the
+        // models drawn after it this frame are made ready for that first.
+        ready_casting_models(compositor, (&mut *cache, &mut *chains), shot, scene_id);
         let maps = draw_shadows(
             compositor,
             (&mut *cache, &mut *chains),
@@ -7293,6 +7301,58 @@ fn light_scene(
         chains.drew_shadows(scene_id, maps);
     }
     (lights, shadowed)
+}
+
+/// Makes ready, for the shadow maps the first model drawn in scene `scene_id` draws
+/// this frame (ADR-0151 decision 3), every model the scene's pass shows: its upload
+/// ([`Chains::upload_model`]) and its layer, which [`depth_models`] reads its
+/// placement through. Without this a model drawn later in the frame, or not drawn
+/// before, casts no shadow in that frame: the first frame of a scene with two models
+/// would be lit as if only the first one drawn were there. An upload that fails or is
+/// still coming leaves its model out, as its own draw reports.
+fn ready_casting_models(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    shot: &Shot,
+    scene_id: &SceneId,
+) {
+    let Some(pass) = scene_pass(shot, scene_id) else {
+        return;
+    };
+    for layer in &pass.layers {
+        if !layer.boxed.is_some_and(|boxed| boxed.model) {
+            continue;
+        }
+        let GpuKey::ItemBox(scene, item) = &layer.image else {
+            continue;
+        };
+        let Some(boxed) = shot
+            .boxes
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))
+        else {
+            continue;
+        };
+        let SourceRef::Frame(source) = &boxed.source else {
+            continue;
+        };
+        let Some(shown) = shot
+            .frames
+            .get(source)
+            .and_then(|frame| frame.model.as_ref())
+        else {
+            continue;
+        };
+        if chains
+            .upload_model(compositor, source, &shown.model)
+            .is_err()
+        {
+            continue;
+        }
+        let [width, height] = boxed.boxed.layer;
+        if let Err(error) = cache.layer(compositor, &layer.image, width, height) {
+            tracing::debug!(%scene, %item, %error, "a model's layer isn't ready for the shadow maps");
+        }
+    }
 }
 
 /// The shadow maps drawn for scene `scene_id` this run, as a receiver reads them.
@@ -7428,7 +7488,7 @@ fn draw_shadows(
         .map(|slot| GpuKey::ShadowMap(scene_id.clone(), slot as u8))
         .collect();
     for key in &keys {
-        cache.layer(compositor, key, side, side)?;
+        cache.depth_layer(compositor, key, side, side)?;
     }
     let mut items = Vec::new();
     let Some(camera) = fill_items(
@@ -7616,7 +7676,7 @@ fn draw_reflection(
     let image_key = GpuKey::Reflection(pass.scene.clone());
     let depth_key = GpuKey::ReflectionDepth(pass.scene.clone());
     cache.layer(compositor, &image_key, width, height)?;
-    cache.layer(compositor, &depth_key, width, height)?;
+    cache.depth_layer(compositor, &depth_key, width, height)?;
     // Each model the pass shows, drawn through the mirrored camera, by the layer the
     // pass places for it.
     let size = [width as f32, height as f32];
@@ -8490,7 +8550,7 @@ pub(crate) fn claim_layers(
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 if let Some(depth) = &pass.view_depth {
-                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                    cache.depth_layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
             }
             ChainStep::Box(owner) => {
@@ -8505,7 +8565,7 @@ pub(crate) fn claim_layers(
                         height,
                     );
                     if boxed.boxed.model && boxed.camera.is_some() {
-                        let _ = cache.layer(
+                        let _ = cache.depth_layer(
                             compositor,
                             &GpuKey::ModelDepth(scene.clone(), item.clone()),
                             width,
@@ -8815,19 +8875,38 @@ fn draw_surface(
         return Ok(None);
     };
     let targets = [normal, brdf, reflected];
-    compositor.clear_surface(targets)?;
-    for drawn in depth_models(
+    // Only a model that reflects its scene has a surface: one that doesn't, in front, is
+    // nearer in the view depth, which the pass checks.
+    let models: Vec<_> = depth_models(
         (cache, chains),
         (shot, pass),
         (at, canvas, camera),
         live,
         false,
-    ) {
-        // Only a model that reflects its scene has a surface: one that doesn't, in front,
-        // is nearer in the view depth, which the pass checks.
-        if !(drawn.shown.lighting == Lighting::Scene && drawn.shown.reflections) {
-            continue;
+    )
+    .into_iter()
+    .filter(|drawn| drawn.shown.lighting == Lighting::Scene && drawn.shown.reflections)
+    .collect();
+    // One model alone, its surface drawn with its layer this frame at the buffer's size:
+    // merging it would copy it, so its own layers are the buffer.
+    if let [only] = models.as_slice() {
+        let (scene, item) = only.item;
+        let own = model_surface_keys(scene, item);
+        let fits = own
+            .each_ref()
+            .map(|key| cache.get(key))
+            .iter()
+            .all(|layer| {
+                layer.is_some_and(|layer| {
+                    (layer.width(), layer.height()) == (targets[0].width(), targets[0].height())
+                })
+            });
+        if fits && chains.surfaced.contains(&(scene.clone(), item.clone())) {
+            return Ok(Some(own));
         }
+    }
+    compositor.clear_surface(targets)?;
+    for drawn in models {
         // Its surface drawn with its layer this frame, merged; else drawn again here.
         let (scene, item) = drawn.item;
         let layers = model_surface_keys(scene, item).map(|key| cache.get(&key));

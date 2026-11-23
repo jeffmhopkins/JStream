@@ -1059,6 +1059,78 @@ fn render_into_refuses_a_bad_target() {
     ));
 }
 
+/// A depth layer has one channel, takes only the depth draws, and a colour layer takes
+/// none of them.
+#[test]
+fn a_depth_layer_takes_only_depth_draws() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let depth = opened.compositor.depth_layer(2, 2).expect("depth layer");
+    let colour = opened.compositor.layer(2, 2).expect("layer");
+    assert!(depth.is_depth_layer() && !colour.is_depth_layer());
+    assert_eq!(depth.texture().format(), wgpu::TextureFormat::R16Float);
+    let scene = Scene {
+        canvas: FrameSize::new(2, 2).expect("invariant: non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    opened
+        .compositor
+        .render_view_depth(&scene, &depth)
+        .expect("a depth layer takes a view depth");
+    opened
+        .compositor
+        .render_into(&scene, &colour)
+        .expect("a layer takes a scene");
+    assert!(matches!(
+        opened.compositor.render_view_depth(&scene, &colour),
+        Err(RenderError::Invalid { what: "layer", .. })
+    ));
+    assert!(matches!(
+        opened.compositor.render_into(&scene, &depth),
+        Err(RenderError::Invalid { what: "layer", .. })
+    ));
+    assert!(matches!(
+        opened.compositor.depth_layer(2, 0),
+        Err(RenderError::Invalid { what: "layer", .. })
+    ));
+}
+
+/// The cache keeps a depth layer by key while its size holds, and a key that held the
+/// other kind of layer gets a new texture of the kind asked for.
+#[test]
+fn the_cache_keeps_depth_layers_apart_from_layers() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let compositor = &opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    cache.begin_frame();
+    let first = cache
+        .depth_layer(compositor, &"depth", 2, 2)
+        .expect("depth layer")
+        .texture()
+        .clone();
+    let same = cache
+        .depth_layer(compositor, &"depth", 2, 2)
+        .expect("depth layer")
+        .texture()
+        .clone();
+    assert!(same == first);
+    let resized = cache
+        .depth_layer(compositor, &"depth", 4, 2)
+        .expect("depth layer");
+    assert!(resized.is_depth_layer() && resized.texture() != &first);
+    let colour = cache.layer(compositor, &"depth", 4, 2).expect("layer");
+    assert!(!colour.is_depth_layer());
+    let back = cache
+        .depth_layer(compositor, &"depth", 4, 2)
+        .expect("depth layer");
+    assert!(back.is_depth_layer());
+    drop(cache.end_frame(compositor));
+}
+
 /// Rewriting an upload keeps its texture and changes what it shows; a layer is refused.
 #[test]
 fn an_upload_is_rewritten_in_place() {

@@ -460,10 +460,13 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   follows each value binding's control or data field with the modifiers' readers and
   smoothing, and once its reading first differs from where it started, turns its mapped
   value into its target's setter edit (`jstream_graph::value_edit`). A `jstream-values`
-  thread ticks it about 30 times a second while the collection holds a binding, and when
+  thread ticks it about 30 times a second while the collection holds a binding (60 while
+  a value is still moving, [ADR-0190](../../docs/adr/0190-moving-values-tick-at-frame-pace.md)), and when
   those edits change the engine redraws and re-routes audio through the shown graph, on
   top of the open gestures' values ([Live values](#live-values)). A binding whose input
-  or range is unchanged across a batch keeps its follower; a missing target drives
+  or range is unchanged across a batch keeps its follower, as does one (or a channel's
+  input) whose input changed only its `smoothing_ms` (`same_but_smoothing`), which takes
+  the new time and goes on driving; a missing target drives
   nothing. A binding's `amount` scales its value toward `from` by a channel's level.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
@@ -1441,7 +1444,8 @@ the render parameter channel, never through the collection:
   moved control wins over a gesture on the same setting; through them `shown` also
   carries filter settings, faders and sends, which the mixer and the render snapshot
   follow as they follow a stored change. The `jstream-values` thread rebuilds it when
-  those edits change, at most about 30 times a second.
+  those edits change, at most about 30 times a second, or 60 while a value is moving
+  (ADR-0190).
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
@@ -1703,7 +1707,8 @@ preset changed in one batch that one undo takes back.
   timeline's lane already started from, so scrubbing never jumps); each `jstream-values` tick moves
   every playing timeline's lanes to its position on the animation clock (`lanes_at`)
   before the channels tick, and an end sets each lane's last point. The values thread
-  ticks every 16.7 ms while a lane drives a channel. See *Channels* in
+  ticks every 16.7 ms while a lane drives a channel, and while a channel's value or a
+  binding's setting is still moving ([ADR-0190](../../docs/adr/0190-moving-values-tick-at-frame-pace.md)). See *Channels* in
   [Contents: motion](#contents-motion).
 - **Triggers and waits** (`sequences.rs`): `Sequences` keeps the timelines waiting on a
   `delay_ms`, which the values tick plays when due, credited to the engine, and the
@@ -2202,7 +2207,9 @@ crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetri
 `floor_reflection`, `depth_bloom` and the screen-space reflections the engine adds, below)
 also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
-planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
+planning gives its composite's pass a `GpuKey::ViewDepth` depth layer
+(`ResourceCache::depth_layer`: one channel, as every view depth, model depth and shadow
+map the engine keeps is), and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
 each model it shows at least half opaque, whether the pass places
 the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
@@ -2233,7 +2240,7 @@ depth, `draw_reflection` draws the scene through the camera mirrored in the floo
 down, `a_camera_mirrors_in_the_floor`) into a `GpuKey::Reflection` layer, each model it
 shows drawn again through that camera into its `GpuKey::ReflectedModel`, lit as it is
 but unshadowed, in place of its layer, and items without a camera left out; then that
-picture's view depth into `GpuKey::ReflectionDepth` (`draw_view_depth` through the
+picture's view depth into the depth layer `GpuKey::ReflectionDepth` (`draw_view_depth` through the
 mirrored camera, every model included). The pass is cut at the floor, since the mirrored
 camera looks up at it from below and the floor would hide everything on it: each model
 is drawn with `ModelDraw::floor`, so nothing of it at or below the plane is drawn or
@@ -2372,7 +2379,7 @@ Shadows ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decisio
 by index with their softness (`Chains::shadowed`). The first `scene`-lit model of a run
 that receives shadows (`ShownModel::receives_shadows`) in a scene with any draws that
 scene's maps (`draw_shadows`): for each of the first 2 such lights, a
-`GpuKey::ShadowMap` layer of 2048² holding the view depth of the scene's pass (found
+`GpuKey::ShadowMap` depth layer of 2048² holding the view depth of the scene's pass (found
 among the chains', the program's and the mixes' passes, `scene_pass`) seen from the
 light, its cards through `render_view_depth` and its models through `draw_view_depth`'s
 model loop, leaving out a model whose source doesn't cast (`casts_shadows`) and a card
@@ -2381,7 +2388,10 @@ with the `additive` or `screen` blend, which only adds light (`casts_shadow`,
 light looks from where it is along its aim, through its cone and a tenth more; a
 directional light from far back along its aim, at the sphere around what the pass places
 (`caster_bounds`), through a 30° view that holds it, which stands in for an orthographic
-view. More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
+view. Before drawing them it makes every model the pass shows ready to cast
+(`ready_casting_models`: its upload and its layer), so a model drawn after the first, or
+not yet drawn by this compositor, casts in that frame too
+(`the_first_frame_shadows_with_every_model`). More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
 the maps for that run (`shadows_of`), and every receiving model of the scene draws with
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).
@@ -2429,7 +2439,10 @@ draws a view depth. Such a chain reads the scene's surface buffer too
 (`Chain::reads_surface`, `Pass::surface`). Each model item in such a scene that
 reflects it (`scene`-lit, its source's `reflections` on) draws its surface with its layer, into three `GpuKey::ModelSurface` layers of its layer's size
 (`Compositor::draw_model_with_surface`, noted in `Chains::surfaced` for the frame), so
-it is shaded once. After the view depth, `draw_surface` clears the scene's three
+it is shaded once. After the view depth, `draw_surface` hands the pass those layers
+themselves when one model alone reflects the scene and drew them this frame at the
+buffer's size, since a merge would only copy them
+([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)). Otherwise it clears the scene's three
 `GpuKey::Surface` layers and merges each reflecting model the view depth holds into them
 (`Compositor::merge_model_surface`); a model whose layer drew no surface this frame is
 drawn into them again through the scene's camera with the scene's lights, sky and probe

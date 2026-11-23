@@ -81,7 +81,7 @@ and calls this crate.
   aberrated (a shift in log-tan by the rapidity of `warp` × 0.9 of light's speed) and
   Doppler shifted (bluer and brighter ahead, redder and dimmer behind, leaning cool),
   over a blue background-radiation glow ahead (`radiation`). While the warp is
-  `dropping` (0 to 1, easing out as it nears a cruise) the deep sky returns early, squeezed ahead, and zooms back out to its
+  `dropping` (0 to 1, easing out over the last 0.15 toward its setting, [ADR-0186](../../docs/adr/0186-the-sky-eases-out-of-warp-toward-rest.md)) the deep sky returns early, squeezed ahead, and zooms back out to its
   place; `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
   about 0.6 px wide. Up to `MAX_SKY_PICTURES` (4) `SkyPicture`s are drawn over all of
@@ -114,8 +114,16 @@ and calls this crate.
   anything stays transparent. A face of another size, or a target that isn't four by
   two of them, is refused. The pipeline is made on the first resample.
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
-  draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
-  nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
+  draws a scene's depth into a canvas-sized depth layer, red holding `1 / w` (`f / D`) of the
+  nearest thing and 0 where nothing is. A **depth layer** (`Compositor::depth_layer`,
+  `ResourceCache::depth_layer`) is a layer of one channel (`R16Float`, the half float a
+  colour layer's red held, at a quarter of its memory): a view depth, a model's own depth
+  and a shadow map are each one. Only `render_view_depth` and `draw_model_depth` draw
+  into one, and they draw into nothing else: a depth draw given a colour layer, or any
+  other draw given a depth layer, is `RenderError::Invalid`. It is read as any image
+  (green and blue read 0 and alpha 1, which no reader uses). A depth layer whose content
+  is known is emptied only there before the scene's cards are drawn, as a colour layer is
+  (#1449), and afterwards its content is the cards' reach. It reuses the composite's prepared vertices and
   mips, drawing each visible card seen through a camera with `fs_depth`
   (`composite.wgsl`), which discards where the sampled alpha times opacity times the
   sharp edge coverage is under one half; the pipeline blends with `Max`, so the
@@ -179,7 +187,7 @@ and calls this crate.
   (from `layer`). The depth bound and cycle handling are the caller's
   ([jstream-core › Snapshots](../jstream-core/README.md#design)).
 - `ResourceCache` keeps what a caller draws every frame (uploads, imports of GPU
-  frames, and layers), keyed by the caller's IDs, so a frame that shows what the last
+  frames, layers and depth layers), keyed by the caller's IDs, so a frame that shows what the last
   one showed allocates no texture. `upload_drawn`, on a cache that
   `draw_uploads_small` allows it, holds an upload only items draw at the size they draw
   it, not its frame's (#1139). An import keeps its frame's `FrameSync` hold only
@@ -560,7 +568,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    bounded filter's reach past its input's, or unknown ([Filters](#filters)).
    `draw_model` sets its layer's too: the box, on the layer, of the eight corners of
    the model's bounds (`drawn_box`, a texel of margin), and `draw_model_depth` adds
-   that box to what its target held. So a small model's layer, its depth and its
+   that box to what its target held, which `render_view_depth` set to its cards' reach
+   (nothing, for the empty scene that clears a model's depth). So a small model's layer, its depth and its
    effects cost the model's box, not the canvas. A rigged model, whose pose can leave
    its bounds, and a model whose bounds reach behind the viewer have no box and are
    drawn whole (`a_models_layer_is_bounded_by_its_models_box`). A scene placing the layer as a 2D item
@@ -653,6 +662,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
+| `depth_layer` texture (`R16Float`) and its render-target view | The returned `Image`; `render_view_depth` and `draw_model_depth` reuse it |
 | Model pipelines (depth prepass, opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Sky pipelines (the frame's and the bright stars' table's), sampler, 1x1 stand-in picture, and the star table (281 by 64 `R32Uint`) with its 1x1 stand-in | Compositor, made on its first `draw_sky` or by `warm_3d`; a uniform and one or two bind groups per sky drawn (none for a call whose layer already holds the sky); the table rewritten by each draw of a sky with stars |
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
@@ -673,7 +683,9 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 image it draws, its passes, then `end_frame`. `upload` keyed by an ID reuses the entry when the
 caller's version and the size are unchanged, rewrites the same texture for a new
 version, and makes a new texture (retiring the old one) for a new size; `layer` reuses
-a layer of the same size. `end_frame` retires every entry the frame did not use (but one `keep_while` keeps),
+a layer of the same size, and `depth_layer` a depth layer of the same size, each making
+its own kind anew where the key held the other
+(`the_cache_keeps_depth_layers_apart_from_layers`). `end_frame` retires every entry the frame did not use (but one `keep_while` keeps),
 registers `Queue::on_submitted_work_done` for the frame (the frame fence: it records
 the newest finished frame in an atomic), polls the device once without blocking, and
 returns the retired images whose last frame has finished. A steady frame allocates
@@ -796,8 +808,8 @@ its layer is drawn instead.
 
 **Depth of field on models** ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
 When a `ModelDraw`'s camera has a focus, `draw_model` draws the model and its view depth
-(`1 / w`, as `draw_model_depth` draws it over a cleared layer) into two layers the
-compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
+(`1 / w`, as `draw_model_depth` draws it over a cleared depth layer) into a layer and a
+depth layer the compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
 the filter runtime, as an internal filter no chain can hold. Its five passes, sharing
 `focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl` takes the
 largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose radius
@@ -876,7 +888,9 @@ under the studio rig, fixed to the viewing frame, or unlit.
 the base-colour texture of the material it names (by its glTF name), or of every
 material, with another image: `draw_model` samples it through a mip chain of the whole
 image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
-image changed), bound with the material's own repeating anisotropic sampler, and the
+image changed), bound with the material's own repeating anisotropic sampler (16× for the
+base colour; the normal, surface, occlusion and emissive maps are read through a second
+sampler at 4×, binding 7, [ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)), and the
 material's uniform marks it a premultiplied linear picture (`card.y`), which the shader
 divides by its alpha before multiplying. The material bind groups that carry it are
 kept on the `GpuModel` while the chain's texture and the material stay the same, so a
@@ -921,8 +935,8 @@ own, which is driven the same way
 3). `ModelDraw::shadows` holds up to `MAX_SHADOW_MAPS` (2) `ShadowMap`s: which of the
 lights casts it, the map, the light's view (`SceneCamera`) it was drawn through, and its
 softness. A map is a view depth drawn from the light, as `render_view_depth` draws cards
-and `draw_model_depth` draws models, into a square layer (`SHADOW_MAP_PX`, 2048, as the
-engine draws them), so its red is `1 / w` of the caster nearest the light. The draw
+and `draw_model_depth` draws models, into a square depth layer (`SHADOW_MAP_PX`, 2048, as
+the engine draws them: 8 MB a map), so its red is `1 / w` of the caster nearest the light. The draw
 takes each map's view into the model's viewing frame (`shadow_view`: the light's
 position and axes through `in_view` and `direction_in_view`, its focal length and
 principal point, and a filter radius of 0.75 to 12 map pixels by softness) after the
@@ -932,7 +946,9 @@ a steady frame makes none). A map whose light isn't packed, or of another compos
 left out. `visibility` in `model.wgsl` pushes the fragment off its surface by a map
 pixel's size there, projects it into the light's view, and counts 12 disc samples,
 rotated per pixel, whose stored `1 / w` isn't nearer the light than the fragment's by
-more than 0.2%; outside the map is lit. A shadowed light's light is scaled by that share
+more than 0.2%; outside the map is lit. It reads the disc's middle and four points of
+its rim first, and where those five agree, away from a shadow's edge, they answer for
+the disc ([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)). A shadowed light's light is scaled by that share
 (`golden_model_a_shadow_map_shadows_a_scene_lit_model`, a cube's and a card's map).
 
 **Environment** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
@@ -954,7 +970,11 @@ filters' `to_premul_linear` from `filter/colour.wgsl`, which the model shader is
 with, so a page painted as premultiplied sRGB code values reads as an upload of the same
 colour does, `golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a
 ring of 8 taps around the direction for a spread: the reflection at the square of the
-roughness, the diffuse light at 1. `draw_model` and `light_card` read a sky picture of
+roughness. The diffuse light is one read (`sky_matte`) a level above the one a spread of
+1 reads, where a filtered texel spans about what that ring's nine reads did
+([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)); a gradient has no reads to save. Where the fragment is wholly its probe's and the capture saw
+something all along the ray (its alpha at least 0.999, `probe_covers`), the sky's
+reflection would be multiplied by nothing and is not read. `draw_model` and `light_card` read a sky picture of
 this compositor through a mip chain of its whole picture (`Panoramas`, built as a live
 texture's is and rebuilt only when the picture changed, premultiplied linear, so the
 uniform's mode then says so), and a spread reads the level whose texels are about as
@@ -1501,20 +1521,24 @@ it out; `filter::testing` reads both lists.
   decision 5, `depth/occlusion.rs`): `radius_px` (1 to 2000, default 48), `strength`
   (0 to 2, default 1), `color` (default black) and `quality` (`low`, 8 samples a pixel,
   the default, or `high`, 16). Two draws. The first (`occlusion/sample.wgsl`) reads only
-  the depth: it rebuilds each pixel's point `((px − c) D / f, D)` about the canvas
+  the depth, and is drawn at half the picture's width and height, rounded up
+  ([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)): each texel samples for one pixel of its block of two by two (`chosen`, one corner and
+  the other on every other texel). It rebuilds that pixel's point `((px − c) D / f, D)` about the canvas
   centre, its normal from neighbours two pixels away (each side the one nearer in
   depth, so an edge doesn't bend it), and counts the hemisphere samples about the
-  normal, rotated per pixel by a 4 × 4 ordered pattern, that land behind a nearer
+  normal, rotated per texel by a 4 × 4 ordered pattern, that land behind a nearer
   depth by more than a small bias, faded where that occluder is far past the radius.
   The samples' points and the pattern's 16 rotations are made once on the CPU and
   handed in the uniform (`kernel`, `sample_uniforms`), so no pixel works out a sine and
   a cosine per sample.
   It writes the share and the pixel's `1 / w` into a scratch layer. The second
-  (`occlusion/apply.wgsl`) averages the share over the 4 × 4 tile, keeping to pixels
-  within 1% of the distance (or a quarter of the radius), and lays
+  (`occlusion/apply.wgsl`, through `Ctx::draw_program` for its three textures: the
+  picture, the shares and the view depth) averages the share over the 4 × 4 texels
+  around the pixel, keeping to those whose pixel is
+  within 1% of the pixel's own distance (or a quarter of the radius), and lays
   `c · (1 − k) + color · c.alpha · k`, `k = share · strength` at most 1, so alpha is
-  kept. Where nothing was drawn, at no strength, and without a matching depth, it
-  copies its input.
+  kept. Where nothing was drawn, where no texel near is as far, at no strength, and
+  without a matching depth, it leaves its input.
 - `depth_bloom` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 8, `depth/bloom.rs`): `threshold` (0 to 4 of linear luma, default 0.8),
   `strength` (0 to 4, default 1), `radius_px` (0 to 100, default 24, its outset),
@@ -1560,24 +1584,36 @@ it out; `filter::testing` reads both lists.
   `jstream_protocol::SCREEN_SPACE_STEPS`, default 16; another count takes the one
   below). It reads `ViewDepth::surface` too (`DepthSurface`, which
   `video_filter_reads_surface(kind)` asks the engine for), the scene's surface buffer
-  (see Design). One draw (`screen/screen.wgsl`, through
-  `Ctx::draw_program` for its five textures) leaves a pixel as it is unless its surface
+  (see Design). It is two draws, each through `Ctx::draw_program`
+  ([ADR-0189](../../docs/adr/0189-screen-space-reflections-march-at-half-size.md)).
+  **The march** (`screen/trace.wgsl`, five textures) is drawn into a scratch layer half
+  the picture's width and height, rounded up. Each texel stands for a block of two by
+  two pixels and marches one of them (`chosen`): one corner of the block, the other
+  corner on every other texel. It writes nothing unless that pixel's surface
   is marked replaceable, rougher than 0.6 is not, and nothing nearer covers it (the view
   depth there more than 0.2% nearer than the surface's own `1 / w`: a card in front).
   It rebuilds the pixel's point and view direction in the viewing frame from the
   surface's `1 / w`, reflects the view about the normal, and follows the ray across the
   screen from its point to as far again as the point is, cut at the frame's edges and
-  short of the viewer's plane, in `steps` steps from a per-pixel offset, `1 / w`
+  short of the viewer's plane, in `steps` steps from a per-texel offset, `1 / w`
   running linearly along its image. The first step that is behind the view depth there
-  by less than one and a half steps' depth is a hit, and five halvings refine it. What
-  the picture shows there, over a disc of 12 taps as wide as the ray travelled times
-  the roughness squared (at most 32 px), its luma capped at 8, replaces the
-  environment's reflection the surface added: `c + k (hit · brdf − hit.a · reflected)`,
-  `k` falling to 0 within 8% of the frame's shorter side of an edge, by half toward the
-  hit's thickness, for rays turned toward the viewer, and from roughness 0.4 to 0.6.
-  Without a view, a surface buffer or images of the input's size it copies its input
-  (`a_floor_reflects_the_wall_behind_it`,
-  `a_hit_replaces_the_environments_reflection`).
+  by less than one and a half steps' depth is a hit, and five halvings refine it. It
+  writes what the picture shows there, over a disc of 12 taps as wide as the ray
+  travelled times the roughness squared (at most 32 px), its luma capped at 8, times
+  `k`, premultiplied: `k` falls to 0 within 8% of the frame's shorter side of an edge,
+  by half toward the hit's thickness, for rays turned toward the viewer, and from
+  roughness 0.4 to 0.6. **The resolve** (`screen/resolve.wgsl`, those five textures and
+  the march) is drawn at the picture's size. It leaves a pixel as it is by the march's
+  own three tests. Any other takes the marched pixels of the four nearest blocks, each
+  weighed by how near it is on screen (falling to nothing three pixels away on either
+  axis), by how close its point lies to the pixel's own plane (nothing at 2% of the
+  pixel's distance off it), and by the fourth power of the cosine between the normals;
+  their weighted mean `m` replaces the environment's reflection the surface added,
+  `c + m.rgb · brdf − m.a · reflected`. With no weight at all the pixel is left as it
+  is. Without a view, a surface buffer or images of the input's size the pass copies
+  its input (`a_floor_reflects_the_wall_behind_it`,
+  `a_hit_replaces_the_environments_reflection`,
+  `the_march_is_half_the_size_and_keeps_to_its_surface`).
 - `volumetric_fog` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 6, `depth/volumetric.rs`): `color` (with alpha, default `#c8ccd2ff`),
   `density` (0 to 20 per 1000 px, default 0.5), `base_y_px` (default 1080) and
@@ -1712,7 +1748,9 @@ a focal length back seen half as far from the middle; a card at 0.4 opacity or h
 writes no depth and one at 0.6 does; a scene with no camera writes nothing; and a
 cube's own front face, through `draw_model_depth`, is nearer than the card behind it,
 and the same when its layer carries that depth and the cube isn't drawn there
-(`golden_view_depth_takes_the_depth_a_models_layer_carries`).
+(`golden_view_depth_takes_the_depth_a_models_layer_carries`). A depth layer is one
+channel and takes only the depth draws, which a colour layer refuses
+(`a_depth_layer_takes_only_depth_draws`).
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1
