@@ -4131,6 +4131,41 @@ impl Shot {
         frame.model.is_none() && !self.chains.values().any(|chain| chain.input == *key)
     }
 
+    /// How much of the resolution of `spec`'s capture, whose frames are `size`, its
+    /// placements need: how much it is enlarged where it is shown most, over every pass,
+    /// the program's and the video mixes', and every item whose effects draw it, as
+    /// [`Self::scales`] measures a source's frame (0 when none places it). Its upload is
+    /// held at the size its items draw it with that as the planned need
+    /// ([`ResourceCache::upload_frame_drawn`], #1139). `None` when something reads its
+    /// texels as they are, so it is uploaded whole: a video chain, whose filters work in
+    /// the frame's own texels, or a model that shows it on a surface or reflects it.
+    fn capture_need(&self, spec: &CaptureKey, size: FrameSize) -> Option<f32> {
+        let key = GpuKey::Capture(spec.clone());
+        let mapped = self
+            .maps
+            .values()
+            .flat_map(|maps| [&maps.texture, &maps.reflection])
+            .flatten()
+            .any(|map| matches!(map, SourceRef::Capture(shown) if shown == spec));
+        if mapped || self.chains.values().any(|chain| chain.input == key) {
+            return None;
+        }
+        let extent = [size.width(), size.height()];
+        let layers = self
+            .passes
+            .iter()
+            .chain(self.mix_passes.values().flatten())
+            .flat_map(|pass| &pass.layers)
+            .filter(|layer| layer.image == key)
+            .map(|layer| magnification(layer.placement, layer.crop, extent));
+        let boxes = self
+            .boxes
+            .values()
+            .filter(|boxed| matches!(&boxed.source, SourceRef::Capture(shown) if shown == spec))
+            .map(|boxed| magnification(boxed.placement, boxed.crop, extent));
+        Some(layers.chain(boxes).fold(0.0, f32::max))
+    }
+
     /// How much each source whose frame a layer draws is enlarged where it is shown
     /// most, in canvas pixels per pixel of the frame's extent: what its source should
     /// draw at to stay sharp (ADR-0073). It is measured on every pass, the program's and
@@ -6110,9 +6145,15 @@ pub(crate) fn compose_metered(
                 size.height(),
                 rgba,
             )?,
-            CaptureImage::Cpu(frame) => {
-                cache.upload_frame(compositor, &key, capture.version, frame)?
-            }
+            // Held at the size its items draw it, unless something reads its texels as
+            // they are (#1139): a webcam shown small is converted straight into the
+            // texels it is drawn with.
+            CaptureImage::Cpu(frame) => match shot.capture_need(spec, frame.info().size) {
+                Some(planned) => {
+                    cache.upload_frame_drawn(compositor, &key, capture.version, frame, planned)?
+                }
+                None => cache.upload_frame(compositor, &key, capture.version, frame)?,
+            },
             // Opaque, as the CPU path ignores a capture's alpha (#451).
             CaptureImage::Gpu(frame) => cache.import_opaque(compositor, &key, frame)?,
         };
@@ -10767,6 +10808,70 @@ pub(crate) mod tests {
             },
         );
         assert!(!drawn.drawn_only(&key, &frame), "a chain reads its texels");
+    }
+
+    /// A capture's CPU frame only items draw is held at the size they draw it, from its
+    /// first upload, and still shows its colour (#1139): a webcam shown as a small
+    /// picture never fills a texture of its frame's size. One a video chain reads is
+    /// uploaded whole.
+    #[test]
+    fn a_capture_drawn_small_is_uploaded_small() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let size = FrameSize::new(1920, 1080).expect("invariant: non-zero");
+        let info = jstream_media::VideoFrameInfo {
+            size: FrameSize::new(1024, 512).expect("invariant: non-zero"),
+            format: jstream_media::PixelFormat::Rgba8,
+            color: jstream_media::ColorInfo::default(),
+            pts: zero(),
+        };
+        let rgba = std::iter::repeat_n(GREEN, 1024 * 512).flatten().collect();
+        let camera =
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 1024 * 4)])
+                .expect("invariant: a packed frame");
+        let capture = CaptureFrame {
+            version: 1,
+            image: CaptureImage::Cpu(&camera),
+        };
+        // A 1024x512 frame in a 128x64 box: an eighth each way, held at a quarter.
+        let small = Placement::Geometry(jstream_protocol::ItemGeometry {
+            size: jstream_protocol::Size::try_new(128.0, 64.0).expect("positive"),
+            ..jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+        });
+        let mut drawn = shot(vec![(
+            "program",
+            vec![fill("red"), placed(primary(), small)],
+        )]);
+        let spec = CaptureKey::primary();
+        let key = GpuKey::Capture(spec.clone());
+        assert_eq!(drawn.capture_need(&spec, info.size), Some(0.125));
+        for _ in 0..2 {
+            let out = frame_at(&mut compositor, &mut cache, &drawn, Some(&capture), size);
+            assert_eq!(out.pixel(960, 540), Some(GREEN), "the capture's centre");
+            let image = cache.get(&key).expect("uploaded");
+            assert_eq!(
+                (image.width(), image.height(), image.extent()),
+                (256, 128, (1024, 512))
+            );
+        }
+        drawn.chains.insert(
+            ChainOwner::Source(SourceId::new("camera")),
+            Chain {
+                input: key.clone(),
+                filters: Vec::new(),
+                pad: None,
+            },
+        );
+        assert_eq!(
+            drawn.capture_need(&spec, info.size),
+            None,
+            "a chain reads its texels"
+        );
+        frame_at(&mut compositor, &mut cache, &drawn, Some(&capture), size);
+        let image = cache.get(&key).expect("uploaded");
+        assert_eq!((image.width(), image.height()), (1024, 512));
     }
 
     /// A still image's pixels are let go of once the program stage has uploaded them,

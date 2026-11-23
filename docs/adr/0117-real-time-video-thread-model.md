@@ -108,7 +108,9 @@ Still images and painted sources (text, timers, scopes) are uploaded once per ch
 the size they are drawn, with headroom as [ADR-0073](0073-sources-drawn-at-their-shown-size.md) does, and the
 decoded CPU copy is dropped once the upload is done, keeping the file to reload from
 (#1139). Their textures stay premultiplied linear `Rgba16Float`, so edges blend as they do
-now.
+now. A capture's CPU frame (a webcam's, or a display's off the GPU path) that only items
+draw is converted into a texture of the size it is drawn too, so a camera shown as a
+small picture never fills a texture of its frame's size.
 
 ### 3. Frames leave the control plane
 A new frame no longer re-plans. The render snapshot names each source's frame slot, and the

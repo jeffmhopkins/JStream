@@ -1195,12 +1195,25 @@ impl Compositor {
         errors.close(image::upload_frame(&self.maker(), frame))
     }
 
-    /// Refills `image`, an upload this compositor made at `frame`'s size, with `frame`
-    /// as [`Self::upload_frame`] reads it, without allocating a texture.
+    /// [`Self::upload_frame`] into a texture of `to` texels, smaller than the frame each
+    /// way or its size, placed at the frame's size: each texel is the mean of the
+    /// frame's texels under it, in premultiplied linear light (#1139).
+    pub(crate) fn upload_frame_into(
+        &self,
+        frame: &jstream_media::VideoFrame,
+        to: (u32, u32),
+    ) -> Result<Image, RenderError> {
+        let errors = self.errors();
+        errors.close(image::upload_frame_into(&self.maker(), frame, to))
+    }
+
+    /// Refills `image`, an upload this compositor made of a frame of `frame`'s size
+    /// (whole, or held smaller), with `frame` as [`Self::upload_frame`] reads it, without
+    /// allocating a texture.
     ///
     /// # Errors
     /// As for [`Self::upload_frame`], and [`RenderError::Invalid`] when `image` is not
-    /// an upload this compositor made at the frame's size.
+    /// an upload this compositor made of a frame of that size.
     pub fn rewrite_frame(
         &self,
         image: &Image,

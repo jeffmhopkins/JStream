@@ -1916,7 +1916,11 @@ allocates no texture. A source's frame that no video chain reads and no model st
 the preview's caches (`draw_uploads_small`) hold it at the size its items draw it, never
 under what `Shot::scales` plans for it over every mix (so a mix that isn't due on a
 tick, and only claims its layers, doesn't let it shrink), and its first upload at that
-plan, so a 1080p still in a small box keeps a small texture (#1139). The snapshot thread's cache draws every upload whole. A still image's frame (`Pixels::Still`, from a source whose
+plan, so a 1080p still in a small box keeps a small texture (#1139). A capture's CPU frame is held the same way
+(`ResourceCache::upload_frame_drawn`) when `Shot::capture_need` gives its planned need: how much its placements enlarge it
+over every mix and every item whose effects draw it. It gives none, and the frame is uploaded whole, when a video chain reads
+the capture or a model shows or reflects it. So a 1080p webcam shown as a small picture is converted straight into the
+texels it is drawn with. The snapshot thread's cache draws every upload whole. A still image's frame (`Pixels::Still`, from a source whose
 `Source::still` is `Some`) is uploaded through `upload_if_needed` and
 `upload_drawn_if_needed`, which read its pixels only when the cache has to upload:
 `still::ShownStill` holds them while a draw may need them, and the `jstream-stills`
@@ -3909,7 +3913,8 @@ frame's hold only to the frame that draws it, so a held capture slot is the fram
 screen and nothing more. On the CPU path it keeps each capture's newest frame as it
 arrived (packed RGBA or BGRA, or NV12, which Windows' capture delivers), checking only
 that its rows are long enough, and the compositor uploads it with
-`ResourceCache::upload_frame`, which converts it on the GPU with its frame's matrix and
+`ResourceCache::upload_frame` (or `upload_frame_drawn`, at the size its items draw it,
+when only items draw it: see [Snapshots](#snapshots)), which converts it on the GPU with its frame's matrix and
 range ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §2), opaque: alpha
 is 1 on every pixel, as the GPU path reads a capture's (#451). The render thread copies
 the bytes into a buffer and converts no pixel; only what the program mix shows is

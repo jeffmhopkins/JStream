@@ -1242,6 +1242,102 @@ fn the_cache_holds_an_upload_at_the_size_it_is_drawn() {
     );
 }
 
+/// A 512² NV12 frame (BT.709, limited range) of one grey: `luma` everywhere.
+fn grey_nv12(luma: u8) -> jstream_media::VideoFrame {
+    let info = VideoFrameInfo {
+        size: FrameSize::new(512, 512).expect("a size"),
+        format: PixelFormat::Nv12,
+        color: ColorInfo {
+            space: jstream_media::ColorSpace::Bt709,
+            range: jstream_media::ColorRange::Limited,
+        },
+        pts: MediaTime::new(0, Timebase::new(1, 1000).expect("a timebase")),
+    };
+    let planes = vec![
+        jstream_media::Plane::new(vec![luma; 512 * 512], 512),
+        jstream_media::Plane::new(vec![128; 512 * 256], 512),
+    ];
+    jstream_media::VideoFrame::new(info, planes).expect("a frame")
+}
+
+/// A capture's CPU frame only items draw is held at the size they drew it at the frame
+/// before, as an upload of packed pixels is (#1139): whole at first, a quarter each way
+/// once drawn at an eighth, and a new frame is converted straight into that small
+/// texture, so a webcam shown small never fills a texture of its frame's size. It is
+/// placed at its frame's size throughout and shows the frame's colour. A new entry
+/// starts at the size its placement was planned to need, and a whole upload under the
+/// key ([`ResourceCache::upload_frame`], for a frame a video chain reads) makes it whole
+/// again.
+#[test]
+fn the_cache_holds_a_video_frame_at_the_size_it_is_drawn() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    cache.draw_uploads_small(true);
+    let (white, black) = (grey_nv12(235), grey_nv12(16));
+    let frame = |cache: &mut ResourceCache<&str>,
+                 compositor: &mut Compositor,
+                 (version, video): (u64, &jstream_media::VideoFrame),
+                 side| {
+        cache.begin_frame();
+        let image = cache
+            .upload_frame_drawn(compositor, &"camera", version, video, 0.0)
+            .expect("uploads")
+            .clone();
+        let centre = draw_square(compositor, &image, side, false);
+        drop(cache.end_frame(compositor));
+        (
+            (image.width(), image.height()),
+            image.extent(),
+            centre,
+            image.texture().clone(),
+        )
+    };
+    let (size, extent, centre, _) = frame(&mut cache, compositor, (1, &white), 64.0);
+    assert_eq!((size, extent), ((512, 512), (512, 512)), "whole at first");
+    assert_eq!(centre, [255, 255, 255, 255]);
+    let (size, extent, centre, small) = frame(&mut cache, compositor, (2, &white), 64.0);
+    assert_eq!(
+        (size, extent),
+        ((128, 128), (512, 512)),
+        "a quarter once drawn at an eighth"
+    );
+    assert_eq!(centre, [255, 255, 255, 255]);
+    // A new frame is converted into the small texture in place.
+    let (size, _, centre, rewritten) = frame(&mut cache, compositor, (3, &black), 80.0);
+    assert!(size == (128, 128) && rewritten == small);
+    assert_eq!(centre, [0, 0, 0, 255]);
+    let (size, _, _, _) = frame(&mut cache, compositor, (4, &white), 400.0);
+    assert_eq!(size, (128, 128), "this frame still draws what it held");
+    let (size, _, centre, _) = frame(&mut cache, compositor, (5, &white), 400.0);
+    assert_eq!(size, (512, 512), "whole again once drawn large");
+    assert_eq!(centre, [255, 255, 255, 255]);
+    // A new entry starts at what its placement was planned to need.
+    cache.begin_frame();
+    let planned = cache
+        .upload_frame_drawn(compositor, &"planned", 1, &white, 0.1)
+        .expect("uploads");
+    assert_eq!(
+        (planned.width(), planned.height(), planned.extent()),
+        (64, 64, (512, 512))
+    );
+    // Held small; a whole upload under the key is made again, not refilled.
+    let whole = cache
+        .upload_frame(compositor, &"planned", 2, &white)
+        .expect("a new upload");
+    assert_eq!((whole.width(), whole.height()), (512, 512));
+    drop(cache.end_frame(compositor));
+    // Without `draw_uploads_small` every frame is whole.
+    let mut plain: ResourceCache<&str> = ResourceCache::new();
+    plain.begin_frame();
+    let image = plain
+        .upload_frame_drawn(compositor, &"camera", 1, &white, 0.1)
+        .expect("uploads");
+    assert_eq!((image.width(), image.height()), (512, 512));
+}
+
 /// One still shown small on every tick and large in a mix drawn only every other tick
 /// keeps its size when the caller plans for both: a tick the large mix doesn't draw must
 /// not shrink what it shows next. Without the plan the size follows the last tick's
