@@ -57,7 +57,8 @@ and calls this crate.
   the model is placed on the extent's canvas and the layer holds the same picture, less sharp.
   The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
-  at the model's centre. A model nothing reads the layer of is shaded in its scene's
+  at the model's centre. A model nothing reads the layer of, drawn with the canvas's
+  pixels, is shaded in its scene's
   pass instead ([ADR-0191](../../docs/adr/0191-a-model-is-drawn-in-its-scenes-pass.md)):
   `Compositor::prepare_model` makes the same draw ready without drawing it (a
   `PreparedModel`), and the item that would place the layer carries it (`Item::model`),

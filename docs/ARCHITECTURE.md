@@ -1457,7 +1457,7 @@ only that part of it in the modes a transparent texel leaves unchanged (#1070), 
 group of a few small items doesn't shade the whole canvas twice. A model's layer is
 bounded the same way, by the box of its model's bounds on the canvas. A model whose
 layer nothing has to read (no effects, fully opaque in the normal blend, no depth of
-field, one pass showing it) has no layer drawn at all: its scene's pass shades it in
+field, drawn with the canvas's pixels, one pass showing it) has no layer drawn at all: its scene's pass shades it in
 place ([ADR-0191](adr/0191-a-model-is-drawn-in-its-scenes-pass.md)), and the picture
 is the same. A blur, a mask, a shadow or a glow over
 such a layer, as an item's effects, shades only that box grown by how far it reaches, and

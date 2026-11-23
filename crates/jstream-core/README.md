@@ -2382,8 +2382,9 @@ A model whose layer nothing has to read is shaded in its scene's pass
 `Compositor::prepare_model` and keeps it in `Chains::direct` instead of drawing the
 layer; its depth layer is drawn as before. It draws the layer, as it always did, for an
 item with effects or a source with filters (a chain reads the layer), while its layer has
-fewer pixels than the canvas (ADR-0197: the smaller layer is the saving), while a transition runs (its tracks place
-layers), when the compositor returns no draw (a canvas that mixes encoded colour, a
+fewer pixels than the canvas (ADR-0197: the smaller layer is the saving,
+`a_model_drawn_with_fewer_pixels_keeps_its_layer`), while a transition runs (its tracks
+place layers), when the compositor returns no draw (a canvas that mixes encoded colour, a
 camera with a depth of field), and for a model more than one pass showed in the frame
 before. Each pass that draws a scene's colour fills its items with `fill_shown`, which
 is `fill_items` and settles each model made ready (`DirectModels::place`): the first
