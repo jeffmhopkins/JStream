@@ -186,7 +186,7 @@ stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retarge
 stamp = { hash = "b3:303acef2980bbcfc", by = "agent:channels", note = "Added the channels row and amount on value_bindings in the collection tree for ADR-0183; the rest of the model is unchanged." }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:7c85bbb43d15f575", by = "agent:claude-warp-aim", note = "the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188)" }
+stamp = { hash = "b3:af5915e742a4ee30", by = "agent:claude-warp-aim", note = "Backdrop clause now says pictures pinned in the sky, the first near straight ahead; matches the four-slot sky.rs/sky.wgsl and the render README bullet" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -207,7 +207,7 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:d8980baa4f07826b", by = "agent:effects-perf", note = "Re-read against cheaper depth bloom, ambient occlusion and volumetric fog shaders and a per-filter bench: the pipeline's steps, the compositor's passes, the view depth a depth-reading scene filter gets (one more draw into a half-float 1/w layer) and how filters draw into Rgba16Float layers are as described; only the work inside three filters' fragment shaders changed." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:2a3accfb3b6eff33", by = "agent:claude-warp-aim", note = "the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188)" }
+stamp = { hash = "b3:6cfe04f9edf336ee", by = "agent:claude-warp-aim", note = "Backdrop clause now says pictures pinned in the sky, the first near straight ahead; matches the four-slot sky.rs/sky.wgsl and the render README bullet" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:732219550053661a", by = "agent:release-alpha8", note = "The one-scene compositor paragraph carries model upload's upload thread, #1609's probe capture one face a frame, hologram follow-up ADR-0179's light-only cards casting no shadow, #1622's skipped sky pass and gpu-stack's depth-layer copy, model box bounds and shared pipelines with priming, with no contradiction between them or with the render README." }
@@ -540,7 +540,7 @@ stamp = { hash = "b3:af0c9302d2001b6a", by = "agent:claude", note = "Added a par
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "This branch: the program stage's and preview's caches hold a frame only items draw at its drawn size, floored at the plan over every mix (#1139). The upload is still converted by the ingest compute pass to premultiplied linear Rgba16Float, which can now also write a smaller texture as a box mean of the frame's texels; cache retirement after the fence is unchanged. The section's one added sentence holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:8a327f175d2fbd3f", by = "agent:claude-warp-aim", note = "the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188)" }
+stamp = { hash = "b3:96895043ddfe04e6", by = "agent:claude-warp-aim", note = "Backdrop clause now says pictures pinned in the sky, the first near straight ahead; matches the four-slot sky.rs/sky.wgsl and the render README bullet" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -579,7 +579,7 @@ stamp = { hash = "b3:72af7ff2d2724e80", by = "agent:release-alpha9", note = "The
 stamp = { hash = "b3:466cef6108894484", by = "agent:claude", note = "Screen-space reflections now shade each model once: its layer's draw writes its surface (fs_with_surface) into three ModelSurface layers, and the scene's surface buffer merges them (surface_merge.wgsl), redrawing only a model whose layer drew none; ADR-0185 records this and the default-off switch. Edited the sentence: each model writes its surface in the same draw as its layer and the scene's buffer merges the nearest; checked against the render README and code." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:5aea6094120235a9", by = "agent:claude-warp-aim", note = "the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188)" }
+stamp = { hash = "b3:11b3f1f20697ba35", by = "agent:claude-warp-aim", note = "Backdrop clause now says pictures pinned in the sky, the first near straight ahead; matches the four-slot sky.rs/sky.wgsl and the render README bullet" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/pipelines.rs"]
 stamp = { hash = "b3:88528041c441f2ef", by = "agent:claude", note = "Review round 1: re-read the 3D view depth sentence (a model under half opacity adds none, compositor.rs) and the context paragraph on shared pipelines and priming, which the order of queued jobs and the filter refusal handling leave true." }
@@ -606,13 +606,13 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: five
 stamp = { hash = "b3:9f6f23e875baf19a", by = "agent:claude", note = "Replaced 'still no depth buffer' with decision 7: a pass placing a model gets a reversed Depth32Float target, the model writes NEAR_W/w before filters, later items test it, models order by centre, no model means no target; checked against compositor.rs and snapshot.rs, and it sits consistently beside the sky backdrop, which has no view depth." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky.rs"]
-stamp = { hash = "b3:79cef12e22ac06ea", by = "agent:claude-warp-aim", note = "the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188)" }
+stamp = { hash = "b3:a976bf6447afc95d", by = "agent:claude-warp-aim", note = "Backdrop clause now says pictures pinned in the sky, the first near straight ahead; matches the four-slot sky.rs/sky.wgsl and the render README bullet" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:26722242aaa55960", by = "agent:claude-warp-aim", note = "the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188)" }
+stamp = { hash = "b3:ce57802bfd8f95b9", by = "agent:claude-warp-aim", note = "Backdrop clause now says pictures pinned in the sky, the first near straight ahead; matches the four-slot sky.rs/sky.wgsl and the render README bullet" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:2d4ba81f923443f7", by = "agent:claude-warp-aim", note = "the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188)" }
+stamp = { hash = "b3:7d9c4462006f091c", by = "agent:claude-warp-aim", note = "Backdrop clause now says pictures pinned in the sky, the first near straight ahead; matches the four-slot sky.rs/sky.wgsl and the render README bullet" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky_common.wgsl"]
 stamp = { hash = "b3:6c72739ac4e99f87", by = "agent:claude", note = "sky bake (ADR-0174): the backdrop sentence now says nebulae and the band are baked once per seed into cube maps and stars stay procedural; one full-canvas pass, its layer under every item and no view depth are unchanged; no other sentence of the section describes the sky" }
@@ -678,7 +678,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:10a076cf835a2880", by = "agent:release-alpha9", note = "Added channel to the tool list; MCP guidance now covers sequences, which the section summarises through the design guidance. | merge: #1645 (screen-space reflections, 1f65ffa) merged: the MCP tool snapshot gains SSR's rendering fields beside the train's channel and timeline tools; the summary holds | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: tools.snap's schema now says the switch defaults to false; the MCP design holds." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:ec3d01d52c09edf1", by = "agent:claude-warp-aim", note = "design.rs guide gains the per-picture width sentence for arrival pictures; the MCP architecture section names nothing this changes" }
+stamp = { hash = "b3:910af47130095927", by = "agent:claude-warp-aim", note = "design.rs guide gains the nested-scene arrival sentence; the MCP architecture section names nothing this changes" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2112,7 +2112,7 @@ stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and
 stamp = { hash = "b3:113ee0e71733db16", by = "agent:release-alpha8", note = "live.rs now hands out each running source's probe (with_probe, #1609) and model (LiveSources::model, for model upload's warm models), and snapshot.rs gained #1609's probes, gpu-stack's priming, #1631's camera bindings and the hologram follow-up's 3D-family Moves; the Snapshot bullet points to snapshot/probes.rs and Priming and nothing it says is contradicted." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:d5ef06a6c60cdf7e", by = "agent:claude-warp-aim", note = "snapshot.rs adds picture_scale and a width scale per arrival picture; the area's bullets name no detail this changes" }
+stamp = { hash = "b3:a4b53db2553484b6", by = "agent:claude-warp-aim", note = "snapshot.rs adds SkyPart, sky_part, arrival_parts and part_direction for multi-picture arrivals; the area's bullets name no detail this changes" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:c0802860d71a4cb4", by = "agent:3d-groups", note = "Added the 3D groups paragraph: collect plans a sharing group's children into the scene's pass with GroupLinks, each frame places them through GroupPose after live values and motion, transitions place them as planned, PassCamera.anchor places the camera, and a follow camera ignores the anchor; covers now lists snapshot/groups.rs. | merge: Main's #1562 adds a still.drew_nothing() log in snapshot.rs's image lookup; the 3D groups paragraph and snapshot/groups.rs are unaffected. | merge: Main's #1588 (ADR-0167) splits scene_environment into first_environment and environment_at and adds the sky backdrop; the conflict was resolved by keeping main's split and placing an environment light through its 3D groups inside environment_at, so the 3D groups paragraph's lights claim holds." }
@@ -2475,7 +2475,7 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:ce856c803a2fa00a", by = "agent:claude-warp-aim", note = "Shot::sky_pictures now carries each picture's width scale from picture_scale (item width over canvas width, or legacy scale.x), which draw_sky_of multiplies into sky_picture_deg clamped 1-120; the arrival paragraph now names it" }
+stamp = { hash = "b3:cb7b7d49fd5633bf", by = "agent:claude-warp-aim", note = "Arrival paragraph now describes SkyPart arrivals (a nested scene is one arrival of up to four pictures, placed by turn/tilt via part_direction), pictures passed as an array, and the light from the arrival's last picture; matches snapshot.rs and the new companion test in chain.rs" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2487,7 +2487,7 @@ stamp = { hash = "b3:c802a93fc0f13af0", by = "agent:3d-groups", note = "Dependen
 stamp = { hash = "b3:25f2f3b47ccb9f93", by = "agent:claude", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds | merge: #1375 brought in JTunnel senders received into network_audio sources; it touches this section's inputs alongside this branch's change without contradicting it, and wave/alpha5 verified its text for #1375 | kept from the merged side: audio_sources.rs gains the Network want and the receiver slot in Wanted; nothing about snapshots or kinds' building changed." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/chain.rs"]
-stamp = { hash = "b3:2c65d9b70f106b78", by = "agent:claude-warp-aim", note = "Shot::sky_pictures now carries each picture's width scale from picture_scale (item width over canvas width, or legacy scale.x), which draw_sky_of multiplies into sky_picture_deg clamped 1-120; the arrival paragraph now names it" }
+stamp = { hash = "b3:c6445844bcf77093", by = "agent:claude-warp-aim", note = "Arrival paragraph now describes SkyPart arrivals (a nested scene is one arrival of up to four pictures, placed by turn/tilt via part_direction), pictures passed as an array, and the light from the arrival's last picture; matches snapshot.rs and the new companion test in chain.rs" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/effect_packs.rs"]
 stamp = { hash = "b3:2dea51e38948ab0c", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Extended the upgrade paragraph to shader sources (Migration, ShaderSource::migrate, live sync after) and said a shader source loads before its pack verbatim; checked against effect_packs.rs, engine.rs and the new test; dropped the not-yet line for sources. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
@@ -2514,7 +2514,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:d5ef06a6c60cdf7e", by = "agent:claude-warp-aim", note = "Shot::sky_pictures now carries each picture's width scale from picture_scale (item width over canvas width, or legacy scale.x), which draw_sky_of multiplies into sky_picture_deg clamped 1-120; the arrival paragraph now names it" }
+stamp = { hash = "b3:a4b53db2553484b6", by = "agent:claude-warp-aim", note = "Arrival paragraph describes SkyPart arrivals (a nested scene is one arrival of up to four pictures, placed by turn/tilt via part_direction), pictures passed as an array, and the light from the arrival's last picture; matches snapshot.rs and the companion test in chain.rs" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:54c776185e5d3074", by = "agent:claude-warp-aim", note = "probe capture now pushes arrival_light after scene_lights, which the section's arrival sentence now names" }
@@ -2616,7 +2616,7 @@ stamp = { hash = "b3:027e29bed3a16896", by = "agent:channels", note = "Re-read a
 stamp = { hash = "b3:048747410023f472", by = "agent:claude", note = "core outputs now says the program readback can be NV12; the daemon's design text doesn't describe the readback, still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:ce856c803a2fa00a", by = "agent:claude-warp-aim", note = "Snapshots changed only in the arrival-picture paragraph (per-picture width scale); the daemon section cites Snapshots for priming, which is unchanged" }
+stamp = { hash = "b3:cb7b7d49fd5633bf", by = "agent:claude-warp-aim", note = "Snapshots changed only in the arrival-picture paragraph (multi-picture arrivals); the daemon section cites Snapshots for priming, which is unchanged" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:10c130fe918d94d6", by = "agent:plugin-uninstall", note = "re-read after review round 1: plugin.uninstall's doc now says a running plugin holds only read from removal and stops once its invocation returns (N2); nothing else in this section changed" }
@@ -3285,7 +3285,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:ec3d01d52c09edf1", by = "agent:claude-warp-aim", note = "design.rs guide sentence on sky_picture_deg now explains sizing each picture by its item's width; the section's description of the guide still holds" }
+stamp = { hash = "b3:910af47130095927", by = "agent:claude-warp-aim", note = "design.rs guide gains the nested-scene arrival sentence (bottom ahead, others by turn_deg/tilt_deg, top lights); the section's description of the guide still holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3318,7 +3318,7 @@ stamp = { hash = "b3:af5c949db44560d1", by = "agent:ptz-builder", note = "OPEN_W
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:ec3d01d52c09edf1", by = "agent:claude-warp-aim", note = "design.rs now says sky_picture_deg is the width of a full-canvas item's picture and a narrower item shows its picture narrower; the purpose names nothing this changes" }
+stamp = { hash = "b3:910af47130095927", by = "agent:claude-warp-aim", note = "design.rs guide adds how to make a planet-and-sun arrival from a nested scene; the purpose names nothing this changes" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3528,7 +3528,7 @@ stamp = { hash = "b3:0edff86c8bbfba0f", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:486bda9fc370cc34", by = "agent:claude", note = "Re-read after the crate-map row for jstream-jtunnel changed: GPU frames are unrelated. Still holds." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:7c85bbb43d15f575", by = "agent:claude-warp-aim", note = "gpu-pipeline gained the ADR-0188 backdrop clause; nothing about platform GPU frames changed" }
+stamp = { hash = "b3:af5915e742a4ee30", by = "agent:claude-warp-aim", note = "gpu-pipeline changed only in the backdrop's pinned-pictures clause; the platform's GPU frames section relies on nothing there" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map, against wave/m3, gains main's MediaDecoders and paths in the platform row, the jstream-browser row, platform-windows without the CEF backend, the outputs row, the ADR-0058 links and the apps row's desktop, daemon and browser-helper text, beside wave/m3's CLAP rows. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. The GPU-frame types and who may use unsafe with them still hold." }
@@ -5451,7 +5451,7 @@ stamp = { hash = "b3:af0c9302d2001b6a", by = "agent:claude", note = "The TIMESTA
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Passes step 1 now describes upload_rgba8_into's smaller texture (box mean in premultiplied linear, rewrite into the same texture, Image::full); the ResourceCache paragraph describes upload_drawn's record_draw measurement, planned first size, power-of-two scale with quarter headroom, 1/16 floor, 256x256 floor and hysteresis, with the lavapipe numbers measured for this change; the resource table still holds." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:8a327f175d2fbd3f", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl gain the pinned picture (binding 7, four more uniform vec4s, Kept compares it); the design's no-I/O and resource rows hold: the stand-in picture serves it too" }
+stamp = { hash = "b3:96895043ddfe04e6", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl draw up to four pinned pictures (bindings 7-10, pictures array in the uniform); the resource table's sky row (one or two bind groups per sky, stand-in picture) still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -5490,7 +5490,7 @@ stamp = { hash = "b3:72af7ff2d2724e80", by = "agent:release-alpha9", note = "The
 stamp = { hash = "b3:466cef6108894484", by = "agent:claude", note = "Screen-space reflections now shade each model once: its layer's draw writes its surface (fs_with_surface) into three ModelSurface layers, and the scene's surface buffer merges them (surface_merge.wgsl), redrawing only a model whose layer drew none; ADR-0185 records this and the default-off switch. Rewrote the surface buffer paragraph (draw_model_with_surface, merge_model_surface cut to the model's box with 1/w squeezed into 0..1, draw_model_surface as the fallback writing the same depth, the shared shade) and the surface pipelines' resource row; checked against model/mod.rs, compositor.rs, model.wgsl and surface_merge.wgsl." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:5aea6094120235a9", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl gain the pinned picture (binding 7, four more uniform vec4s, Kept compares it); the design's no-I/O and resource rows hold: the stand-in picture serves it too" }
+stamp = { hash = "b3:11b3f1f20697ba35", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl draw up to four pinned pictures (bindings 7-10, pictures array in the uniform); the resource table's sky row (one or two bind groups per sky, stand-in picture) still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/pipelines.rs"]
 stamp = { hash = "b3:88528041c441f2ef", by = "agent:claude", note = "Review round 1: re-read the model drawing order (primitives last to first; triangles inside one primitive in index order, model/mod.rs) and the resources table rows for the model, depth and shared pipelines; no resource or owner changed." }
@@ -5517,13 +5517,13 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: step
 stamp = { hash = "b3:9f6f23e875baf19a", by = "agent:claude", note = "Rewrote the No depth buffer step: Item::depth turns on depth_on, a Depth32Float scene target per canvas size and DepthPipelines (tested GreaterEqual / Always, depth_writer), cleared to 0, the model's layer untested then fs_write_depth, others test NEAR_W/w; checked against compositor.rs, blend.rs and composite.wgsl." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky.rs"]
-stamp = { hash = "b3:79cef12e22ac06ea", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl gain the pinned picture (binding 7, four more uniform vec4s, Kept compares it); the design's no-I/O and resource rows hold: the stand-in picture serves it too" }
+stamp = { hash = "b3:a976bf6447afc95d", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl draw up to four pinned pictures (bindings 7-10, pictures array in the uniform); the resource table's sky row (one or two bind groups per sky, stand-in picture) still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:26722242aaa55960", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl gain the pinned picture (binding 7, four more uniform vec4s, Kept compares it); the design's no-I/O and resource rows hold: the stand-in picture serves it too" }
+stamp = { hash = "b3:ce57802bfd8f95b9", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl draw up to four pinned pictures (bindings 7-10, pictures array in the uniform); the resource table's sky row (one or two bind groups per sky, stand-in picture) still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:2d4ba81f923443f7", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl gain the pinned picture (binding 7, four more uniform vec4s, Kept compares it); the design's no-I/O and resource rows hold: the stand-in picture serves it too" }
+stamp = { hash = "b3:7d9c4462006f091c", by = "agent:claude-warp-aim", note = "sky.rs/sky.wgsl draw up to four pinned pictures (bindings 7-10, pictures array in the uniform); the resource table's sky row (one or two bind groups per sky, stand-in picture) still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky_common.wgsl"]
 stamp = { hash = "b3:6c72739ac4e99f87", by = "agent:claude", note = "sky bake (ADR-0174): added the bake pipeline and per-seed cube maps to the resources table with their lifetime (4 seeds, 900 draws); the sky row still holds (a uniform and bind group per draw); passes, formats of layers, model and ResourceCache text describe code this change does not touch; a bake is a bounded one-off on the render thread, within R-RT-002" }
@@ -5850,7 +5850,7 @@ stamp = { hash = "b3:a4fdee2216af9c7a", by = "agent:shader-source", note = "Prog
 stamp = { hash = "b3:ec9884ac2d146606", by = "agent:effects-perf", note = "Outline and glow now find the nearest seed in two exact scanning passes when the reach is 17 px or less and by a jump flood whose first step reads the input (no seed pass) past that; sharpen above radius 1 is a row-mean pass and a column pass; the Lanczos stretch works out each axis's weights once per pixel. Rewrote the outline, glow, sharpen and aspect_ratio paragraphs, the glow line under Bounds and the pack's 'one draw each' to say so. Checked the scratch pool text against it: outline and glow still take two scratch layers and sharpen one, within the three it allows. Settings, outsets, reaches and what each kind draws are unchanged: on the comparison images outline is byte-identical, glow differs in 3 pixels of one image (the scan and the flood picked different seeds there; the scan is checked against brute force), and sharpen at radius 2 and 3 differs by one 8-bit step in under 1% of bytes, 2 bytes by up to 4 at a nearly transparent edge." }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:886e084aa9533a02", by = "agent:claude-warp-aim", note = "the sky bullet now says a SkyPicture is drawn over it through its tangent plane, covering what is behind and fading at warp (ADR-0188), as sky.rs and sky.wgsl do" }
+stamp = { hash = "b3:0d7c2b8ef614854e", by = "agent:claude-warp-aim", note = "SkyDraw.pictures is now an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 and a 108-float uniform; the README sky bullet now says so; golden test covers two pictures" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:0edff86c8bbfba0f", by = "agent:claude", note = "Wrote the shared-pipelines passage (pipelines.rs in the GpuContext beside the watch, the key, waiting on a pipeline being made, warm_3d incl. the sky bake's pipeline, which pipelines are covered, the 1024 cap, pipelines_made) and re-read it against Built::get/render, Key::of, gpu.rs Shared and Compositor::warm_3d; re-read the sky backdrop bullet and the model bullets against the prepass, depth-copy and model-box commits. Stale again only through jstream-platform#gpu-frames, whose watch sentence now says the same as this passage." }
@@ -5859,7 +5859,7 @@ stamp = { hash = "b3:0edff86c8bbfba0f", by = "agent:claude", note = "Wrote the s
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:7c85bbb43d15f575", by = "agent:claude-warp-aim", note = "the sky bullet now says a SkyPicture is drawn over it through its tangent plane, covering what is behind and fading at warp (ADR-0188), as sky.rs and sky.wgsl do" }
+stamp = { hash = "b3:af5915e742a4ee30", by = "agent:claude-warp-aim", note = "SkyDraw.pictures is now an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 and a 108-float uniform; the README sky bullet now says so; golden test covers two pictures" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -6195,7 +6195,7 @@ stamp = { hash = "b3:af0c9302d2001b6a", by = "agent:claude", note = "Every submi
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Added upload_drawn/draw_uploads_small to the ResourceCache bullet; the rest (uploads premultiplied Rgba16Float, extents, imports) still holds since a drawn-small upload is still Rgba16Float premultiplied linear, placed at its frame's extent." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:8a327f175d2fbd3f", by = "agent:claude-warp-aim", note = "the sky bullet now says a SkyPicture is drawn over it through its tangent plane, covering what is behind and fading at warp (ADR-0188), as sky.rs and sky.wgsl do" }
+stamp = { hash = "b3:96895043ddfe04e6", by = "agent:claude-warp-aim", note = "SkyDraw.pictures is now an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 and a 108-float uniform; the README sky bullet now says so; golden test covers two pictures" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -6234,7 +6234,7 @@ stamp = { hash = "b3:72af7ff2d2724e80", by = "agent:release-alpha9", note = "Sky
 stamp = { hash = "b3:466cef6108894484", by = "agent:claude", note = "Screen-space reflections now shade each model once: its layer's draw writes its surface (fs_with_surface) into three ModelSurface layers, and the scene's surface buffer merges them (surface_merge.wgsl), redrawing only a model whose layer drew none; ADR-0185 records this and the default-off switch. The purpose's model bullet still holds; the surface buffer is in Design." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:5aea6094120235a9", by = "agent:claude-warp-aim", note = "the sky bullet now says a SkyPicture is drawn over it through its tangent plane, covering what is behind and fading at warp (ADR-0188), as sky.rs and sky.wgsl do" }
+stamp = { hash = "b3:11b3f1f20697ba35", by = "agent:claude-warp-aim", note = "SkyDraw.pictures is now an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 and a 108-float uniform; the README sky bullet now says so; golden test covers two pictures" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/pipelines.rs"]
 stamp = { hash = "b3:88528041c441f2ef", by = "agent:claude", note = "Review round 1: re-read the view depth passage (a model layer under half opacity is not copied, compositor.rs depth-copier arm) and the shared pipelines passage (Built::forget lets a dropped filter source go; 1024 cap unchanged) against compositor.rs, pipelines.rs and filter/pass.rs." }
@@ -6261,13 +6261,13 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: the 
 stamp = { hash = "b3:9f6f23e875baf19a", by = "agent:claude", note = "Item gains depth, blend.rs depth pipelines, composite.wgsl clip z min(NEAR_W, w) and fs_write_depth (decision 7); the purpose bullets still hold beside depth of field and the sky backdrop." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky.rs"]
-stamp = { hash = "b3:79cef12e22ac06ea", by = "agent:claude-warp-aim", note = "the sky bullet now says a SkyPicture is drawn over it through its tangent plane, covering what is behind and fading at warp (ADR-0188), as sky.rs and sky.wgsl do" }
+stamp = { hash = "b3:a976bf6447afc95d", by = "agent:claude-warp-aim", note = "SkyDraw.pictures is now an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 and a 108-float uniform; the README sky bullet now says so; golden test covers two pictures" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:26722242aaa55960", by = "agent:claude-warp-aim", note = "the sky bullet now says a SkyPicture is drawn over it through its tangent plane, covering what is behind and fading at warp (ADR-0188), as sky.rs and sky.wgsl do" }
+stamp = { hash = "b3:ce57802bfd8f95b9", by = "agent:claude-warp-aim", note = "SkyDraw.pictures is now an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 and a 108-float uniform; the README sky bullet now says so; golden test covers two pictures" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:2d4ba81f923443f7", by = "agent:claude-warp-aim", note = "the sky bullet now says a SkyPicture is drawn over it through its tangent plane, covering what is behind and fading at warp (ADR-0188), as sky.rs and sky.wgsl do" }
+stamp = { hash = "b3:7d9c4462006f091c", by = "agent:claude-warp-aim", note = "SkyDraw.pictures is now an array of MAX_SKY_PICTURES (4) SkyPictures drawn bottom first through bindings 7-10 and a 108-float uniform; the README sky bullet now says so; golden test covers two pictures" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky_common.wgsl"]
 stamp = { hash = "b3:6c72739ac4e99f87", by = "agent:claude", note = "sky bake (ADR-0174): re-read the section; the sky backdrop bullet now says the nebulae and band are baked per seed into two cube maps by sky_deep.wgsl and read by sky.wgsl, and names the two new tests; the rest of the scene, placement, transition, API and lost-device text is untouched by a change inside draw_sky" }
@@ -6477,7 +6477,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:39867dbbb57aa283", by = "agent:claude-warp-aim", note = "README and light.rs now describe sky_picture_deg as the width of a full-canvas item's picture, scaled by the item's width over the canvas's; range and default unchanged" }
+stamp = { hash = "b3:35b946aac235dd9c", by = "agent:claude-warp-aim", note = "README sky_pictures sentence now says a nested-scene item is one arrival of up to four pictures placed by turn and tilt; light.rs unchanged" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }

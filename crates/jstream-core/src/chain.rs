@@ -4610,6 +4610,20 @@ mod tests {
     /// and lights the scene from there in the picture's colour.
     #[test]
     fn an_arrival_picture_shows_ahead_and_lights_the_scene() {
+        arrives_at(false);
+    }
+
+    /// ADR-0188: an arrival of several pictures, a nested scene's, shows its first ahead
+    /// and the others turned from it, and lights the scene from its last: a sun turned
+    /// a quarter to the right of a planet lights it from the right in the sun's colour.
+    #[test]
+    fn an_arrival_of_a_planet_and_its_sun_lights_from_the_sun() {
+        arrives_at(true);
+    }
+
+    /// The arrival test, with a planet alone or a planet and a sun a quarter to its right
+    /// (`system`).
+    fn arrives_at(system: bool) {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
         let Some(mut compositor) = gpu() else { return };
         let mut graph = placed(&[("cam", (4.0, 4.0), (2.0, 2.0), 0.0)]);
@@ -4641,16 +4655,58 @@ mod tests {
                     settings: Default::default(),
                     duplicated_from: None,
                 },
-                Edit::ItemAdd {
-                    scene_id: arrivals.clone(),
-                    item_id: ItemId::new("planet"),
-                    source_id: SourceId::new("planet"),
-                    transform: None,
-                    geometry: None,
-                    opacity: None,
-                    blend: None,
-                },
             ],
+        );
+        let solar = SceneId::new("solar");
+        let mut sun_at = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(960.0, 540.0).expect("finite"),
+            jstream_protocol::Size::try_new(1920.0, 1080.0).expect("positive"),
+        )
+        .expect("valid");
+        sun_at.turn_deg = jstream_protocol::Finite32::new(90.0).expect("finite");
+        let add = |scene: &SceneId, item: &str, source: &str, geometry| Edit::ItemAdd {
+            scene_id: scene.clone(),
+            item_id: ItemId::new(item),
+            source_id: SourceId::new(source),
+            transform: None,
+            geometry,
+            opacity: None,
+            blend: None,
+        };
+        apply(
+            &mut graph,
+            if system {
+                vec![
+                    Edit::SceneCreate {
+                        scene_id: solar.clone(),
+                        name: "Solar".into(),
+                        role: None,
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("sun"),
+                        name: "sun".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "display".into(),
+                        },
+                        settings: Default::default(),
+                        duplicated_from: None,
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("solar"),
+                        name: "solar".into(),
+                        kind: SourceKind::Scene {
+                            scene_id: solar.clone(),
+                        },
+                        settings: Default::default(),
+                        duplicated_from: None,
+                    },
+                    add(&solar, "planet", "planet", None),
+                    add(&solar, "sun", "sun", Some(sun_at)),
+                    add(&arrivals, "solar", "solar", None),
+                ]
+            } else {
+                vec![add(&arrivals, "planet", "planet", None)]
+            },
         );
         let sky = jstream_sources::ShownLight {
             kind: jstream_sources::LightType::Environment,
@@ -4684,6 +4740,8 @@ mod tests {
         };
         let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");
         let red = Frame::new(4, 4, &[255, 0, 0, 255].repeat(16), 4).expect("invariant: 4x4 RGBA8");
+        let green =
+            Frame::new(4, 4, &[0, 255, 0, 255].repeat(16), 5).expect("invariant: 4x4 RGBA8");
         let lamp = Frame::new(1, 1, &[0; 4], 3)
             .expect("invariant: 1x1 RGBA8")
             .with_light(Some(sky));
@@ -4696,6 +4754,7 @@ mod tests {
                     match id.as_str() {
                         "cam" => white.clone(),
                         "planet" => red.clone(),
+                        "sun" => green.clone(),
                         _ => lamp.clone(),
                     },
                     None,
@@ -4708,12 +4767,21 @@ mod tests {
             .sky_pictures
             .get(&SourceId::new("logo"))
             .expect("the light's arrival pictures are planned");
-        assert_eq!(planned.len(), 1);
-        assert_eq!(planned[0].0, SourceId::new("planet"));
+        assert_eq!(planned.len(), 1, "one arrival");
+        let parts = &planned[0];
+        assert_eq!(parts[0].source, SourceId::new("planet"));
+        assert_eq!(parts[0].offset_deg, [0.0; 2]);
         assert!(
-            (planned[0].1 - 1.0).abs() < 1e-6,
+            (parts[0].scale - 1.0).abs() < 1e-6,
             "a full-canvas item: its setting"
         );
+        if system {
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[1].source, SourceId::new("sun"));
+            assert_eq!(parts[1].offset_deg, [90.0, 0.0]);
+        } else {
+            assert_eq!(parts.len(), 1);
+        }
         // A picture's item scales its width: a box half the canvas wide, half.
         let canvas = jstream_protocol::Canvas::DEFAULT;
         let half = jstream_protocol::ItemGeometry::try_new(
@@ -4756,13 +4824,23 @@ mod tests {
         .expect("it lights the scene");
         assert_eq!(light.kind, jstream_render::LightKind::Directional);
         assert!((light.intensity - 2.0).abs() < 1e-6);
-        assert!(
-            light.color.r > 0.99 && light.color.g < 0.01,
-            "{:?}",
-            light.color
-        );
-        // It shines from ahead, back toward the viewer.
-        assert!(light.aim[2] > 0.9, "{:?}", light.aim);
+        if system {
+            // From the sun, a quarter to the right, toward the left, in its colour.
+            assert!(
+                light.color.g > 0.99 && light.color.r < 0.01,
+                "{:?}",
+                light.color
+            );
+            assert!(light.aim[0] < -0.9, "{:?}", light.aim);
+        } else {
+            assert!(
+                light.color.r > 0.99 && light.color.g < 0.01,
+                "{:?}",
+                light.color
+            );
+            // It shines from ahead, back toward the viewer.
+            assert!(light.aim[2] > 0.9, "{:?}", light.aim);
+        }
     }
 
     /// ADR-0187: as a warp aimed ahead starts, the backdrop cross-fades from the sky its

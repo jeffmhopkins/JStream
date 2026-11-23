@@ -1885,15 +1885,19 @@ one (`a_warp_aimed_ahead_cross_fades_the_backdrop_to_straight_ahead`).
 With arrival pictures
 ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
 planning puts the frames of the visible items of the light's `sky_pictures` scene in the
-shot (`Shot::sky_pictures`, by the light's source, each with how much its item's width
-scales `sky_picture_deg`, `picture_scale`), and the state keeps the picture shown
+shot (`Shot::sky_pictures`, by the light's source), one arrival each, or one of up to four
+pictures for an item showing a nested scene (`SkyPart`s: each with how much its item's
+width scales `sky_picture_deg`, `picture_scale`, and its turn and tilt from the first,
+which `part_direction` places), and the state keeps the arrival shown
 and where it is pinned (`Arrival`): none while the deep sky is gone at warp
 (`deep_shown`), and another, at random, picked once as it starts to show again with the
 warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
-`draw_sky_of` passes it to the backdrop, the upload loop takes the shown picture's average
-colour once per version (`note_picture_mean`, kept in `Chains::picture_means` for the
-shown pictures only), and `light_scene` and a probe's capture add a directional light from
-it in that colour (`arrival_light`, `an_arrival_picture_shows_ahead_and_lights_the_scene`).
+`draw_sky_of` passes its pictures to the backdrop, the upload loop takes the average
+colour of the shown arrival's last picture once per version (`note_picture_mean`, kept in
+`Chains::picture_means` for the shown ones only), and `light_scene` and a probe's capture
+add a directional light from that picture in that colour (`arrival_light`,
+`an_arrival_picture_shows_ahead_and_lights_the_scene`,
+`an_arrival_of_a_planet_and_its_sun_lights_from_the_sun`).
 Its stars, star brightness, nebula, galaxy band and colours are drawn as those
 modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,

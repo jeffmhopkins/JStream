@@ -735,11 +735,10 @@ pub(crate) struct Shot {
     /// whole or planned as a transition's end. A scene placing none isn't here.
     lights: BTreeMap<SceneId, Vec<Lit>>,
     /// The arrival pictures of each environment light with some (ADR-0188), by its
-    /// source: the sources its `sky_pictures` scene shows, bottom first, whose frames
-    /// are in [`Self::frames`], each with how wide its item is against the canvas (its
-    /// box's width over the canvas's, or a legacy transform's horizontal scale), which
-    /// scales its `sky_picture_deg`.
-    pub(crate) sky_pictures: BTreeMap<SourceId, Vec<(SourceId, f32)>>,
+    /// source: what each visible item of its `sky_pictures` scene shows, bottom first,
+    /// one arrival each: a picture, or the pictures of a nested scene, whose frames are
+    /// in [`Self::frames`].
+    pub(crate) sky_pictures: BTreeMap<SourceId, Vec<Vec<SkyPart>>>,
     /// The reflection probe items each copied scene places (ADR-0170 decision 3), in
     /// stacking order, as [`Self::lights`] holds its lights.
     probes: BTreeMap<SceneId, Vec<Lit>>,
@@ -1087,6 +1086,19 @@ impl Transitioning {
             t => from.mix(to, t, blending),
         }
     }
+}
+
+/// One picture of an arrival (ADR-0188): what its item shows, how wide and where.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SkyPart {
+    /// The source whose frame it shows.
+    pub(crate) source: SourceId,
+    /// How much its item scales `sky_picture_deg`: its box's width over the canvas's, or
+    /// a legacy transform's horizontal scale ([`picture_scale`]).
+    pub(crate) scale: f32,
+    /// Its turn (to the right) and tilt (up) from the arrival's first picture, in
+    /// degrees: its item's; 0 for the first.
+    pub(crate) offset_deg: [f32; 2],
 }
 
 impl Default for Shot {
@@ -3604,16 +3616,74 @@ impl<'a> Planner<'a, '_> {
                 if !item.visible() || item.source_id() == id {
                     continue;
                 }
-                if let Some(SourceRef::Frame(picture)) = self.look(item.source_id(), out)
-                    && out.frames.get(&picture).is_some_and(|frame| {
-                        frame.light.is_none() && frame.model.is_none() && frame.probe.is_none()
-                    })
-                {
-                    shown.push((picture, picture_scale(item.placement(), out.canvas)));
+                let state = self.state;
+                // A nested scene is one arrival of several pictures: its first is the
+                // one ahead, and the others are placed by their turn and tilt from it.
+                let parts = match state.source(item.source_id()).map(Source::kind) {
+                    Some(SourceKind::Scene { scene_id }) if scene_id != &scene => {
+                        let mut parts = Vec::new();
+                        for inner in self.items_of(scene_id) {
+                            if parts.len() == jstream_render::MAX_SKY_PICTURES {
+                                break;
+                            }
+                            if inner.visible()
+                                && inner.source_id() != id
+                                && let Some(part) = self.sky_part(inner.as_ref(), out)
+                            {
+                                parts.push(part);
+                            }
+                        }
+                        if let Some(main) = parts.first_mut() {
+                            main.offset_deg = [0.0; 2];
+                        }
+                        parts
+                    }
+                    _ => self
+                        .sky_part(item.as_ref(), out)
+                        .map(|part| SkyPart {
+                            offset_deg: [0.0; 2],
+                            ..part
+                        })
+                        .into_iter()
+                        .collect(),
+                };
+                if !parts.is_empty() {
+                    shown.push(parts);
                 }
             }
             out.sky_pictures.insert(id.clone(), shown);
         }
+    }
+
+    /// What arrival picture item `item` shows (ADR-0188): its frame, uploaded though no
+    /// item places it, with its width and its turn and tilt; `None` for an item showing
+    /// a light, a model, a probe, a scene or a capture.
+    fn sky_part(&mut self, item: &GraphItem, out: &mut Shot) -> Option<SkyPart> {
+        let state = self.state;
+        if state
+            .source(item.source_id())
+            .is_some_and(|source| matches!(source.kind(), SourceKind::Scene { .. }))
+        {
+            return None;
+        }
+        let Some(SourceRef::Frame(picture)) = self.look(item.source_id(), out) else {
+            return None;
+        };
+        out.frames
+            .get(&picture)
+            .is_some_and(|frame| {
+                frame.light.is_none() && frame.model.is_none() && frame.probe.is_none()
+            })
+            .then(|| SkyPart {
+                scale: picture_scale(item.placement(), out.canvas),
+                offset_deg: match item.placement() {
+                    GraphPlacement::Geometry(geometry) => {
+                        [geometry.turn_deg.get(), geometry.tilt_deg.get()]
+                    }
+                    _ => [0.0; 2],
+                },
+                source: picture,
+            })
     }
 
     /// What a model `image` shows on its surfaces and reflects, when it names other
@@ -8081,17 +8151,25 @@ fn draw_sky_of(
     let (environment, look, opacity) =
         environment_at((shot, cache), (placed, light, sky), at, live);
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
-    // Its arrival picture (ADR-0188), where its frame was uploaded this frame.
+    // Its arrival's pictures (ADR-0188), where their frames were uploaded this frame.
     let pinned = |arrival: Option<crate::chain::Arrival>| {
-        let arrival = arrival?;
-        let (source, scale) = arrival_picture(shot, placed, arrival)?;
-        let image = cache.get(&GpuKey::Frame(source.clone()))?;
-        Some(jstream_render::SkyPicture {
-            image,
-            direction: arrival.direction.map(|v| v as f32),
-            width_deg: (sky.sky_picture_deg * scale).clamp(1.0, 120.0),
-            opacity: 1.0,
-        })
+        let mut pictures = [None; jstream_render::MAX_SKY_PICTURES];
+        let parts =
+            arrival.and_then(|arrival| Some((arrival, arrival_parts(shot, placed, arrival)?)));
+        if let Some((arrival, parts)) = parts {
+            for (slot, part) in pictures.iter_mut().zip(parts) {
+                *slot = cache.get(&GpuKey::Frame(part.source.clone())).map(|image| {
+                    jstream_render::SkyPicture {
+                        image,
+                        direction: part_direction(arrival.direction, part.offset_deg)
+                            .map(|v| v as f32),
+                        width_deg: (sky.sky_picture_deg * part.scale).clamp(1.0, 120.0),
+                        opacity: 1.0,
+                    }
+                });
+            }
+        }
+        pictures
     };
     let draw =
         |[turn_deg, tilt_deg, roll_deg]: [f32; 3], (opacity, warp, travel, dropping), arrival| {
@@ -8115,7 +8193,7 @@ fn draw_sky_of(
                 warp,
                 travel,
                 dropping,
-                picture: pinned(arrival),
+                pictures: pinned(arrival),
             }
         };
     // The new sky shows at `shown * faded`, over the leaving one; drawing the leaving one
@@ -8173,7 +8251,9 @@ pub(crate) fn arrival_light(
     }
     let state = chains.skies.borrow().get(scene_id).copied()?;
     let arrival = state.arrival?;
-    let source = arrival_source(shot, placed, arrival)?;
+    // The arrival lights the scene from its last picture: a sun over a planet.
+    let part = arrival_parts(shot, placed, arrival)?.last()?;
+    let source = &part.source;
     let (environment, look, opacity) =
         environment_at((shot, cache), (placed, light, sky), at, live);
     let shown = crate::chain::deep_shown(state.warp, state.dropping);
@@ -8183,7 +8263,7 @@ pub(crate) fn arrival_light(
     }
     // Where the backdrop shows it, in the scene; the light shines from there.
     let rotation = crate::warp_aim::from_angles(state.angles(warp_aiming(&environment, sky)));
-    let d = arrival.direction;
+    let d = part_direction(arrival.direction, part.offset_deg);
     let from = [0, 1, 2].map(|r| (0..3).map(|k| rotation[r][k] * d[k]).sum::<f64>());
     // Its colour is taken in the frame after it is picked, while it is still faint.
     let [r, g, b] = chains.picture_means.get(source)?.1;
@@ -8246,7 +8326,8 @@ fn shown_arrivals(shot: &Shot, chains: &Chains) -> BTreeSet<SourceId> {
         .iter()
         .filter_map(|(scene, state)| {
             let (placed, _, _) = first_environment(shot, scene).0?;
-            arrival_source(shot, placed, state.arrival?).cloned()
+            let part = arrival_parts(shot, placed, state.arrival?)?.last()?;
+            Some(part.source.clone())
         })
         .collect()
 }
@@ -8272,36 +8353,69 @@ fn mean_rgb(rgba: &[u8]) -> Option<[f32; 3]> {
     (weight > 0.0).then(|| sum.map(|total| ((total / weight) as f32).powf(1.0 / 2.2)))
 }
 
-/// The arrival pictures of the environment light `placed` (ADR-0188): the sources its
+/// The arrivals of environment light `placed`'s backdrop (ADR-0188): what its
 /// `sky_pictures` scene shows, bottom first; none without one.
-fn sky_pictures<'s>(shot: &'s Shot, placed: &Lit) -> &'s [(SourceId, f32)] {
+fn sky_pictures<'s>(shot: &'s Shot, placed: &Lit) -> &'s [Vec<SkyPart>] {
     shot.sky_pictures
         .get(&placed.source)
         .map_or(&[], Vec::as_slice)
 }
 
-/// The source of the environment light `placed`'s arrival picture `arrival`.
-fn arrival_source<'s>(
+/// The pictures of the environment light `placed`'s arrival `arrival`, the first ahead.
+fn arrival_parts<'s>(
     shot: &'s Shot,
     placed: &Lit,
     arrival: crate::chain::Arrival,
-) -> Option<&'s SourceId> {
-    arrival_picture(shot, placed, arrival).map(|(source, _)| source)
-}
-
-/// The source of the environment light `placed`'s arrival picture `arrival`, with how
-/// much its item scales its width ([`Shot::sky_pictures`]).
-fn arrival_picture<'s>(
-    shot: &'s Shot,
-    placed: &Lit,
-    arrival: crate::chain::Arrival,
-) -> Option<(&'s SourceId, f32)> {
-    let pictures = sky_pictures(shot, placed);
-    let count = u32::try_from(pictures.len())
+) -> Option<&'s [SkyPart]> {
+    let arrivals = sky_pictures(shot, placed);
+    let count = u32::try_from(arrivals.len())
         .ok()
         .filter(|count| *count > 0)?;
-    let (source, scale) = pictures.get(usize::try_from(arrival.index % count).ok()?)?;
-    Some((source, *scale))
+    arrivals
+        .get(usize::try_from(arrival.index % count).ok()?)
+        .map(Vec::as_slice)
+}
+
+/// Where in the sky a picture `offset_deg` (turn to the right, tilt up) from an
+/// arrival's first picture at `main` is, in the sky's frame (x right, y down): turned
+/// about the sky's up through `main`, then tilted toward it.
+pub(crate) fn part_direction(main: [f64; 3], [turn_deg, tilt_deg]: [f32; 2]) -> [f64; 3] {
+    if turn_deg == 0.0 && tilt_deg == 0.0 {
+        return main;
+    }
+    let length = (main[0] * main[0] + main[1] * main[1] + main[2] * main[2]).sqrt();
+    if length.is_nan() || length <= 1e-9 {
+        return main;
+    }
+    let f = main.map(|v| v / length);
+    // Its right and up, as the backdrop draws a picture there: up toward the sky's
+    // (-y), or toward ahead (-z) straight up or down.
+    let sky_up = if f[1].abs() > 0.999 {
+        [0.0, 0.0, -1.0]
+    } else {
+        [0.0, -1.0, 0.0]
+    };
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let r = cross(sky_up, f);
+    let rl = (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
+    let right = r.map(|v| v / rl);
+    let up = cross(f, right);
+    let angle = |deg: f32| {
+        if deg.is_finite() {
+            f64::from(deg.clamp(-360.0, 360.0)).to_radians()
+        } else {
+            0.0
+        }
+    };
+    let (st, ct) = angle(tilt_deg).sin_cos();
+    let (su, cu) = angle(turn_deg).sin_cos();
+    [0, 1, 2].map(|i| ct * cu * f[i] + ct * su * right[i] + st * up[i])
 }
 
 /// How much an arrival picture's item scales its width (ADR-0188): its box's width over
