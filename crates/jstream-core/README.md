@@ -254,8 +254,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   the name of what reads its `params` key's `values.<n>` (an enabled `data` modifier on an
   item, named by its source and property, or on a scene's camera, by the scene and
   property, a value binding, by its target, or a channel's input
-  ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), by the channel's name or
-  else its ID), a reader naming the sender winning a
+  ([ADR-0185](../../docs/adr/0185-a-channel-names-the-mod-it-reads.md)), by the
+  channel's name or else its ID), a reader naming the sender winning a
   slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine
   works them out after every applied batch, undo, redo and load (`State::changed`) and
   when the receiver starts, and hands a change to `Receiver::set_names`. Only a sender

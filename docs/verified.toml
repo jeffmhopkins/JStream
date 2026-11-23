@@ -2061,7 +2061,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:6473b431ab728a10", by = "agent:claude", note = "Re-read the JTunnel names paragraph: it now lists a channel's data input (ADR-0183), named by the channel's name or else its ID, as names.rs's channel_label does." }
+stamp = { hash = "b3:4b3ff85082e45306", by = "agent:claude", note = "Re-read the JTunnel names paragraph: it now lists a channel's data input, linked to ADR-0185, named by the channel's name or else its ID, as names.rs's channel_label does." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:ff5e2c24579293a0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -8355,7 +8355,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:0f0dfcf2e50428c6", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:240f932aeebece9a", by = "agent:claude", note = "Re-read the names packet bullet and the residual-risk paragraph: both now include channel names, the one new thing param_names sends; the receivers, gating by state switch, 40-byte cap and clearing are unchanged." }
+stamp = { hash = "b3:c4e2a961bb5bd233", by = "agent:claude", note = "Re-read the names packet bullet and the residual-risk paragraph: both now include channel names (ADR-0185), the one new thing param_names sends; receivers, the state switch gate, the 40-byte cap and clearing are unchanged." }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }

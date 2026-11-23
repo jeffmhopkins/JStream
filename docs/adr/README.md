@@ -197,4 +197,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0182](0182-a-sky-follows-its-items-tilt-and-roll.md) | An environment light's sky follows its item's tilt and rotation as well as its turn | accepted | agent |  |
 | [ADR-0183](0183-virtual-control-channels.md) | Channels: named live values that controls set and anything follows | accepted | agent |  |
 | [ADR-0184](0184-sequences-lanes-and-triggers.md) | Sequences: lanes on timelines, and what starts them | accepted | agent |  |
+| [ADR-0185](0185-a-channel-names-the-mod-it-reads.md) | A channel names the JTunnel Mod it reads | accepted | agent |  |
 <!-- @generated end adr-index -->

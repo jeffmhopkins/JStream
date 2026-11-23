@@ -740,7 +740,8 @@ somewhere it shouldn't.
   tells an accepted sender whose state is on what the collection calls its modulation
   params, so its DAW shows them. It carries only the names of what reads the sender's
   `params` key (an item's source and property, a scene's camera property, a value
-  binding's target, a channel's name or ID), each at most 40 bytes with no control characters, at most 32 of
+  binding's target, a channel's name or ID per
+  [ADR-0185](../adr/0185-a-channel-names-the-mod-it-reads.md)), each at most 40 bytes with no control characters, at most 32 of
   them. It goes beside the keepalive while any slot is named, and as an empty list four
   more times once none is. A sender with its state off is sent none. The receiver never
   parses one.
