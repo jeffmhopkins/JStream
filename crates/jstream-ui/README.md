@@ -46,7 +46,7 @@ Contents ([Design](#design) explains the choices):
   switch any client or agent makes shows at once; `None` while the engine has no
   collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog
   (C18): Open lists the recent projects other than the open one under a Recent eyebrow
-  (a click fills Location, a double-click opens it), then a Location row on the
+  (one tab stop; a click, Space or Up and Down fill Location, a double-click or Enter opens it), then a Location row on the
   property grid, a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
   `collection.new`, `collection.open` or `collection.save_as`, with what an open or new
   stops as a one-line callout. `collection_folder` is the folder Browse… places `collection` assets under: the
