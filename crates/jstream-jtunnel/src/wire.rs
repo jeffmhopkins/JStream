@@ -13,11 +13,19 @@
 //! bye        nothing
 //! state      stream id (4), message id (4), piece (1), piece count (1), key length (1),
 //!            key, data length (2), data
+//! names      count (1), count x [slot (1), name length (1), name]
 //! ```
 //!
 //! A state packet (type 4, JTunnel 0.13 and later) is one piece of a JSON message under a
 //! key, the sender's side channel of what its DAW is doing (ADR-0171 decision 1);
 //! [`StateAssembler`](crate::StateAssembler) puts the pieces back together.
+//!
+//! A names packet (type 5, JTunnel 0.15 and later) goes the other way, from a receiver to
+//! a sender it subscribes to: what the receiver calls each of the sender's
+//! [`MOD_SLOTS`] modulation params, which the sender streams as its `params` key, so the
+//! DAW shows the names ([ADR-0181](../../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md)).
+//! The list is whole: a slot it leaves out has no name. [`write_names`] writes one;
+//! JStream never parses one, since it never takes names.
 //!
 //! Parsing checks everything the sender's own parser checks, so a packet JTunnel would
 //! refuse is refused here too, and a parsed packet's events can be walked without
@@ -85,6 +93,8 @@ pub enum PacketType {
     Bye = 3,
     /// One piece of a state message, from a sender (ADR-0171 decision 1).
     State = 4,
+    /// A receiver's names for its sender's modulation params (ADR-0181).
+    Names = 5,
 }
 
 /// How a stream's audio is coded.
@@ -586,6 +596,47 @@ pub fn write_bye(out: &mut [u8]) -> Option<usize> {
     write_header(out, PacketType::Bye)
 }
 
+/// How many modulation params a JTunnel sender has, each of which a names packet may name.
+pub const MOD_SLOTS: usize = 32;
+/// The longest name a names packet carries, in bytes, so all [`MOD_SLOTS`] fit one packet.
+pub const MAX_MOD_NAME: usize = 40;
+
+/// Whether `name` may go in a names packet as JTunnel checks it: empty (no name), or at
+/// most [`MAX_MOD_NAME`] bytes with no control character and no space at either end.
+#[must_use]
+pub fn is_mod_name(name: &str) -> bool {
+    name.len() <= MAX_MOD_NAME
+        && !name.chars().any(char::is_control)
+        && !name.starts_with(' ')
+        && !name.ends_with(' ')
+}
+
+/// Writes a names packet into `out`: `names[i]` names slot `i`, and an empty one leaves
+/// it out. Gives its length, or `None` if `out` is too small, there are not exactly
+/// [`MOD_SLOTS`] names, or one is not [`is_mod_name`].
+#[must_use]
+pub fn write_names(out: &mut [u8], names: &[String]) -> Option<usize> {
+    if names.len() != MOD_SLOTS || !names.iter().all(|name| is_mod_name(name)) {
+        return None;
+    }
+    let mut at = write_header(out, PacketType::Names)?;
+    let count = names.iter().filter(|name| !name.is_empty()).count();
+    *out.get_mut(at)? = u8::try_from(count).ok()?;
+    at += 1;
+    for (slot, name) in names.iter().enumerate() {
+        if name.is_empty() {
+            continue;
+        }
+        let end = at + 2 + name.len();
+        let body = out.get_mut(at..end)?;
+        body[0] = u8::try_from(slot).ok()?;
+        body[1] = u8::try_from(name.len()).ok()?;
+        body[2..].copy_from_slice(name.as_bytes());
+        at = end;
+    }
+    Some(at)
+}
+
 /// Writes one state piece into `out`, as a sender does, and gives its length, or `None`
 /// if `out` is too small or the piece is one [`parse`] would refuse (a bad key, too much
 /// data, a piece past the count). JStream doesn't send state; this is for tests and
@@ -682,6 +733,39 @@ pub fn decode_pcm24(audio: &[u8], out: &mut [f32]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_names_packet_is_jtunnels_layout_and_refuses_what_jtunnel_would() {
+        let mut names = vec![String::new(); MOD_SLOTS];
+        names[4] = "Camera 1 Pan".into();
+        names[31] = "Fog dénsité".into();
+        let mut out = [0_u8; MAX_PACKET_BYTES];
+        let len = write_names(&mut out, &names).expect("fits");
+        let mut want = b"JTUN\x02\x05\x02\x04\x0cCamera 1 Pan\x1f".to_vec();
+        want.push(u8::try_from("Fog dénsité".len()).expect("short"));
+        want.extend_from_slice("Fog dénsité".as_bytes());
+        assert_eq!(&out[..len], &want[..]);
+        // No names: an empty list, which clears every slot.
+        let none = vec![String::new(); MOD_SLOTS];
+        assert_eq!(write_names(&mut out, &none), Some(7));
+        assert_eq!(out[5..7], [5, 0]);
+        // Every slot at the longest name fits one packet.
+        let longest = vec!["x".repeat(MAX_MOD_NAME); MOD_SLOTS];
+        assert!(write_names(&mut out, &longest).is_some_and(|len| len <= MAX_PACKET_BYTES));
+        for bad in [
+            "x".repeat(MAX_MOD_NAME + 1),
+            "a\nb".into(),
+            " Pan".into(),
+            "Pan ".into(),
+            "\u{85}".into(),
+        ] {
+            let mut names = none.clone();
+            names[0] = bad;
+            assert_eq!(write_names(&mut out, &names), None);
+        }
+        assert_eq!(write_names(&mut out, &none[1..]), None);
+        assert_eq!(write_names(&mut out[..20], &longest), None);
+    }
 
     fn header(codec: Codec, frame_samples: u16) -> AudioHeader {
         AudioHeader {

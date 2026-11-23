@@ -1838,3 +1838,191 @@ fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
     );
     assert_eq!(engine.jtunnel_stats().map(|s| s.state), Some(1));
 }
+
+/// The next names packet (ADR-0181) `sender` receives, as each slot's name; subscribes
+/// between are skipped.
+fn next_names(sender: &std::net::UdpSocket) -> Vec<String> {
+    let mut buf = [0; jstream_jtunnel::wire::MAX_PACKET_BYTES];
+    let until = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < until {
+        let (n, _) = sender.recv_from(&mut buf).expect("a packet");
+        let packet = &buf[..n];
+        if packet.len() < 7 || packet[5] != 5 {
+            continue;
+        }
+        let mut names = vec![String::new(); jstream_jtunnel::wire::MOD_SLOTS];
+        let mut at = 7;
+        for _ in 0..packet[6] {
+            let (slot, len) = (usize::from(packet[at]), usize::from(packet[at + 1]));
+            names[slot] = String::from_utf8(packet[at + 2..at + 2 + len].to_vec()).expect("UTF-8");
+            at += 2 + len;
+        }
+        assert_eq!(at, n, "nothing after the last name");
+        return names;
+    }
+    panic!("no names packet");
+}
+
+/// ADR-0181: what reads a sender's `params` key names its modulation params after what
+/// it drives: an item's source and property, a scene's camera property, a value
+/// binding's target. A reader naming the sender wins a slot over one for any sender; a
+/// disabled one names nothing; the names go beside each keepalive, and an empty list
+/// follows once none is left. A sender whose state is off is sent no names.
+#[test]
+fn what_reads_a_senders_params_names_them_on_the_sender() {
+    use jstream_protocol::{
+        BusId, CameraMotionModifier, CameraProperty, Finite32, MotionClock, MotionCurve,
+        MotionKind, MotionModifier, MotionProperty, SceneId, ValueBinding, ValueTarget,
+    };
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let bitwig = jtunnel_sender();
+    let quiet = jtunnel_sender();
+    let mut setup = crate::JtunnelSetup::new(vec![
+        crate::AcceptedSender::new("Bitwig", bitwig.local_addr().expect("an address"))
+            .expect("accepted"),
+        crate::AcceptedSender::new("Quiet", quiet.local_addr().expect("an address"))
+            .expect("accepted")
+            .with_state(false),
+    ])
+    .expect("a setup");
+    setup.bind = "127.0.0.1:0".parse().expect("an address");
+    setup.discover = None;
+    engine.start_jtunnel(&setup).expect("a receiver");
+
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let data = |input: Option<&str>, slot: usize| MotionKind::Data {
+        input: input.map(str::to_owned),
+        key: "params".into(),
+        field: format!("values.{slot}"),
+        range: [f(0.0), f(1.0)],
+        states: std::collections::BTreeMap::new(),
+        smoothing_ms: 50,
+        curve: MotionCurve::Linear,
+        from: f(0.0),
+        to: f(1.0),
+        color_from: None,
+        palette: std::collections::BTreeMap::new(),
+    };
+    let modifier = |id: &str, kind: MotionKind, enabled: bool| MotionModifier {
+        modifier_id: id.into(),
+        property: MotionProperty::X,
+        effect: None,
+        source: None,
+        kind,
+        clock: MotionClock::Engine,
+        enabled,
+        amount: None,
+    };
+    let webcam = Edit::SourceCreate {
+        source_id: SourceId::new("webcam"),
+        name: "Webcam".into(),
+        kind: SourceKind::Builtin {
+            kind: "webcam".into(),
+        },
+        settings: Settings::new(),
+        duplicated_from: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            webcam,
+            add("a", "w1", "webcam"),
+            Edit::ItemSetMotion {
+                item_id: ItemId::new("w1"),
+                scene_id: None,
+                motion: vec![
+                    modifier("x", data(Some("Bitwig"), 4), true),
+                    modifier("off", data(None, 31), false),
+                    // Another sender's key: not this sender's slot 5.
+                    modifier("other", data(Some("Laptop"), 5), true),
+                ],
+            },
+            Edit::SceneSetCameraMotion {
+                scene_id: SceneId::new("a"),
+                motion: vec![CameraMotionModifier {
+                    modifier_id: "pan".into(),
+                    property: CameraProperty::Pan,
+                    kind: data(None, 0),
+                    clock: MotionClock::Engine,
+                    enabled: true,
+                    amount: None,
+                }],
+            },
+            Edit::BindingSetValue {
+                binding: ValueBinding {
+                    binding_id: "master".into(),
+                    input: data(None, 4),
+                    target: ValueTarget::BusGain {
+                        bus_id: BusId::master(),
+                    },
+                    amount: None,
+                },
+            },
+            Edit::BindingSetValue {
+                binding: ValueBinding {
+                    binding_id: "master-2".into(),
+                    input: data(None, 1),
+                    target: ValueTarget::BusGain {
+                        bus_id: BusId::master(),
+                    },
+                    amount: None,
+                },
+            },
+        ]),
+    )
+    .expect("binds");
+    let names = next_names(&bitwig);
+    let master = names[1].clone();
+    assert!(master.ends_with(" Volume"), "the bus's fader: {master:?}");
+    let mut want = vec![String::new(); jstream_jtunnel::wire::MOD_SLOTS];
+    want[0] = "A Pan".into();
+    want[1] = master;
+    want[4] = "Webcam X".into();
+    assert_eq!(names, want);
+    // Sent again beside the next keepalive, so a lost one is put right.
+    assert_eq!(next_names(&bitwig), want);
+
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemSetMotion {
+                item_id: ItemId::new("w1"),
+                scene_id: None,
+                motion: Vec::new(),
+            },
+            Edit::SceneSetCameraMotion {
+                scene_id: SceneId::new("a"),
+                motion: Vec::new(),
+            },
+            Edit::BindingClearValue {
+                binding_id: "master".into(),
+            },
+            Edit::BindingClearValue {
+                binding_id: "master-2".into(),
+            },
+        ]),
+    )
+    .expect("unbinds");
+    // Once the names already queued are out, an empty list clears every slot.
+    let mut cleared = false;
+    for _ in 0..4 {
+        if next_names(&bitwig).iter().all(String::is_empty) {
+            cleared = true;
+            break;
+        }
+    }
+    assert!(cleared, "the names go");
+
+    // The sender whose state is off heard keepalives only.
+    quiet
+        .set_read_timeout(Some(Duration::from_millis(50)))
+        .expect("a timeout");
+    let mut buf = [0; jstream_jtunnel::wire::MAX_PACKET_BYTES];
+    while let Ok((n, _)) = quiet.recv_from(&mut buf) {
+        assert_ne!(buf.get(5).copied().filter(|_| n > 5), Some(5), "no names");
+    }
+}
