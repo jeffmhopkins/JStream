@@ -2594,6 +2594,7 @@ fn profile_info() -> ProfileInfo {
             frame_max_ms: ms(21.0),
             over_budget: 2,
             skipped: 1,
+            preview_skipped: 4,
             submits: ms(42.5),
             phases: PhaseProfile {
                 uploads_ms: ms(1.25),

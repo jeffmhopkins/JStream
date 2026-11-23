@@ -116,6 +116,8 @@ pub(crate) struct DrawerTotals {
     pub(crate) maxes: SecondMaxes,
     /// The ticks skipped (the program only).
     pub(crate) skipped: u64,
+    /// The pictures only preview streams take that were skipped (the program only).
+    pub(crate) preview_skipped: u64,
     /// The GPU submits the drawer's thread made ([`DrawMeter::submitted`]).
     pub(crate) submits: u64,
     pub(crate) phases: [u64; PHASES],
@@ -302,6 +304,7 @@ pub(crate) struct DrawMeter {
     seconds: u64,
     maxes: SecondMaxes,
     skipped: u64,
+    preview_skipped: u64,
     submits: u64,
     /// The thread's submit count when it was last read, or `None` before the first read.
     submits_seen: Option<u64>,
@@ -346,6 +349,7 @@ impl Default for DrawMeter {
             seconds: 0,
             maxes: SecondMaxes::default(),
             skipped: 0,
+            preview_skipped: 0,
             submits: 0,
             submits_seen: None,
             phases: [0; PHASES],
@@ -559,6 +563,12 @@ impl DrawMeter {
         self.skipped = self.skipped.saturating_add(skipped);
     }
 
+    /// Counts `skipped` pictures the drawer drew or read back for preview streams only
+    /// and skipped (#1690): no output missed them, so they are no drops.
+    pub(crate) fn preview_skip(&mut self, skipped: u64) {
+        self.preview_skipped = self.preview_skipped.saturating_add(skipped);
+    }
+
     /// Counts the GPU submits the drawer's thread has made since the last call, given
     /// the thread's running count (`jstream_render::submits_on_this_thread`). Called at
     /// the end of each frame, before [`Self::end_frame`]. The first call only notes the
@@ -664,6 +674,7 @@ impl DrawMeter {
             seconds: self.seconds,
             maxes: self.maxes,
             skipped: self.skipped,
+            preview_skipped: self.preview_skipped,
             submits: self.submits,
             phases: self.phases,
             units,

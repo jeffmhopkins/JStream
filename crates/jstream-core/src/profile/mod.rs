@@ -510,6 +510,9 @@ fn drawer_profile(
                 .over_budget
                 .saturating_sub(before.map_or(0, |b| b.over_budget)),
             skipped: now.skipped.saturating_sub(before.map_or(0, |b| b.skipped)),
+            preview_skipped: now
+                .preview_skipped
+                .saturating_sub(before.map_or(0, |b| b.preview_skipped)),
             submits: per_frame(
                 now.submits.saturating_sub(before.map_or(0, |b| b.submits)),
                 frames,
