@@ -3912,7 +3912,9 @@ keeps each capture's newest `GpuFrame` until a newer one replaces it, and the ca
 frame's hold only to the frame that draws it, so a held capture slot is the frame on
 screen and nothing more. On the CPU path it keeps each capture's newest frame as it
 arrived (packed RGBA or BGRA, or NV12, which Windows' capture delivers), checking only
-that its rows are long enough, and the compositor uploads it with
+that its rows are long enough, hands the frame it replaces back to its stream
+(`CaptureStream::recycle`, through a shared device's reader unless another reader holds
+the device), so a webcam's capture thread fills that memory again, and the compositor uploads it with
 `ResourceCache::upload_frame` (or `upload_frame_drawn`, at the size its items draw it,
 when only items draw it: see [Snapshots](#snapshots)), which converts it on the GPU with its frame's matrix and
 range ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §2), opaque: alpha

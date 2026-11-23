@@ -35,7 +35,9 @@ Contents:
 - **Color:** `ColorInfo` (BT.601/709/2020, limited or full range), defaulting to BT.709
   limited, the engine's default output ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
 - **Video:** `VideoFrameInfo` (size, format, color, pts) and a CPU-backed `VideoFrame`
-  whose plane count, strides and buffer lengths are checked against the format.
+  whose plane count, strides and buffer lengths are checked against the format. A frame
+  gives up its planes (`into_planes`) and a plane its buffer (`Plane::into_data`), for a
+  producer that fills them again.
 - **Audio:** `AudioFormat` (non-zero sample rate, `ChannelLayout`, `f32` interleaved or
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
 - **3D models** (`model`, [ADR-0107](../../docs/adr/0107-3d-models.md)): a checked

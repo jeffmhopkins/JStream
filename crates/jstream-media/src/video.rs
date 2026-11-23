@@ -56,6 +56,12 @@ impl Plane {
     pub fn stride(&self) -> usize {
         self.stride
     }
+
+    /// The plane's buffer, giving up the plane: for a producer that fills it again for
+    /// its next frame instead of allocating one.
+    pub fn into_data(self) -> Vec<u8> {
+        self.data
+    }
 }
 
 /// A video frame in CPU memory whose planes are checked against its format.

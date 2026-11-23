@@ -47,15 +47,17 @@ impl Layout {
     }
 
     /// The engine frame for `src`, with `info`'s size, colour and `pts` (its format is
-    /// set from the layout).
+    /// set from the layout). A copied layout (NV12, I420) fills `spare`'s buffers again
+    /// when it is given a frame the engine handed back, instead of allocating.
     pub(crate) fn frame(
         self,
         src: &[u8],
         stride: usize,
         info: VideoFrameInfo,
+        spare: Option<VideoFrame>,
     ) -> Result<VideoFrame, PlatformError> {
         match self {
-            Self::Nv12 => yuv::copy_planar(
+            Self::Nv12 => yuv::copy_planar_into(
                 LOCK,
                 src,
                 stride,
@@ -63,8 +65,9 @@ impl Layout {
                     format: PixelFormat::Nv12,
                     ..info
                 },
+                spare,
             ),
-            Self::I420 => yuv::copy_planar(
+            Self::I420 => yuv::copy_planar_into(
                 LOCK,
                 src,
                 stride,
@@ -72,6 +75,7 @@ impl Layout {
                     format: PixelFormat::I420,
                     ..info
                 },
+                spare,
             ),
             Self::Yuy2 => yuv::yuy2_to_nv12(LOCK, src, stride, info),
         }
@@ -120,12 +124,16 @@ mod tests {
         let src = [7u8; 8 * 2];
         let i = info(4, 2, PixelFormat::Bgra8);
         assert_eq!(
-            Layout::Yuy2.frame(&src, 8, i).expect("yuy2").info().format,
+            Layout::Yuy2
+                .frame(&src, 8, i, None)
+                .expect("yuy2")
+                .info()
+                .format,
             PixelFormat::Nv12
         );
         assert_eq!(
             Layout::Nv12
-                .frame(&src[..12], 4, i)
+                .frame(&src[..12], 4, i, None)
                 .expect("nv12")
                 .info()
                 .format,
@@ -133,7 +141,7 @@ mod tests {
         );
         assert_eq!(
             Layout::I420
-                .frame(&src[..12], 4, i)
+                .frame(&src[..12], 4, i, None)
                 .expect("i420")
                 .info()
                 .format,
@@ -144,7 +152,7 @@ mod tests {
     #[test]
     fn a_short_buffer_is_reported_against_the_lock() {
         assert!(matches!(
-            Layout::Nv12.frame(&[0u8; 11], 4, info(4, 2, PixelFormat::Nv12)),
+            Layout::Nv12.frame(&[0u8; 11], 4, info(4, 2, PixelFormat::Nv12), None),
             Err(PlatformError::Os {
                 call: "IMFMediaBuffer::Lock",
                 ..
