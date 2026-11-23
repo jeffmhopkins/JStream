@@ -6597,7 +6597,7 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:ff923b70ae781b73" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "Depth now doubles or halves the distance per DEPTH_DRAG_PX with a MIN_ITEM_DISTANCE floor, Turn skips billboards, and camera mode and the item tool are left in a 2D scene; the 3D tools bullet says each" }
+stamp = { hash = "b3:e7694ff5fbaa8126", by = "agent:release-alpha8", note = "camera.rs changed only in readout()'s doc comment, which now says the readout also gives the field of view, as #1633's format string already did; this section's camera-mode, Depth and Turn text doesn't quote the readout, so it holds." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the 3D scenes and crop paragraphs: crop.rs changed only a test SceneInfo initialiser. The canvas still outlines and drags a group's item as one box; outlining a 3D group by its children (ADR-0164 §6) is a follow-up, so nothing here is wrong." }
@@ -6654,7 +6654,7 @@ stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "Re-read after the Depth floor, billboard skip and leaving 3D tools in 2D: still canvas-local state, nothing here changes" }
+stamp = { hash = "b3:e7694ff5fbaa8126", by = "agent:release-alpha8", note = "camera.rs changed only in readout()'s doc comment, which now says the readout also gives the field of view, as #1633's format string already did; this section's camera-mode, Depth and Turn text doesn't quote the readout, so it holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers." }
@@ -6888,7 +6888,7 @@ stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: sc
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "Re-read: unchanged by the round-1 fixes" }
+stamp = { hash = "b3:e7694ff5fbaa8126", by = "agent:release-alpha8", note = "camera.rs changed only in readout()'s doc comment, which now says the readout also gives the field of view, as #1633's format string already did; this section's camera-mode, Depth and Turn text doesn't quote the readout, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers." }
@@ -8544,7 +8544,7 @@ stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:3546004f22bc2a80", by = "agent:claude", note = "CV-11 notes the 3D tool bar additions; the 3D scenes and new 3D tools/camera mode bullets match canvas/mod.rs and camera.rs (bindings, wheel settle 350 ms, fov 1-170, Save view batch, Esc/V/K)" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
-stamp = { hash = "b3:95c96edcaa436f72", by = "agent:claude", note = "CV-11 still lists the 3D tool bar additions (Depth, Turn, Camera mode, and in camera mode the drag, wheel and Save view buttons); the rest of the table is unchanged by this PR" }
+stamp = { hash = "b3:e7694ff5fbaa8126", by = "agent:release-alpha8", note = "camera.rs changed only in readout()'s doc comment, which now says the readout also gives the field of view, as #1633's format string already did; this section's camera-mode, Depth and Turn text doesn't quote the readout, so it holds." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/crop.rs"]
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read this section's rows for the covered file: its only change is camera_anchor: None in test SceneInfo initialisers (protocol 0.125), so no feature it describes changed." }
