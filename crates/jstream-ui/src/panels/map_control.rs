@@ -510,6 +510,7 @@ fn bar(level: impl Fn() -> f32 + Send + Sync + 'static) -> impl IntoView {
 #[component]
 fn MapControl(request: MapControlRequest) -> impl IntoView {
     let studio = expect_context::<Studio>();
+    let mapping_mode = use_context::<crate::panels::mapping_mode::MappingMode>();
     let session = expect_context::<SessionContext>();
     let dialog = expect_context::<MapControlDialog>();
     let request = StoredValue::new(request);
@@ -1181,6 +1182,17 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
             <div class="modal-footer">
                 <span class="hint footer-left">{replaces}</span>
                 <button type="button" class="secondary" on:click=move |_| close()>"Cancel"</button>
+                <button type="button" class="secondary"
+                    title="Close this and arm the source: then drag up or down on any setting to map the source onto it by an amount"
+                    disabled=move || tab.get() == Tab::Key || draft.with(Option::is_none)
+                    on:click=move |_| {
+                        if let (Some(mode), Some(reader)) = (mapping_mode, draft.get_untracked()) {
+                            mode.arm(reader);
+                            close();
+                        }
+                    }>
+                    "Map by dragging"
+                </button>
                 <button type="button" class="primary" data-primary disabled=move || !ready() on:click=map>"Use"</button>
             </div>
         </Modal>

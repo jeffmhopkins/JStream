@@ -28,6 +28,7 @@ pub mod labels;
 pub mod learn;
 pub mod looks;
 pub mod map_control;
+pub mod mapping_mode;
 pub mod mixer;
 pub mod motion;
 pub mod number;

@@ -490,8 +490,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
   fader's row opening its menu, Map control… opening the dialog, a Mod picked there
   changing nothing until Use, which is one edit and names the Mod on the control button;
-  Cancel changing nothing; and the menu's Learn taking the one MIDI control that moves
-  after it opened, as one edit.
+  Cancel changing nothing; the menu's Learn taking the one MIDI control that moves
+  after it opened, as one edit; and mapping mode from the dialog's "Map by dragging":
+  the bar naming the armed Mod, a click on a setting mapping nothing, a 20 px drag up
+  showing "+10 %" and sending one edit when let go, a second drag moving the far end
+  as one more edit, and Escape leaving the mode.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with

@@ -825,6 +825,22 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the key bound to `channel.switch` `toggle`; a key that already switches a channel just
   gets the setting following that channel). `LearnPopover` takes the one source heard
   after a 900 ms pause with nothing new, or lists several to pick from.
+- **Mapping mode** (`panels/mapping_mode.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+  `MappingMode`, provided by the Shell, holds the armed source (`armed`, a reader and its
+  name; `arm` and `disarm`) and the drag under way (`drag`: the setting's `data-learn`,
+  the amount as a share of its range, and `done`). Anything that lists sources arms one
+  with `arm`. `MappingBar`, mounted once under the header, shows the armed source and,
+  while one is armed, listens on the document's capture phase: a press on a setting's row
+  (`setting_at`, the lookup a right-click uses) starts a drag and never reaches the
+  control, `dragged` turns pointer travel into the amount (200 px the whole range, a
+  tenth as fast with Shift), letting go after less than 3 px is a click that maps
+  nothing, the click that follows a press is swallowed, Escape cancels the drag or
+  disarms, and `[` and `]` step the armed Mod (`stepped`). The body carries
+  `mapping-mode` for the styles. The setting's control button (`learn.rs`) watches
+  `drag` for its own ID: it shows `amount_label` of `ends_after` while the drag runs, and
+  on `done` writes one `binding.set_value` reading the armed source from where the
+  setting is to the dragged amount, kept in range; a setting the source maps already
+  keeps its start, smoothing, curve and amount channel.
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in

@@ -83,3 +83,46 @@ test('Learn from the menu takes the one MIDI control that moves', async ({ page,
   await expect.poll(() => rev(page)).toBe(before + 1);
   await expect(button).toContainText('CC 21');
 });
+
+test('mapping mode maps the armed source by the amount dragged on a setting', async ({ page, daemon }) => {
+  const live = await liveSources(page);
+  live({ senders: { Bitwig: { params: mods({ 20: 0.62 }) } } });
+  await connect(page, daemon);
+  const { button, x, y } = await fader(page);
+  const before = await rev(page);
+
+  await page.mouse.click(x, y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Map control…' }).click();
+  const dialog = page.getByRole('dialog', { name: /^Map control/ });
+  await dialog.getByRole('button', { name: /^Mod 20/ }).click();
+  await dialog.getByRole('button', { name: 'Map by dragging' }).click();
+  await expect(dialog).toBeHidden();
+  const bar = page.locator('.mapping-bar');
+  await expect(bar).toContainText('Mapping Mod 20');
+  // Arming a source maps nothing by itself, and neither does a click on a setting.
+  await page.mouse.click(x, y);
+  expect(await rev(page)).toBe(before);
+
+  // 20 px up is a tenth of the range: one edit, when the pointer is let go.
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y - 10, { steps: 3 });
+  await page.mouse.move(x, y - 20, { steps: 3 });
+  await expect(button).toHaveText('+10 %');
+  expect(await rev(page)).toBe(before);
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  await expect(button).toHaveText('+10 %');
+
+  // The same source dragged again moves the far end, as one more edit.
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 10, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(before + 2);
+  await expect(button).toHaveText('+5 %');
+
+  await page.keyboard.press('Escape');
+  await expect(bar).toBeHidden();
+  await expect(button).toContainText('Mod 20');
+});
