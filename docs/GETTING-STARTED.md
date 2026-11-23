@@ -123,6 +123,11 @@ adds, which makes soft glows and veils brighter.
 3. Drag the source on the canvas to move it, and its handles to resize it. To crop it,
    hold Alt on a handle, or press C for crop mode (V leaves it). The **Inspector** holds
    the exact numbers, and the **Arrange** panel aligns and fits what you select.
+   In a 3D scene (one with a camera) a drag slides an item on its depth plane; the
+   tool bar's **Depth** (D) pushes it away or brings it closer, and **Turn** (R) turns
+   and tilts it. Press K, or the camera button, for camera mode: a left drag orbits
+   (or looks around, or moves, as its buttons pick), a right drag moves, the wheel zooms,
+   and **◆ Save view** keeps the shot as a new keyframe scene. Esc leaves it.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red

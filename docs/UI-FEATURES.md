@@ -171,7 +171,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | ✅ | The drag moves one edge of the item's picture, which keeps its scale, and stops at the uncropped extent; the drop is one undoable batch of `item.set_geometry` and `item.set_crop` (crop is in source pixels), shown live as it goes. The box becomes the picture's rectangle, so a `fit` box with room around its picture closes onto it, and a `fill` box's clipped margins become crop. It needs the source's size (`source.sizes` and `source.size_changed`, [ADR-0022](adr/0022-item-transform-and-canvas.md)): a capture source has one while an output runs and its capture has a frame, and a nested scene's is the canvas. Without one, crop mode has no crop handles, the box's handles resize as usual (with Alt too) and the pill says "no source size yet"; the Inspector's crop fields still work. In crop mode the selection, its handles (12 px, filled) and its pill are amber, and the ghost shows whenever the item is cropped. |
 | CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ✅ | The group box can reach past the frame; the pointer is followed over the whole canvas area so its handles stay reachable. A corner scales by the larger change (as a single item's resize does), where the prototype takes the larger factor; they differ only when shrinking. |
 | CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ✅ | A marquee can start on the dark margin too. Hits use each item's axis-aligned bounds. |
-| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | ✅ | Move/resize leaves crop mode; Crop toggles it, in the prototype's amber when on. |
+| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | ✅ | Move/resize leaves crop mode; Crop toggles it, in the prototype's amber when on. A 3D scene's bar adds Depth, Turn and Camera mode before Snapping, and in camera mode its drag, wheel and Save view buttons ([Beyond the prototype](#beyond)). |
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | A locked item stays where it is ([OB-02](#objects)). |
 | CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ✅ | Selects the item alone and opens its source's Properties dialog ([DL-02](#dialogs)), which is the same for every placement of the source. A nested scene opens the scene's Properties dialog ([DL-03](#dialogs)). |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
@@ -486,8 +486,8 @@ handlers; the real UI makes them work.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | ✅ | Arrows move every selected item but a locked one, as one edit. Esc also leaves crop mode, and so does switching scenes. |
-| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | ✅ | Alt on a handle crops while the source's size is known (CV-08); Shift halves a crop drag's speed too. In a 3D scene Alt-drag orbits the camera and Alt+Shift-drag dollies it instead, since its boxes have no handles (see [Beyond the prototype](#beyond)). |
+| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | ✅ | Arrows move every selected item but a locked one, as one edit. Esc also leaves crop mode, and so does switching scenes. In a 3D scene K toggles camera mode, D picks the Depth tool and R the Turn tool, V goes back to Move, and Esc leaves camera mode first ([Beyond the prototype](#beyond)). |
+| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | ✅ | Alt on a handle crops while the source's size is known (CV-08); Shift halves a crop drag's speed too. In a 3D scene Alt-drag orbits the camera and Alt+Shift-drag dollies it instead, since its boxes have no handles, and Ctrl-drag on an item moves it toward or away from the camera (see [Beyond the prototype](#beyond)). |
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ✅ | F2 renames and Del removes in the Scenes and Sources rows (Del deletes a scene or a folder there, through its plan). Ctrl+D and Ctrl+Shift+D duplicate the item as a reference or a clone on the canvas and in its row, and Del on the canvas removes the selection; in a keyframe scene ([SC-07](#scenes)) the duplicates and Del do nothing, as they would change its parent's items. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ✅ | The page's own clipboard, not the system's (decision register D43, `clipboard.rs`). Ctrl+C on the canvas or an object row copies the selected items; on a scene row it copies the scene. Ctrl+V on the canvas or in Sources places the copied items' sources again in the shown scene, as references with the items' boxes, crop, visibility, lock, opacity, blend, transition settings, effects and motion, 40 pixels right and down when pasted into the scene they came from; a nested scene that would contain itself, or a source deleted since, is left out. In the Scenes panel Ctrl+V duplicates the copied scene, as Duplicate scene does ([CM-03](#menus)). Each paste is one undo step, and in a keyframe scene Ctrl+V does nothing. |
@@ -573,7 +573,26 @@ not remove them; they move into the prototype's look.
   on the side a camera typed in Properties is already past that, no further than it is),
   Alt+Shift-drag dollies it, live on output (`live.set` of `scene.set_camera`) and
   committed as one undo step; on a keyframe scene that writes its camera override. The
-  pill under the frame reads the camera's position and distance to its target.
+  pill under the frame reads the camera's position, distance to its target and field of
+  view.
+- A 3D scene's tools, after Crop in the canvas tool bar (`canvas/camera.rs`). Depth (D),
+  or Ctrl-drag with Move, moves the dragged items along the line from the camera to
+  them: up pushes them away, down brings them closer, their distance doubling or halving per 200 screen pixels and never nearer than 10 px, so they stay
+  under the pointer. Turn (R) turns them about their centre: sideways sets `turn_deg`,
+  up and down `tilt_deg`, kept within ±180°; a billboard, which faces the camera anyway, isn't turned. Both are shown live and committed as one
+  undo step, on a keyframe scene as its overrides. Camera mode (K, the camera button)
+  hands the mouse to the camera and selects or moves no item, opens no menu and no
+  Properties: a left drag orbits, looks around (turns the camera where it stands, its
+  target moving), moves (slides camera and target across the picture, the target's
+  plane following the pointer) or dollies, as its Orbit, Look around, Move and Dolly
+  buttons pick; a right or middle drag moves, or orbits when a left drag moves;
+  Shift-drag dollies. The wheel zooms (the camera's `fov_deg`, 1° to 170°) or dollies,
+  as the Wheel: zoom and Wheel: dolly buttons pick, Shift+wheel doing the other. Every
+  tool and choice is a button, with its key and modifier named in its tooltip; a wheel turn is live on output and committed as
+  one undo step once the wheel rests for 350 ms. The choices are kept in the browser.
+  "◆ Save view" makes a keyframe scene of the shown scene (of its parent, on a keyframe)
+  with the camera shown as its own, in one undo step (`scene.create_variant` and
+  `scene.set_camera`), and selects it. Esc, V or the button leaves camera mode.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs ([Outputs](#outputs)): creating stream, recording and virtual camera outputs,
