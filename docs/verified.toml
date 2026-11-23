@@ -816,10 +816,10 @@ stamp = { hash = "b3:170a35823fa167a0", by = "agent:page-api-review", note = "Co
 stamp = { hash = "b3:7bed91ce5f40dd64", by = "agent:r9bzj2", note = "merge: The wave's page API took schema 8 (v7_to_v8 turns on page API checkboxes); controller bindings move to schema 9 with v8_to_v9 and fixtures/v9.json, and the text now says so" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:8a52f20f38ba4836", by = "agent:bindings", note = "Re-read the collection file history: added that several actions need no schema bump, old files load, an older engine refuses a repeated chord via the replayed hotkey.set; round-trip test added in persist/tests.rs." }
+stamp = { hash = "b3:0dec64ac0cbe19b1", by = "agent:issues-thread", note = "Re-read against the #1671 load-order fix: the section describes schema versions, checks on load and file handling, none of which changed; it doesn't state the order channels load in, so it still holds" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:3a652b08b1973b95", by = "agent:bindings", note = "Re-read the collection file history: added that several actions need no schema bump, old files load, an older engine refuses a repeated chord via the replayed hotkey.set; round-trip test added in persist/tests.rs." }
+stamp = { hash = "b3:cbdd026d4ba5c4c3", by = "agent:issues-thread", note = "Re-read against the #1671 load-order fix: the section describes schema versions, checks on load and file handling, none of which changed; it doesn't state the order channels load in, so it still holds" }
 
 ["ARCH#principles"."body"]
 stamp = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
@@ -1878,7 +1878,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, history.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on 0013-command-model.md, RULES.md#R-API-004, README.md#batches, matching what it relies on" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Re-read Calls: added output.toggle reading running under the state lock then running as output.start/stop with their locking. | kept from the merged side: Re-read: item.show and set_keyframe still continue a transition in flight from what is on screen; an ended one now counts as not in flight, as Program scene says" }
+stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: item.show and set_keyframe still continue a transition in flight from what is on screen; an ended one now counts as not in flight, as Program scene says" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:3396a70c4ea3f458", by = "agent:lane-d", note = "collection.* dispatch through collection_call before the generic path; the call flow, saving after batches and audit described here still hold. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
@@ -1902,7 +1902,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:128b8747967ace26", by = "agent:release-alpha8", note = "added stop_jtunnel beside start_jtunnel and jtunnel_stats; checked engine.rs" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff (output.toggle dispatch at the top of execute): the module list is unchanged. | kept from the merged side: Re-read: engine.rs only changes how a switch and screen_now pick what is on screen (still_on_screen); the module list is unchanged" }
+stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: engine.rs only changes how a switch and screen_now pick what is on screen (still_on_screen); the module list is unchanged" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2025,7 +2025,7 @@ stamp = { hash = "b3:d1aca46da610447c", by = "agent:claude", note = "B1: a bindi
 stamp = { hash = "b3:6cd45e61e61a2c66", by = "agent:claude", note = "Re-read: the Data-driven motion bullet now describes painting bindings and Bindings::tint, and Driven source settings names set_color and set_emissive and effects, matching reactive.rs, sourced.rs and driven.rs." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: only output.toggle dispatch changed; its motion, value-binding and channel text is untouched by it. | kept from the merged side: Re-read: no motion, scene or timeline behaviour changed by the engine.rs switch-start fix" }
+stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: no motion, scene or timeline behaviour changed by the engine.rs switch-start fix" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/follow.rs"]
 stamp = { hash = "b3:67a9c13712b51b9d", by = "agent:channels", note = "Added channels.rs to covers and a Channels bullet (driver, cells, values thread, scene reset, note control, amount); value bindings bullet notes amount." }
@@ -2283,7 +2283,7 @@ stamp = { hash = "b3:940f9ec841a53f51", by = "agent:bindings", note = "Checked i
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked its output.start/stop blocking note: toggle blocks the same way, as it runs as one of them. | kept from the merged side: Re-read: engine and session design unchanged by the switch-start fix" }
+stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: engine and session design unchanged by the switch-start fix" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
 stamp = { hash = "b3:44b5b114d27ed218", by = "agent:claude", note = "ADR-0197: lib.rs only gains the private resolution module; engine and sessions are untouched and the section still holds." }
@@ -2349,7 +2349,7 @@ stamp = { hash = "b3:b7ef33611a15221a", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:fcec80c6a7edbd49", by = "agent:release-alpha9", note = "Added that the values tick plays waited and triggered timelines and moves lanes under the collection lock. | merge: engine.rs's State now holds #1636's jtunnel_names (ADR-0181) beside #1638/#1640's channels, channels_program and sequences; the merge kept both field sets; #1636's names leaf mutex (Receiver::set_names under the collection lock, and the receiver's thread) sits beside #1640's channel and timeline locks with no new order between them | kept from the merged side: the per-sender names leaf mutex (ADR-0181): set_names under the collection lock, the receiver thread alone; start_jtunnel takes the collection lock again after setting the slot | kept from the merged side: The text covers #1628's start_jtunnel/stop_jtunnel emits, #1620's Shared::hearing leaf and gpu-stack's priming order, and now also CC PR 3 value bindings' two leaf-lock uses under the collection lock: midi.last_controls reading MidiInputs, and jstream-values looking up a binding's MIDI input or live data watch." }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: toggle takes the state lock only to read running, released before start/stop take theirs; lock order unchanged. | kept from the merged side: Re-read: no new lock; still_on_screen runs under the same collection lock on_screen did" }
+stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: no new lock; still_on_screen runs under the same collection lock on_screen did" }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2358,7 +2358,7 @@ stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:027e29bed3a16896", by = "agent:channels", note = "The values thread now also starts for channels; updated the warn sentence." }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: toggle logs under the resolved action; nothing here changed. | kept from the merged side: Re-read: no logging changed" }
+stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: no logging changed" }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2412,7 +2412,7 @@ stamp = { hash = "b3:62d8d7d707f625e6", by = "agent:release-alpha11", note = "Ed
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
 
 ["CRATE-jstream-core#privacy"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: toggle stores and sends nothing new; privacy text holds. | kept from the merged side: Re-read: nothing about privacy changed" }
+stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: nothing about privacy changed" }
 
 ["CRATE-jstream-core#program-scene"."body"]
 stamp = { hash = "b3:6ce554deb0186f21", by = "agent:issues-thread", note = "Re-read against the fix: added that a switch, set_keyframe or item.show after a transition ended but not yet let go starts from the program scene (still_on_screen), and that a held whole-scene picture keeps its scene's camera; ADR-0029 §7 and ADR-0180 decision 2 still hold" }
@@ -3072,7 +3072,7 @@ stamp = { hash = "b3:96cd71b98ff1e82e", by = "agent:lane-d", note = "VideoSessio
 stamp = { hash = "b3:da598d986fcdf80f", by = "agent:lane-d", note = "VideoSession gains stats_handle (StatsHandle, a Weak reader); Purpose's API list says so | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: VideoInput::format and NV12 sessions converting RGBA8/BGRA8 on the encode thread fit the crate's purpose; unchanged" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:5f628983e4ab0bb6", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
+stamp = { hash = "b3:3d2c63f280c0c8fa", by = "agent:issues-thread", note = "Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#batches"]
 stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "Added bindings to the state, the controller bindings bullet, delete.plan and state.get, the file's bindings, schema 8 and its migration, the rebuild order and the tests for controller bindings (ADR-0122, protocol 0.96); SCHEMA_VERSION now 8 (was written 6)" }
@@ -3198,10 +3198,10 @@ stamp = { hash = "b3:170a35823fa167a0", by = "agent:page-api-review", note = "Sc
 stamp = { hash = "b3:7bed91ce5f40dd64", by = "agent:r9bzj2", note = "merge: The wave's page API took schema 8 (v7_to_v8 turns on page API checkboxes); controller bindings move to schema 9 with v8_to_v9 and fixtures/v9.json, and the text now says so" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:8a52f20f38ba4836", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
+stamp = { hash = "b3:0dec64ac0cbe19b1", by = "agent:issues-thread", note = "Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:3a652b08b1973b95", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
+stamp = { hash = "b3:cbdd026d4ba5c4c3", by = "agent:issues-thread", note = "Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/plan.rs"]
 stamp = { hash = "b3:017871c4d75d5766", by = "agent:claude", note = "This PR: hotkey.rs's set_labels and take/restore. These are now combined with #1299's remove helper, so a removed hotkey's labels come back after it. State.hotkey_labels comes with hotkey_bindings(), renamed because #1299's bindings() lists controller bindings. Persist gains v10_to_v11 and fixtures/v11.json, built on #1319's v10. plan.rs and read.rs report labels through State::binding, with the import HotkeyBinding no longer needs dropped. Merge: #1299 bindings, #1316 camera and #1319 timing (schemas 9 and 10), plus #1269, #1272, #1280, #1281, #1289, #1307, #1314, #1315, #1329, #1364, #1366, #1368 and #1374. On re-reading, the body says bindings are 9, timing 10 and labels 11, and 'now 11', matching the code. | kept from the merged side: Added bindings to the state, the controller bindings bullet, delete.plan and state.get, the file's bindings, schema 8 and its migration, the rebuild order and the tests for controller bindings (ADR-0122, protocol 0.96); SCHEMA_VERSION now 8 (was written 6)" }
@@ -6801,7 +6801,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:909d2792a7ebf598", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch. | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section" }
+stamp = { hash = "b3:bc8683e0a05127ad", by = "agent:release-alpha11", note = "dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652) | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; Escape reaches the topmost dialog, near-plane outline fallback; holds beside #1662's restyle and #1657's smoothing | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; re-read the canvas paragraph beside #1679's near-plane fallback (merged in #1686 itself), #1685's group sharing and #1662's restyle, holds | kept from the merged side: Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07872d274f206a2e", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
@@ -6975,7 +6975,7 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:82a4282fac6f1525", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
+stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scene_properties.rs only adds a sentence to the Share the 3D space note; the design section's Share the 3D space and Moves with lines still hold" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:0520ba26c94a9a69", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
@@ -7050,10 +7050,10 @@ stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:14de1eb3aacb9945", by = "agent:claude", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs | merge: wave 2: #1662's outputs rows, mixer master icons and ⋯ menu, transitions preset toolbar and agent activity runs by time; re-read beside #1657's smoothing rows and #1653's keyboard text, holds" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:c2e5ce386835f010", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
+stamp = { hash = "b3:3779976698d318ef", by = "agent:release-alpha10", note = "C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds | merge: wave 2: #1662's panels restyled on the design language; the purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -7224,7 +7224,7 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "C20-C22 (ou
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:82a4282fac6f1525", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
+stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scene_properties.rs only adds a sentence to the Share the 3D space note (a scene shares a group once); the purpose section names no note text; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:0520ba26c94a9a69", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
@@ -7467,7 +7467,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:71fecdecc0681b09", by = "agent:bindings", note = "Re-read: added the Keys & MIDI entry matching what keys-and-midi.spec.js drives." }
+stamp = { hash = "b3:ecdbdd3aeed34a7c", by = "agent:release-alpha11", note = "Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7992,7 +7992,7 @@ stamp = { hash = "b3:57db58043cad8447", by = "agent:claude", note = "Step 1 keep
 stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The deps only added Settings › 3D rendering and its file; going live is unchanged. | merge: the desktop usage dep gained #1580 (projects default to Documents\JStream, screenshots say where they saved, ADR-0163, paths::user_folder); going live holds. | merge: #1590 renamed settings in the desktop usage and UI-FEATURES header sections this depends on; #1590 already updated the names this section uses, and the 3D rendering page needs no getting-started step | merge: merged #1597 (a DAW's JTunnel state as live data: data.list, data.get, NetworkProfile state counters, ADR-0171, protocol 0.140); its desktop usage input gains jtunnel.json's state flag; this section names neither it nor the 3D rendering page and holds | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Going live steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold. | kept from the merged side: Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds.''' }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Checked against the HD-01 edit: going live steps unchanged; nothing about Settings pages." }
+stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:946bde14bc7e59a5", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8004,7 +8004,7 @@ stamp = { hash = "b3:23d99288d10a6118", by = "agent:claude", note = "Pick Record
 stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The deps only added Settings › 3D rendering and its file; recording is unchanged. | merge: the desktop usage dep gained #1580 (projects default to Documents\JStream, screenshots say where they saved, ADR-0163, paths::user_folder); recording holds. | merge: #1590 renamed settings in the desktop usage and UI-FEATURES header sections this depends on; #1590 already updated the names this section uses, and the 3D rendering page needs no getting-started step | merge: merged #1597 (a DAW's JTunnel state as live data: data.list, data.get, NetworkProfile state counters, ADR-0171, protocol 0.140); its desktop usage input gains jtunnel.json's state flag; this section names neither it nor the 3D rendering page and holds | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Recording steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold. | kept from the merged side: Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds.''' }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Checked against the HD-01 edit: recording steps unchanged." }
+stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:946bde14bc7e59a5", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8034,7 +8034,7 @@ stamp = { hash = "b3:58f92aed22ff4a94", by = "agent:release-alpha11", note = "UI
 stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Checked against the HD-01 edit (Keys & MIDI page): this walkthrough lists no Settings pages." }
+stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:ee04cdff297d3730", by = "agent:bindings", note = "Checked against the HD-01 edit (Keys & MIDI page): this walkthrough lists no Settings pages." }
@@ -8676,19 +8676,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:7fa4b50c629a54e7", by = "agent:claude", note = "Added the Icon button rule (28 px, borderless, muted, link-coloured while on, a funnel's count, ⋯ opens what the icons don't show) for C20-C22" }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "Added the Icon button rule (28 px, borderless, muted, link-coloured while on, a funnel's count, ⋯ opens what the icons don't show) for C20-C22 | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:1fdba0e3b5a5b18c", by = "agent:claude", note = "added: a sequence's own mark is --code-type (Scenes row icon, event chip edge); the playing badge is teal, not the on-air red; checked style.css" }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22)" }
@@ -8697,7 +8697,7 @@ stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the e
 stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. dialog.rs's Info component unchanged | kept from the merged side: dialog.rs's Info component is unchanged; the copy rules still hold" }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
@@ -8706,7 +8706,7 @@ stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the l
 stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Dialog layout rules unchanged by the Escape listener | kept from the merged side: The dialog layout rules are unchanged by the Escape listener; this section doesn't describe keys" }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
@@ -8715,7 +8715,7 @@ stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn butto
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8724,19 +8724,19 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Re-read: menu.rs gains keys/focus_first/asks_for_menu so panel-drawn menus take the same keys; the menu style rules here are unchanged." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "A context menu's danger line is now red text on the menu, not button.danger's solid red, which matches 'reads red' here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-FEATURES#automation"."body"]
 stamp = { hash = "b3:fed62ddf1b5177ec", by = "agent:claude", note = "Only the ADR number and link changed, 0188 to 0190." }
@@ -8823,7 +8823,7 @@ stamp = { hash = "b3:beb5beb8909eae52", by = "agent:release-alpha8", note = "DL-
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude-ui-features", note = "panels/confirm.rs: Confirm is the inline delete confirmation showing the plan summary, the only dialog-like UI today, which DL-01 keeps; the rest (DL-02 Properties tab, DL-06 add-under-list) live in other panels as the notes say." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:82a4282fac6f1525", by = "agent:bindings", note = "Re-read DL-03: scene_edits now unbinds only the scene's switch from the old chord; clear-then-set and the refusal of a taken chord still hold." }
+stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "DL-03 now says the Share the 3D space note adds that a scene shares a group once, a second placement being a flat card, as scene_properties.rs shows" }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Re-read: source_properties.rs passes LearnOwner::Source to the form; the dialog list holds, and the inspector section describes the button." }
@@ -8853,7 +8853,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "FL-11 now
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = "With the hologram follow-up's Transmission, Steady, Broken signal and Amber presets FL-11 names every kind filter_presets.rs gives presets, and the text below the table describes CC PR 3 value bindings' learn button on any chain's live settings, wired through LearnOwner::Filter in both forms." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Re-read HD-01's Settings page list: Keys & MIDI after Audio, as SettingsPage::ALL orders it." }
+stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
@@ -8964,7 +8964,7 @@ stamp = { hash = "b3:f6309095a048ad27", by = "agent:claude", note = "WS-04 names
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Checked the new .trigger-*/.action-* rules use only theme tokens (--line, --border, --raised, --muted)." }
+stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "WS-04 names the new headphones icon and the funnels and empty states that use icons (C20, C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold; theme tokens unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
