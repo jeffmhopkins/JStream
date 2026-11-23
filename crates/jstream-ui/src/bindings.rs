@@ -5,7 +5,7 @@
 //! one or more actions, in the order they were bound. This module is pure: it lists the
 //! collection's triggers with what they run ([`rows`]), describes them for people
 //! ([`When::label`], [`describe`]), names every kind of action a person can bind
-//! ([`Pick`], [`catalogue`]) and builds the edits that add and remove them.
+//! ([`Pick`], [`Pick::ALL`]) and builds the edits that add and remove them.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#keyboard
 
