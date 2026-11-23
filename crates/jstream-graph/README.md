@@ -478,7 +478,7 @@ that does not want to change the graph it has.
   `action.value`), a wheel chord (`Chord::is_wheel`, ADR-0112 §3) bound to an action
   that doesn't take steps (`Action::takes_steps`; `invalid_argument` on `action.type`),
   and the objects the action names
-  (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
+  (`not_found`; a channel's actions name their channel, ADR-0183). Each is undone by the other. A rebind is `hotkey.clear` then
   `hotkey.set` in one batch. `hotkey.set_labels` (ADR-0133) sets a binding's labels,
   whole: the binding must exist, then each label, each once (`checked_labels`); an
   empty list removes them, and the inverse sets the old ones. Clearing or removing a

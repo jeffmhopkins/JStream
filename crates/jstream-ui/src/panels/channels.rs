@@ -804,6 +804,12 @@ fn ChannelCard(
                 </div>
             })}
             {inputs}
+            <div class="chan-key">
+                <crate::panels::inspector::HotkeyRow
+                    label="Key"
+                    action=Action::ChannelSwitch { channel_id: id.get_value(), to: ChannelSwitch::Toggle }
+                />
+            </div>
 
             <div class="section-head chan-head"><span class="eyebrow">"Shaping"</span></div>
             <div class="chan-grid">

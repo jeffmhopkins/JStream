@@ -41,7 +41,8 @@ Don't use the on-air red for errors or warnings that aren't live.
 
 The one exception is a series: the Sequence panel's lanes take `--accent`, `--ok`,
 `--warn` and `--code-keyword` in turn (`.seq-lane.lane-N`), only to tell the lanes
-apart.
+apart. A sequence's own mark is teal, `--code-type`: its icon in the Scenes panel and the
+edge of an event chip, as a keyframe's is its purple diamond.
 
 <a id="buttons"></a>
 ## Buttons

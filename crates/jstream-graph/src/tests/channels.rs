@@ -109,3 +109,25 @@ fn channels_survive_the_file() {
         .expect("loads");
     assert_eq!(loaded.state(), g.state());
 }
+
+/// ADR-0183 decision 6: a key binds to a channel's actions once the channel exists.
+#[test]
+fn a_key_binds_to_a_channel_that_exists() {
+    let mut g = fixture();
+    let toggle = |id: &str| Edit::HotkeySet {
+        chord: jstream_protocol::Chord::new("F8"),
+        action: jstream_protocol::Action::ChannelSwitch {
+            channel_id: id.into(),
+            to: jstream_protocol::ChannelSwitch::Toggle,
+        },
+    };
+    let missing = apply_err(&mut g, vec![toggle("lights")]);
+    assert!(matches!(
+        missing,
+        ProtocolError::NotFound {
+            entity: EntityKind::Channel,
+            ..
+        }
+    ));
+    apply_ok(&mut g, vec![channel("lights", &[]), toggle("lights")]);
+}

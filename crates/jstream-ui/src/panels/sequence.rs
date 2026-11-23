@@ -79,7 +79,7 @@ pub fn empty_sequence(id: TimelineId, name: String) -> TimelineInfo {
 }
 
 /// `ms` as seconds, as a chip says it: "0.5 s".
-fn seconds(ms: u32) -> String {
+pub(crate) fn seconds(ms: u32) -> String {
     let text = format!("{:.2}", f64::from(ms) / 1000.0);
     format!("{} s", text.trim_end_matches('0').trim_end_matches('.'))
 }
@@ -187,8 +187,36 @@ pub fn move_point(points: &mut [LanePoint], n: usize, at_ms: u32, value: f32, du
     }
 }
 
+/// Adds a lane on `channel_id` to `t`, holding `level` at its end, unless it has one:
+/// whether it added it.
+pub fn with_lane(t: &mut TimelineInfo, channel_id: &str, level: f32) -> bool {
+    if t.lanes.iter().any(|l| l.target.channel == channel_id) {
+        return false;
+    }
+    t.lanes.push(TimelineLane {
+        target: LaneTarget {
+            channel: channel_id.to_owned(),
+        },
+        points: vec![LanePoint {
+            at_ms: t.duration_ms,
+            value: Finite32::new(level.clamp(0.0, 1.0)).unwrap_or(Finite32::ZERO),
+            curve: LaneCurve::Linear,
+        }],
+        on: true,
+    });
+    true
+}
+
+/// Opens sequence `timeline_id` in the Sequence panel, showing the panel.
+pub fn open_sequence(studio: Studio, timeline_id: TimelineId) {
+    studio.sequence.set(Some(timeline_id));
+    if let Some(dock) = use_context::<crate::workspace::DockState>() {
+        dock.0.update(|d| d.show(crate::dock::PanelId::Sequence));
+    }
+}
+
 /// A time snapped to [`SNAP_MS`] unless `free`.
-fn snap(at_ms: f64, free: bool) -> u32 {
+pub(crate) fn snap(at_ms: f64, free: bool) -> u32 {
     let ms = at_ms.max(0.0);
     if free {
         ms.round() as u32
@@ -437,21 +465,7 @@ pub fn Sequence() -> impl IntoView {
         adding.set(false);
         let level = values.with_untracked(|v| v.get(&channel_id).map_or(0.0, |c| c.value.get()));
         change(&|t| {
-            if t.lanes.iter().any(|l| l.target.channel == channel_id) {
-                return;
-            }
-            let end = t.duration_ms;
-            t.lanes.push(TimelineLane {
-                target: LaneTarget {
-                    channel: channel_id.clone(),
-                },
-                points: vec![LanePoint {
-                    at_ms: end,
-                    value: Finite32::new(level).unwrap_or(Finite32::ZERO),
-                    curve: LaneCurve::Linear,
-                }],
-                on: true,
-            });
+            with_lane(t, &channel_id, level);
         });
     };
     let make_lane = move |name: String| {
@@ -551,9 +565,9 @@ pub fn Sequence() -> impl IntoView {
                         <button type="button" class="seq-new" on:click=move |_| create()>"+ New sequence"</button>
                     </p>
                 }.into_any(),
-                Some((_, t)) => view! {
+                Some((scene, t)) => view! {
                     <Triggers timeline=t.clone() change=change />
-                    <Lanes timeline=t change=change values=values position=Signal::derive(position) />
+                    <Lanes timeline=t scene=scene change=change values=values position=Signal::derive(position) />
                     <div class="seq-foot">
                         <span class="hint">"Double-click a lane to add a point · drag to move (Shift: free) · right-click for its curve · a control moved by hand takes its lane over"</span>
                         <button type="button" class="seq-delete" on:click=delete>"Delete sequence"</button>
@@ -831,6 +845,7 @@ fn TriggerEditor(
 #[component]
 fn Lanes(
     timeline: TimelineInfo,
+    scene: SceneId,
     change: impl Fn(&dyn Fn(&mut TimelineInfo)) -> bool + Copy + Send + Sync + 'static,
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
     position: Signal<Option<u32>>,
@@ -1128,6 +1143,7 @@ fn Lanes(
                 <div class="seq-ruler" on:click=seek title="Click to play from here">{ticks}</div>
             </div>
             <div class="seq-body">
+                <crate::panels::events::Events timeline=timeline.clone() scene=scene change=change />
                 {lanes}
                 {empty.then(|| view! {
                     <p class="placeholder seq-empty">"No lanes yet. Add lane searches the channels; a lane starts from where its channel is."</p>
