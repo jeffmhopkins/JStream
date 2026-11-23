@@ -594,9 +594,11 @@ pub struct OutputStatsInfo {
     /// while its live link is down.
     #[serde(default)]
     pub frames: u64,
-    /// What the output sent over the last tick's interval, in kilobits a second (bytes
-    /// times 8 over the milliseconds since the previous sample). 0 on the first tick of
-    /// a run that hasn't sent anything yet.
+    /// What the output sent over the last four seconds, in kilobits a second (bytes
+    /// times 8 over the milliseconds since the sample four seconds back, or since the
+    /// run's first sample while it is younger), so a keyframe's burst doesn't swing it
+    /// (#1693; over the last tick's interval before 0.176). 0 on the first tick of a run
+    /// that hasn't sent anything yet.
     #[serde(default)]
     pub kbps: u32,
     /// Video frames the output lost this run: frames its video encoder dropped (its

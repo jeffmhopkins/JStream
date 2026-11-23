@@ -213,10 +213,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   steps, and New code and Done; New code shows the next code, a device listed since ends
   it with "A device paired.", and Done closes the dialog alone, the list naming the
   device and its dates.
-- **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
-  the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
-  nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
-  second.
+- **Header stats** (`header-stats.spec.js`): while no output runs the readout shows only
+  the CPU share ("<1%"), however many frames the pipeline drops for the previews (#1690);
+  once a tick lists a running output it shows "60 fps · 0 dropped · CPU 3%", counting
+  from there, and "60 fps · 2 dropped · CPU 3%" after two more drops.
 - **Stream stats** (`stream-stats.spec.js`): added from the View menu, the panel says
   there are no outputs; with a recording added it is Ready with no uptime, its full
   description on hover, and shows the default profile's H.264 at 8000 kbps; once the
