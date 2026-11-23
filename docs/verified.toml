@@ -2094,7 +2094,7 @@ stamp = { hash = "b3:a7451c0eadbeed08", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:bd99ac845cac0f3d", by = "agent:claude", note = "Re-read: frames.rs and keyframes.rs only gain source: None in modifier literals; nothing the section lists changed. | merge: Main's #1593 (a Move passes through keyframes via, camera_path orbit, ADR-0166, protocol 0.138) added keyframe Move tests; section text from main, our literals unaffected. | kept from the merged side: keyframes.rs gains path, refusal and orbit tests under the keyframe scenes it already lists; the rest are constructor fields" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
-stamp = { hash = "b3:aa428b20deed2267", by = "agent:claude", note = "Added a_gpu_that_is_behind_is_handed_no_more_encode_targets to gpu_capture.rs and listed it; four tests now skip without TEXTURE_FORMAT_NV12, so the count in the text changed from three" }
+stamp = { hash = "b3:f4bab91f8d5b8d1a", by = "agent:claude", note = "Re-read the gpu_capture entry after the frames-in-flight test stopped asserting zero drops before the forced flights (a software GPU slower than the test's ticks really is behind for some): it still says the output gets no more targets while the GPU has not finished two earlier ticks' and that those ticks are counted as dropped, which the test asserts from the count at that point on." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/groups3d.rs"]
 stamp = { hash = "b3:cf804b57911a7e23", by = "agent:3d-groups", note = "Listed src/tests/groups3d.rs and what its three video.snapshot tests check: the child sorts in front, moves and fades with the group item, and an anchored camera rides with it." }

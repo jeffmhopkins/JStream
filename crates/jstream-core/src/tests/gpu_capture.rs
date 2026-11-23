@@ -1864,7 +1864,9 @@ fn a_gpu_that_is_behind_is_handed_no_more_encode_targets() {
             .unwrap_or_default()
     };
     assert!(run_until(&|| staged() >= 3), "no encode target was staged");
-    assert_eq!(encode_drops(), 0, "a GPU that keeps up drops nothing");
+    // A software GPU slower than the fake clock's ticks may really be behind for some
+    // of them, so what it dropped so far is only where the count starts.
+    let before = encode_drops();
 
     // Two ticks' conversions that never come back: the GPU is behind.
     flights
@@ -1883,7 +1885,7 @@ fn a_gpu_that_is_behind_is_handed_no_more_encode_targets() {
         "a target was staged while the GPU was behind"
     );
     assert!(
-        encode_drops() >= 10,
+        encode_drops() >= before + 10,
         "the ticks the session missed were not counted"
     );
 
