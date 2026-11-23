@@ -156,10 +156,18 @@ fn an_amount_scales_a_binding_by_its_channel() {
             fade_ms: None,
         },
     );
+    // A binding notes what its control reads on the values thread's first tick after the
+    // batch, and drives only once it reads something else. The channel's 0.5 shows in
+    // `channel.values` from that tick, so once it does, the CCs below are moves however
+    // slow the runner.
+    assert!(
+        until(|| level(&control).is_some_and(|l| l.0 == 0.5)),
+        "the values thread ticks: {:?}",
+        level(&control)
+    );
     let midi = engine.midi_inputs();
     let cc = |v: u8| jstream_midi::Message::parse(&[0xB0, 7, v]).expect("a CC");
     midi.push("Bitwig", 0, &cc(0));
-    std::thread::sleep(Duration::from_millis(100));
     midi.push("Bitwig", 1, &cc(127));
     assert!(
         until(|| (engine.drawn_master_gain() + 30.0).abs() < 1e-3),
