@@ -7,7 +7,8 @@
 //! The events offered are the cue actions an operator reaches for: show, hide or toggle
 //! an item of the sequence's scene, load one of its keyframes, put a scene on program,
 //! switch a channel, play or stop another sequence, and restart a source. A cue some
-//! other client wrote with another action shows as its action's type, and keeps working.
+//! other client wrote with another action shows as its action's type and keeps working;
+//! a click on it opens it read-only, so it can be moved or deleted but never overwritten.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#automation
 
@@ -421,11 +422,40 @@ pub fn Events(
     };
     let editor = move || {
         let e = editing.get()?;
-        let existing = e
-            .cue
-            .and_then(|n| cues.with_value(|c| c.get(n).cloned()))
-            .and_then(|c| c.action())
+        let held = e.cue.and_then(|n| cues.with_value(|c| c.get(n).cloned()));
+        let existing = held
+            .as_ref()
+            .and_then(TimelineCue::action)
             .and_then(|a| kind_of(&a));
+        // A cue whose action the editor doesn't offer opens read-only, so a Save can't
+        // replace it with something it never was: it can only be deleted here.
+        if let (Some(n), Some(cue), None) = (e.cue, held.as_ref(), existing.as_ref()) {
+            let words = studio
+                .collection
+                .with_untracked(|c| c.as_ref().map(|c| text(c, cue)).unwrap_or_default());
+            let remove = move |_| {
+                editing.set(None);
+                change(&|t| {
+                    if n < t.cues.len() {
+                        t.cues.remove(n);
+                    }
+                });
+            };
+            let (left, top) = place(e.x, e.y);
+            return Some(view! {
+                <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
+                <div class="context-menu seq-event-editor" role="dialog" aria-label="Event" style:left=left style:top=top>
+                    <div class="ctx-head">{format!("Event at {}", seconds(e.at_ms))}</div>
+                    <p class="seq-event-note">{words}</p>
+                    <p class="hint">"This kind of event is set elsewhere, by an agent or another client. It runs as it is; here it can only be moved or deleted."</p>
+                    <div class="seq-editor-buttons">
+                        <button type="button" class="seq-delete" on:click=remove>"Delete"</button>
+                        <button type="button" on:click=move |_| editing.set(None)>"Close"</button>
+                    </div>
+                </div>
+            }
+            .into_any());
+        }
         let kind = RwSignal::new(existing.as_ref().map_or(EventKind::Show, |(k, _)| *k));
         let object = RwSignal::new(existing.map(|(_, o)| o).unwrap_or_default());
         let options = move || {
@@ -515,7 +545,8 @@ pub fn Events(
                     </button>
                 </div>
             </div>
-        })
+        }
+        .into_any())
     };
     let empty = timeline.cues.is_empty();
     view! {

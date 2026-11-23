@@ -2564,6 +2564,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .seq-events-empty { position: absolute; top: 7px; left: 4px; pointer-events: none; }
 .seq-event-editor { user-select: none; width: 320px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .seq-event-editor .ctx-head { padding-left: 2px; }
+.seq-event-note { margin: 0 2px; color: var(--text); }
 .seq-empty { margin: 10px 2px; }
 .seq-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 4px; }
 .seq-delete { background: none; color: var(--danger-text); }
