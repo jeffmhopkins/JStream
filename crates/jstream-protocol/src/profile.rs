@@ -395,6 +395,12 @@ pub struct DrawerProfile {
     /// (R-RT-004). Always 0 for the preview, which draws when it can.
     #[serde(default)]
     pub skipped: u64,
+    /// The program's pictures that only preview streams take (a monitored scene, or the
+    /// program at a size only they take) skipped because the GPU or the readback was
+    /// behind (0.176, #1690). No output missed them, so `stats.tick`'s drops leave them
+    /// out. Always 0 for the preview.
+    #[serde(default)]
+    pub preview_skipped: u64,
     /// The average time per frame in each phase.
     #[serde(default)]
     pub phases: PhaseProfile,

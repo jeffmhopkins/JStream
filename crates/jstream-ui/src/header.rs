@@ -79,30 +79,48 @@ impl RecordButton {
     }
 }
 
-/// Frames dropped since the header first heard `stats.tick`, from its running totals.
+/// Video frames the outputs lost while they ran, from `stats.tick`'s running totals
+/// (#1690). Only an output's or a recording's losses matter to a show: while none runs
+/// the pipeline only feeds this machine's previews, and what it drops then is counted
+/// nowhere here, so the readout never suggests a stream is in trouble when there is
+/// none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Dropped {
-    /// The totals the count starts from, and the last tick's `seq` and totals.
-    base: Option<(DropCounts, u64, DropCounts)>,
+    /// The last tick's `seq` and totals.
+    last: Option<(u64, DropCounts)>,
+    /// Whether an output ran at the last tick.
+    running: bool,
+    /// The frames dropped since outputs last began running.
+    count: u64,
 }
 
 impl Dropped {
-    /// Takes one `stats.tick`. A `seq` that doesn't increase, or a total that shrank,
-    /// means the engine restarted: the count starts over from this tick.
-    pub fn observe(&mut self, seq: u64, drops: DropCounts) {
-        self.base = match self.base {
-            Some((base, last_seq, last)) if seq > last_seq && !shrank(drops, last) => {
-                Some((base, seq, drops))
-            }
-            _ => Some((drops, seq, drops)),
-        };
+    /// Takes one `stats.tick`, and whether it lists a running output. The drops since
+    /// the last tick count when an output ran at its start, so the interval an output
+    /// started in doesn't and the one it stopped in does; the count starts over when
+    /// outputs begin to run after none did. A `seq` that doesn't
+    /// increase, or a total that shrank, means the engine restarted: nothing is counted
+    /// for that tick.
+    pub fn observe(&mut self, seq: u64, drops: DropCounts, running: bool) {
+        if running && !self.running {
+            self.count = 0;
+        }
+        if let Some((last_seq, last)) = self.last
+            && seq > last_seq
+            && !shrank(drops, last)
+            && self.running
+        {
+            self.count = self
+                .count
+                .saturating_add(frames(drops).saturating_sub(frames(last)));
+        }
+        self.last = Some((seq, drops));
+        self.running = running;
     }
 
-    /// Video frames dropped anywhere in the pipeline since the count started, or `None`
-    /// before the first tick.
+    /// Video frames dropped since outputs began running, while one runs, or `None`.
     pub fn frames(&self) -> Option<u64> {
-        self.base
-            .map(|(base, _, last)| frames(last).saturating_sub(frames(base)))
+        self.running.then_some(self.count)
     }
 }
 
@@ -437,9 +455,11 @@ pub fn Header(
                         seq,
                         drops,
                         load: now,
+                        outputs,
                         ..
                     } => {
-                        dropped.try_update(|d| d.observe(seq, drops));
+                        let running = !outputs.is_empty();
+                        dropped.try_update(|d| d.observe(seq, drops, running));
                         engine_load.try_update(|l| l.observe(seq, now));
                     }
                     _ => {}
@@ -930,8 +950,9 @@ pub fn Header(
             <span class="spacer"></span>
             <span
                 class="readout"
-                title="The program's frame rate while an output runs, video frames dropped \
-                       since this page connected, and the share of all CPUs JStream uses"
+                title="The program's frame rate while an output runs, video frames the \
+                       outputs and recordings dropped since they started (previews \
+                       don't count), and the share of all CPUs JStream uses"
             >
                 {move || {
                     let (fps, cpu) = engine_load.with(|l| (l.fps(), l.cpu()));
@@ -1131,7 +1152,7 @@ mod tests {
     }
 
     #[test]
-    fn dropped_counts_video_frames_since_the_first_tick() {
+    fn dropped_counts_video_frames_while_an_output_runs() {
         let mut d = Dropped::default();
         assert_eq!(d.frames(), None);
         let totals = |capture, render, encode, packets| DropCounts {
@@ -1141,15 +1162,46 @@ mod tests {
             output_packets: packets,
             ..DropCounts::default()
         };
-        d.observe(4, totals(10, 2, 1, 50));
+        d.observe(4, totals(10, 2, 1, 50), true);
         assert_eq!(d.frames(), Some(0), "counts from the first tick it sees");
-        d.observe(5, totals(12, 3, 1, 90));
+        d.observe(5, totals(12, 3, 1, 90), true);
         assert_eq!(d.frames(), Some(3), "packets are not frames");
-        d.observe(7, totals(12, 3, 4, 90));
+        d.observe(7, totals(12, 3, 4, 90), true);
         assert_eq!(d.frames(), Some(6), "a missed tick still counts");
-        d.observe(1, totals(1, 0, 0, 0));
-        assert_eq!(d.frames(), Some(0), "an engine restart starts over");
-        d.observe(2, totals(0, 0, 0, 0));
-        assert_eq!(d.frames(), Some(0), "a shrinking total starts over");
+        d.observe(1, totals(1, 0, 0, 0), true);
+        assert_eq!(
+            d.frames(),
+            Some(6),
+            "an engine restart counts nothing for its tick"
+        );
+        d.observe(2, totals(0, 0, 0, 0), true);
+        assert_eq!(d.frames(), Some(6), "nor does a shrinking total");
+    }
+
+    /// With no output or recording running, drops (a preview's work, a capture
+    /// starting) show nothing and count toward nothing (#1690).
+    #[test]
+    fn dropped_shows_nothing_while_no_output_runs() {
+        let mut d = Dropped::default();
+        let render = |ticks| DropCounts {
+            render_ticks: ticks,
+            ..DropCounts::default()
+        };
+        d.observe(1, render(0), false);
+        d.observe(2, render(4), false);
+        assert_eq!(d.frames(), None, "idle: no readout");
+        d.observe(3, render(132), false);
+        assert_eq!(d.frames(), None);
+        d.observe(4, render(132), true);
+        assert_eq!(d.frames(), Some(0), "the idle drops don't carry into a run");
+        d.observe(5, render(135), true);
+        assert_eq!(d.frames(), Some(3));
+        // The interval an output stopped in still counts, then the readout goes.
+        d.observe(6, render(137), false);
+        assert_eq!(d.frames(), None);
+        d.observe(7, render(150), false);
+        // The next run starts its count from zero.
+        d.observe(8, render(151), true);
+        assert_eq!(d.frames(), Some(0));
     }
 }

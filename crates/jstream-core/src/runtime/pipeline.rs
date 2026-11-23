@@ -430,11 +430,17 @@ impl MixFrame {
         }
     }
 
-    /// This tick's frames not read back, which go into the published drops (R-RT-004),
-    /// and resets them. A readback only for a probe drops no frame, so it counts none.
-    fn take_unread(&mut self) -> u64 {
+    /// This tick's frames not read back, and resets them: those an output or a
+    /// virtual camera missed, which go into the published drops (R-RT-004), then those
+    /// only this machine's preview streams missed (#1690), which don't. A readback
+    /// only for a probe drops no frame, so it counts none.
+    fn take_unread(&mut self) -> (u64, u64) {
         let unread = std::mem::take(&mut self.unread);
-        if self.probe_only { 0 } else { unread }
+        match (self.probe_only, self.local) {
+            (true, _) => (0, 0),
+            (false, true) => (0, unread),
+            (false, false) => (unread, 0),
+        }
     }
 }
 
@@ -4439,7 +4445,9 @@ fn render_loop(job: RenderJob) {
             reader.adopt();
         }
         for frame in &mut frames.mixes {
-            unread = unread.saturating_add(frame.take_unread());
+            let (dropped, local) = frame.take_unread();
+            unread = unread.saturating_add(dropped);
+            meter.preview_skip(local);
         }
         encode_held = encode_held.saturating_add(std::mem::take(&mut frames.behind));
         drops.publish(
@@ -6539,15 +6547,32 @@ mod tests {
         let size = FrameSize::new(4, 4).expect("size");
         let mut frame = MixFrame::new(None, size, 1, None);
         frame.unread = 2;
-        assert_eq!(frame.take_unread(), 2, "a fed readback's misses are drops");
+        assert_eq!(
+            frame.take_unread(),
+            (2, 0),
+            "a fed readback's misses are drops"
+        );
         assert_eq!(frame.unread, 0, "reset");
         frame.probe_only = true;
         frame.unread = 3;
         assert_eq!(
             frame.take_unread(),
-            0,
+            (0, 0),
             "only the probe's reference was missed"
         );
+        assert_eq!(frame.unread, 0, "reset");
+    }
+
+    /// A picture only preview streams take (a monitored scene, or the program at a size
+    /// only they take) that is skipped or not read back is no output's drop: it is
+    /// counted apart, for `profile.get`, and never reaches `stats.tick`'s drops (#1690).
+    #[test]
+    fn a_preview_only_pictures_misses_are_no_drops() {
+        let size = FrameSize::new(4, 4).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        frame.local = true;
+        frame.unread = 5;
+        assert_eq!(frame.take_unread(), (0, 5), "skipped, not dropped");
         assert_eq!(frame.unread, 0, "reset");
     }
 

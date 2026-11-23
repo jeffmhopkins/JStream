@@ -4431,6 +4431,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "description": "The average time per frame in each phase."
         },
+        "preview_skipped": {
+          "default": 0,
+          "description": "The program's pictures that only preview streams take (a monitored scene, or the\nprogram at a size only they take) skipped because the GPU or the readback was\nbehind (0.176, #1690). No output missed them, so `stats.tick`'s drops leave them\nout. Always 0 for the preview.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "skipped": {
           "default": 0,
           "description": "The program's ticks skipped because drawing fell a whole period or more behind\n(R-RT-004). Always 0 for the preview, which draws when it can.",
@@ -11546,7 +11553,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "kbps": {
           "default": 0,
-          "description": "What the output sent over the last tick's interval, in kilobits a second (bytes\ntimes 8 over the milliseconds since the previous sample). 0 on the first tick of\na run that hasn't sent anything yet.",
+          "description": "What the output sent over the last four seconds, in kilobits a second (bytes\ntimes 8 over the milliseconds since the sample four seconds back, or since the\nrun's first sample while it is younger), so a keyframe's burst doesn't swing it\n(#1693; over the last tick's interval before 0.176). 0 on the first tick of a run\nthat hasn't sent anything yet.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -14314,7 +14321,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "encoder_sessions": {
               "default": 0,
-              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. A preview stream's session counts\nin both while it is a hardware one (since 0.175). Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
+              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. A preview stream's session counts\nin both while it is a hardware one (since 0.177). Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
@@ -19009,5 +19016,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.175"
+  "title": "JStream protocol 0.177"
 }
