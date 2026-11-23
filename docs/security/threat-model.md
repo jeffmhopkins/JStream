@@ -740,7 +740,7 @@ somewhere it shouldn't.
   tells an accepted sender whose state is on what the collection calls its modulation
   params, so its DAW shows them. It carries only the names of what reads the sender's
   `params` key (an item's source and property, a scene's camera property, a value
-  binding's target), each at most 40 bytes with no control characters, at most 32 of
+  binding's target, a channel's name or ID), each at most 40 bytes with no control characters, at most 32 of
   them. It goes beside the keepalive while any slot is named, and as an empty list four
   more times once none is. A sender with its state off is sent none. The receiver never
   parses one.
@@ -787,8 +787,8 @@ somewhere it shouldn't.
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw
 (ADR-0123 §6), as with JTunnel anywhere. An accepted sender, and anything on the path to
-its address, learns the names of the sources, scenes and buses bound to its params
-(ADR-0181); its state switch turns that off.
+its address, learns the names of the sources, scenes, buses and channels bound to its
+params (ADR-0181); its state switch turns that off.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
 same network who already targets this machine. The check is of the source address a
 datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN

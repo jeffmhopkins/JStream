@@ -91,7 +91,11 @@ channel in place, unattached, as ADR-0178 decision 5 leaves a value binding.
 1 while that note is held, 0 once it is released, so a pad gates a channel; any `midi`
 reader takes it, a modifier's and a value binding's too. Its `from` and `to` map the reader onto the channel's 0 to 1 and are kept
 within it. A JTunnel sender's modulation params are a `data` input on key `params`, field
-`values.N`, so a DAW's automation feeds a channel with nothing new. A channel can't read
+`values.N`, so a DAW's automation feeds a channel with nothing new. Such an input is one of
+the readers that [ADR-0181](0181-jstream-names-a-jtunnel-senders-params.md) decision 2
+names a Mod after, as a value binding is: the slot takes the channel's name, or its ID as
+words when it has none ("Stage Power"), and the sender hears it as it hears any other name,
+only while that sender's state is on. A channel can't read
 itself, directly or through others: `channel.set` refuses a cycle with `invalid_argument`. As a
 value binding does (ADR-0178 decision 3), an input takes part only once it first reads
 something other than it read when the engine started following it, so a controller at rest
