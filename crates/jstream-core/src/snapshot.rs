@@ -8374,19 +8374,38 @@ fn draw_surface(
         return Ok(None);
     };
     let targets = [normal, brdf, reflected];
-    compositor.clear_surface(targets)?;
-    for drawn in depth_models(
+    // Only a model that reflects its scene has a surface: one that doesn't, in front, is
+    // nearer in the view depth, which the pass checks.
+    let models: Vec<_> = depth_models(
         (cache, chains),
         (shot, pass),
         (at, canvas, camera),
         live,
         false,
-    ) {
-        // Only a model that reflects its scene has a surface: one that doesn't, in front,
-        // is nearer in the view depth, which the pass checks.
-        if !(drawn.shown.lighting == Lighting::Scene && drawn.shown.reflections) {
-            continue;
+    )
+    .into_iter()
+    .filter(|drawn| drawn.shown.lighting == Lighting::Scene && drawn.shown.reflections)
+    .collect();
+    // One model alone, its surface drawn with its layer this frame at the buffer's size:
+    // merging it would copy it, so its own layers are the buffer.
+    if let [only] = models.as_slice() {
+        let (scene, item) = only.item;
+        let own = model_surface_keys(scene, item);
+        let fits = own
+            .each_ref()
+            .map(|key| cache.get(key))
+            .iter()
+            .all(|layer| {
+                layer.is_some_and(|layer| {
+                    (layer.width(), layer.height()) == (targets[0].width(), targets[0].height())
+                })
+            });
+        if fits && chains.surfaced.contains(&(scene.clone(), item.clone())) {
+            return Ok(Some(own));
         }
+    }
+    compositor.clear_surface(targets)?;
+    for drawn in models {
         // Its surface drawn with its layer this frame, merged; else drawn again here.
         let (scene, item) = drawn.item;
         let layers = model_surface_keys(scene, item).map(|key| cache.get(&key));

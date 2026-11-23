@@ -2410,7 +2410,10 @@ draws a view depth. Such a chain reads the scene's surface buffer too
 (`Chain::reads_surface`, `Pass::surface`). Each model item in such a scene that
 reflects it (`scene`-lit, its source's `reflections` on) draws its surface with its layer, into three `GpuKey::ModelSurface` layers of its layer's size
 (`Compositor::draw_model_with_surface`, noted in `Chains::surfaced` for the frame), so
-it is shaded once. After the view depth, `draw_surface` clears the scene's three
+it is shaded once. After the view depth, `draw_surface` hands the pass those layers
+themselves when one model alone reflects the scene and drew them this frame at the
+buffer's size, since a merge would only copy them
+([ADR-0192](../../docs/adr/0192-cheaper-sampling-in-3d-scenes.md)). Otherwise it clears the scene's three
 `GpuKey::Surface` layers and merges each reflecting model the view depth holds into them
 (`Compositor::merge_model_surface`); a model whose layer drew no surface this frame is
 drawn into them again through the scene's camera with the scene's lights, sky and probe

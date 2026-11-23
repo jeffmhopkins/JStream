@@ -201,4 +201,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0186](0186-the-sky-eases-out-of-warp-toward-rest.md) | A sky dropping out of warp eases out toward rest as it does toward a cruise | accepted | agent |  |
 | [ADR-0189](0189-screen-space-reflections-march-at-half-size.md) | Screen-space reflections march at half the picture's size | accepted | agent |  |
 | [ADR-0190](0190-moving-values-tick-at-frame-pace.md) | Values tick at a frame's pace while one is moving | accepted | agent |  |
+| [ADR-0192](0192-cheaper-sampling-in-3d-scenes.md) | Cheaper sampling in 3D scenes: fewer reads where they change little | accepted | agent |  |
 <!-- @generated end adr-index -->
