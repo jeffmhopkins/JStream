@@ -1,17 +1,36 @@
 //! `sharpen`: an unsharp mask. Each pixel moves away from the mean of the
 //! `(2 radius + 1)²` box around it by `amount`. OBS's Sharpen with sharpness `s` is
 //! close to amount `4 s` at radius 1.
+//!
+//! A radius of 1 is one pass of nine taps. A larger one is two: the mean of each
+//! pixel's row of taps into a scratch layer, then a column of those, since every tap
+//! is decoded and encoded and a 7 by 7 box is 49 of them. The row means are kept as
+//! half floats, which holds them to well under an 8-bit step of the result.
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 
+use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, filter, float, int};
-use crate::filter::{Blend, Shader};
+use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
+use crate::image::Image;
 
 pub(super) const KIND: &str = "sharpen";
 
-pub(super) const SHADER: Shader = Shader {
+const SHADER: Shader = Shader {
     label: "filter-sharpen",
     source: include_str!("sharpen.wgsl"),
+    blend: Blend::Replace,
+};
+
+const COLUMNS: Shader = Shader {
+    label: "filter-sharpen-columns",
+    source: include_str!("sharpen_columns.wgsl"),
+    blend: Blend::Replace,
+};
+
+const ROWS: Shader = Shader {
+    label: "filter-sharpen-rows",
+    source: include_str!("sharpen_rows.wgsl"),
     blend: Blend::Replace,
 };
 
@@ -46,9 +65,60 @@ fn read(settings: &Settings) -> (f32, i32) {
     (amount, radius)
 }
 
-pub(super) fn uniforms(settings: &Settings) -> Vec<u8> {
-    let (amount, radius) = read(settings);
+/// The shaders' `Params`.
+fn uniforms(amount: f32, radius: i32) -> Vec<u8> {
     Uniforms::new().f32(amount).i32(radius).finish()
+}
+
+pub(super) struct Sharpen {
+    amount: f32,
+    radius: i32,
+}
+
+impl Sharpen {
+    pub(super) fn new(settings: &Settings) -> Self {
+        let (amount, radius) = read(settings);
+        Self { amount, radius }
+    }
+}
+
+impl Pass for Sharpen {
+    fn update(&mut self, settings: &Settings) {
+        (self.amount, self.radius) = read(settings);
+    }
+
+    fn encode(
+        &mut self,
+        ctx: &mut Ctx<'_>,
+        input: &Image,
+        output: &Image,
+    ) -> Result<(), RenderError> {
+        let params = uniforms(self.amount, self.radius);
+        if self.radius <= 1 {
+            return ctx.draw(&Draw {
+                shader: SHADER,
+                input,
+                aux: None,
+                params: &params,
+                target: output,
+            });
+        }
+        let means = ctx.scratch(input.width(), input.height())?;
+        ctx.draw(&Draw {
+            shader: ROWS,
+            input,
+            aux: None,
+            params: &params,
+            target: &means,
+        })?;
+        ctx.draw(&Draw {
+            shader: COLUMNS,
+            input,
+            aux: Some(&means),
+            params: &params,
+            target: output,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -68,7 +138,7 @@ mod tests {
         let mut wild = settings(KIND, json!({}));
         wild.0.insert("radius".into(), json!(9));
         assert_eq!(super::read(&wild).1, 3);
-        assert_eq!(super::uniforms(&wild).len(), 16);
+        assert_eq!(super::uniforms(0.5, 3).len(), 16);
     }
 
     const DARK: [u8; 4] = [64, 64, 64, 255];

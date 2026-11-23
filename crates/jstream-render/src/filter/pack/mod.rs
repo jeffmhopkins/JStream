@@ -1,6 +1,7 @@
 //! The single-pass pack (roadmap V1): colour correction, the chroma, colour and luma keys, sharpen, rounded corners with a border, scroll, scanlines, the hologram, vignette, and the full border.
 //!
-//! Every kind here is one fullscreen draw of the input's size. The colour kinds
+//! Every kind here is one fullscreen draw of the input's size, but sharpen at a radius
+//! above 1, which takes two. The colour kinds
 //! (colour correction and the keys) work on straight sRGB-encoded colour, as OBS does,
 //! so OBS's numbers carry over; sharpen works on premultiplied encoded colour. Their
 //! WGSL decodes back to premultiplied linear light on the way out.
@@ -61,7 +62,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
         keys::CHROMA_KIND => single(keys::CHROMA_SHADER, keys::chroma_uniforms),
         keys::COLOR_KIND => single(keys::COLOR_SHADER, keys::color_uniforms),
         keys::LUMA_KIND => single(keys::LUMA_SHADER, keys::luma_uniforms),
-        sharpen::KIND => single(sharpen::SHADER, sharpen::uniforms),
+        sharpen::KIND => Box::new(sharpen::Sharpen::new(settings)),
         rounded_corners::KIND => single(rounded_corners::SHADER, rounded_corners::uniforms),
         scroll::KIND => Box::new(scroll::Scroll::new(settings)),
         scanlines::KIND => Box::new(scanlines::Scanlines::new(settings)),

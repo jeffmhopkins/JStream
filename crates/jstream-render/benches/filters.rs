@@ -132,7 +132,10 @@ fn heavier(kind: &str) -> Vec<(&'static str, Value)> {
         "bloom" => vec![("radius_100", json!({ "radius": 100.0 }))],
         "drop_shadow" => vec![("blur_64", json!({ "blur": 64.0 }))],
         "glow" => vec![("radius_100", json!({ "radius": 100.0 }))],
-        "outline" => vec![("width_32", json!({ "width": 32.0 }))],
+        "outline" => vec![
+            ("width_12", json!({ "width": 12.0 })),
+            ("width_32", json!({ "width": 32.0 })),
+        ],
         "sharpen" => vec![("radius_3", json!({ "radius": 3 }))],
         "aspect_ratio" => vec![(
             "stretch_lanczos",

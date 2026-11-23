@@ -1,5 +1,5 @@
-//! `glow`: soft light around the shape, an even width all round. A jump flood ([`jfa`])
-//! finds each pixel's distance to the shape's edge, and the glow there is that of a
+//! `glow`: soft light around the shape, an even width all round. Its nearest seed ([`jfa`])
+//! gives each pixel's distance to the shape's edge, and the glow there is that of a
 //! straight edge blurred by `radius` (sigma `radius / 3`) at that distance, times
 //! `strength` and the nearest shape pixel's alpha, clamped to 1, drawn under the input.
 //! So a corner lights as far and as brightly as an edge, and rounds off, where a blur
