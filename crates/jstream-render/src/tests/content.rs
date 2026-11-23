@@ -900,3 +900,131 @@ fn a_parent_is_kept_while_the_layers_it_places_are() {
     super::near(&seen, 14, 16, [255, 0, 0, 255], 0);
     super::near(&seen, 6, 16, [0, 0, 0, 255], 0);
 }
+
+/// The cells of a 64x64 scene: four squares, the third half-opaque over the second.
+fn cells<'a>(images: &'a [Image; 4], moved: f32, faded: f32) -> [Item<'a>; 4] {
+    [
+        item(&images[0], at([2.0, 2.0], [5.0, 5.0], 0.0), Crop::NONE, 1.0),
+        item(
+            &images[1],
+            at([40.0, 4.0], [6.0, 6.0], 0.0),
+            Crop::NONE,
+            faded,
+        ),
+        item(
+            &images[2],
+            at([44.0, 8.0], [6.0, 6.0], 0.0),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &images[3],
+            at([moved, 44.0], [4.0, 4.0], 0.0),
+            Crop::NONE,
+            1.0,
+        ),
+    ]
+}
+
+/// A layer in which a few items changed is drawn again only over their boxes
+/// (ADR-0194), to the very pixels a whole redraw gives, in both blending spaces: an
+/// item moved, one faded under another, an image's texels changed. A change over more
+/// than half of it, an added item, or a background draws it whole.
+#[test]
+fn a_layer_is_redrawn_only_where_its_items_changed() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let canvas = FrameSize::new(64, 64).expect("invariant: non-zero");
+    for blending in [Blending::Linear, Blending::Srgb] {
+        compositor.set_blending(blending);
+        let images = [
+            solid(compositor, 2, 2, [255, 0, 0, 255]),
+            solid(compositor, 2, 2, [0, 255, 0, 255]),
+            solid(compositor, 2, 2, [40, 90, 255, 128]),
+            solid(compositor, 2, 2, [255, 255, 0, 255]),
+        ];
+        let kept = compositor.layer(64, 64).expect("layer");
+        // Draws the cells into `kept`, and afresh into a new layer, and holds the two
+        // to the same pixels; returns how many texels of `kept` were redrawn as boxes.
+        let frame = |compositor: &mut Compositor, items: &[Item<'_>], background: Color| {
+            let scene = Scene {
+                canvas,
+                background,
+                items,
+            };
+            compositor.render_into(&scene, &kept).expect("kept");
+            let patched = compositor.patched_texels();
+            let fresh = compositor.layer(64, 64).expect("fresh");
+            compositor.render_into(&scene, &fresh).expect("fresh");
+            assert_eq!(compositor.patched_texels(), 0, "a new layer is drawn whole");
+            let read = |compositor: &mut Compositor, layer: &Image| {
+                let shown = [
+                    item(layer, Placement::IDENTITY, Crop::NONE, 1.0),
+                    item(
+                        &images[0],
+                        at([70.0, 70.0], [1.0, 1.0], 0.0),
+                        Crop::NONE,
+                        1.0,
+                    ),
+                ];
+                let scene = Scene {
+                    canvas,
+                    background: Color::BLACK,
+                    items: &shown,
+                };
+                let output = compositor.render(&scene, true).expect("render");
+                output.pixels().expect("invariant: read back").clone()
+            };
+            let (patched_pixels, fresh_pixels) =
+                (read(compositor, &kept), read(compositor, &fresh));
+            assert_eq!(patched_pixels.rgba(), fresh_pixels.rgba());
+            patched
+        };
+        let clear = Color::TRANSPARENT;
+        assert_eq!(frame(compositor, &cells(&images, 10.0, 1.0), clear), 0);
+        // The last cell moves: its old box and its new one, and nothing else.
+        let moved = frame(compositor, &cells(&images, 30.0, 1.0), clear);
+        assert!(moved > 0 && moved < 64 * 64 / 4, "{moved} texels");
+        // The second fades under the third.
+        let faded = frame(compositor, &cells(&images, 30.0, 0.4), clear);
+        assert!(faded > 0 && faded < 64 * 64 / 4, "{faded} texels");
+        // The first cell's texels change.
+        compositor
+            .rewrite_rgba8(&images[0], &[255, 0, 255, 255].repeat(4))
+            .expect("rewrite");
+        let rewritten = frame(compositor, &cells(&images, 30.0, 0.4), clear);
+        assert!(
+            rewritten > 0 && rewritten < 64 * 64 / 4,
+            "{rewritten} texels"
+        );
+        // Two cells change at once, far apart: two boxes.
+        let both = frame(compositor, &cells(&images, 12.0, 0.9), clear);
+        assert!(both > 0 && both < 64 * 64 / 4, "{both} texels");
+        // Whole draws: an item added, a background, and a change over most of it.
+        let mut more = cells(&images, 12.0, 0.9).to_vec();
+        more.push(item(
+            &images[3],
+            at([20.0, 20.0], [2.0, 2.0], 0.0),
+            Crop::NONE,
+            1.0,
+        ));
+        assert_eq!(frame(compositor, &more, clear), 0, "an item added");
+        assert_eq!(frame(compositor, &more, Color::BLACK), 0, "a background");
+        assert_eq!(
+            frame(compositor, &more, Color::BLACK),
+            0,
+            "over a background"
+        );
+        let mut wide = cells(&images, 12.0, 0.9);
+        assert_eq!(frame(compositor, &wide, clear), 0, "an item removed");
+        wide[0] = item(
+            &images[0],
+            at([0.0, 0.0], [30.0, 30.0], 0.0),
+            Crop::NONE,
+            1.0,
+        );
+        assert_eq!(frame(compositor, &wide, clear), 0, "most of the layer");
+    }
+}

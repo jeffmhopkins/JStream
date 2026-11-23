@@ -51,6 +51,8 @@ struct Draw {
     /// whole canvas texel for texel, opaque and in `normal`: a scene of that alone is
     /// resolved straight from the image ([`Compositor::record_layer_resolve`]).
     whole: bool,
+    /// The target's texels it can touch ([`covered`]), `None` when it is off the target.
+    reach: Option<Rect>,
 }
 
 /// What a layer's last [`Compositor::render_into`] drew into it, kept on the layer
@@ -79,6 +81,7 @@ struct DrawnDraw {
     mips: Option<WeakMips>,
     blend: BlendMode,
     rect: Option<Rect>,
+    reach: Option<Rect>,
 }
 
 /// A mip chain remembered without keeping it, equal only to itself.
@@ -102,8 +105,35 @@ impl DrawnDraw {
                 .map(|mips| WeakMips(Arc::downgrade(mips))),
             blend: draw.blend,
             rect: draw.rect,
+            reach: draw.reach,
         }
     }
+
+    /// Whether it draws what `other` does, wherever in the vertex buffer each is.
+    fn shows(&self, other: &Self) -> bool {
+        self.image == other.image
+            && self.mips == other.mips
+            && self.blend == other.blend
+            && self.rect == other.rect
+    }
+
+    /// Its vertices' bytes in `vertices`, the buffer it was built into.
+    fn bytes<'a>(&self, vertices: &'a [u8]) -> &'a [u8] {
+        let stride = VERTEX_STRIDE as usize;
+        let first = self.first_vertex as usize * stride;
+        vertices
+            .get(first..first + self.vertex_count as usize * stride)
+            .unwrap_or(&[])
+    }
+}
+
+/// Adds `rect` to `patches`, joined with every box there it shares a texel with, so
+/// the boxes stay apart.
+fn join(patches: &mut Vec<Rect>, mut rect: Rect) {
+    while let Some(met) = patches.iter().position(|at| at.meets(rect)) {
+        rect = rect.union(patches.swap_remove(met));
+    }
+    patches.push(rect);
 }
 
 /// A background colour as the bits compared for [`Drawn`].
@@ -121,6 +151,14 @@ struct Rect {
 }
 
 impl Rect {
+    /// Whether the two share a texel.
+    fn meets(self, other: Self) -> bool {
+        self.x < other.x + other.width
+            && other.x < self.x + self.width
+            && self.y < other.y + other.height
+            && other.y < self.y + self.height
+    }
+
     /// The smallest rectangle holding both.
     fn union(self, other: Self) -> Self {
         let x = self.x.min(other.x);
@@ -135,6 +173,10 @@ impl Rect {
         }
     }
 }
+
+/// The most boxes a layer is redrawn in ([`Compositor::changed`]): with more changed
+/// places than this the whole layer is drawn.
+const MAX_PATCHES: usize = 8;
 
 /// How many sets of targets of sizes other than the last one rendered at are kept.
 pub(crate) const SPARE_TARGETS: usize = 3;
@@ -241,6 +283,13 @@ pub struct Compositor {
     /// How many [`Self::render_into`] calls left their layer as it was, for tests.
     #[cfg(test)]
     kept_layers: usize,
+    /// The boxes of its layer the [`Self::render_into`] under way redraws, when it
+    /// redraws less than all of it ([`Self::changed`]). Kept for its capacity.
+    patches: Vec<Rect>,
+    /// How many texels the last [`Self::render_into`] redrew as boxes, 0 when it drew
+    /// the whole layer or none of it, for tests.
+    #[cfg(test)]
+    patched_texels: u32,
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
@@ -642,6 +691,12 @@ impl Compositor {
         self.resolved_layer
     }
 
+    /// How many texels the last [`Self::render_into`] redrew as boxes.
+    #[cfg(test)]
+    pub(crate) fn patched_texels(&self) -> u32 {
+        self.patched_texels
+    }
+
     /// How many [`Self::render_into`] calls left their layer as it was.
     #[cfg(test)]
     pub(crate) fn kept_layers(&self) -> usize {
@@ -736,6 +791,10 @@ impl Compositor {
         self.ready(scene)?;
         // A layer that still holds this very draw is left as it is (ADR-0194): the
         // same vertices over the same images, none of them changed since.
+        #[cfg(test)]
+        {
+            self.patched_texels = 0;
+        }
         if self.holds(scene, target) {
             #[cfg(test)]
             {
@@ -743,6 +802,10 @@ impl Compositor {
             }
             return Ok(());
         }
+        // Where only some items changed, only their boxes are drawn again.
+        let mut patches = std::mem::take(&mut self.patches);
+        self.changed(scene, target, &mut patches);
+        self.patches = patches;
         self.load_ready(scene)?;
         // The submit lock is held from staging through the submit, as in `render`.
         let lock = self.gpu.submit.clone();
@@ -760,7 +823,15 @@ impl Compositor {
         let prior = (scene.background.a == 0.0)
             .then(|| target.content())
             .flatten();
-        self.record_composite(&mut encoder, (view, target.texture()), scene, prior, true);
+        if self.patches.is_empty() {
+            self.record_composite(&mut encoder, (view, target.texture()), scene, prior, true);
+        } else {
+            self.record_patches(&mut encoder, (view, target.texture()), scene);
+            #[cfg(test)]
+            {
+                self.patched_texels = self.patches.iter().map(|at| at.width * at.height).sum();
+            }
+        }
         self.record_release(&mut encoder);
         self.gpu.submit_work(encoder.finish());
         target.mark_changed();
@@ -1943,6 +2014,9 @@ impl Compositor {
             targets_made: 0,
             #[cfg(test)]
             kept_layers: 0,
+            patches: Vec::new(),
+            #[cfg(test)]
+            patched_texels: 0,
             vertices: Vec::new(),
             vertex_buffer,
             draws: Vec::new(),
@@ -2132,7 +2206,8 @@ impl Compositor {
             } else {
                 item.image.alpha()
             };
-            if let Some(reach) = covered(shape, scene.canvas.width(), scene.canvas.height()) {
+            let reach = covered(shape, scene.canvas.width(), scene.canvas.height());
+            if let Some(reach) = reach {
                 self.drawn = Some(self.drawn.map_or(reach, |drawn| drawn.union(reach)));
             }
             let whole = mips.is_none()
@@ -2159,6 +2234,7 @@ impl Compositor {
                 blend: item.blend,
                 rect,
                 whole,
+                reach,
             });
         }
         let limit = self.gpu.max_texture_dimension_2d;
@@ -2378,6 +2454,126 @@ impl Compositor {
                 .map(|draw| DrawnDraw::of(draw, &scene.items[draw.index])),
         );
         *kept = Some(drawn);
+    }
+
+    /// Fills `patches` with the boxes of `target` that drawing `scene`, readied, would
+    /// change (ADR-0194 decision 6), or leaves it empty when the whole layer is to be
+    /// drawn. They are the boxes, before and now, of each draw that is not what the
+    /// layer's last [`Self::render_into`] drew in its place: other vertices, another
+    /// image or mode, or an image whose texels changed. Boxes that meet are joined, so
+    /// no texel is in two.
+    ///
+    /// The whole layer is drawn instead when the layer does not hold that last draw any
+    /// more, the background is not transparent or the space changed, a draw was added
+    /// or removed, a draw reads its backdrop or the scene has a model's depth, there are
+    /// more than [`MAX_PATCHES`] boxes, or they cover more than half the layer.
+    fn changed(&self, scene: &Scene<'_>, target: &Image, patches: &mut Vec<Rect>) {
+        patches.clear();
+        let drawn = target.drawn_as();
+        let Some(drawn) = drawn.as_ref() else {
+            return;
+        };
+        let background = background_bits(scene.background);
+        if drawn.at != target.generation()
+            || drawn.blending != self.blending
+            || drawn.background != background
+            || scene.background.a != 0.0
+            || drawn.draws.len() != self.draws.len()
+        {
+            return;
+        }
+        for (was, draw) in drawn.draws.iter().zip(&self.draws) {
+            let item = &scene.items[draw.index];
+            let now = DrawnDraw::of(draw, item);
+            if item.depth.is_some() || was.rect.is_some() || now.rect.is_some() {
+                patches.clear();
+                return;
+            }
+            if was.shows(&now) && was.bytes(&drawn.vertices) == now.bytes(&self.vertices) {
+                continue;
+            }
+            for reach in [was.reach, now.reach].into_iter().flatten() {
+                join(patches, reach);
+            }
+            if patches.len() > MAX_PATCHES {
+                patches.clear();
+                return;
+            }
+        }
+        let texels: u64 = patches
+            .iter()
+            .map(|at| u64::from(at.width) * u64::from(at.height))
+            .sum();
+        let whole = u64::from(target.width()) * u64::from(target.height());
+        if texels * 2 > whole {
+            patches.clear();
+        }
+    }
+
+    /// The composite of `scene` over [`Self::patches`] alone, into a `target` that holds
+    /// the scene's last draw everywhere else: each box is made transparent, the draws
+    /// that reach it are drawn clipped to it, and in the encoded space it is decoded.
+    /// The boxes share no texel, so none is blended or decoded twice.
+    fn record_patches(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        (view, texture): (&wgpu::TextureView, &wgpu::Texture),
+        scene: &Scene<'_>,
+    ) {
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-composite-patches"),
+                color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            let size = (scene.canvas.width(), scene.canvas.height());
+            for patch in &self.patches {
+                let region = Region {
+                    x: patch.x,
+                    y: patch.y,
+                    width: patch.width,
+                    height: patch.height,
+                };
+                self.wipe.record(&mut pass, region, size, false);
+                pass.set_scissor_rect(patch.x, patch.y, patch.width, patch.height);
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                let encoded = self.blending == Blending::Srgb;
+                let blends = if encoded {
+                    &self.encoded_blends
+                } else {
+                    &self.blends
+                };
+                for draw in &self.draws {
+                    if !draw.reach.is_some_and(|reach| reach.meets(*patch)) {
+                        continue;
+                    }
+                    // `changed` let no draw through that reads its backdrop.
+                    let Ok(Steps::Fixed(pipelines)) = blends.steps(draw.blend) else {
+                        continue;
+                    };
+                    let bind_group = match &draw.mips {
+                        Some(mips) => &mips.bind_group,
+                        None => scene.items[draw.index].image.bind_group(),
+                    };
+                    for pipeline in pipelines {
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, bind_group, &[]);
+                        pass.draw(
+                            draw.first_vertex..draw.first_vertex + draw.vertex_count,
+                            0..1,
+                        );
+                    }
+                }
+            }
+        }
+        if self.blending == Blending::Srgb {
+            for patch in &self.patches {
+                self.record_decode(encoder, (view, texture), *patch);
+            }
+        }
     }
 
     /// The second half of [`Self::load`]: what the readied scene needs on the GPU.
