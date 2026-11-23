@@ -7,15 +7,18 @@
 //! uses (`drawn_polygon_seen`, clipped to the near plane as the compositor clips it,
 //! `CameraView::depth_of` and `CameraView::on_plane`). An item that shows a 3D model is
 //! outlined and hit by the model's bounds instead (ADR-0107 decision 8): its box extruded
-//! by the model's depth, through `ItemGeometry::solid_outline`.
+//! by the model's depth, through `ItemGeometry::solid_outline`. A 3D group (ADR-0164
+//! decision 6) is outlined by the hull of its children as they are placed through the
+//! group item's pose (`GroupPose`), hit inside any child's outline, and dragged by its
+//! own item's geometry.
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md,
-//! docs/adr/0111-camera-up-at-the-poles.md
+//! docs/adr/0111-camera-up-at-the-poles.md, docs/adr/0164-3d-groups-share-their-scenes-space.md
 
 use crate::canvas::transform::Point;
 use jstream_control::protocol::{
-    CameraView, Canvas, CanvasPoint, ContentRect, Finite32, ItemGeometry, MAX_FOV_DEG, MIN_FOV_DEG,
-    SceneCamera, SceneId, Size, SolidBounds, Vec2, Vec3,
+    CameraView, Canvas, CanvasPoint, ContentRect, Finite32, GroupPose, ItemGeometry, MAX_FOV_DEG,
+    MIN_FOV_DEG, SceneCamera, SceneId, Size, SolidBounds, Vec2, Vec3,
 };
 
 /// The camera an orbit or dolly shows until the collection has it, kept with the scene it
@@ -89,15 +92,27 @@ pub fn view(camera: Option<SceneCamera>, canvas: Canvas) -> Option<CameraView> {
     camera?.view(canvas).ok()
 }
 
-/// The part of the box in front of the camera, as the compositor draws it: the whole box
-/// clipped to the near plane, three to five corners on the canvas (#1054). `None` when
-/// none of it is in front of the camera or it is seen edge-on. Convex, as a clipped
-/// rectangle is.
-///
-/// For an item that shows a model (`solid`), the outline of the model's bounds as the
-/// item places them: the hull of their eight corners, `None` when one is behind the
-/// camera.
-pub fn polygon(
+/// What the canvas outlines and hits an item by in a 3D scene, besides its own box.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Shape {
+    /// Its box, as the compositor draws it.
+    #[default]
+    Box,
+    /// The bounds of the 3D model it shows (ADR-0107 decision 8).
+    Model(SolidBounds),
+    /// A 3D group's children (ADR-0164 decisions 2 and 6): each child's geometry in the
+    /// group's own pixels with its own shape, placed through the group item's pose on a
+    /// group canvas of `canvas`. Never empty: a group with nothing drawn is a [`Shape::Box`].
+    Group {
+        /// The group's own canvas, which its fit mode scales into the item's box.
+        canvas: Canvas,
+        /// Its drawn children, in stacking order.
+        parts: Vec<(ItemGeometry, Shape)>,
+    },
+}
+
+/// The outline of one box or model as the camera shows it: see [`polygon`].
+fn piece(
     geometry: &ItemGeometry,
     solid: Option<SolidBounds>,
     view: &CameraView,
@@ -135,17 +150,33 @@ pub fn polygon(
         .then_some(points)
 }
 
-/// Whether `point` is inside the box as the camera shows it: inside the part of it in
-/// front of the camera, either winding (a box seen from behind is mirrored).
-pub fn contains(
+/// Calls `each` with every box or model the item draws, in the scene's space: the item
+/// itself, or a 3D group's children placed through its pose, nested groups in turn. A
+/// child whose placement overflows is left out, as the compositor leaves it out.
+fn each_piece(
     geometry: &ItemGeometry,
-    solid: Option<SolidBounds>,
-    view: &CameraView,
-    point: Point,
-) -> bool {
-    let Some(outline) = polygon(geometry, solid, view) else {
-        return false;
-    };
+    shape: &Shape,
+    each: &mut impl FnMut(&ItemGeometry, Option<SolidBounds>),
+) {
+    match shape {
+        Shape::Box => each(geometry, None),
+        Shape::Model(bounds) => each(geometry, Some(*bounds)),
+        Shape::Group { canvas, parts } => {
+            let Ok(pose) = GroupPose::of(*geometry, *canvas) else {
+                return;
+            };
+            for (child, shape) in parts {
+                if let Ok(placed) = pose.place(*child) {
+                    each_piece(&placed, shape, each);
+                }
+            }
+        }
+    }
+}
+
+/// Whether `point` is inside a convex `outline`, either winding (a box seen from behind
+/// is mirrored).
+fn inside(outline: &[Point], point: Point) -> bool {
     let len = outline.len();
     let side = |a: Point, b: Point| (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
     let sides: Vec<f32> = (0..len)
@@ -154,23 +185,107 @@ pub fn contains(
     sides.iter().all(|s| *s >= 0.0) || sides.iter().all(|s| *s <= 0.0)
 }
 
+/// The convex hull of `points` by Andrew's monotone chain, with no collinear points.
+fn hull(mut points: Vec<Point>) -> Vec<Point> {
+    points.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    points.dedup();
+    if points.len() < 3 {
+        return points;
+    }
+    let cross = |o: Point, a: Point, b: Point| {
+        (f64::from(a.x) - f64::from(o.x)) * (f64::from(b.y) - f64::from(o.y))
+            - (f64::from(a.y) - f64::from(o.y)) * (f64::from(b.x) - f64::from(o.x))
+    };
+    let mut out: Vec<Point> = Vec::with_capacity(points.len() * 2);
+    for pass in [false, true] {
+        let start = out.len();
+        let ordered: Vec<Point> = if pass {
+            points.iter().rev().copied().collect()
+        } else {
+            points.clone()
+        };
+        for p in ordered {
+            while out.len() >= start + 2 && cross(out[out.len() - 2], out[out.len() - 1], p) <= 0.0
+            {
+                out.pop();
+            }
+            out.push(p);
+        }
+        out.pop();
+    }
+    out
+}
+
+/// The part of the box in front of the camera, as the compositor draws it: the whole box
+/// clipped to the near plane, three to five corners on the canvas (#1054). `None` when
+/// none of it is in front of the camera or it is seen edge-on. Convex, as a clipped
+/// rectangle is.
+///
+/// For an item that shows a model ([`Shape::Model`]), the outline of the model's bounds
+/// as the item places them: the hull of their eight corners, `None` when one is behind
+/// the camera. For a 3D group ([`Shape::Group`]), the hull of its children's outlines as
+/// they are placed through the group item's pose (ADR-0164 decision 6), `None` when none
+/// of them is seen.
+pub fn polygon(geometry: &ItemGeometry, shape: &Shape, view: &CameraView) -> Option<Vec<Point>> {
+    if !matches!(shape, Shape::Group { .. }) {
+        let solid = match shape {
+            Shape::Model(bounds) => Some(*bounds),
+            _ => None,
+        };
+        return piece(geometry, solid, view);
+    }
+    let mut points = Vec::new();
+    each_piece(geometry, shape, &mut |g, solid| {
+        points.extend(piece(g, solid, view).into_iter().flatten());
+    });
+    let outline = hull(points);
+    (outline.len() >= 3).then_some(outline)
+}
+
+/// How far along the viewing axis the item is where `point` hits it, or `None` when it
+/// misses: a box or model by its outline at its own depth, a 3D group by whichever of its
+/// children's outlines is nearest there, since each child is sorted on its own
+/// (ADR-0164 decision 3), never by the gaps between them. With depth sorting off every
+/// hit is at depth 0.
+fn hit_depth(
+    geometry: &ItemGeometry,
+    shape: &Shape,
+    view: &CameraView,
+    point: Point,
+) -> Option<f64> {
+    let mut best: Option<f64> = None;
+    each_piece(geometry, shape, &mut |g, solid| {
+        if piece(g, solid, view).is_some_and(|outline| inside(&outline, point)) {
+            let depth = if view.depth_sort() {
+                view.depth_of(*g)
+            } else {
+                0.0
+            };
+            best = Some(best.map_or(depth, |near| near.min(depth)));
+        }
+    });
+    best
+}
+
+/// Whether `point` is inside the box as the camera shows it: inside the part of it in
+/// front of the camera, either winding (a box seen from behind is mirrored). A 3D group is
+/// hit inside any of its children's outlines.
+pub fn contains(geometry: &ItemGeometry, shape: &Shape, view: &CameraView, point: Point) -> bool {
+    hit_depth(geometry, shape, view, point).is_some()
+}
+
 /// The box under `point` that the engine draws on top: the nearest along the viewing
 /// axis when the camera sorts by depth, ties and an unsorted camera going to the later
 /// in stacking order, as the compositor draws them.
 pub fn topmost_at<'a, T>(
-    items: impl DoubleEndedIterator<Item = (T, &'a ItemGeometry, Option<SolidBounds>)>,
+    items: impl DoubleEndedIterator<Item = (T, &'a ItemGeometry, &'a Shape)>,
     view: &CameraView,
     point: Point,
 ) -> Option<T> {
     let mut best: Option<(f64, T)> = None;
-    for (id, geometry, solid) in items {
-        if !contains(geometry, solid, view, point) {
+    for (id, geometry, shape) in items {
+        let Some(depth) = hit_depth(geometry, shape, view, point) else {
             continue;
-        }
-        let depth = if view.depth_sort() {
-            view.depth_of(*geometry)
-        } else {
-            0.0
         };
         // Later in stacking order wins a tie, so `<=`.
         if best.as_ref().is_none_or(|(near, _)| depth <= *near) {
@@ -182,8 +297,8 @@ pub fn topmost_at<'a, T>(
 
 /// The outline of the part of the box in front of the camera as SVG `points`, or empty
 /// when none of it is.
-pub fn outline(geometry: &ItemGeometry, solid: Option<SolidBounds>, view: &CameraView) -> String {
-    polygon(geometry, solid, view).map_or_else(String::new, |outline| {
+pub fn outline(geometry: &ItemGeometry, shape: &Shape, view: &CameraView) -> String {
+    polygon(geometry, shape, view).map_or_else(String::new, |outline| {
         outline.iter().fold(String::new(), |mut points, at| {
             points.push_str(&format!("{},{} ", at.x, at.y));
             points
@@ -197,10 +312,10 @@ pub fn outline(geometry: &ItemGeometry, solid: Option<SolidBounds>, view: &Camer
 /// bounds.
 pub fn screen_box(
     geometry: &ItemGeometry,
-    solid: Option<SolidBounds>,
+    shape: &Shape,
     view: &CameraView,
 ) -> Option<ItemGeometry> {
-    let quad = polygon(geometry, solid, view)?;
+    let quad = polygon(geometry, shape, view)?;
     let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     for at in quad {
         left = left.min(at.x);
@@ -662,8 +777,18 @@ mod tests {
                 "{a:?} vs {b:?}"
             );
         }
-        assert!(contains(&g, None, &seen, Point { x: 650.0, y: 350.0 }));
-        assert!(!contains(&g, None, &seen, Point { x: 750.0, y: 350.0 }));
+        assert!(contains(
+            &g,
+            &Shape::Box,
+            &seen,
+            Point { x: 650.0, y: 350.0 }
+        ));
+        assert!(!contains(
+            &g,
+            &Shape::Box,
+            &seen,
+            Point { x: 750.0, y: 350.0 }
+        ));
     }
 
     #[test]
@@ -672,7 +797,7 @@ mod tests {
         let near = item(960.0, 540.0, 300.0, 300.0, 200.0);
         let far = item(960.0, 540.0, 300.0, 300.0, -400.0);
         // The near box is first in stacking order, under the far one.
-        let items = [("near", &near, None), ("far", &far, None)];
+        let items = [("near", &near, &Shape::Box), ("far", &far, &Shape::Box)];
         let centre = Point { x: 960.0, y: 540.0 };
         assert_eq!(topmost_at(items.into_iter(), &seen, centre), Some("near"));
         // With depth sorting off, stacking order decides, as the compositor draws.
@@ -966,7 +1091,7 @@ mod tests {
             corners(&g, &seen).is_none(),
             "a corner is behind the camera"
         );
-        let front = polygon(&g, None, &seen).expect("its front is drawn");
+        let front = polygon(&g, &Shape::Box, &seen).expect("its front is drawn");
         assert!((3..=5).contains(&front.len()), "{front:?}");
         let Placed::At(centre) =
             seen.place(Vec3::new(960.0, 560.0, camera_z - 200.0).expect("finite"))
@@ -978,20 +1103,78 @@ mod tests {
             y: centre.y,
         };
         assert!(
-            contains(&g, None, &seen, centre),
+            contains(&g, &Shape::Box, &seen, centre),
             "its centre, at {centre:?}, is hit"
         );
-        assert!(!contains(&g, None, &seen, Point { x: 100.0, y: 100.0 }));
-        assert!(!outline(&g, None, &seen).is_empty());
-        assert!(screen_box(&g, None, &seen).is_some());
+        assert!(!contains(
+            &g,
+            &Shape::Box,
+            &seen,
+            Point { x: 100.0, y: 100.0 }
+        ));
+        assert!(!outline(&g, &Shape::Box, &seen).is_empty());
+        assert!(screen_box(&g, &Shape::Box, &seen).is_some());
     }
 
     #[test]
     fn a_marquee_box_bounds_the_projected_corners() {
         let seen = framing();
         let g = item(500.0, 300.0, 400.0, 200.0, 0.0);
-        let bounds = screen_box(&g, None, &seen).expect("in front");
+        let bounds = screen_box(&g, &Shape::Box, &seen).expect("in front");
         assert!((bounds.center.x.get() - 500.0).abs() < 0.05);
         assert!((bounds.size.width.get() - 400.0).abs() < 0.1);
+    }
+
+    /// A 3D group over the whole canvas whose children are `parts`.
+    fn group(parts: Vec<(ItemGeometry, Shape)>) -> Shape {
+        Shape::Group {
+            canvas: CANVAS,
+            parts,
+        }
+    }
+
+    /// ADR-0164 decision 6 (#1596): a 3D group is outlined by the hull of its children as
+    /// its item places them, so the outline follows a drag of the item's own geometry; a
+    /// point on a child hits it at that child's depth, and the gap between them falls
+    /// through to what is behind.
+    #[test]
+    fn a_3d_group_is_outlined_hit_and_dragged_by_its_children() {
+        let seen = framing();
+        let rig = group(vec![
+            (item(480.0, 540.0, 200.0, 200.0, 0.0), Shape::Box),
+            (item(1440.0, 540.0, 200.0, 200.0, 0.0), Shape::Box),
+        ]);
+        let at = item(960.0, 540.0, 1920.0, 1080.0, 0.0);
+        let bounds = screen_box(&at, &rig, &seen).expect("seen");
+        assert!((bounds.size.width.get() - 1160.0).abs() < 0.5, "{bounds:?}");
+        assert!((bounds.size.height.get() - 200.0).abs() < 0.5, "{bounds:?}");
+        // Dragged right by 100 px, the children's outline moves with the item.
+        let moved = item(1060.0, 540.0, 1920.0, 1080.0, 0.0);
+        let after = screen_box(&moved, &rig, &seen).expect("seen");
+        assert!((after.center.x.get() - bounds.center.x.get() - 100.0).abs() < 0.5);
+
+        let wall = item(960.0, 540.0, 1920.0, 1080.0, -100.0);
+        let items = [("rig", &at, &rig), ("wall", &wall, &Shape::Box)];
+        let on_child = Point { x: 480.0, y: 540.0 };
+        let gap = Point { x: 960.0, y: 540.0 };
+        // The wall is later in stacking order but behind the child.
+        assert_eq!(topmost_at(items.into_iter(), &seen, on_child), Some("rig"));
+        assert_eq!(topmost_at(items.into_iter(), &seen, gap), Some("wall"));
+        assert!(!contains(&at, &rig, &seen, gap));
+    }
+
+    /// A 3D group nested in another is placed inside its parent's placed space: a half-size
+    /// rig in the left half of its parent puts its child's centre at a quarter.
+    #[test]
+    fn a_nested_3d_group_is_placed_through_both_groups() {
+        let seen = framing();
+        let inner = group(vec![(item(960.0, 540.0, 200.0, 200.0, 0.0), Shape::Box)]);
+        let outer = group(vec![(item(480.0, 540.0, 960.0, 540.0, 0.0), inner)]);
+        let at = item(960.0, 540.0, 1920.0, 1080.0, 0.0);
+        let bounds = screen_box(&at, &outer, &seen).expect("seen");
+        assert!((bounds.center.x.get() - 480.0).abs() < 0.5, "{bounds:?}");
+        assert!((bounds.size.width.get() - 100.0).abs() < 0.5, "{bounds:?}");
+        assert!(contains(&at, &outer, &seen, Point { x: 480.0, y: 540.0 }));
+        assert!(!contains(&at, &outer, &seen, Point { x: 960.0, y: 540.0 }));
     }
 }

@@ -1666,7 +1666,18 @@ beside it ([Design › Studio mode](#design)).
   outlined, labelled, hit and touched by a marquee by its model's bounds instead: its box
   extruded by the model's depth, the hull of their eight corners through the camera
   (`ItemGeometry::solid_outline`), none while a corner is behind it. In a 2D scene it
-  keeps its box, as cards keep theirs. The name uses the projected top-left when that corner and
+  keeps its box, as cards keep theirs. An item placing a group that shares the scene's
+  space (a 3D group, [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)
+  decision 6) is outlined, labelled and touched by a marquee by the convex hull of its
+  children's outlines, each child placed through the item's pose as the engine places it
+  (`GroupPose`, nested groups in turn), and hit only inside a child's outline, at that
+  child's depth, so a press in the gap between children reaches what is behind
+  (`camera::Shape`, worked out by `Layout::sized` as the engine plans the pass: a group
+  shared once per scene, by a visible item placing it by a geometry, never through
+  itself, at most `MAX_NESTING` deep). Its children are the group scene's own visible
+  geometry items, without a keyframe's overrides of them, and a group with none is
+  outlined by its box. A drag moves the group's own item, and the outline follows it.
+  The name uses the projected top-left when that corner and
   the far end of the top edge are both in front of the camera, and stays upright on the
   visible part's bounds when either is not. A press hits the box the engine
   draws on top: the nearest along the view (`CameraView::depth_of`) when the
