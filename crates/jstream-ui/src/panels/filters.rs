@@ -3431,6 +3431,25 @@ fn FilterPane(target: Target) -> impl IntoView {
     .into_any()
 }
 
+/// The icon a catalogue group shows on its rows and the picker's tile (C15).
+pub fn group_icon(chain: FilterChain, group: &str) -> &'static str {
+    match (chain, group) {
+        (FilterChain::Video, "Color and keying") => "palette",
+        (FilterChain::Video, "Detail") => "sparkle",
+        (FilterChain::Video, "Style") => "star",
+        (FilterChain::Video, "Motion and timing") => "play",
+        (FilterChain::Video, "Uses another scene") => "layers",
+        (_, "Effect packs") => "cube",
+        (FilterChain::Audio, "Levels and dynamics") => "bars",
+        (FilterChain::Audio, "Cleanup") => "wave",
+        (FilterChain::Audio, "Tone") => "music",
+        (FilterChain::Audio, "Timing") => "clock",
+        (FilterChain::Audio, "Mastering") => "speaker",
+        (FilterChain::Audio, "Plugins") => "wrench",
+        _ => "funnel",
+    }
+}
+
 /// The Add filter dialog (spec-workspace.md 6.4), drawn while it is open.
 #[component]
 pub fn AddFilter() -> impl IntoView {
@@ -3681,6 +3700,10 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         }
         let mut out = Vec::new();
         let mut last: Option<(FilterChain, &'static str)> = None;
+        // The chain heads only when the list holds both chains (C15): otherwise each
+        // group's eyebrow is enough.
+        let both = list.iter().any(|t| t.chain == FilterChain::Video)
+            && list.iter().any(|t| t.chain == FilterChain::Audio);
         // An audio chain with no CLAP plugin to offer still shows Plugins, saying where
         // to look, unless a search narrowed the list.
         let mut clap_hint = search.with(String::is_empty)
@@ -3694,7 +3717,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 out.push(no_clap_plugins(settings));
                 clap_hint = false;
             }
-            if last.map(|(c, _)| c) != Some(t.chain) {
+            if both && last.map(|(c, _)| c) != Some(t.chain) {
                 let (title, icon) = match t.chain {
                     FilterChain::Video => ("Video", "monitor"),
                     FilterChain::Audio => ("Audio", "speaker"),
@@ -3744,7 +3767,8 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                         on:click=pick
                         on:dblclick=quick
                     >
-                        {t.name.clone()}
+                        <Icon name=group_icon(t.chain, t.group) size=14 />
+                        <span class="add-type-name">{t.name.clone()}</span>
                     </button>
                 }
                 .into_any(),
@@ -3763,18 +3787,10 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             FilterChain::Video => "Video",
             FilterChain::Audio => "Audio",
         };
+        // Its settings' names, as chips.
         let settings = descriptor.with(|d| {
-            d.as_ref().map(|d| {
-                if d.params.is_empty() {
-                    "None".to_owned()
-                } else {
-                    d.params
-                        .iter()
-                        .map(|p| p.label.clone())
-                        .collect::<Vec<_>>()
-                        .join(" · ")
-                }
-            })
+            d.as_ref()
+                .map(|d| d.params.iter().map(|p| p.label.clone()).collect::<Vec<_>>())
         });
         let choices = studio.collection.with(|c| {
             c.as_ref()
@@ -3821,15 +3837,30 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             }
         });
         Some(view! {
-            <div class="add-filter-title">{t.name.clone()}</div>
-            <div class="add-filter-kind">{format!("{chain_name} · {}", t.group)}</div>
-            {(!t.hint.is_empty()).then(|| view! { <p class="add-filter-hint">{t.hint}</p> })}
-            {scene_select}
-            {settings.map(|s| view! {
-                <div class="add-filter-settings">
-                    <span class="add-existing-title">"Settings"</span>
-                    <span>{s}</span>
+            <div class="picker-head">
+                <span class="picker-tile"><Icon name=group_icon(t.chain, t.group) size=22 /></span>
+                <div class="picker-titles">
+                    <span class="picker-title add-filter-title">{t.name.clone()}</span>
+                    <span class="picker-meta add-filter-kind">{format!("{chain_name} · {}", t.group)}</span>
                 </div>
+            </div>
+            {(!t.hint.is_empty()).then(|| view! { <p class="picker-desc add-filter-hint">{t.hint}</p> })}
+            {scene_select}
+            {settings.map(|s| {
+                let chips = if s.is_empty() {
+                    view! { <span class="picker-none">"None"</span> }.into_any()
+                } else {
+                    s.into_iter()
+                        .map(|label| view! { <li class="chip">{label}</li> })
+                        .collect_view()
+                        .into_any()
+                };
+                view! {
+                    <div class="add-filter-settings">
+                        <span class="eyebrow">"Settings"</span>
+                        <ul class="chips" aria-label="Settings">{chips}</ul>
+                    </div>
+                }
             })}
             {full_note}
             {refer_note}
@@ -3859,7 +3890,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 <div class="add-detail">
                     {detail}
                     {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
-                    <p class="add-note add-filter-foot">{foot}</p>
+                    <p class="callout add-filter-foot"><Icon name="info" size=14 />{foot}</p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -3948,6 +3979,30 @@ mod tests {
             version: 1,
             quarantined: false,
         }
+    }
+
+    /// Each catalogue group has its own icon, and an unknown one the funnel (C15).
+    #[test]
+    fn each_group_has_an_icon() {
+        for group in VIDEO_GROUPS {
+            assert!(!group_icon(FilterChain::Video, group).is_empty());
+        }
+        assert_eq!(
+            group_icon(FilterChain::Video, "Color and keying"),
+            "palette"
+        );
+        assert_eq!(group_icon(FilterChain::Audio, "Plugins"), "wrench");
+        assert_eq!(group_icon(FilterChain::Audio, "Effect packs"), "cube");
+        assert_eq!(group_icon(FilterChain::Video, "Other"), "funnel");
+        assert_eq!(
+            group_icon(FilterChain::Video, "Levels and dynamics"),
+            "funnel"
+        );
+        let icons: HashSet<_> = AUDIO_GROUPS
+            .iter()
+            .map(|g| group_icon(FilterChain::Audio, g))
+            .collect();
+        assert_eq!(icons.len(), AUDIO_GROUPS.len(), "Other is the only funnel");
     }
 
     /// Only a kind `kind.list` marks quarantined shows the badge and its Re-enable; a

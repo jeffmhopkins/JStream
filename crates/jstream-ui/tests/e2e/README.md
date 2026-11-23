@@ -254,7 +254,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   item and wrapping, Enter chooses, and a press outside closes it; the Sources
   panel's menu opens the Add source dialog, whose types start with the seed's audio
   inputs, and its Color type places the seed's Backdrop again as a reference 40 px
-  down and right, selected (the mock lists no kinds, so Color can't create); a scene nests once and isn't offered again, and the backdrop
+  down and right, selected (the mock lists no kinds, so Color can't create, and shows neither the New | Existing control nor a Name field); a scene nests once and isn't offered again, and the backdrop
   cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
   picked) or description ("nest" leaves Scene), shows "No source type matches." with
   Add disabled when none match, the dialog keeping its height throughout, and an empty
@@ -373,7 +373,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   With three kinds described (`describeKinds`): the rows' summaries and carets, a click
   on a filter with four settings opening the dialog, a change there one edit at once
   that Escape keeps, the Add filter dialog offering
-  only the video kinds under their group, its search, the picked kind's details, and
+  only the video kinds under their group, its search, the picked kind's details (its
+  settings as chips), and
   Add as one edit, the new filter opening in place, where a changed setting is one more
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filters window was closed,
