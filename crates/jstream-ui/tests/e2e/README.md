@@ -474,11 +474,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opening under the row and filling its box with the label's colour, the row's and the
   Inspector's chips and tag button, the Scenes panel's labels filter, and a delete
   taking the label off the scene in one edit.
+- **Channels** (`channels.spec.js`, [ADR-0183](../../../../docs/adr/0183-virtual-control-channels.md)):
+  the Channels panel from the View menu making a channel from its search's "+ New
+  channel", one edit, opening its card, and a Fade up typed there as one more edit.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
   Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
-  menu's eleven panels, adding Live chat, which says it waits on YouTube sign-in.
+  menu's thirteen panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

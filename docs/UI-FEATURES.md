@@ -70,8 +70,9 @@ real UI shows the engine's real state instead.
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat and agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
+| [Channels and sequences](#automation) | 5 | 0 | 5 | 0 | 0 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **143** | **129** | **5** | **0** | **5** | **4** |
+| **Total** | **148** | **129** | **10** | **0** | **5** | **4** |
 <!-- @generated end ui-summary -->
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
@@ -295,9 +296,10 @@ when its root is the collection folder or an absolute path, a Browse… button, 
 where the path starts (Collection, App assets or Absolute); a file under the
 collection folder is stored relative to it. Beyond the prototype, every setting in the form
 that its kind marks live and that is a number with both ends or a switch has a learn
-button after its reset ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): click it and move a control on a MIDI controller, and that
-control drives the setting over its whole range; the button then shows the control (`CC 7`)
-and a click unbinds it.
+button after its reset ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)). A click opens its menu: Learn MIDI control, then move a
+control on a MIDI controller, and that control drives the setting over its whole range;
+make or follow a channel ([Channels and sequences](#automation)); or remove the control. A
+bound button shows its control (`CC 7`) or its channel's name.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -377,8 +379,9 @@ covers = ["crates/jstream-ui/src/panels/mixer.rs"]
 Spec: [panels › mixer](../design/ui-prototype/spec-panels.md#mixer-panel). The real mixer
 does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyond)).
 Beyond it too, each channel, bus and existing send has a learn button after its fader's
-mute or dB field ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): a MIDI control moved after a click drives that fader from -60 to
-+6 dB.
+mute or dB field ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): its menu's Learn MIDI control makes the next MIDI control moved
+drive that fader from -60 to +6 dB, and its other items make or follow a channel, or remove
+the control.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -482,6 +485,24 @@ Spec: [panels › stream stats](../design/ui-prototype/spec-panels.md#stream-sta
 | CH-01 | Live chat | YouTube chat with badges and Super Chats, pinned message, composer. | 🔒 | Y4 (#363) and the OAuth client. |
 | CH-02 | Show on stream | Feature one message on stream. | 🔒 | Y4 (#363 draws the featured message). |
 | AG-01 | Agent activity | What MCP clients changed, newest first. | ✅ | `activity.list` (protocol 0.51, [ADR-0083](adr/0083-activity-log-over-the-protocol.md)): the engine's sentence for each call under the client's name and how long ago; JStream's own UIs are left out, a failed call shows its error code. A Clear button empties the list shown, for the workspace, until agents act again; the engine's log and undo history are kept. |
+
+<a id="automation"></a>
+## Channels and sequences
+<!-- @section
+covers = ["crates/jstream-ui/src/panels/channels.rs", "crates/jstream-ui/src/panels/sequence.rs"]
+-->
+
+Not in the prototype: [ADR-0183](adr/0183-virtual-control-channels.md) (channels) and
+[ADR-0184](adr/0184-sequences-lanes-and-triggers.md) (sequences), following the plan's
+mockups.
+
+| ID | Feature | Requirement | Status | Notes |
+|---|---|---|---|---|
+| VC-01 | Control button | Beside every live setting, one menu: learn a MIDI control, make a channel, follow one, remove the control. | 🟡 | The learn button is now the control button, on a source's or filter's live settings and the mixer's faders and sends. Make channel names the channel after the setting, starts it where the setting is (in the selected scene), moves a learned MIDI control over to it as an input, and opens it; Follow channel… searches the channels, this scene's first, with "+ New channel" at the foot. A setting that follows a channel shows its name as a chip. Not built yet: Add to sequence ›, Set key…, the "at 0 % / at 100 %" range line, the Inspector's position, size and opacity rows, several selected items making one channel, and arrow-key use of the menu. |
+| VC-02 | Channel card | A channel's live value, switch, inputs, shaping, what it drives and its sequences. | 🟡 | In a Channels panel (by default beside the Inspector) rather than the Inspector itself: a search over the channels, then the card with the live meter (which also sets the value by hand) and the line saying what drives it, the on switch, its inputs (Learn MIDI, or another channel), Fade up, Fade down, Smooth, Curve, Combine, Default and When off, the settings that follow it with their range, and the sequences with a lane on it. Not built yet: set a key or a DAW param as an input, changing where it lives, and the triggers listed from the channel's side. |
+| SQ-01 | Sequence panel | The selected scene's sequences: pick or make one, play or stop, loop, length, Add lane by search. | 🟡 | A dockable Sequence panel, by default in the bottom dock. Add lane searches the channels (or makes one) and adds its lane holding the channel's value at the end. Not built yet: Add lane's "Settings (makes a channel)" and "Switches" groups, and Space to play or stop. |
+| SQ-02 | Lanes | One row per lane: points on the timeline's ruler, curves, a dashed start from where the channel is, live value, mute, remove, a play head. | 🟡 | Double-click adds a point (snapped to 0.1 s, Shift for free), a drag moves one (one undo step), a right-click sets the curve into it or deletes it; a click on the ruler plays from there. Not built yet: marquee, copy and paste, typed times and values, dragging the length, the events lane, switch lanes, preview while scrubbing, and moving a point from the keyboard. |
+| SQ-03 | Triggers | What starts and stops a sequence, as sentences, with "+ Trigger". | 🟡 | Chips for `starts` and `stops`; "+ Trigger" opens an editor for a channel (rises or falls past a level, switches on or off), a scene going on or off program, a keyframe loading or leaving, or another sequence starting, ending or looping, each with Wait first. Keys and MIDI stay hotkeys and bindings. Not built yet: the triggers set from a keyframe's or scene's menu, and the Scenes panel's sequence rows. |
 
 <a id="keyboard"></a>
 ## Keyboard

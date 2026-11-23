@@ -28,7 +28,8 @@
 //! channel: under `latest` a control moved, an action or a later timeline's lane takes
 //! it over. A lane with no point at 0 starts from the channel's value at that moment
 //! (before its curve), so nothing jumps; a seek keeps the value the timeline's lane
-//! started from, so scrubbing doesn't jump either; each pass of a loop after the first starts
+//! started from (unless under `latest` a control or action took it since), so scrubbing
+//! doesn't jump either; each pass of a loop after the first starts
 //! from the lane's last point. When the timeline ends or stops, the lane holds its last
 //! value. The channel's own switch, averaging, fade and curve apply after the lane.
 //!
@@ -420,8 +421,25 @@ impl ChannelDriver {
             // A seek keeps where this timeline's lane started from, so scrubbing a
             // playing sequence never jumps (ADR-0184 decision 3). A play, or a seek
             // that takes the channel from something else, starts from the value now.
+            // Under `latest`, a control or action that moved since the lane last did
+            // took the channel, so the lane is no longer the one holding it. Other
+            // combines still mix the lane with them, so its start stays put.
+            let latest = followed.info.combine == ChannelCombine::Latest;
+            let newer = followed
+                .inputs
+                .iter()
+                .filter(|input| input.moved)
+                .map(|input| input.changed)
+                .chain(followed.action.map(|action| action.changed))
+                .max();
             let from = match &followed.lane {
-                Some(held) if seek && held.timeline_id == *timeline_id => held.from,
+                Some(held)
+                    if seek
+                        && held.timeline_id == *timeline_id
+                        && (!latest || newer.is_none_or(|changed| changed < held.changed)) =>
+                {
+                    held.from
+                }
                 _ => followed.faded.unwrap_or(followed.value),
             };
             followed.lane = Some(Lane {
@@ -1126,6 +1144,49 @@ mod tests {
         assert!(
             (rig.value("c").unwrap_or(0.0) - 1.0).abs() < 1e-5,
             "a play starts from the value now"
+        );
+        rig.driver.lanes_at(&down.timeline_id, 500.0, 0);
+        rig.tick(60);
+        rig.driver.set_value("c", 0.8, None, rig.at(70)).ok();
+        rig.tick(70);
+        rig.driver.lanes_start(&down.timeline_id, &down, 0, true);
+        rig.tick(80);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.8).abs() < 1e-5,
+            "a seek after an action took the channel starts from the value now"
+        );
+    }
+
+    /// Under a combine other than `latest`, an action is mixed with the lane rather than
+    /// taking the channel, so a seek still keeps where the lane started.
+    #[test]
+    fn a_seek_under_sum_keeps_where_the_lane_started() {
+        let mut rig = Rig::new();
+        let mut info = ChannelInfo::new("c");
+        info.combine = ChannelCombine::Sum;
+        set(&mut rig.graph, info);
+        rig.tick(0);
+        let up = lane_timeline("up", 1.0);
+        rig.driver.lanes_start(&up.timeline_id, &up, 0, false);
+        rig.driver.lanes_at(&up.timeline_id, 500.0, 0);
+        rig.tick(10);
+        rig.driver.set_value("c", 0.25, None, rig.at(20)).ok();
+        rig.tick(20);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.75).abs() < 1e-5,
+            "the lane and the action add up"
+        );
+        rig.driver.lanes_start(&up.timeline_id, &up, 500, true);
+        rig.tick(30);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.75).abs() < 1e-5,
+            "seeking to where it is doesn't jump"
+        );
+        rig.driver.lanes_start(&up.timeline_id, &up, 0, true);
+        rig.tick(40);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.25).abs() < 1e-5,
+            "seeking to 0 leaves only the action"
         );
     }
 }

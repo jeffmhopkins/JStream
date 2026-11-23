@@ -127,11 +127,19 @@ fn a_lane_glides_from_the_current_value_and_holds_its_end() {
         seen.first().is_some_and(|v| *v > 0.6),
         "starts near 0.8: {seen:?}"
     );
-    let steps = seen.windows(2).map(|w| w[0] - w[1]);
+    // How big each step is depends on how often a slow runner gets to sample, so a
+    // glide is checked as never going up and passing through several values on its way.
     assert!(
-        steps.clone().all(|d| (-1e-4..0.2).contains(&d)),
-        "only ever down, in small steps: {seen:?}"
+        seen.windows(2).all(|w| w[0] - w[1] > -1e-4),
+        "only ever down: {seen:?}"
     );
+    let mut between: Vec<f32> = seen
+        .iter()
+        .copied()
+        .filter(|v| *v > 0.01 && *v < 0.79)
+        .collect();
+    between.dedup();
+    assert!(between.len() >= 3, "glides, not jumps: {seen:?}");
     assert!(
         seen.iter().any(|v| *v > 0.1 && *v < 0.7),
         "passes through the middle: {seen:?}"

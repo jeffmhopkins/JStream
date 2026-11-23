@@ -180,11 +180,15 @@ pub enum PanelId {
     Stats,
     /// What agents changed.
     Agent,
+    /// The channels and the open channel's card (ADR-0183).
+    Channels,
+    /// The open sequence: its lanes and triggers (ADR-0184).
+    Sequence,
 }
 
 impl PanelId {
     /// Every panel, in the View menu's order.
-    pub const ALL: [PanelId; 11] = [
+    pub const ALL: [PanelId; 13] = [
         PanelId::Scenes,
         PanelId::Objects,
         PanelId::Inspector,
@@ -196,6 +200,8 @@ impl PanelId {
         PanelId::Outputs,
         PanelId::Agent,
         PanelId::Transitions,
+        PanelId::Channels,
+        PanelId::Sequence,
     ];
 
     /// The panel's title, on its tab and in the View menu.
@@ -212,6 +218,8 @@ impl PanelId {
             PanelId::Chat => "Live chat",
             PanelId::Stats => "Stream stats",
             PanelId::Agent => "Agent activity",
+            PanelId::Channels => "Channels",
+            PanelId::Sequence => "Sequence",
         }
     }
 
@@ -229,6 +237,8 @@ impl PanelId {
             PanelId::Chat => "chat",
             PanelId::Stats => "ytstats",
             PanelId::Agent => "agent",
+            PanelId::Channels => "channels",
+            PanelId::Sequence => "sequence",
         }
     }
 
@@ -241,8 +251,11 @@ impl PanelId {
             | PanelId::Filters
             | PanelId::Chat
             | PanelId::Stats
-            | PanelId::Agent => Zone::Right,
-            PanelId::Mixer | PanelId::Outputs | PanelId::Transitions => Zone::Bottom,
+            | PanelId::Agent
+            | PanelId::Channels => Zone::Right,
+            PanelId::Mixer | PanelId::Outputs | PanelId::Transitions | PanelId::Sequence => {
+                Zone::Bottom
+            }
         }
     }
 

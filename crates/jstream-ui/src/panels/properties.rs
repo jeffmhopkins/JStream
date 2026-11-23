@@ -295,7 +295,16 @@ fn Field(
     let studio = expect_context::<Studio>();
     let id = param.id.clone();
     let learn = learn.zip(param_range(&param)).map(|(owner, range)| {
-        view! { <Learn target=owner.target(&param.id) range=range /> }
+        let current = {
+            let param = param.clone();
+            Signal::derive(move || {
+                settings.with(|s| match value_of(&param, s) {
+                    Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+                    v => v.as_f64(),
+                })
+            })
+        };
+        view! { <Learn target=owner.target(&param.id) range=range label=param.label.clone() current=current /> }
     });
     let value = {
         let param = param.clone();
