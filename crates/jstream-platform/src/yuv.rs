@@ -6,13 +6,15 @@
 //! The source's rows are `stride` bytes apart, with the chroma planes following the luma
 //! plane: NV12's interleaved plane at the same stride, I420's two planes at half of it.
 //! Media Foundation and V4L2 (`bytesperline`) both lay them out so. The output frames are
-//! tightly packed, with the size, colour and `pts` the caller gives.
+//! tightly packed, with the size, colour and `pts` the caller gives. A copy writes each
+//! byte once, and [`copy_planar_into`] writes into the buffers of a frame the caller is
+//! done with.
 //!
 //! A multi-planar source (V4L2's `NV12M` and `YUV420M`) has each plane in its own
 //! buffer, with its own stride: [`copy_planes`] takes them one by one.
 
 use crate::PlatformError;
-use crate::media::{PixelFormat, VideoFrame, VideoFrameInfo};
+use crate::media::{PixelFormat, Plane, PlaneGeometry, VideoFrame, VideoFrameInfo};
 
 /// The error for a buffer that is shorter than its format and stride need, naming the
 /// OS `call` that handed it over.
@@ -63,9 +65,33 @@ pub fn copy_planar(
     stride: usize,
     info: VideoFrameInfo,
 ) -> Result<VideoFrame, PlatformError> {
-    let mut frame = VideoFrame::zeroed(info)?;
+    copy_planar_into(call, src, stride, info, None)
+}
+
+/// [`copy_planar`] into the buffers of `spare`, a frame the caller is done with
+/// ([`CaptureStream::recycle`](crate::CaptureStream::recycle)), when it has any: a buffer
+/// that holds the plane is filled again, so a capture at a steady size allocates no
+/// plane after its first few frames. `spare`'s size and format don't matter.
+///
+/// # Errors
+/// As for [`copy_planar`].
+pub fn copy_planar_into(
+    call: &'static str,
+    src: &[u8],
+    stride: usize,
+    info: VideoFrameInfo,
+    spare: Option<VideoFrame>,
+) -> Result<VideoFrame, PlatformError> {
+    let count = info.format.plane_count();
+    let mut spare = spare.map(VideoFrame::into_planes).unwrap_or_default();
+    // Taken from the end, so each plane gets the buffer it had last time.
+    spare.truncate(count);
+    spare.resize_with(count, || Plane::new(Vec::new(), 0));
+    spare.reverse();
+    let mut planes = Vec::with_capacity(count);
     let mut offset = 0;
-    for plane in 0..info.format.plane_count() {
+    for plane in 0..count {
+        let buffer = spare.pop().map(Plane::into_data).unwrap_or_default();
         let Some(geometry) = info.plane(plane)? else {
             continue;
         };
@@ -73,24 +99,39 @@ pub fn copy_planar(
             (PixelFormat::I420, 1 | 2) => stride.div_ceil(2),
             _ => stride,
         };
-        for (y, row) in rows(
-            call,
-            src,
-            offset,
-            plane_stride,
-            geometry.row_bytes,
-            geometry.height,
-        )?
-        .enumerate()
-        {
-            let dst = frame
-                .row_mut(plane, y as u32)
-                .ok_or_else(|| short(call, src.len(), offset))?;
-            dst.copy_from_slice(row);
-        }
+        planes.push(packed(call, src, offset, plane_stride, geometry, buffer)?);
         offset += plane_stride * geometry.height as usize;
     }
-    Ok(frame)
+    Ok(VideoFrame::new(info, planes)?)
+}
+
+/// One plane's rows copied out of `src` (the first at `offset`, each `stride` after the
+/// last) into a tightly packed [`Plane`] that reuses `buffer`'s memory. Each byte is
+/// written once: the plane is not zero-filled first, and rows with no padding between
+/// them are copied in one piece, so a webcam's 1080p frame costs one pass over its bytes
+/// on the capture thread.
+fn packed(
+    call: &'static str,
+    src: &[u8],
+    offset: usize,
+    stride: usize,
+    geometry: PlaneGeometry,
+    mut buffer: Vec<u8>,
+) -> Result<Plane, PlatformError> {
+    let row_bytes = geometry.row_bytes;
+    let rows = rows(call, src, offset, stride, row_bytes, geometry.height)?;
+    let len = row_bytes * geometry.height as usize;
+    buffer.clear();
+    buffer.reserve_exact(len);
+    if stride == row_bytes {
+        // `rows` checked that `src` holds every row.
+        buffer.extend_from_slice(&src[offset..offset + len]);
+    } else {
+        for row in rows {
+            buffer.extend_from_slice(row);
+        }
+    }
+    Ok(Plane::new(buffer, row_bytes))
 }
 
 /// Copies a planar frame (`info.format` is NV12 or I420) whose planes are each in their
@@ -104,7 +145,6 @@ pub fn copy_planes(
     planes: &[(&[u8], usize)],
     info: VideoFrameInfo,
 ) -> Result<VideoFrame, PlatformError> {
-    let mut frame = VideoFrame::zeroed(info)?;
     let count = info.format.plane_count();
     if planes.len() < count {
         return Err(PlatformError::Os {
@@ -116,19 +156,14 @@ pub fn copy_planes(
             ),
         });
     }
+    let mut copied = Vec::with_capacity(count);
     for (plane, &(src, stride)) in planes.iter().enumerate().take(count) {
         let Some(geometry) = info.plane(plane)? else {
             continue;
         };
-        for (y, row) in rows(call, src, 0, stride, geometry.row_bytes, geometry.height)?.enumerate()
-        {
-            let dst = frame
-                .row_mut(plane, y as u32)
-                .ok_or_else(|| short(call, src.len(), 0))?;
-            dst.copy_from_slice(row);
-        }
+        copied.push(packed(call, src, 0, stride, geometry, Vec::new())?);
     }
-    Ok(frame)
+    Ok(VideoFrame::new(info, copied)?)
 }
 
 /// Converts packed 4:2:2 (YUY2: `Y0 U Y1 V` per two pixels, rows `stride` bytes apart) to
@@ -188,7 +223,7 @@ mod tests {
         VideoFrameInfo,
     };
 
-    use super::{copy_planar, copy_planes, yuy2_to_nv12};
+    use super::{copy_planar, copy_planar_into, copy_planes, yuy2_to_nv12};
 
     const CALL: &str = "test";
 
@@ -232,6 +267,38 @@ mod tests {
         assert_eq!(frame.row(0, 0), Some(&[1, 2, 3, 4, 5, 6, 7, 8][..]));
         assert_eq!(frame.row(0, 1), Some(&[9, 10, 11, 12, 13, 14, 15, 16][..]));
         assert!(copy_planar(CALL, &src[..19], 12, info(2, 2, PixelFormat::Bgra8)).is_err());
+    }
+
+    /// A frame handed back is filled again: each plane keeps its buffer, whatever the
+    /// spare's size was, as long as the buffer holds the plane.
+    #[test]
+    fn a_spare_frames_buffers_are_filled_again() {
+        let src: Vec<u8> = (0..4 * 3).collect();
+        let nv12 = info(4, 2, PixelFormat::Nv12);
+        let first = copy_planar_into(CALL, &src, 4, nv12, None).expect("copy");
+        let held: Vec<*const u8> = first.planes().iter().map(|p| p.data().as_ptr()).collect();
+        let next: Vec<u8> = (100..100 + 4 * 3).collect();
+        let second = copy_planar_into(CALL, &next, 4, nv12, Some(first)).expect("copy");
+        let now: Vec<*const u8> = second.planes().iter().map(|p| p.data().as_ptr()).collect();
+        assert_eq!(now, held, "no new buffer");
+        assert_eq!(second.row(0, 1), Some(&[104, 105, 106, 107][..]));
+        assert_eq!(second.row(1, 0), Some(&[108, 109, 110, 111][..]));
+        // A spare of another format and size is still used, and the result is right.
+        let small = [1, 2, 0, 3, 4, 0, 9, 9, 0];
+        let third = copy_planar_into(CALL, &small, 3, info(2, 2, PixelFormat::Nv12), Some(second))
+            .expect("copy");
+        assert_eq!(third.row(0, 1), Some(&[3, 4][..]));
+        assert_eq!(third.row(1, 0), Some(&[9, 9][..]));
+        let one = copy_planar_into(
+            CALL,
+            &[7; 16],
+            8,
+            info(2, 2, PixelFormat::Bgra8),
+            Some(third),
+        )
+        .expect("copy");
+        assert_eq!(one.planes().len(), 1);
+        assert_eq!(one.row(0, 1), Some(&[7; 8][..]));
     }
 
     #[test]

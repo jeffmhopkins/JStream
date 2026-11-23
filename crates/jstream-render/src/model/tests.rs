@@ -309,13 +309,15 @@ fn a_models_layer_is_bounded_by_its_models_box() {
     assert!(count(&bounded, FRONT) > 300, "the cube shows");
 
     // Its depth, over a cleared layer, has the same box.
-    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
     let empty = Scene {
         canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
         background: Color::TRANSPARENT,
         items: &[],
     };
-    compositor.render_into(&empty, &depth).expect("it clears");
+    compositor
+        .render_view_depth(&empty, &depth)
+        .expect("it clears");
     compositor
         .draw_model_depth(&model_draw(geometry), &depth)
         .expect("the depth draws");
@@ -592,6 +594,66 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
         ];
         let shot = render(compositor, &items);
         let want = if card_wins { [255, 255, 255] } else { FRONT };
+        assert_near(rgb(&shot, 80, 50), want, (80, 50));
+    }
+}
+
+/// ADR-0107 decision 7 (#1601): a card seen through the camera, drawn after a nearer
+/// model, is hidden where the model is. An item on the screen itself (no camera) is not
+/// in the model's space and is never hidden by it.
+#[test]
+fn golden_model_depth_hides_a_camera_card_but_not_a_screen_item() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = SceneCamera::framing(canvas());
+    let white = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
+    let mut geometry = boxed(80.0, 50.0, 30.0);
+    geometry.depth_px = finite(40.0);
+    let draw = ModelDraw {
+        model: &cube,
+        geometry,
+        camera: Some(camera),
+        lighting: Lighting::Unlit,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let own_depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(&draw, &layer)
+        .expect("the model draws");
+    compositor
+        .draw_model_depth(&draw, &own_depth)
+        .expect("the model's depth draws");
+    for (card_camera, want) in [(Some(camera), FRONT), (None, [255, 255, 255])] {
+        let items = [
+            Item {
+                camera: Some(camera),
+                depth: Some(&own_depth),
+                ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+            },
+            Item {
+                camera: card_camera,
+                ..crate::tests::item(
+                    &white,
+                    Placement::Geometry(boxed(80.0, 50.0, 60.0)),
+                    Crop::NONE,
+                    1.0,
+                )
+            },
+        ];
+        let shot = render(compositor, &items);
         assert_near(rgb(&shot, 80, 50), want, (80, 50));
     }
 }
@@ -1085,7 +1147,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
         blur_px: Finite32::ZERO,
         autofocus: false,
     };
-    let map = compositor.layer(256, 256).expect("a map");
+    let map = compositor.depth_layer(256, 256).expect("a map");
     let clear = Scene {
         canvas: FrameSize::new(256, 256).expect("non-zero"),
         background: Color::rgb(0.0, 0.0, 0.0),
@@ -1116,7 +1178,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
     let card = compositor
         .upload_rgba8(1, 1, &[255, 255, 255, 255])
         .expect("a pixel uploads");
-    let card_map = compositor.layer(256, 256).expect("a map");
+    let card_map = compositor.depth_layer(256, 256).expect("a map");
     let mut card_at = boxed(60.0, 50.0, 20.0);
     card_at.fit_mode = jstream_protocol::FitMode::Stretch;
     let cards = [Item {
@@ -1476,7 +1538,7 @@ fn golden_model_a_floor_cuts_what_is_below_it() {
     let shot = render(compositor, &items);
     assert_near(rgb(&shot, 80, 40), FRONT, (80, 40));
     assert_near(rgb(&shot, 80, 60), [0, 0, 0], (80, 60));
-    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
     compositor
         .draw_model_depth(&draw, &depth)
         .expect("the depth draws");
@@ -2008,12 +2070,13 @@ fn golden_model_a_near_part_blurs_over_a_far_one_but_never_the_reverse() {
     );
     let outside = rgb(&on_far, edge as u32 - 3, 50);
     assert!(outside[0] > 40, "the soft block didn't spread: {outside:?}");
-    // Far from the block, the in-focus slab is untouched.
-    assert_near(rgb(&on_far, 50, 20), rgb(&plain, 50, 20), (50, 20));
+    // Past the block's blur, the in-focus slab is untouched. The blur's rim on this row
+    // is at x = 54, and a wide blur's rim is soft by a few pixels (ADR-0193).
+    assert_near(rgb(&on_far, 40, 20), rgb(&plain, 40, 20), (40, 20));
 }
 /// ADR-0165: one non-finite pixel in a model's layer (a NaN from a degenerate normal, or a
 /// channel past the half-float range) stays one pixel. The gather spreads each pixel over
-/// up to 48 others, and the smoothing over 25, so unchecked it would mark a whole disc of
+/// up to 48 others, and the smoothing and the resolve over more, so unchecked it would mark a whole disc of
 /// a defocused model with black dots.
 #[test]
 fn golden_model_depth_of_field_keeps_a_non_finite_pixel_to_itself() {
@@ -2079,6 +2142,67 @@ fn golden_model_depth_of_field_keeps_a_non_finite_pixel_to_itself() {
             }
         }
     }
+}
+
+/// ADR-0193: the gather of what spreads wide is drawn at half the layer's size, and a
+/// blur too slight for that size is still drawn at the layer's own. Stripes one pixel
+/// wide, 0.6 px out of focus, are softened and still there.
+#[test]
+fn golden_model_depth_of_field_gathers_at_half_size_and_keeps_a_slight_blur_fine() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // Every pixel at the framing distance, 1 / w = 1, and the focus four times as far:
+    // a circle of confusion of three times the camera's blur.
+    let camera = focused_camera(framing_distance() * 4.0, 0.2);
+    let view = camera.view(canvas()).expect("a view");
+    let colour: Vec<[f32; 4]> = (0..WIDTH * HEIGHT)
+        .map(|at| {
+            let v = if (at % WIDTH).is_multiple_of(2) {
+                0.1
+            } else {
+                0.9
+            };
+            [v, v, v, 1.0]
+        })
+        .collect();
+    let depth = vec![[1.0, 0.0, 0.0, 1.0]; (WIDTH * HEIGHT) as usize];
+    let maker = opened.compositor.maker();
+    let colour =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &colour).expect("the colour uploads");
+    let depth =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &depth).expect("the depth uploads");
+    let mut focus = crate::filter::VideoFilter::of(
+        super::focus::KIND,
+        Box::new(super::focus::ModelFocus::default()),
+    );
+    focus.set_depth(Some(crate::filter::ViewDepth {
+        view: Some(view),
+        ..crate::filter::ViewDepth::new(std::sync::Arc::new(depth), view.focal_px())
+    }));
+    let out = opened
+        .compositor
+        .apply_filter(&mut focus, &colour, crate::filter::FilterClock::default())
+        .expect("the passes draw");
+    // The scratch layers in the order the passes take them: tiles, reach, packed, then
+    // the gathered layer and its smoothed copy.
+    for gathered in &focus.scratch().kept()[3..5] {
+        assert_eq!(
+            (gathered.width(), gathered.height()),
+            (WIDTH / 2, HEIGHT / 2)
+        );
+    }
+    let sharp = crate::filter::testing::read(&mut opened, &colour);
+    let shot = crate::filter::testing::read(&mut opened, &out);
+    let contrast = |shot: &Snapshot| {
+        i32::from(rgb(shot, WIDTH / 2 + 1, HEIGHT / 2)[0])
+            - i32::from(rgb(shot, WIDTH / 2, HEIGHT / 2)[0])
+    };
+    let (before, after) = (contrast(&sharp), contrast(&shot));
+    assert!(
+        after > 12 && after < before - 40,
+        "stripes {before} apart before, {after} after"
+    );
 }
 
 /// Draws an unlit white plane with `texture` (ADR-0107 decision 5) and reads it back.
@@ -2411,7 +2535,7 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         .expect("a pixel uploads");
     let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
-    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.depth_layer(WIDTH, HEIGHT).expect("a layer");
     let mut geometry = boxed(80.0, 50.0, 30.0);
     geometry.depth_px = finite(40.0);
     let draw = ModelDraw {
@@ -2432,7 +2556,7 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         .draw_model(&draw, &layer)
         .expect("the model draws");
     compositor
-        .render_into(
+        .render_view_depth(
             &Scene {
                 canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
                 background: Color::TRANSPARENT,
@@ -2500,6 +2624,7 @@ fn a_second_compositor_on_the_device_makes_no_pipeline_again() {
             warp: 0.0,
             travel: 0.0,
             dropping: 0.0,
+            pictures: [None; crate::sky::MAX_SKY_PICTURES],
         };
         compositor.draw_sky(&sky, &layer).expect("the sky draws");
         let sky = render(
@@ -2842,5 +2967,115 @@ fn a_surface_reads_the_live_texture_its_layer_shows() {
     assert!(
         alone.iter().zip(with).all(|(a, b)| a.abs_diff(b) <= 2),
         "drawn alone {alone:?}, with the layer {with:?}"
+    );
+}
+
+/// [`draw`], into a layer `percent` of the canvas's width and of its height that stands
+/// for the whole canvas (ADR-0197), placed over it.
+fn draw_at(
+    compositor: &mut Compositor,
+    model: &Model,
+    geometry: ItemGeometry,
+    camera: Option<SceneCamera>,
+    percent: u32,
+) -> Snapshot {
+    let uploaded = compositor.upload_model(model).expect("the model uploads");
+    let mut layer = compositor
+        .layer(WIDTH * percent / 100, HEIGHT * percent / 100)
+        .expect("a layer");
+    layer.set_extent(FrameSize::new(WIDTH, HEIGHT).expect("non-zero"));
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera,
+                lighting: Lighting::Unlit,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                materials: &[],
+                texture: None,
+                reflection: None,
+                probe: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    render(compositor, &items)
+}
+
+/// ADR-0197: a model drawn into a layer with half the canvas's pixels each way, which
+/// stands for the whole canvas, shows where it does at full size: the same inside, and
+/// an edge within two pixels of the sharp one.
+#[test]
+fn golden_model_drawn_with_fewer_pixels_shows_in_the_same_place() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let model = two_boxes([
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]),
+        ([0.0, 0.0, 0.0], [0.1, 0.1, 0.01], [255, 0, 0]),
+    ]);
+    let geometry = boxed(80.0, 50.0, 40.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let full = draw_at(compositor, &model, geometry, camera, 100);
+    let plain = draw(compositor, &model, geometry, camera, Lighting::Unlit);
+    assert_eq!(full.rgba(), plain.rgba(), "at 100 nothing changes");
+    let half = draw_at(compositor, &model, geometry, camera, 50);
+    let edges = |shot: &Snapshot| {
+        let row = red_row(shot, 50);
+        let left = row
+            .iter()
+            .position(|&r| r > 128)
+            .expect("the slab is drawn");
+        let right = row
+            .iter()
+            .rposition(|&r| r > 128)
+            .expect("the slab is drawn");
+        (left, right)
+    };
+    let (sharp, soft) = (edges(&full), edges(&half));
+    assert!(
+        sharp.0.abs_diff(soft.0) <= 2 && sharp.1.abs_diff(soft.1) <= 2,
+        "edges at full size {sharp:?}, at half {soft:?}"
+    );
+    assert_near(rgb(&half, 80, 50), rgb(&full, 80, 50), (80, 50));
+    assert_near(rgb(&half, 10, 10), [0, 0, 0], (10, 10));
+}
+
+/// ADR-0197 with ADR-0165: depth of field on a model drawn with half the pixels blurs
+/// over as much of the picture as at full size, not twice as much.
+#[test]
+fn golden_model_drawn_with_fewer_pixels_is_as_soft_out_of_focus() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let model = two_boxes([
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]),
+        ([0.0, 0.0, 0.0], [0.1, 0.1, 0.01], [255, 0, 0]),
+    ]);
+    let geometry = boxed(80.0, 50.0, 40.0);
+    // Focused four times as far: the slab blurs by 16 * 3/4 = 12 canvas pixels.
+    let camera = Some(focused_camera(framing_distance() * 4.0, 16.0));
+    let ramp = |shot: &Snapshot| {
+        red_row(shot, 50)[..80]
+            .iter()
+            .filter(|&&r| r > 10 && r < 245)
+            .count()
+    };
+    let full = ramp(&draw_at(compositor, &model, geometry, camera, 100));
+    let half = ramp(&draw_at(compositor, &model, geometry, camera, 50));
+    assert!(full >= 8, "the edge ramps at full size: {full} pixels");
+    assert!(
+        half.abs_diff(full) <= full / 3 + 2,
+        "the edge ramps over {half} canvas pixels at half size, {full} at full"
     );
 }

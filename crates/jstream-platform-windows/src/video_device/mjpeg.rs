@@ -241,7 +241,7 @@ impl Session {
         match self.pull()? {
             Some(out) => {
                 let (layout, stride) = (self.layout, self.stride);
-                let decoded = with_bytes(&out, |bytes| layout.frame(bytes, stride, info))??;
+                let decoded = with_bytes(&out, |bytes| layout.frame(bytes, stride, info, None))??;
                 Ok(VideoSurface::Cpu(decoded))
             }
             None => Err(PlatformError::Os {

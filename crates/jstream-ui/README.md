@@ -208,8 +208,8 @@ Contents ([Design](#design) explains the choices):
   values `live_values` reads, with channel IDs, the search and its order tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path and each trigger's sentence tested natively), its
-  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text
-  tested natively), the Add source dialog (`add_source.rs`:
+  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
+  which cues it edits and how it finds one, tested natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -243,8 +243,8 @@ Contents ([Design](#design) explains the choices):
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (the pipeline's health and Start all in its header, then a compact row for the program
-  output and for each output with its state, Start or Stop, FX button and ⋯ menu, and a
+  (the pipeline's health and Start all in its header, then a flat row for the program
+  output and for each output with its state dot and words, Start or Stop, FX funnel and ⋯ menu, and a
   running one's stats line; Duplicate; each output's settings dialog, which creates or
   edits a stream, recording or virtual camera and its stream key, applies nothing until
   Save and follows another client's changes to untouched fields, whose drafts,
@@ -259,8 +259,9 @@ Contents ([Design](#design) explains the choices):
   under it with their meters, faders, dB fields, mutes and routing, the same as
   vertical strips, and the buses),
   also tested natively against `MockEngine`; and `studio.rs`:
-  `StudioMode`, the Transitions panel (the preset picker and editor, and each scene's
-  overrides), `StudioControls`, studio mode's Transition, Cut, preset and Swap between
+  `StudioMode`, the Transitions panel (the preset toolbar with its picker, + and ⋯
+  menu of Rename, Duplicate, Set as default and Delete…, the picked preset's editor on
+  the property grid, and each scene's overrides, over the studio-mode note), `StudioControls`, studio mode's Transition, Cut, preset and Swap between
   preview and program, and `StageLabel`, the label over each side ([Design](#design)),
   and the scene's Transition in and out submenus the menus share
   (`override_submenu`); and
@@ -495,7 +496,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   at the pointer, and
   the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
-  Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
+  Escape or Tab. A menu a panel draws itself (the control button's, a lane point's)
+  takes the same keys through `menu::keys` and `menu::focus_first`, and
+  `menu::asks_for_menu` reads the Menu key and Shift+F10. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
@@ -560,7 +563,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   group scene has filters, or the group's look, or a keyframe scene's, can't become its
   items' own (`Kept` in `item_menu.rs`). The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
-  backdrop cancel, and Enter presses the button marked `data-primary`. A primary press
+  backdrop cancel, and Enter presses the button marked `data-primary`. Escape reaches the
+  topmost dialog wherever the focus is: a capture-phase window listener takes one pressed
+  outside it (before its first field has the focus, or on a dialog under it) unless a
+  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). A primary press
   on that dialog's own header drags it, as a `translate` from the centred place, clamped
   so the box stays inside the window (a box wider than the window keeps covering it; the
   top never goes above the window). The offset is remembered for the dialog's label in
@@ -786,7 +792,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   control (`CC 7`), and the menu's Remove control unbinds it; a learning one says "Move…" and stops on a
   click, or once its form closes (its signals are read with `try_`, so a closed form ends
   the loop). An engine that reads no MIDI controls says so in the problem bar.
-  Since ADR-0183 the button is the control button: a click opens one menu (Learn MIDI
+  Since ADR-0183 the button is the control button: a click opens one menu (for a learned
+  MIDI control, a Smoothing field first, which sends the binding again with its
+  `smoothing_ms`; then Learn MIDI
   control, Make channel or Open channel, Follow channel…, Add to sequence ›, Set key…,
   Remove control). Make channel
   makes a channel named after the setting (`label`), in the selected scene, whose
@@ -798,8 +806,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`sequence::with_lane`), all in one batch, and opens the sequence. Set key… takes the
   next key pressed (`KeyCapture`, a focused button whose keys never reach the hotkeys;
   Escape or leaving it cancels) and binds it to `channel.switch` `toggle` on the channel,
-  made if need be, in the same batch. A setting that follows a channel shows the
-  channel's name as a chip.
+  made if need be, in the same batch. A sequence that already has the lane gets no
+  `timeline.set`; it only opens. A setting that follows a channel shows the
+  channel's name as a chip. Enter or Space opens the menu under the button (a click with
+  no pointer, `detail` 0) with its first item focused; Escape or Tab closes it and gives
+  the focus back to the button.
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in
@@ -807,7 +818,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`Studio::channel`): its name, switch (`channel.switch`), a meter that also sets the value
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
-  0 to 1; "+ Channel" adds a `channel` input), its shaping, the value bindings that follow
+  0 to 1; "+ Channel" adds a `channel` input; each input that reads something shows its
+  `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
   `channel.set` of the whole channel. `live_values` reads `channel.values` every 100 ms
@@ -822,14 +834,21 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   in a `0 0 1000 100` box stretched over the lane (`lane_path`, dashed from the channel's
   value when the first point is after 0) with its points as HTML dots placed with `style:`
   properties. A double-click adds a point, a drag moves one, kept between its neighbours,
-  and a right-click sets its curve or deletes it; each gesture sends one `timeline.set`.
+  and a right-click sets its curve or deletes it; each gesture sends one `timeline.set`,
+  and one that changes nothing sends none. A point takes the focus: Enter, Space, the Menu
+  key or Shift+F10 open its menu beside it, and Delete removes it.
   The play head runs from `Studio::playing`, kept from `studio.get`'s `timelines` and each
   `timeline.changed`, and a click on the ruler sends `timeline.seek`. Above the lanes, the
   Events lane (`panels/events.rs`) draws the timeline's `cues` as chips on the same
   ruler: a double-click opens an editor there (what happens, which item, keyframe, scene,
   channel, sequence or source, from `objects`), a click on a chip edits it, a drag moves
   it with the pointer captured, and the editor deletes it; each is one `timeline.set`,
-  with the cues kept in time order. The Scenes panel lists each scene's sequences after
+  with the cues kept in time order. The editor edits a cue only when it can build the
+  same action again (`editable`), and keeps an object that is gone as "(missing)"; each
+  edit finds its cue by time and action (`position`), and one another client changed
+  meanwhile is left as it is, with a problem shown. A chip opens its editor from the
+  keyboard (Enter, Space, the Menu key, Shift+F10), Escape closes it, and Delete removes
+  the event. The Scenes panel lists each scene's sequences after
   its keyframes (`Row::Sequence`, the teal sequence icon): a click opens one in the
   Sequence panel (`sequence::open_sequence`), its hover button plays or stops it, it shows
   its elapsed time while it plays and the keys bound to play it, and its menu plays or
@@ -1095,7 +1114,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Transform), Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
-  so it says what it waits on and is in no built-in layout. Stream stats
+  so it is an empty state that says what it waits on, and is in no built-in layout. Stream stats
   (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
   (protocol 0.57): the output picked in its menu, else the first running stream, the
   first running output, then the first stream. It reads the outputs and profiles as
@@ -1113,7 +1132,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs and the desktop app's global hotkeys, and asks again after each `state.changed`,
   `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
-  5 seconds. Its Clear button empties only the list shown: `ActivityCleared`, kept by
+  5 seconds. It shows the calls in runs under a heading of how long ago (`by_time`,
+  tested natively), each with the agent's name on the right. Its Clear button empties only the list shown: `ActivityCleared`, kept by
   the shell, marks the newest entry's `seq`, and the panel asks only after it, so the
   list stays clear across tab switches while the engine's log is untouched; the
   Live layout shows Stream stats, Outputs and it as tabs in one group. The
@@ -1438,13 +1458,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   header. The master card's button shows and hides the channels and counts them; it
   has the master's short-term loudness on a bar from −60 to +6 LUFS with a marker at
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
-  readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
-  button that resets the integrated loudness (`audio.reset_loudness`). Its Hear
-  button is the master's monitor (`bus.set_monitor`, D22): it reads "Hear: off" while
-  the master has none, a click turns one on at the default output after FX, and later
-  clicks switch it between after and before FX on the same device. Its "FX N"
-  counts the master chain's filters, from `Studio`'s collection, and shows that chain
-  in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
+  readings in its tooltip, and its true peak on a bar of the same scale, with a
+  warning over 0 dBTP ("safe" is the bar's tooltip). Both bars fill green to amber to
+  red along the whole track: `spread` sizes the fill's gradient to the track, set as
+  its `background-size` with a `style:` property. Its icon buttons (C20) are Hear,
+  the funnel and ⋯. Hear (headphones, named "Hear: off" and so on) is the master's
+  monitor (`bus.set_monitor`, D22): a click turns one on at the default output after
+  FX, and later clicks switch it between after and before FX on the same device. The
+  ⋯ menu picks Off, After FX or Before FX by name and resets the integrated loudness
+  (`audio.reset_loudness`). The funnel counts the master chain's filters, from
+  `Studio`'s collection, once it has one, and shows that chain in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
@@ -1665,8 +1688,21 @@ beside it ([Design › Studio mode](#design)).
   `CanvasItem::solid`, [ADR-0107](../../docs/adr/0107-3d-models.md) decision 8) is
   outlined, labelled, hit and touched by a marquee by its model's bounds instead: its box
   extruded by the model's depth, the hull of their eight corners through the camera
-  (`ItemGeometry::solid_outline`), none while a corner is behind it. In a 2D scene it
-  keeps its box, as cards keep theirs. The name uses the projected top-left when that corner and
+  (`ItemGeometry::solid_outline`). While a corner is behind the camera (the model reaches
+  past the near plane) it falls back to its box clipped to the near plane, as a card's,
+  so it stays outlined and selectable (#1601). In a 2D scene it
+  keeps its box, as cards keep theirs. An item placing a group that shares the scene's
+  space (a 3D group, [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)
+  decision 6) is outlined, labelled and touched by a marquee by the convex hull of its
+  children's outlines, each child placed through the item's pose as the engine places it
+  (`GroupPose`, nested groups in turn), and hit only inside a child's outline, at that
+  child's depth, so a press in the gap between children reaches what is behind
+  (`camera::Shape`, worked out by `Layout::sized` as the engine plans the pass: a group
+  shared once per scene, by a visible item placing it by a geometry, never through
+  itself, at most `MAX_NESTING` deep). Its children are the group scene's own visible
+  geometry items, without a keyframe's overrides of them, and a group with none is
+  outlined by its box. A drag moves the group's own item, and the outline follows it.
+  The name uses the projected top-left when that corner and
   the far end of the top edge are both in front of the camera, and stays upright on the
   visible part's bounds when either is not. A press hits the box the engine
   draws on top: the nearest along the view (`CameraView::depth_of`) when the

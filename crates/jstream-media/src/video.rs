@@ -91,6 +91,38 @@ impl Plane {
     pub fn stride(&self) -> usize {
         self.stride
     }
+
+    /// The plane's buffer, giving up the plane: for a producer that fills it again for
+    /// its next frame instead of allocating one. A plane whose bytes are still shared,
+    /// or a range of a longer buffer, gives a copy of its own bytes.
+    pub fn into_data(self) -> Vec<u8> {
+        let whole = self.range == (0..self.data.len());
+        match Arc::try_unwrap(self.data) {
+            Ok(data) if whole => data,
+            Ok(data) => data.get(self.range).map(<[u8]>::to_vec).unwrap_or_default(),
+            Err(shared) => shared
+                .get(self.range)
+                .map(<[u8]>::to_vec)
+                .unwrap_or_default(),
+        }
+    }
+}
+
+impl PartialEq for Plane {
+    fn eq(&self, other: &Self) -> bool {
+        self.stride == other.stride && self.data() == other.data()
+    }
+}
+
+impl Eq for Plane {}
+
+impl fmt::Debug for Plane {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Plane")
+            .field("data", &self.data())
+            .field("stride", &self.stride)
+            .finish()
+    }
 }
 
 impl PartialEq for Plane {

@@ -297,6 +297,12 @@ pub(crate) struct MixFrame {
     /// the conversions of [`FRAMES_IN_FLIGHT`] earlier ticks, as the draw found
     /// ([`EncodeFlights`]). Taken by [`Frames::draw`], which counts it.
     pub(crate) starved: bool,
+    /// Whether only this machine sees it: a monitored scene, or the program at a size
+    /// only preview streams take. Set by [`Frames::prepare`]. It gives way to the
+    /// outputs' pictures while the GPU is behind ([`yields`]).
+    pub(crate) local: bool,
+    /// How many due ticks in a row it has given way.
+    yielded: u32,
 }
 
 impl MixFrame {
@@ -419,6 +425,8 @@ impl MixFrame {
             probe_only: false,
             nv12: None,
             starved: false,
+            local: false,
+            yielded: 0,
         }
     }
 
@@ -427,6 +435,28 @@ impl MixFrame {
     fn take_unread(&mut self) -> u64 {
         let unread = std::mem::take(&mut self.unread);
         if self.probe_only { 0 } else { unread }
+    }
+}
+
+/// Whether only this machine sees a picture ([`MixFrame::local`]): a monitored `scene`,
+/// or one nothing but preview streams takes. An output's session, or a virtual camera
+/// that has it `held`, makes it the stream's own picture.
+fn only_local(scene: bool, held: bool, taps: &[VideoTap]) -> bool {
+    scene || (!held && !taps.is_empty() && taps.iter().all(|tap| tap.local))
+}
+
+/// Whether a due tick's picture is left undrawn so the outputs' get the GPU: a `local`
+/// one ([`MixFrame::local`]), while the GPU has not finished the tick before (`busy`).
+/// `yielded` counts its ticks in a row: after [`LOCAL_YIELD_TICKS`] it is drawn anyway,
+/// so a preview under a GPU that never catches up still moves. The caller counts the
+/// tick (R-RT-004). On the frame's fields, so the draw can hold its others.
+fn yields(local: bool, busy: bool, yielded: &mut u32) -> bool {
+    if local && busy && *yielded < LOCAL_YIELD_TICKS {
+        *yielded += 1;
+        true
+    } else {
+        *yielded = 0;
+        false
     }
 }
 
@@ -439,6 +469,11 @@ const RETIRED_BUFFERS: usize = 8;
 /// render thread records another: it records frame N while the GPU runs N − 1
 /// (ADR-0117 §1).
 pub(crate) const FRAMES_IN_FLIGHT: usize = 2;
+
+/// How many due ticks in a row a picture only this machine sees gives way to the
+/// outputs' while the GPU is behind ([`yields`]): at 30 frames a second a
+/// preview that always yields still shows about two a second.
+pub(crate) const LOCAL_YIELD_TICKS: u32 = 15;
 
 /// The ticks whose encode-target conversions the GPU has not finished, for one draw's
 /// compositor. Nothing else holds a GPU-path mix's composites back: an encoder lets go
@@ -460,6 +495,11 @@ impl EncodeFlights {
     /// behind, and this tick records none.
     fn behind(&self) -> bool {
         self.0.load(Ordering::Acquire) >= FRAMES_IN_FLIGHT
+    }
+
+    /// Whether any counted submit is still running.
+    fn flying(&self) -> bool {
+        self.0.load(Ordering::Acquire) > 0
     }
 
     /// Counts this tick's conversions, the last of which `queue`'s latest submit
@@ -1153,6 +1193,7 @@ impl Program {
             gpu: *encoders.video.path() == VideoPath::Gpu,
             claim: lock(&encoders.claim).take(),
             probe: Some(Arc::clone(&encoders.probe)),
+            local: false,
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
     }
@@ -1187,6 +1228,7 @@ impl Program {
             gpu: false,
             claim: None,
             probe: None,
+            local: true,
         };
         let _ = self.video_taps.send((feed, tap));
     }
@@ -1952,9 +1994,15 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
         chains.upload_models_aside(&compositor);
         let mut nv12 = Nv12Passes::default();
         let mut readbacks = Readbacks::copied();
+        // The ticks whose draws the GPU has not finished, whatever they drew.
+        let ticks = EncodeFlights::default();
         // Whether the compositor was asked to time the pack passes yet: once a meter
         // guards them (#349).
         let mut timing = false;
+        // Chooses the size 3D models are drawn at, once the first tick says what a
+        // frame may take (ADR-0197).
+        let model_mode = crate::resolution::Mode::from_env();
+        let mut governor: Option<crate::resolution::Governor> = None;
         let draw: DrawFn = Box::new(
             move |program, scenes, live, captures, frames, at, meter, warm| {
                 if let Some(hook) = &hook {
@@ -1991,7 +2039,20 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 // Read once, after the poll above brought back what the GPU has finished:
                 // every mix of the tick is converted, or none is.
                 let behind = flights.behind();
+                // How many pixels this tick's 3D models are drawn with (ADR-0197): fewer
+                // while the GPU is short of time, so the outputs' frames are not what
+                // gives way.
+                chains.model_percent = governor
+                    .get_or_insert_with(|| {
+                        crate::resolution::Governor::new(model_mode, meter.budget())
+                    })
+                    .tick(meter.take_gpu_frame(), behind);
                 let mut converted = false;
+                // The GPU is still on the tick before this one: the pictures only this
+                // machine sees give way, so the outputs' never queue behind a preview's.
+                // With no output's picture to draw there is nothing to give way to.
+                let busy = ticks.flying() && frames.iter().any(|frame| frame.due && !frame.local);
+                let mut drew = false;
                 // A monitored scene not planned (deleted, or not yet) draws nothing.
                 let shot_of = |frame: &MixFrame| match &frame.scene {
                     Some(scene) => scenes.get(scene).map(|scene| scene.shot()),
@@ -2022,10 +2083,12 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                             None => View::output(frame.mix.as_ref(), frame.owner.as_ref()),
                         };
                         // A monitored scene the tick has no time left for is skipped, its
-                        // layers kept, and counted (R-RT-004).
+                        // layers kept, and counted (R-RT-004). So is a local picture
+                        // while the GPU is behind.
                         if frame
                             .deadline
                             .is_some_and(|deadline| Instant::now() >= deadline)
+                            || yields(frame.local, busy, &mut frame.yielded)
                         {
                             frame.unread += 1;
                             frame.awaiting = true;
@@ -2097,6 +2160,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                                 continue;
                             }
                         }
+                        drew = true;
                         let drawn = snapshot::compose_metered(
                             &mut compositor,
                             (&mut cache, &mut chains, &mut *meter),
@@ -2112,6 +2176,9 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                         )
                         .and_then(|output| {
                             let started = Instant::now();
+                            // The frame's way out, its conversion for the encoders and
+                            // its copy for a readback, is timed with its composite.
+                            meter.gpu_unit_composite(&mut compositor);
                             if frame.readback {
                                 // Recorded now and collected once mapped, a tick or two on.
                                 if !readbacks.record(&compositor, frame, &output, at)? {
@@ -2138,6 +2205,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                                     .map(|()| converted = true),
                                 None => Ok(()),
                             };
+                            meter.gpu_unit_none(&mut compositor);
                             meter.phase_since(Phase::Finish, started);
                             submitted
                         });
@@ -2148,6 +2216,9 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 // After the tick's last submit, so the count comes down once all of it ran.
                 if converted {
                     flights.launch(compositor.queue());
+                }
+                if drew {
+                    ticks.launch(compositor.queue());
                 }
                 // A failed frame skips this: what it retired waits for the next frame's
                 // fence, which also covers it, so nothing is freed on this thread.
@@ -3365,6 +3436,9 @@ pub(crate) struct VideoTap {
     /// Where the frames pushed are copied while a `quality.probe` is armed (ADR-0145):
     /// an output's session has one, a preview's none.
     probe: Option<Arc<ProbeTap>>,
+    /// A preview stream's tap: its picture stays on this machine, and gives way to the
+    /// outputs' while the GPU is behind ([`yields`]).
+    local: bool,
 }
 
 impl VideoTap {
@@ -3390,8 +3464,8 @@ impl From<VideoInput> for TapInput {
 
 impl TapInput {
     /// Pushes the frame `pixels` of `size`, stamped `pts`: NV12 when `planar`, else
-    /// RGBA8. A picture stream and a session opened for RGBA8 (the preview's H.264)
-    /// take only RGBA8, so they skip an NV12 frame, one left from before they were
+    /// RGBA8. A picture stream and a session opened for RGBA8 (a preview's H.264 at an
+    /// odd size) take only RGBA8, so they skip an NV12 frame, one left from before they were
     /// attached. `false` once its reader has gone.
     fn push(&self, size: FrameSize, pts: MediaTime, pixels: &[u8], planar: bool) -> bool {
         match self {
@@ -3821,9 +3895,10 @@ impl Frames {
             let probed = taps.iter().any(|tap| tap.probed());
             frame.readback = fed || probed;
             frame.probe_only = frame.readback && !fed;
-            // Only encoder sessions opened for NV12 take it: a camera, a picture stream
-            // and a session opened for RGBA (the preview's H.264) need RGBA, and so does
-            // a probe's reference.
+            // Only encoder sessions opened for NV12 take it, a preview's H.264 at an
+            // even size among them: a camera, a picture stream and a session opened
+            // for RGBA (a preview's at an odd size) need RGBA, and so does a probe's
+            // reference.
             frame.planar = fed
                 && !held
                 && !probed
@@ -3833,6 +3908,7 @@ impl Frames {
                 })
                 && frame.size.width() % 2 == 0
                 && frame.size.height() % 2 == 0;
+            frame.local = only_local(frame.scene.is_some(), held, taps);
             encode.starved = false;
             frame.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
@@ -5245,9 +5321,10 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, EncodeRing, FRAME_DEN, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw,
-        Switch, SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock,
-        open_video, output_size, push_each, stream_info, until_block, video_config,
+        DrawFn, EncodeRing, FRAME_DEN, Feed, Frames, GpuGate, GpuSources, LOCAL_YIELD_TICKS,
+        MixFrame, OpenDraw, Switch, SwitchWhy, VideoTap, catch_up, check_video_encoder,
+        encode_ring_len, lock, only_local, open_video, output_size, push_each, stream_info,
+        until_block, video_config, yields,
     };
     use crate::runtime::captures::rgba_from_surface;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
@@ -5837,6 +5914,7 @@ mod tests {
             gpu: false,
             claim: None,
             probe: None,
+            local: false,
         }
     }
 
@@ -5879,7 +5957,7 @@ mod tests {
         );
     }
 
-    /// A session opened for RGBA8, as the preview's H.264 is, skips an NV12 frame: one
+    /// A session opened for RGBA8, as a preview's H.264 at an odd size is, skips an NV12 frame: one
     /// shown before it joined a mix read back as NV12. It takes the next RGBA8 frame.
     #[test]
     fn a_session_opened_for_rgba_skips_an_nv12_frame() {
@@ -5911,6 +5989,61 @@ mod tests {
         session
             .finish()
             .expect("the encoder took every frame it was given");
+    }
+
+    /// A picture only preview streams take gives way while the GPU is behind, for at
+    /// most [`LOCAL_YIELD_TICKS`] due ticks in a row, and an output's never does: the
+    /// stream keeps its frames and the preview's rate falls instead.
+    #[test]
+    fn a_local_picture_gives_way_while_the_gpu_is_behind() {
+        let mut yielded = 0;
+        assert!(!yields(false, true, &mut yielded), "an output's picture");
+        assert!(!yields(true, false, &mut yielded), "the GPU keeps up");
+        for tick in 0..LOCAL_YIELD_TICKS {
+            assert!(yields(true, true, &mut yielded), "tick {tick}");
+        }
+        assert!(
+            !yields(true, true, &mut yielded),
+            "drawn anyway after the limit"
+        );
+        assert!(
+            yields(true, true, &mut yielded),
+            "and the count starts again"
+        );
+        assert!(!yields(true, false, &mut yielded), "the GPU caught up");
+        assert_eq!(yielded, 0);
+    }
+
+    /// A monitored scene is local, and so is a picture only preview streams take; an
+    /// output's session on it, or a camera holding it, makes it the stream's own.
+    #[test]
+    fn only_preview_streams_make_a_picture_local() {
+        let size = FrameSize::new(64, 36).expect("size");
+        let feed = Feed {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            scene: None,
+        };
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            None,
+            &feed,
+            &EncoderProfile::DEFAULT,
+            FRAME_DEN,
+        )
+        .expect("fake session");
+        let output = || cpu_tap(session.input());
+        let preview = || VideoTap {
+            local: true,
+            ..cpu_tap(session.input())
+        };
+        assert!(only_local(false, false, &[preview(), preview()]));
+        assert!(!only_local(false, false, &[preview(), output()]));
+        assert!(!only_local(false, true, &[preview()]), "a camera holds it");
+        assert!(!only_local(false, false, &[]), "kept for a camera alone");
+        assert!(only_local(true, false, &[]), "a monitored scene");
     }
 
     /// Sessions with the same feed share one drawn mix; a mix whose sessions are gone
@@ -6025,6 +6158,7 @@ mod tests {
                 gpu: true,
                 claim: None,
                 probe: None,
+                local: false,
             },
         );
         assert!(frames.feeds_gpu());
@@ -6070,6 +6204,7 @@ mod tests {
                 gpu: true,
                 claim: Some(claim),
                 probe: None,
+                local: false,
             },
         );
         assert!(frames.feeds_gpu());

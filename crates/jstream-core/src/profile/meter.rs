@@ -314,6 +314,8 @@ pub(crate) struct DrawMeter {
     guard: Option<crate::runtime::PassGuard>,
     /// Whether the frame being drawn is timed on the GPU.
     gpu_timed: bool,
+    /// The GPU time of the latest timed frame that came back ([`Self::take_gpu_frame`]).
+    gpu_frame: Option<Duration>,
     /// Each GPU id's unit, by id, and the generation they were given in.
     gpu_units: GpuIds,
 }
@@ -351,6 +353,7 @@ impl Default for DrawMeter {
             published: None,
             guard: None,
             gpu_timed: false,
+            gpu_frame: None,
             gpu_units: GpuIds::default(),
         }
     }
@@ -374,9 +377,31 @@ impl DrawMeter {
     /// came back since the last frame, a frame or two late, and times this frame when
     /// it is one of every [`GPU_EVERY`]. Call once per frame before drawing.
     pub(crate) fn begin_gpu(&mut self, compositor: &mut jstream_render::Compositor) {
-        compositor.gpu_units(|_, id, took| self.gpu_measured(id, took));
+        // A timed frame comes back whole: its units' times add up to the frame's.
+        let mut frame: Option<(u64, Duration)> = None;
+        compositor.gpu_units(|tag, id, took| {
+            self.gpu_measured(id, took);
+            frame = Some(match frame {
+                Some((last, sum)) if last == tag => (tag, sum.saturating_add(took)),
+                _ => (tag, took),
+            });
+        });
+        if let Some((_, took)) = frame {
+            self.gpu_frame = Some(took);
+        }
         self.gpu_timed =
             self.frames.is_multiple_of(GPU_EVERY) && compositor.begin_gpu_frame(self.frames);
+    }
+
+    /// The GPU time of the latest timed frame that came back since this was last
+    /// called, all its units together: what the frame cost the GPU, a frame or two ago.
+    pub(crate) fn take_gpu_frame(&mut self) -> Option<Duration> {
+        self.gpu_frame.take()
+    }
+
+    /// What a frame may take: the budget the meter was made with.
+    pub(crate) fn budget(&self) -> Duration {
+        self.budget
     }
 
     /// Ends the frame's GPU timing on `compositor`, sending its timestamps to be read.

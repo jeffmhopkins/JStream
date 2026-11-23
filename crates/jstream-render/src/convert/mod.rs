@@ -245,8 +245,8 @@ impl Nv12Converter {
                 state: wgpu::TextureUses::PRESENT,
             }),
         );
-        crate::gpu::count_submit();
-        queue.submit([encoder.finish()]);
+        // Through the compositor, so a drawer timing a unit times the conversion in it.
+        compositor.submit_work(encoder.finish());
         Ok(())
     }
 }

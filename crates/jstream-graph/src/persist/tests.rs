@@ -1806,6 +1806,41 @@ fn hotkeys_round_trip() {
     assert_eq!(load(&json), Ok(graph));
 }
 
+/// A hotkey and a controller binding that set a channel save and load back (#1671): the
+/// channels load before the replayed hotkeys and bindings, whose check needs them.
+#[test]
+fn a_hotkey_and_a_binding_that_set_a_channel_round_trip() {
+    use jstream_protocol::{ChannelInfo, Finite32, Trigger};
+    let mut graph = fixture_graph();
+    let set = |value| Action::ChannelSetValue {
+        channel_id: "holo".into(),
+        value,
+        fade_ms: None,
+    };
+    let applied = graph.apply(
+        &[
+            Edit::ChannelSet {
+                channel: ChannelInfo::new("holo"),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("Ctrl+Alt+KeyJ"),
+                action: set(Finite32::ONE),
+            },
+            Edit::BindingSet {
+                trigger: Trigger::MidiNote {
+                    note: 40,
+                    channel: None,
+                    input: None,
+                },
+                action: set(Finite32::ZERO),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    assert_eq!(load(&graph.to_collection_json()), Ok(graph));
+}
+
 /// A binding is checked on load as `hotkey.set` checks it: here its scene is missing.
 #[test]
 fn a_hotkey_naming_a_missing_scene_is_refused() {

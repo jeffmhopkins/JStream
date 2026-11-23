@@ -345,7 +345,7 @@ fn three_d(c: &mut Criterion) {
         .expect("invariant: a shape uploads");
     let side = jstream_render::SHADOW_MAP_PX;
     let map = compositor
-        .layer(side, side)
+        .depth_layer(side, side)
         .expect("invariant: a shadow map fits");
     let from = [
         WIDTH as f32 * 0.5 - 600.0,
@@ -466,7 +466,7 @@ fn depth_filter(
     let mut fog = VideoFilter::new(id, &defaults).expect("invariant: it builds");
     let depth = std::sync::Arc::new(
         compositor
-            .layer(WIDTH, HEIGHT)
+            .depth_layer(WIDTH, HEIGHT)
             .expect("invariant: the canvas fits"),
     );
     let composite = compositor

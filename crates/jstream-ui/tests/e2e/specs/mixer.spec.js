@@ -10,7 +10,7 @@ function mixer(page) {
 
 /** The master card's fold button. */
 function fold(page) {
-  return mixer(page).getByRole('button', { name: /Master · program output/ });
+  return mixer(page).getByRole('button', { name: /^Master Program output/ });
 }
 
 test('the master card folds its channels, whose dB fields set the gain', async ({ page, daemon }) => {
@@ -20,7 +20,7 @@ test('the master card folds its channels, whose dB fields set the gain', async (
   await expect(card.locator('.master-count')).toHaveText('2 channels');
   await expect(card.getByRole('button', { name: 'Hear: off' })).toBeEnabled();
   // FX shows the program output's chain, the master chain, in the Filters panel.
-  await card.getByRole('button', { name: 'FX 0' }).click();
+  await card.getByRole('button', { name: 'Program output filters' }).click();
   await expect(page.locator('.filters-panel .filters-title')).toHaveText('Program output');
 
   // Folded at first.
@@ -89,7 +89,9 @@ test('the master card shows the loudness against the target and warns on true pe
   // The bar runs from −60 to +6 LUFS, so the target, −14 LUFS, is at 70%.
   const fill = await rows.nth(0).locator('.level-fill').evaluate((el) => el.style.width);
   expect(parseFloat(fill)).toBeCloseTo(69.4, 1);
-  await expect(rows.nth(1).locator('.master-note')).toHaveText('safe');
+  // "safe" is the bar's tooltip; only a warning is shown.
+  await expect(rows.nth(1).locator('.master-note')).toHaveText('');
+  await expect(rows.nth(1).locator('.level-bar')).toHaveAttribute('title', 'safe');
   await expect(rows.nth(1).locator('.master-value')).toHaveText('−6.0 dBTP');
   await expect(rows.nth(1)).not.toHaveClass(/\bover\b/);
   // Only the warning is announced, not the readouts that change every tick.
@@ -119,18 +121,18 @@ test('the Hear button sets the master monitor, which each bus strip can name a d
   await showPanel(page, 'Audio mixer');
   const card = mixer(page).getByRole('group', { name: 'Master' });
   const hear = card.locator('button.hear');
-  await expect(hear).toHaveText('Hear: off');
+  await expect(hear).toHaveAccessibleName('Hear: off');
   await expect(hear).not.toHaveClass(/\bon\b/);
 
   // Off, then after FX on the default output, then before FX: one edit each.
   const start = await rev(page);
   await hear.click();
-  await expect(hear).toHaveText('Hear: after FX');
+  await expect(hear).toHaveAccessibleName('Hear: after FX');
   await expect(hear).toHaveClass(/\bon\b/);
   await expect(hear).toHaveAttribute('title', /on the default output\. Click to hear it before FX$/);
   await expect.poll(() => rev(page)).toBe(start + 1);
   await hear.click();
-  await expect(hear).toHaveText('Hear: before FX');
+  await expect(hear).toHaveAccessibleName('Hear: before FX');
   await expect.poll(() => rev(page)).toBe(start + 2);
 
   // The master's strip shows the same monitor, and names its device.
@@ -150,10 +152,10 @@ test('the Hear button sets the master monitor, which each bus strip can name a d
 
   // Switching the tap keeps the device; off takes the monitor away.
   await choice.selectOption('post_filters');
-  await expect(hear).toHaveText('Hear: after FX');
+  await expect(hear).toHaveAccessibleName('Hear: after FX');
   await expect(device).toHaveValue('Headphones (USB)');
   await choice.selectOption('off');
-  await expect(hear).toHaveText('Hear: off');
+  await expect(hear).toHaveAccessibleName('Hear: off');
   await expect(device).toHaveCount(0);
   await expect.poll(() => rev(page)).toBe(start + 5);
 
@@ -164,7 +166,7 @@ test('the Hear button sets the master monitor, which each bus strip can name a d
   await stream.locator('summary', { hasText: 'More' }).click();
   await stream.getByRole('combobox', { name: 'Stream monitor' }).selectOption('pre_filters');
   await expect(stream.getByRole('textbox', { name: 'Stream monitor device' })).toBeVisible();
-  await expect(hear).toHaveText('Hear: off');
+  await expect(hear).toHaveAccessibleName('Hear: off');
 
   // The vertical strip's button is the same control.
   await page.getByRole('button', { name: /^Meters: / }).click();
@@ -192,7 +194,7 @@ test('the title bar flips the meters to vertical strips, whose gain scrubs up an
   const strip = mixer(page).locator('.master-strip');
   await expect(strip.locator('.master-count')).toHaveText('2 channels');
   await expect(strip.locator('.level-column')).toHaveAttribute('title', 'Loudness · white line = target');
-  await expect(strip.getByRole('button', { name: 'FX 0' })).toBeEnabled();
+  await expect(strip.getByRole('button', { name: 'Program output filters' })).toBeEnabled();
   await expect(strip.getByRole('button', { name: 'Hear off' })).toBeEnabled();
 
   // The channels fold beside the master; each shows its short name, the full one as a tooltip.

@@ -395,7 +395,7 @@ impl<T> ReadbackRing<T> {
             // As every submit on a platform context's queue: no other thread's staged
             // fences ride on this one.
             let _submitting = compositor.submit_lock().lock();
-            compositor.queue().submit([encoder.finish()]);
+            compositor.submit_work(encoder.finish());
         }
         slot.state.store(PENDING, Ordering::Release);
         let state = Arc::clone(&slot.state);

@@ -35,6 +35,11 @@ struct Sky {
     // crowds the stars ahead and shifts their light; z: how much the warp is dropping,
     // 0 to 1; w: the warp, 0 to 1.
     seed: vec4<f32>,
+    // The pictures pinned in the sky (ADR-0188), four vec4s each, bottom first. 0, xyz:
+    // its centre's direction in the sky's frame, unit length; w: the tangent of half its
+    // width, 0 for none. 1, xyz: its right axis; w: the tangent of half its height.
+    // 2, xyz: its down axis; w: how opaque it is, 0 to 1. 3, x: how it stores alpha.
+    pictures: array<vec4<f32>, 16>,
 }
 
 @group(0) @binding(0) var<uniform> u: Sky;
@@ -48,6 +53,11 @@ struct Sky {
 // Which cells of the bright stars' layer hold a star, as `fs_stars` writes it for the
 // frame: a column across, 32 rows to a texel down, a bit a row.
 @group(0) @binding(6) var star_table: texture_2d<u32>;
+// The pictures pinned in the sky (ADR-0188), read through `sky_sampler`.
+@group(0) @binding(7) var pinned_0: texture_2d<f32>;
+@group(0) @binding(8) var pinned_1: texture_2d<f32>;
+@group(0) @binding(9) var pinned_2: texture_2d<f32>;
+@group(0) @binding(10) var pinned_3: texture_2d<f32>;
 
 const PI: f32 = 3.14159265;
 const TAU: f32 = 6.28318531;
@@ -89,6 +99,50 @@ fn panorama(d: vec3<f32>) -> vec3<f32> {
     let vv = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.0005, 0.9995);
     let c = to_premul_linear(textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(uu, vv), 0.0), u.ground.w);
     return c.rgb * u.stars.z;
+}
+
+// Pinned picture `i` along `d` (ADR-0188), premultiplied linear light at the intensity:
+// a flat picture seen through its centre's tangent plane, so its shape holds where it is
+// in the sky. None off its edges or behind.
+fn pinned(d: vec3<f32>, i: u32, tex: texture_2d<f32>) -> vec4<f32> {
+    let centre = u.pictures[i * 4u];
+    let x = u.pictures[i * 4u + 1u];
+    let y = u.pictures[i * 4u + 2u];
+    let mode = u.pictures[i * 4u + 3u];
+    let wide = centre.w;
+    let k = dot(d, centre.xyz);
+    if wide <= 0.0 || k <= 1e-4 {
+        return vec4<f32>(0.0);
+    }
+    let q = d / k - centre.xyz;
+    let at = vec2<f32>(dot(q, x.xyz) / wide, dot(q, y.xyz) / max(x.w, 1e-6));
+    if any(abs(at) > vec2<f32>(1.0)) {
+        return vec4<f32>(0.0);
+    }
+    let c = to_premul_linear(textureSampleLevel(tex, sky_sampler, at * 0.5 + 0.5, 0.0), mode.x);
+    return vec4<f32>(c.rgb * u.stars.z, c.a) * clamp(y.w, 0.0, 1.0);
+}
+
+// `c` with the pinned pictures over it along `d`, bottom first, `deep` of each.
+fn with_pictures(c: vec3<f32>, d: vec3<f32>, deep: f32) -> vec3<f32> {
+    var out = c;
+    if u.pictures[0].w > 0.0 {
+        let p = pinned(d, 0u, pinned_0) * deep;
+        out = out * (1.0 - p.a) + p.rgb;
+    }
+    if u.pictures[4].w > 0.0 {
+        let p = pinned(d, 1u, pinned_1) * deep;
+        out = out * (1.0 - p.a) + p.rgb;
+    }
+    if u.pictures[8].w > 0.0 {
+        let p = pinned(d, 2u, pinned_2) * deep;
+        out = out * (1.0 - p.a) + p.rgb;
+    }
+    if u.pictures[12].w > 0.0 {
+        let p = pinned(d, 3u, pinned_3) * deep;
+        out = out * (1.0 - p.a) + p.rgb;
+    }
+    return out;
 }
 
 fn seed() -> u32 {
@@ -428,7 +482,8 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     // Going into warp the deep sky blurs along the streaks and is gone by a quarter of
     // the way. Coming out it returns sooner, squeezed toward straight ahead, and rushes
     // back out to its place as the warp collapses: a zoom, blurred along its rush. The
-    // two blend by how much it is dropping, so arriving at a cruise doesn't snap.
+    // two blend by how much it is dropping, so arriving at a cruise, or at rest, doesn't
+    // snap.
     let deep = mix(1.0 - smoothstep(0.0, 0.25, warp), 1.0 - smoothstep(0.15, 0.55, warp), dropping);
     let zoom = 3.0 * smoothstep(0.0, 0.55, warp) * dropping;
     let rushing = dropping > 0.0;
@@ -462,6 +517,11 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     }
     if amount > 0.0 || u.nebula.w > 0.0 || u.nebula_2.w > 0.0 {
         c += radiation(d) * u.stars.z;
+    }
+    // The pictures pinned in the sky cover what is behind them, and go as the deep sky
+    // does at warp.
+    if deep > 0.0 {
+        c = with_pictures(c, d, deep);
     }
     let a = clamp(u.sky.w, 0.0, 1.0);
     return vec4<f32>(c * a, a);

@@ -12,7 +12,8 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#live-panels
 
 use crate::app::SessionContext;
-use crate::panels::outputs::{OutputRow, describe_kind, is_running, load};
+use crate::icons::Icon;
+use crate::panels::outputs::{OutputRow, describe_kind, is_running, load, target_summary};
 use futures_util::StreamExt;
 use jstream_control::protocol::{
     AudioCodec, EncoderProfile, EncoderProfileId, EncoderProfileInfo, Event, OutputHealth,
@@ -462,7 +463,12 @@ pub fn StreamStats() -> impl IntoView {
     let chart = move || {
         if !has_data.get() {
             return view! {
-                <div class="stats-nodata">"No data yet. Start the output to see its bitrate."</div>
+                <div class="stats-nodata">
+                    <Icon name="wave" size=18 />
+                    <span>
+                        {move || if live() { "No data yet" } else { "No data until the output starts" }}
+                    </span>
+                </div>
             }
             .into_any();
         }
@@ -568,7 +574,7 @@ pub fn StreamStats() -> impl IntoView {
 
     view! {
         <section class="stream-stats">
-            <h2>"Stream stats"</h2>
+            <h2 class="visually-hidden">"Stream stats"</h2>
             {move || problem.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
             {move || {
                 if row.with(Option::is_none) {
@@ -583,12 +589,15 @@ pub fn StreamStats() -> impl IntoView {
                     <div class="stats-status">
                         <span class="stats-pill" class:live=live>
                             <span class="dot"></span>
-                            {move || if live() { "LIVE" } else { "READY" }}
+                            {move || if live() { "Live" } else { "Ready" }}
                         </span>
-                        <span class="stats-title">
+                        <span
+                            class="stats-title"
+                            title=move || row.with(|row| row.as_ref().map(|row| describe_kind(&row.info.kind)))
+                        >
                             {move || {
                                 row.with(|row| {
-                                    row.as_ref().map(|row| describe_kind(&row.info.kind))
+                                    row.as_ref().map(|row| target_summary(&row.info.kind))
                                 })
                             }}
                         </span>
@@ -613,7 +622,7 @@ pub fn StreamStats() -> impl IntoView {
                             <span class="sub">
                                 {move || {
                                     if !live() {
-                                        return "not live".to_owned();
+                                        return "Not live".to_owned();
                                     }
                                     target()
                                         .map_or_else(
@@ -638,7 +647,7 @@ pub fn StreamStats() -> impl IntoView {
                                     stats
                                         .with(|s| s.as_ref().map(dropped_share))
                                         .filter(|_| live())
-                                        .unwrap_or_else(|| "not live".into())
+                                        .unwrap_or_else(|| "Not live".into())
                                 }}
                             </span>
                         </div>
@@ -649,25 +658,16 @@ pub fn StreamStats() -> impl IntoView {
                             .filter(|_| live());
                         let (label, note, class) = health_text(health);
                         view! {
-                            <div class=format!("stats-health {class}") role="status">
+                            <p class=format!("stats-health {class}") role="status" title=note>
                                 <span class="dot"></span>
-                                <div>
-                                    <div class="title">{format!("Stream health: {label}")}</div>
-                                    <div class="note">{note}</div>
-                                </div>
-                            </div>
+                                <span class="title">{format!("Health: {label}")}</span>
+                                <span class="note">{note}</span>
+                            </p>
                         }
                     }}
                     <div class="stats-chart-head">
-                        <span>"BITRATE · LAST 2 MIN"</span>
-                        <span class="mono">
-                            {move || {
-                                stats
-                                    .with(|s| s.as_ref().map(|s| mbps(s.kbps)))
-                                    .filter(|_| live())
-                                    .unwrap_or_default()
-                            }}
-                        </span>
+                        <span class="eyebrow">"Bitrate"</span>
+                        <span>"Last 2 min"</span>
                     </div>
                     {chart}
                     <dl class="stats-details">

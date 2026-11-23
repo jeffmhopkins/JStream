@@ -672,8 +672,14 @@ impl Work {
 }
 
 impl H264 {
-    /// Opens the platform's H.264 encoder at `width` × `height`, software preferred.
-    fn open(codecs: &dyn Codecs, width: u32, height: u32, fps: u32) -> Result<Self, String> {
+    /// Opens the platform's H.264 encoder at `width` × `height`, software preferred,
+    /// for frames pushed in `input_format`.
+    fn open(
+        codecs: &dyn Codecs,
+        (width, height): (u32, u32),
+        fps: u32,
+        input_format: PixelFormat,
+    ) -> Result<Self, String> {
         let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
         let frame_period = Timebase::new(1, fps).map_err(|err| err.to_string())?;
         // About 0.5 bit per pixel per frame, so text and fine detail survive (#1203): the
@@ -685,7 +691,7 @@ impl H264 {
         let config = VideoEncoderConfig {
             codec: Codec::H264,
             size,
-            input_format: PixelFormat::Rgba8,
+            input_format,
             frame_period,
             rate_control: RateControl::Vbr {
                 kbps,
@@ -783,6 +789,17 @@ struct Staged {
     _profiled: Option<StreamGuard>,
 }
 
+/// The format the program stage's render thread pushes a preview's pictures of `size`
+/// in: NV12, which it converts to on the GPU before the readback and the encoder takes
+/// as it is, or RGBA8 for a size NV12 can't hold (an odd width or height).
+fn staged_format(size: FrameSize) -> PixelFormat {
+    if size.width().is_multiple_of(2) && size.height().is_multiple_of(2) {
+        PixelFormat::Nv12
+    } else {
+        PixelFormat::Rgba8
+    }
+}
+
 impl Staged {
     /// Opens `stream`'s encoder at `size`, hands its input to `stage`, and starts the
     /// sender. `rev` is the collection's `rev` now, which each picture carries.
@@ -800,7 +817,12 @@ impl Staged {
         let fps = (stage.base_fps / divisor).max(1);
         let H264 {
             session, packets, ..
-        } = H264::open(codecs, size.width(), size.height(), fps)?;
+        } = H264::open(
+            codecs,
+            (size.width(), size.height()),
+            fps,
+            staged_format(size),
+        )?;
         let profiled = meter_h264(stream, &session);
         stage.attach_preview(size, divisor, stream.scene.clone(), session.input());
         let closing = Arc::new(AtomicBool::new(false));
@@ -1802,11 +1824,12 @@ fn open_h264(stream: &PreviewStream, work: &mut Work, size: FrameSize) -> Result
         .codecs
         .as_ref()
         .ok_or("this engine has no H.264 encoder")?;
+    // This thread pushes the RGBA8 it read back itself.
     let mut h264 = H264::open(
         codecs.as_ref(),
-        size.width(),
-        size.height(),
+        (size.width(), size.height()),
         stream.settings.fps,
+        PixelFormat::Rgba8,
     )?;
     h264.profiled = meter_h264(stream, &h264.session);
     work.h264 = Some(h264);
@@ -1963,5 +1986,21 @@ mod clock_tests {
         // Nor does the hub, timing by the stream's age too.
         assert_eq!(not_back(&last, 1_000), ahead);
         assert_eq!(not_back(&last, ahead + 1), ahead + 1);
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::staged_format;
+    use jstream_media::{FrameSize, PixelFormat};
+
+    /// A staged preview's encoder is opened for NV12, which the render thread converts
+    /// to on the GPU, unless its size has an odd side, which NV12 can't hold.
+    #[test]
+    fn a_staged_preview_encodes_nv12_at_an_even_size() {
+        let size = |width, height| FrameSize::new(width, height).expect("size");
+        assert_eq!(staged_format(size(960, 540)), PixelFormat::Nv12);
+        assert_eq!(staged_format(size(961, 540)), PixelFormat::Rgba8);
+        assert_eq!(staged_format(size(960, 541)), PixelFormat::Rgba8);
     }
 }

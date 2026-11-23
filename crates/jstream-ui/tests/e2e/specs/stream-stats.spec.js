@@ -21,16 +21,16 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await showPanel(page, 'Outputs');
   await addOutput(page, 'record', '/tmp/stats.mp4');
   const row = outputRow(page, 'output-1');
-  await expect(row.locator('.badge')).toHaveText('Stopped');
+  await expect(row.locator('.output-row-state')).toHaveText('Stopped');
 
-  await expect(stats.locator('.stats-pill')).toHaveText('READY');
+  await expect(stats.locator('.stats-pill')).toHaveText('Ready');
   await expect(stats.locator('.stats-uptime')).toHaveText('--:--:--');
-  await expect(stats).toContainText('Record to /tmp/stats.mp4');
+  await expect(stats.locator('.stats-title')).toHaveAttribute('title', 'Record to /tmp/stats.mp4');
   await expect(stats).toContainText('H.264 · 8000 kbps CBR');
 
   await row.getByRole('button', { name: 'Start' }).click();
-  await expect(row.locator('.badge')).toHaveText('Live');
-  await expect(stats.locator('.stats-pill')).toHaveText('LIVE');
+  await expect(row.locator('.output-row-state')).toHaveText('Live');
+  await expect(stats.locator('.stats-pill')).toHaveText('Live');
   await expect(stats.locator('.stats-nodata')).toBeVisible();
 
   const output = (seq, fields) => send({
@@ -44,7 +44,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await expect(tiles.nth(0)).toContainText('2.65 Mbps');
   await expect(tiles.nth(0)).toContainText('target 8.16 Mbps');
   await expect(tiles.nth(1)).toContainText('0.00% this run');
-  await expect(stats.locator('.stats-health')).toContainText('Stream health: Excellent');
+  await expect(stats.locator('.stats-health')).toContainText('Health: Excellent');
   await expect(stats.locator('.stats-chart polyline')).toHaveCount(1);
   await expect(stats).toContainText('45.8 MB · 3660 frames');
 
@@ -52,7 +52,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
     uptime_ms: 3_724_000, bytes: 46_000_000, frames: 3_690, kbps: 2_000,
     dropped_frames: 30, dropped_packets: 2, health: 'poor',
   });
-  await expect(stats.locator('.stats-health')).toContainText('Stream health: Poor');
+  await expect(stats.locator('.stats-health')).toContainText('Health: Poor');
   await expect(tiles.nth(1).locator('.value')).toHaveText('30');
   await expect(tiles.nth(1)).toContainText('0.81% this run');
 
@@ -71,7 +71,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await expect(tip).toHaveCount(0);
 
   await row.getByRole('button', { name: 'Stop' }).click();
-  await expect(stats.locator('.stats-pill')).toHaveText('READY');
+  await expect(stats.locator('.stats-pill')).toHaveText('Ready');
   await expect(stats.locator('.stats-uptime')).toHaveText('--:--:--');
-  await expect(stats.locator('.stats-health')).toContainText('Stream health: Waiting');
+  await expect(stats.locator('.stats-health')).toContainText('Health: Waiting');
 });

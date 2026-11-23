@@ -426,6 +426,16 @@ impl CaptureStream for Reader {
         Ok(surface.map(Arc::unwrap_or_clone))
     }
 
+    /// Hands the frame back to the device's stream, unless another reader holds the
+    /// device's lock: then it is dropped, as a read then reads nothing (R-RT-002).
+    fn recycle(&mut self, surface: VideoSurface) {
+        match self.device.state.try_lock() {
+            Ok(mut state) => state.stream.recycle(surface),
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner().stream.recycle(surface),
+            Err(TryLockError::WouldBlock) => {}
+        }
+    }
+
     fn stats(&self) -> CaptureStats {
         let (now, base) = (self.stats, self.base);
         CaptureStats {
@@ -494,6 +504,21 @@ mod tests {
         assert!(second.latest().expect("reads").is_some());
         drop(second);
         assert_eq!(fake.open_streams(), 0);
+    }
+
+    /// A frame a reader hands back reaches the device's stream, which can fill its
+    /// memory again.
+    #[test]
+    fn a_reader_hands_a_frame_back_to_the_devices_stream() {
+        let (clock, fake, shared) = setup();
+        let id = DeviceId::new(FAKE_WEBCAM);
+        let format = shared.formats(&id).expect("formats")[0];
+        let mut reader = shared.open(&id, &format, None).expect("opens");
+        clock.advance(1);
+        let frame = reader.latest().expect("reads").expect("a frame");
+        assert_eq!(fake.recycled(), 0);
+        reader.recycle(frame);
+        assert_eq!(fake.recycled(), 1);
     }
 
     /// An open in another format switches the device to it in place, for every reader

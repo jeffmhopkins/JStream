@@ -6,9 +6,14 @@
 //!
 //! The events offered are the cue actions an operator reaches for: show, hide or toggle
 //! an item of the sequence's scene, load one of its keyframes, put a scene on program,
-//! switch a channel, play or stop another sequence, and restart a source. A cue some
-//! other client wrote with another action shows as its action's type and keeps working;
-//! a click on it opens it read-only, so it can be moved or deleted but never overwritten.
+//! switch a channel, play or stop another sequence, and restart a source. A cue the
+//! editor can't build again as it is (another action, an item of another scene, a play
+//! with a delay) shows as its action's type and keeps working; a click on it opens it
+//! read-only, so it can be moved or deleted but never overwritten. An event whose object
+//! is gone keeps it, marked "(missing)", until another is picked. Each edit finds its
+//! cue by time and action, not by where it was drawn, and sends nothing if another
+//! client changed it meanwhile. From the keyboard, a chip opens its editor with Enter,
+//! Space, the Menu key or Shift+F10, and Delete removes it.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#automation
 
@@ -216,6 +221,22 @@ pub fn kind_of(action: &Action) -> Option<(EventKind, String)> {
     })
 }
 
+/// The kind and object of `cue` for the editor of a sequence of scene `scene`, when the
+/// editor can show it as it is: building it again from them gives the same action.
+/// `None` for one it doesn't offer, or one it would change (an item of another scene, a
+/// play with a delay, a switch through a preset), which opens read-only.
+pub fn editable(scene: &SceneId, cue: &TimelineCue) -> Option<(EventKind, String)> {
+    let held = cue.action()?;
+    let (kind, object) = kind_of(&held)?;
+    (action(kind, scene, &object).as_ref() == Some(&held)).then_some((kind, object))
+}
+
+/// Where `cue` is in `t`'s cues now, matched by its time and action rather than by
+/// where it was drawn, so an edit lands on the cue it was made on.
+pub fn position(t: &TimelineInfo, cue: &TimelineCue) -> Option<usize> {
+    t.cues.iter().position(|c| c == cue)
+}
+
 /// A cue as a chip's few words: "Show Title", "Keyframe Wide", "Lights on".
 pub fn text(collection: &Collection, cue: &TimelineCue) -> String {
     let Some(action) = cue.action() else {
@@ -273,19 +294,21 @@ pub fn text(collection: &Collection, cue: &TimelineCue) -> String {
 }
 
 /// The cue editor's state: which cue (or a new one), where, and where it opened.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct Editing {
-    /// The cue's index, or `None` for a new one.
-    cue: Option<usize>,
+    /// The cue as it was drawn, or `None` for a new one.
+    cue: Option<TimelineCue>,
     at_ms: u32,
     x: f64,
     y: f64,
 }
 
-/// A chip being dragged: its index, where it is now, and whether it moved.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// A chip being dragged: its place among the chips, the cue as it was drawn, where it
+/// is now, and whether it moved.
+#[derive(Clone, Debug, PartialEq)]
 struct Moving {
     cue: usize,
+    held: TimelineCue,
     at_ms: u32,
     moved: bool,
 }
@@ -312,6 +335,20 @@ pub fn Events(
         let rect = el.get_bounding_client_rect();
         let f = ((f64::from(e.client_x()) - rect.left()) / rect.width().max(1.0)).clamp(0.0, 1.0);
         snap(f * f64::from(duration), e.shift_key()).min(duration)
+    };
+    // Edits cue `held` where it is in the sequence now; if another client changed or
+    // removed it meanwhile, nothing is sent and the operator is told.
+    let on_cue = move |held: &TimelineCue, f: &dyn Fn(&mut TimelineInfo, usize)| {
+        let gone = std::cell::Cell::new(false);
+        change(&|t| match position(t, held) {
+            Some(n) => f(t, n),
+            None => gone.set(true),
+        });
+        if gone.get() {
+            studio.problem.set(Some(
+                "That event was changed elsewhere meanwhile, so it was left as it is.".into(),
+            ));
+        }
     };
     let area_of = |e: &leptos::ev::MouseEvent| {
         e.current_target()
@@ -346,15 +383,13 @@ pub fn Events(
         };
         moving.set(None);
         if m.moved {
-            change(&|t| {
-                if let Some(cue) = t.cues.get_mut(m.cue) {
-                    cue.at_ms = m.at_ms;
-                }
+            on_cue(&m.held, &|t, n| {
+                t.cues[n].at_ms = m.at_ms;
                 t.cues.sort_by_key(|c| c.at_ms);
             });
         } else {
             editing.set(Some(Editing {
-                cue: Some(m.cue),
+                cue: Some(m.held),
                 at_ms: m.at_ms,
                 x: f64::from(e.client_x()),
                 y: f64::from(e.client_y()),
@@ -366,11 +401,13 @@ pub fn Events(
             .into_iter()
             .enumerate()
             .map(|(n, cue)| {
+                let drawn_at = cue.at_ms;
                 let shown_at = move || {
-                    moving
-                        .get()
-                        .filter(|m| m.cue == n)
-                        .map_or(cue.at_ms, |m| m.at_ms)
+                    moving.with(|m| {
+                        m.as_ref()
+                            .filter(|m| m.cue == n)
+                            .map_or(drawn_at, |m| m.at_ms)
+                    })
                 };
                 let left = move || {
                     format!(
@@ -386,6 +423,36 @@ pub fn Events(
                     seconds(cue.at_ms)
                 );
                 let at_ms = cue.at_ms;
+                let held = cue.clone();
+                let keyed = cue.clone();
+                // From the keyboard: Enter, Space, the Menu key or Shift+F10 open the
+                // editor under the chip, and Delete removes the event.
+                let key = move |e: leptos::ev::KeyboardEvent| {
+                    let k = e.key();
+                    if k == "Enter" || k == " " || crate::menu::asks_for_menu(&e) {
+                        e.prevent_default();
+                        e.stop_propagation();
+                        let Some(chip) = e
+                            .current_target()
+                            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                        else {
+                            return;
+                        };
+                        let r = chip.get_bounding_client_rect();
+                        editing.set(Some(Editing {
+                            cue: Some(keyed.clone()),
+                            at_ms,
+                            x: r.left(),
+                            y: r.bottom(),
+                        }));
+                    } else if k == "Delete" || k == "Backspace" {
+                        e.prevent_default();
+                        e.stop_propagation();
+                        on_cue(&keyed, &|t, n| {
+                            t.cues.remove(n);
+                        });
+                    }
+                };
                 let down = move |e: leptos::ev::PointerEvent| {
                     if e.button() != 0 {
                         return;
@@ -400,6 +467,7 @@ pub fn Events(
                     }
                     moving.set(Some(Moving {
                         cue: n,
+                        held: held.clone(),
                         at_ms,
                         moved: false,
                     }));
@@ -408,10 +476,11 @@ pub fn Events(
                     <button
                         type="button"
                         class="seq-event"
-                        class:dragging=move || moving.get().is_some_and(|m| m.cue == n && m.moved)
+                        class:dragging=move || moving.with(|m| m.as_ref().is_some_and(|m| m.cue == n && m.moved))
                         style:left=left
                         title=title
                         on:pointerdown=down
+                        on:keydown=key
                         on:dblclick=|e: leptos::ev::MouseEvent| e.stop_propagation()
                     >
                         {words}
@@ -420,31 +489,46 @@ pub fn Events(
             })
             .collect_view()
     };
+    // Escape closes the editor, as a click outside it does.
+    let escape = move |ev: leptos::ev::KeyboardEvent| {
+        if ev.key() == "Escape" {
+            ev.prevent_default();
+            ev.stop_propagation();
+            editing.set(None);
+        }
+    };
     let editor = move || {
         let e = editing.get()?;
-        let held = e.cue.and_then(|n| cues.with_value(|c| c.get(n).cloned()));
+        // It opens with the focus on its first control, so it works from the keyboard.
+        let dialog = NodeRef::<leptos::html::Div>::new();
+        Effect::new(move |_| {
+            if let Some(el) = dialog.get()
+                && let Ok(Some(first)) = el.query_selector("select, button")
+                && let Ok(first) = first.dyn_into::<web_sys::HtmlElement>()
+            {
+                _ = first.focus();
+            }
+        });
+        let held = e.cue.clone();
         let existing = held
             .as_ref()
-            .and_then(TimelineCue::action)
-            .and_then(|a| kind_of(&a));
-        // A cue whose action the editor doesn't offer opens read-only, so a Save can't
-        // replace it with something it never was: it can only be deleted here.
-        if let (Some(n), Some(cue), None) = (e.cue, held.as_ref(), existing.as_ref()) {
+            .and_then(|cue| scene.with_value(|s| editable(s, cue)));
+        // A cue the editor can't show as it is opens read-only, so a Save can't replace
+        // it with something it never was: it can only be moved or deleted here.
+        if let (Some(cue), None) = (held.clone(), existing.as_ref()) {
             let words = studio
                 .collection
-                .with_untracked(|c| c.as_ref().map(|c| text(c, cue)).unwrap_or_default());
+                .with_untracked(|c| c.as_ref().map(|c| text(c, &cue)).unwrap_or_default());
             let remove = move |_| {
                 editing.set(None);
-                change(&|t| {
-                    if n < t.cues.len() {
-                        t.cues.remove(n);
-                    }
+                on_cue(&cue, &|t, n| {
+                    t.cues.remove(n);
                 });
             };
             let (left, top) = place(e.x, e.y);
             return Some(view! {
                 <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
-                <div class="context-menu seq-event-editor" role="dialog" aria-label="Event" style:left=left style:top=top>
+                <div class="context-menu seq-event-editor" role="dialog" aria-label="Event" node_ref=dialog on:keydown=escape style:left=left style:top=top>
                     <div class="ctx-head">{format!("Event at {}", seconds(e.at_ms))}</div>
                     <p class="seq-event-note">{words}</p>
                     <p class="hint">"This kind of event is set elsewhere, by an agent or another client. It runs as it is; here it can only be moved or deleted."</p>
@@ -457,15 +541,33 @@ pub fn Events(
             .into_any());
         }
         let kind = RwSignal::new(existing.as_ref().map_or(EventKind::Show, |(k, _)| *k));
-        let object = RwSignal::new(existing.map(|(_, o)| o).unwrap_or_default());
+        let object = RwSignal::new(
+            existing
+                .as_ref()
+                .map(|(_, o)| o.clone())
+                .unwrap_or_default(),
+        );
+        let kept = StoredValue::new(existing);
         let options = move || {
-            studio.collection.with(|c| {
+            let mut list = studio.collection.with(|c| {
                 c.as_ref()
                     .map(|c| {
                         own.with_value(|own| scene.with_value(|s| objects(c, s, own, kind.get())))
                     })
                     .unwrap_or_default()
-            })
+            });
+            // An existing cue's object that is no longer there stays listed, marked, so
+            // a Save never points the cue at something else without being asked to.
+            kept.with_value(|kept| {
+                if let Some((k, o)) = kept
+                    && *k == kind.get()
+                    && !o.is_empty()
+                    && !list.iter().any(|(v, _)| v == o)
+                {
+                    list.insert(0, (o.clone(), format!("{o} (missing)")));
+                }
+            });
+            list
         };
         // A new kind picks its first object, unless the one set is one of its own.
         Effect::new(move |_| {
@@ -474,6 +576,9 @@ pub fn Events(
                 object.set(list.first().map(|(v, _)| v.clone()).unwrap_or_default());
             }
         });
+        let is_new = e.cue.is_none();
+        let target = e.cue.clone();
+        let at_ms = e.at_ms;
         let save = move |_| {
             let built =
                 scene.with_value(|s| action(kind.get_untracked(), s, &object.get_untracked()));
@@ -484,29 +589,33 @@ pub fn Events(
                 return;
             };
             editing.set(None);
-            let cue = TimelineCue::new(e.at_ms, &a);
-            change(&|t| {
-                match e.cue {
-                    Some(n) if n < t.cues.len() => t.cues[n] = cue.clone(),
-                    _ => t.cues.push(cue.clone()),
+            let cue = TimelineCue::new(at_ms, &a);
+            match &target {
+                Some(held) => on_cue(held, &|t, n| {
+                    t.cues[n] = cue.clone();
+                    t.cues.sort_by_key(|c| c.at_ms);
+                }),
+                None => {
+                    change(&|t| {
+                        t.cues.push(cue.clone());
+                        t.cues.sort_by_key(|c| c.at_ms);
+                    });
                 }
-                t.cues.sort_by_key(|c| c.at_ms);
-            });
+            }
         };
+        let removed = e.cue.clone();
         let remove = move |_| {
             editing.set(None);
-            if let Some(n) = e.cue {
-                change(&|t| {
-                    if n < t.cues.len() {
-                        t.cues.remove(n);
-                    }
+            if let Some(held) = &removed {
+                on_cue(held, &|t, n| {
+                    t.cues.remove(n);
                 });
             }
         };
         let (left, top) = place(e.x, e.y);
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
-            <div class="context-menu seq-event-editor" role="dialog" aria-label="Event" style:left=left style:top=top>
+            <div class="context-menu seq-event-editor" role="dialog" aria-label="Event" node_ref=dialog on:keydown=escape style:left=left style:top=top>
                 <div class="ctx-head">{format!("Event at {}", seconds(e.at_ms))}</div>
                 <label class="seq-row">
                     <span>"What"</span>
@@ -536,12 +645,12 @@ pub fn Events(
                     </select>
                 </label>
                 <div class="seq-editor-buttons">
-                    {e.cue.is_some().then(|| view! {
+                    {(!is_new).then(|| view! {
                         <button type="button" class="seq-delete" on:click=remove>"Delete"</button>
                     })}
                     <button type="button" on:click=move |_| editing.set(None)>"Cancel"</button>
                     <button type="button" class="primary" on:click=save>
-                        {if e.cue.is_some() { "Save" } else { "Add" }}
+                        {if is_new { "Add" } else { "Save" }}
                     </button>
                 </div>
             </div>
@@ -677,5 +786,38 @@ mod tests {
             &action(EventKind::Keyframe, &main, "wide").unwrap_or_else(|| panic!("keyframe")),
         );
         assert_eq!(text(&c, &cue), "Keyframe Wide");
+    }
+
+    /// The editor edits a cue only when it can build the same action again, and finds a
+    /// cue by its time and action wherever it is now.
+    #[test]
+    fn a_cue_is_edited_as_it_is_and_found_where_it_is_now() {
+        let main = SceneId::new("main");
+        let show = |scene: &str| Action::ItemShow {
+            item_id: "title_1".into(),
+            scene_id: Some(SceneId::new(scene)),
+        };
+        let mine = TimelineCue::new(100, &show("main"));
+        assert_eq!(
+            editable(&main, &mine),
+            Some((EventKind::Show, "title_1".into()))
+        );
+        let elsewhere = TimelineCue::new(100, &show("other"));
+        assert_eq!(editable(&main, &elsewhere), None, "another scene's item");
+        let delayed = TimelineCue::new(
+            100,
+            &Action::TimelinePlay {
+                timeline_id: "outro".into(),
+                delay_ms: Some(500),
+            },
+        );
+        assert_eq!(editable(&main, &delayed), None, "a play with a delay");
+        let mut t = crate::panels::sequence::empty_sequence("intro".into(), "Intro".into());
+        t.cues = vec![elsewhere.clone(), mine.clone()];
+        assert_eq!(position(&t, &mine), Some(1));
+        t.cues.insert(0, delayed);
+        assert_eq!(position(&t, &mine), Some(2), "found after an insert");
+        t.cues.retain(|c| c != &mine);
+        assert_eq!(position(&t, &mine), None, "gone");
     }
 }

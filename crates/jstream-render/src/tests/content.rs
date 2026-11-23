@@ -4,14 +4,14 @@
 use std::sync::Arc;
 
 use jstream_media::FrameSize;
-use jstream_protocol::BlendMode;
+use jstream_protocol::{BlendMode, Blending};
 use serde_json::json;
 
-use super::{Opened, item, open, solid};
+use super::{Opened, item, near, open, solid};
 use crate::filter::testing::{filter, image, read};
 use crate::mips::Region;
 use crate::{
-    Color, Compositor, Crop, FilterClock, Image, LegacyTransform, Placement, Scene, Snapshot,
+    Color, Compositor, Crop, FilterClock, Image, Item, LegacyTransform, Placement, Scene, Snapshot,
     VideoFilter,
 };
 
@@ -511,5 +511,520 @@ fn a_bounded_filter_drawn_again_keeps_nothing_of_the_last_frame() {
         let fresh = filtered(&mut opened, &mut filter(kind, settings), &input);
         let (again, once) = (whole(&mut opened, &output), whole(&mut opened, &fresh));
         same(kind, &again, &once);
+    }
+}
+
+/// The 32x32 scene that is `layer` alone, and the same with a transparent texel drawn
+/// over it so it is composited the long way: (straight from the layer, composited).
+fn alone_and_composited(
+    compositor: &mut Compositor,
+    layer: &Image,
+    background: Color,
+) -> (Snapshot, Snapshot) {
+    let nothing = solid(compositor, 1, 1, [0, 0, 0, 0]);
+    let items = [
+        item(layer, Placement::IDENTITY, Crop::NONE, 1.0),
+        item(&nothing, Placement::IDENTITY, Crop::NONE, 1.0),
+    ];
+    let mut draw = |items: &[Item<'_>], straight: bool| {
+        let scene = Scene {
+            canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+            background,
+            items,
+        };
+        let output = compositor.render(&scene, true).expect("render");
+        let pixels = output.pixels().expect("invariant: read back").clone();
+        assert_eq!(compositor.resolved_layer(), straight);
+        pixels
+    };
+    (draw(&items[..1], true), draw(&items, false))
+}
+
+/// A scene that is one finished layer over the whole canvas is resolved straight from
+/// the layer, to the pixels the composite of it gives, in both blending spaces and over
+/// each kind of background.
+#[test]
+fn a_scene_of_one_whole_layer_is_resolved_straight_from_it() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    for blending in [Blending::Srgb, Blending::Linear] {
+        compositor.set_blending(blending);
+        let layer = sparse(compositor);
+        for background in [
+            Color::TRANSPARENT,
+            Color::BLACK,
+            Color::rgb(0.2, 0.5, 0.9),
+            Color::from_rgba8([200, 40, 10, 128]),
+        ] {
+            let (straight, composited) = alone_and_composited(compositor, &layer, background);
+            for y in 0..32 {
+                for x in 0..32 {
+                    let expected = composited.pixel(x, y).expect("invariant: inside");
+                    near(&straight, x, y, expected, 1);
+                }
+            }
+            // The layer's content is there: its red square and its bar.
+            assert_eq!(straight.pixel(5, 6), Some([255, 0, 0, 255]));
+            assert_ne!(straight.pixel(21, 25), straight.pixel(0, 0));
+        }
+    }
+}
+
+/// Anything but one unfaded, unmoved, canvas-sized layer in `normal` is composited.
+#[test]
+fn a_layer_that_is_not_the_whole_scene_is_composited() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let layer = sparse(compositor);
+    let whole = item(&layer, Placement::IDENTITY, Crop::NONE, 1.0);
+    let mut screened = whole;
+    screened.blend = BlendMode::Screen;
+    let others = [
+        // Faded, moved, cropped, scaled and blended.
+        item(&layer, Placement::IDENTITY, Crop::NONE, 0.5),
+        item(&layer, at([1.0, 0.0], [1.0, 1.0], 0.0), Crop::NONE, 1.0),
+        item(
+            &layer,
+            Placement::IDENTITY,
+            Crop {
+                left: 1,
+                ..Crop::NONE
+            },
+            1.0,
+        ),
+        item(&layer, at([0.0, 0.0], [2.0, 2.0], 0.0), Crop::NONE, 1.0),
+        screened,
+    ];
+    for (case, other) in others.into_iter().enumerate() {
+        let scene = Scene {
+            canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+            background: Color::BLACK,
+            items: &[other],
+        };
+        compositor.render(&scene, false).expect("render");
+        assert!(!compositor.resolved_layer(), "case {case}");
+    }
+    // And a layer of another size than the canvas.
+    let scene = Scene {
+        canvas: FrameSize::new(16, 16).expect("invariant: non-zero"),
+        background: Color::BLACK,
+        items: &[whole],
+    };
+    compositor.render(&scene, false).expect("render");
+    assert!(!compositor.resolved_layer());
+}
+
+/// In browser-style blending a layer over a transparent background is decoded only where
+/// its items reached, and not at all when it drew nothing: the rest is zero, which
+/// decodes to itself. Its pixels are those of a whole decode, and a redraw leaves nothing
+/// of what the layer held before.
+#[test]
+fn a_browser_style_layer_is_decoded_only_where_it_drew() {
+    let Some(Opened { mut compositor, .. }) = open() else {
+        return;
+    };
+    compositor.set_blending(jstream_protocol::Blending::Srgb);
+    let layer = sparse(&mut compositor);
+    let reached = compositor.drawn_texels();
+    assert!(reached > 0 && reached < 32 * 32, "{reached} texels reached");
+    assert_eq!(compositor.decoded_texels(true, (32, 32)), reached);
+    assert_eq!(compositor.decoded_texels(false, (32, 32)), 32 * 32);
+    let shown = |compositor: &mut Compositor| {
+        let items = [item(&layer, Placement::IDENTITY, Crop::NONE, 1.0)];
+        compositor
+            .render(
+                &Scene {
+                    canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+                    background: Color::BLACK,
+                    items: &items,
+                },
+                true,
+            )
+            .expect("render")
+            .pixels()
+            .expect("invariant: readback was requested")
+            .clone()
+    };
+    let shot = shown(&mut compositor);
+    super::near(&shot, 5, 6, [255, 0, 0, 255], 1);
+    // Half-opaque green over black, mixed encoded: half its code value.
+    super::near(&shot, 22, 25, [0, 128, 0, 255], 2);
+    super::near(&shot, 15, 15, [0, 0, 0, 255], 0);
+    super::near(&shot, 0, 0, [0, 0, 0, 255], 0);
+
+    // Drawn again with one item elsewhere: the old boxes are wiped, and stay zero
+    // without a decode over them.
+    let blue = solid(&compositor, 2, 2, [0, 0, 255, 255]);
+    let items = [item(
+        &blue,
+        at([12.0, 12.0], [1.0, 1.0], 0.0),
+        Crop::NONE,
+        1.0,
+    )];
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &items,
+            },
+            &layer,
+        )
+        .expect("render into the layer again");
+    assert!(compositor.decoded_texels(true, (32, 32)) <= 16);
+    let shot = shown(&mut compositor);
+    super::near(&shot, 12, 12, [0, 0, 255, 255], 1);
+    super::near(&shot, 5, 6, [0, 0, 0, 255], 0);
+    super::near(&shot, 22, 25, [0, 0, 0, 255], 0);
+
+    // And with nothing: no decode at all.
+    compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &[],
+            },
+            &layer,
+        )
+        .expect("an empty layer");
+    assert_eq!(compositor.decoded_texels(true, (32, 32)), 0);
+    let shot = shown(&mut compositor);
+    super::near(&shot, 12, 12, [0, 0, 0, 255], 0);
+}
+
+/// In browser-style blending a frame is resolved from its encoded target as it is, to
+/// the pixels the same scene gives when it is drawn into a layer, decoded there and
+/// shown: over a background and over none, with half-opaque items and a backdrop mode.
+#[test]
+fn a_browser_style_frame_is_resolved_from_its_encoded_target() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    compositor.set_blending(Blending::Srgb);
+    let red = solid(compositor, 2, 2, [255, 0, 0, 255]);
+    let green = solid(compositor, 3, 1, [0, 255, 0, 128]);
+    let blue = solid(compositor, 2, 2, [40, 90, 255, 200]);
+    let mut over = item(&blue, at([10.0, 4.0], [8.0, 8.0], 0.0), Crop::NONE, 0.7);
+    over.blend = BlendMode::Overlay;
+    let items = [
+        item(&red, at([5.0, 6.0], [6.0, 6.0], 0.0), Crop::NONE, 1.0),
+        item(&green, at([8.0, 9.0], [6.0, 6.0], 0.0), Crop::NONE, 1.0),
+        over,
+    ];
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    for background in [
+        Color::TRANSPARENT,
+        Color::BLACK,
+        Color::rgb(0.2, 0.5, 0.9),
+        Color::from_rgba8([200, 40, 10, 128]),
+    ] {
+        let scene = Scene {
+            canvas,
+            background,
+            items: &items,
+        };
+        let output = compositor.render(&scene, true).expect("render");
+        let straight = output.pixels().expect("invariant: read back").clone();
+        assert!(!compositor.resolved_layer());
+        let layer = compositor.layer(32, 32).expect("layer");
+        compositor
+            .render_into(&scene, &layer)
+            .expect("into the layer");
+        let shown = [item(&layer, Placement::IDENTITY, Crop::NONE, 1.0)];
+        let output = compositor
+            .render(
+                &Scene {
+                    canvas,
+                    background: Color::TRANSPARENT,
+                    items: &shown,
+                },
+                true,
+            )
+            .expect("render the layer");
+        let decoded = output.pixels().expect("invariant: read back");
+        for y in 0..32 {
+            for x in 0..32 {
+                let expected = decoded.pixel(x, y).expect("invariant: inside");
+                near(&straight, x, y, expected, 1);
+            }
+        }
+        // The items are there: the red square, and the green bar mixed over it.
+        assert_eq!(straight.pixel(6, 7), Some([255, 0, 0, 255]));
+        assert_ne!(straight.pixel(9, 10), straight.pixel(6, 7));
+    }
+}
+
+/// What a layer shows when it is placed alone on a 32x32 canvas.
+fn shown(compositor: &mut Compositor, layer: &Image) -> Snapshot {
+    let nothing = solid(compositor, 1, 1, [0, 0, 0, 0]);
+    let items = [
+        item(layer, Placement::IDENTITY, Crop::NONE, 1.0),
+        item(&nothing, Placement::IDENTITY, Crop::NONE, 1.0),
+    ];
+    let scene = Scene {
+        canvas: FrameSize::new(32, 32).expect("invariant: non-zero"),
+        background: Color::BLACK,
+        items: &items,
+    };
+    let output = compositor.render(&scene, true).expect("render");
+    output.pixels().expect("invariant: read back").clone()
+}
+
+/// A layer that still holds the very draw it is asked for is left as it is
+/// (ADR-0194), and is drawn again when anything it shows has changed: an image's
+/// texels, an item's place or opacity, the background, the blending space, or the
+/// layer itself.
+#[test]
+fn a_layer_is_drawn_again_only_when_what_it_draws_has_changed() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    let red = solid(compositor, 2, 2, [255, 0, 0, 255]);
+    let layer = compositor.layer(32, 32).expect("layer");
+    let mut kept = 0;
+    // Draws the red square at `x` with `opacity` over `background`, and says whether
+    // the layer was left as it was.
+    let mut draw = |compositor: &mut Compositor, x: f32, opacity: f32, background: Color| {
+        let items = [item(
+            &red,
+            at([x, 6.0], [4.0, 4.0], 0.0),
+            Crop::NONE,
+            opacity,
+        )];
+        let scene = Scene {
+            canvas,
+            background,
+            items: &items,
+        };
+        compositor
+            .render_into(&scene, &layer)
+            .expect("into the layer");
+        let was = kept;
+        kept = compositor.kept_layers();
+        kept > was
+    };
+    let clear = Color::TRANSPARENT;
+    assert!(!draw(compositor, 4.0, 1.0, clear), "the first draw");
+    assert!(draw(compositor, 4.0, 1.0, clear), "the same again");
+    assert!(draw(compositor, 4.0, 1.0, clear), "and again");
+    super::near(&shown(compositor, &layer), 6, 8, [255, 0, 0, 255], 0);
+    // Moved: drawn, and nothing is left where it was.
+    assert!(!draw(compositor, 20.0, 1.0, clear), "moved");
+    let moved = shown(compositor, &layer);
+    super::near(&moved, 22, 8, [255, 0, 0, 255], 0);
+    super::near(&moved, 6, 8, [0, 0, 0, 255], 0);
+    assert!(draw(compositor, 20.0, 1.0, clear), "the same again");
+    assert!(!draw(compositor, 20.0, 0.5, clear), "faded");
+    assert!(
+        !draw(compositor, 20.0, 0.5, Color::BLACK),
+        "another background"
+    );
+    assert!(draw(compositor, 20.0, 0.5, Color::BLACK), "the same again");
+    // The image's texels changed.
+    compositor
+        .rewrite_rgba8(&red, &[0, 0, 255, 255].repeat(4))
+        .expect("rewrite");
+    assert!(!draw(compositor, 20.0, 0.5, Color::BLACK), "new texels");
+    assert!(!draw(compositor, 20.0, 1.0, clear), "opaque again");
+    super::near(&shown(compositor, &layer), 22, 8, [0, 0, 255, 255], 0);
+    // The blending space changed.
+    compositor.set_blending(Blending::Srgb);
+    assert!(!draw(compositor, 20.0, 1.0, clear), "another space");
+    assert!(draw(compositor, 20.0, 1.0, clear), "the same again");
+    // Something else drew into the layer since.
+    let scene = Scene {
+        canvas,
+        background: Color::rgb(0.0, 1.0, 0.0),
+        items: &[],
+    };
+    compositor.render_into(&scene, &layer).expect("green");
+    assert!(!draw(compositor, 20.0, 1.0, clear), "after another draw");
+    let again = shown(compositor, &layer);
+    super::near(&again, 22, 8, [0, 0, 255, 255], 0);
+    super::near(&again, 6, 8, [0, 0, 0, 255], 0);
+}
+
+/// A scene that places a layer is drawn again when that layer was, and kept when it
+/// was kept: a nested scene that did not change costs its parents nothing either.
+#[test]
+fn a_parent_is_kept_while_the_layers_it_places_are() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    let red = solid(compositor, 2, 2, [255, 0, 0, 255]);
+    let child = compositor.layer(32, 32).expect("child");
+    let parent = compositor.layer(32, 32).expect("parent");
+    let frame = |compositor: &mut Compositor, x: f32| {
+        let before = compositor.kept_layers();
+        let items = [item(&red, at([x, 6.0], [4.0, 4.0], 0.0), Crop::NONE, 1.0)];
+        let scene = Scene {
+            canvas,
+            background: Color::TRANSPARENT,
+            items: &items,
+        };
+        compositor.render_into(&scene, &child).expect("child");
+        let placed = [item(
+            &child,
+            at([0.0, 8.0], [1.0, 1.0], 0.0),
+            Crop::NONE,
+            1.0,
+        )];
+        let scene = Scene {
+            canvas,
+            background: Color::BLACK,
+            items: &placed,
+        };
+        compositor.render_into(&scene, &parent).expect("parent");
+        compositor.kept_layers() - before
+    };
+    assert_eq!(frame(compositor, 4.0), 0, "the first frame draws both");
+    assert_eq!(
+        frame(compositor, 4.0),
+        2,
+        "an unchanged frame draws neither"
+    );
+    assert_eq!(frame(compositor, 12.0), 0, "a moved item draws both");
+    assert_eq!(frame(compositor, 12.0), 2);
+    let seen = shown(compositor, &parent);
+    super::near(&seen, 14, 16, [255, 0, 0, 255], 0);
+    super::near(&seen, 6, 16, [0, 0, 0, 255], 0);
+}
+
+/// The cells of a 64x64 scene: four squares, the third half-opaque over the second.
+fn cells<'a>(images: &'a [Image; 4], moved: f32, faded: f32) -> [Item<'a>; 4] {
+    [
+        item(&images[0], at([2.0, 2.0], [5.0, 5.0], 0.0), Crop::NONE, 1.0),
+        item(
+            &images[1],
+            at([40.0, 4.0], [6.0, 6.0], 0.0),
+            Crop::NONE,
+            faded,
+        ),
+        item(
+            &images[2],
+            at([44.0, 8.0], [6.0, 6.0], 0.0),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &images[3],
+            at([moved, 44.0], [4.0, 4.0], 0.0),
+            Crop::NONE,
+            1.0,
+        ),
+    ]
+}
+
+/// A layer in which a few items changed is drawn again only over their boxes
+/// (ADR-0201), to the very pixels a whole redraw gives, in both blending spaces: an
+/// item moved, one faded under another, an image's texels changed. A change over more
+/// than half of it, an added item, or a background draws it whole.
+#[test]
+fn a_layer_is_redrawn_only_where_its_items_changed() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let canvas = FrameSize::new(64, 64).expect("invariant: non-zero");
+    for blending in [Blending::Linear, Blending::Srgb] {
+        compositor.set_blending(blending);
+        let images = [
+            solid(compositor, 2, 2, [255, 0, 0, 255]),
+            solid(compositor, 2, 2, [0, 255, 0, 255]),
+            solid(compositor, 2, 2, [40, 90, 255, 128]),
+            solid(compositor, 2, 2, [255, 255, 0, 255]),
+        ];
+        let kept = compositor.layer(64, 64).expect("layer");
+        // Draws the cells into `kept`, and afresh into a new layer, and holds the two
+        // to the same pixels; returns how many texels of `kept` were redrawn as boxes.
+        let frame = |compositor: &mut Compositor, items: &[Item<'_>], background: Color| {
+            let scene = Scene {
+                canvas,
+                background,
+                items,
+            };
+            compositor.render_into(&scene, &kept).expect("kept");
+            let patched = compositor.patched_texels();
+            let fresh = compositor.layer(64, 64).expect("fresh");
+            compositor.render_into(&scene, &fresh).expect("fresh");
+            assert_eq!(compositor.patched_texels(), 0, "a new layer is drawn whole");
+            let read = |compositor: &mut Compositor, layer: &Image| {
+                let shown = [
+                    item(layer, Placement::IDENTITY, Crop::NONE, 1.0),
+                    item(
+                        &images[0],
+                        at([70.0, 70.0], [1.0, 1.0], 0.0),
+                        Crop::NONE,
+                        1.0,
+                    ),
+                ];
+                let scene = Scene {
+                    canvas,
+                    background: Color::BLACK,
+                    items: &shown,
+                };
+                let output = compositor.render(&scene, true).expect("render");
+                output.pixels().expect("invariant: read back").clone()
+            };
+            let (patched_pixels, fresh_pixels) =
+                (read(compositor, &kept), read(compositor, &fresh));
+            assert_eq!(patched_pixels.rgba(), fresh_pixels.rgba());
+            patched
+        };
+        let clear = Color::TRANSPARENT;
+        assert_eq!(frame(compositor, &cells(&images, 10.0, 1.0), clear), 0);
+        // The last cell moves: its old box and its new one, and nothing else.
+        let moved = frame(compositor, &cells(&images, 30.0, 1.0), clear);
+        assert!(moved > 0 && moved < 64 * 64 / 4, "{moved} texels");
+        // The second fades under the third.
+        let faded = frame(compositor, &cells(&images, 30.0, 0.4), clear);
+        assert!(faded > 0 && faded < 64 * 64 / 4, "{faded} texels");
+        // The first cell's texels change.
+        compositor
+            .rewrite_rgba8(&images[0], &[255, 0, 255, 255].repeat(4))
+            .expect("rewrite");
+        let rewritten = frame(compositor, &cells(&images, 30.0, 0.4), clear);
+        assert!(
+            rewritten > 0 && rewritten < 64 * 64 / 4,
+            "{rewritten} texels"
+        );
+        // Two cells change at once, far apart: two boxes.
+        let both = frame(compositor, &cells(&images, 12.0, 0.9), clear);
+        assert!(both > 0 && both < 64 * 64 / 4, "{both} texels");
+        // Whole draws: an item added, a background, and a change over most of it.
+        let mut more = cells(&images, 12.0, 0.9).to_vec();
+        more.push(item(
+            &images[3],
+            at([20.0, 20.0], [2.0, 2.0], 0.0),
+            Crop::NONE,
+            1.0,
+        ));
+        assert_eq!(frame(compositor, &more, clear), 0, "an item added");
+        assert_eq!(frame(compositor, &more, Color::BLACK), 0, "a background");
+        assert_eq!(
+            frame(compositor, &more, Color::BLACK),
+            0,
+            "over a background"
+        );
+        let mut wide = cells(&images, 12.0, 0.9);
+        assert_eq!(frame(compositor, &wide, clear), 0, "an item removed");
+        wide[0] = item(
+            &images[0],
+            at([0.0, 0.0], [30.0, 30.0], 0.0),
+            Crop::NONE,
+            1.0,
+        );
+        assert_eq!(frame(compositor, &wide, clear), 0, "most of the layer");
     }
 }

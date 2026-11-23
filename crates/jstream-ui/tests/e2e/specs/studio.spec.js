@@ -75,32 +75,49 @@ test('the Transitions panel points at the controls in studio mode', async ({ pag
   await connect(page, daemon);
   await showPanel(page, 'Transitions');
   const panel = page.locator('section.studio');
-  await expect(panel.getByText('Studio mode is off')).toBeVisible();
+  await expect(panel.locator('.studio-foot')).toHaveText('Studio mode off · a click on a scene puts it on program');
   await page.locator('header.app-header').getByRole('button', { name: 'Studio mode' }).click();
-  await expect(panel.getByText('Studio mode is on')).toBeVisible();
+  await expect(panel.locator('.studio-foot')).toHaveText('Studio mode on · Transition and Cut take preview to program');
   await expect(panel.getByLabel('Transition preset')).toHaveCount(0);
 });
 
-test('the preset picker edits the default and adds a preset', async ({ page, daemon, consoleErrors }) => {
+test('the preset toolbar edits the default, adds a preset and holds the rest in its ⋯ menu', async ({ page, daemon, consoleErrors }) => {
   const calls = await recordCalls(page);
   await connect(page, daemon);
   await showPanel(page, 'Transitions');
   const presets = page.locator('section.presets');
   const picker = presets.getByLabel('Preset to edit');
-  await expect(picker.locator('option')).toHaveText(['Cut — Cut (default)', '+ New preset…']);
-  await expect(presets.getByRole('radio', { name: 'Cut' })).toBeChecked();
-  // A cut has no duration or easing, and the default can't be deleted or made default.
+  await expect(picker.locator('option')).toHaveText(['Cut · Default']);
+  await expect(presets.getByRole('combobox', { name: 'Type' })).toHaveValue('cut');
+  // A cut has no duration or easing.
   await expect(presets.getByLabel('Duration')).toHaveCount(0);
-  await expect(presets.getByRole('button', { name: 'Delete' })).toHaveCount(0);
   await expect(presets.getByText('The default: used unless a scene overrides it. Overrides: 0 in, 0 out.')).toBeVisible();
+
+  // The ⋯ menu: the default is checked, and can't be set again or deleted.
+  await presets.getByRole('button', { name: 'More for this preset' }).click();
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitemcheckbox', { name: 'Set as default' })).toHaveAttribute('aria-checked', 'true');
+  await expect(menu.getByRole('menuitem', { name: 'Delete…' })).toBeDisabled();
+  await page.keyboard.press('Escape');
 
   // The mock refuses preset edits, after the page has sent them.
   consoleErrors.allow(/transition/);
-  await presets.getByRole('radio', { name: 'Fade' }).check({ force: true });
+  await presets.getByRole('combobox', { name: 'Type' }).selectOption('fade');
   await expect.poll(() => calls.sent('transition.update').length).toBe(1);
   expect(calls.sent('transition.update')[0]).toMatchObject({ preset_id: 'cut', kind: 'fade' });
 
-  await picker.selectOption({ label: '+ New preset…' });
+  // Rename swaps the picker for the name; Enter sends it.
+  await presets.getByRole('button', { name: 'More for this preset' }).click();
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Rename' }).click();
+  const name = presets.getByRole('textbox', { name: 'Preset name' });
+  await expect(name).toBeFocused();
+  await name.fill('Straight cut');
+  await name.press('Enter');
+  await expect(name).toHaveCount(0);
+  await expect.poll(() => calls.sent('transition.update').length).toBe(2);
+  expect(calls.sent('transition.update')[1]).toMatchObject({ preset_id: 'cut', name: 'Straight cut' });
+
+  await presets.getByRole('button', { name: 'New preset' }).click();
   await expect.poll(() => calls.sent('transition.create').length).toBe(1);
   expect(calls.sent('transition.create')[0]).toMatchObject({
     preset_id: 'new-preset',
@@ -118,7 +135,7 @@ test('a preset\'s custom curve shows its points, which are sent as its easing', 
   const presets = page.locator('section.presets');
   // The mock refuses preset edits, after the page has sent them.
   consoleErrors.allow(/transition/);
-  await presets.getByRole('radio', { name: 'Fade' }).check({ force: true });
+  await presets.getByRole('combobox', { name: 'Type' }).selectOption('fade');
   await expect(presets.locator('.curve-editor')).toHaveCount(0);
   await presets.getByLabel('Easing', { exact: true }).selectOption({ label: 'Custom curve' });
   const editor = presets.locator('.curve-editor');
