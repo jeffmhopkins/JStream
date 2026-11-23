@@ -771,11 +771,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   kind marks `live` that is a number with both ends or a switch, for a source's settings
   and a filter's; the mixer puts one after each channel's and bus's mute button, and after the dB
   field of each send that exists. A
-  click reads `midi.last_controls` for a baseline, then every 150 ms for up to 15 s, and
+  click opens the control menu; its Learn MIDI control reads `midi.last_controls` for a baseline, then every 150 ms for up to 15 s, and
   binds the first input whose count of control changes grew with `binding.set_value`,
   over the setting's whole range (a fader's over -60 to +6 dB), 50 ms smoothed, as
   `learn_<hash of the target>`, so learning again replaces it. A bound button shows its
-  control (`CC 7`) and unbinds it on a click; a learning one says "Move…" and stops on a
+  control (`CC 7`), and the menu's Remove control unbinds it; a learning one says "Move…" and stops on a
   click, or once its form closes (its signals are read with `try_`, so a closed form ends
   the loop). An engine that reads no MIDI controls says so in the problem bar.
   Since ADR-0183 the button is the control button: a click opens one menu (Learn MIDI

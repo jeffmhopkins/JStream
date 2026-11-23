@@ -707,7 +707,9 @@ fn TriggerEditor(
     };
     // The first object, once the kind changes.
     Effect::new(move |_| {
-        let first = objects()
+        when.track();
+        // Untracked, so an edit elsewhere doesn't reset what was picked.
+        let first = untrack(objects)
             .into_iter()
             .next()
             .map(|(v, _)| v)
@@ -935,6 +937,11 @@ fn Lanes(
                             }
                             e.stop_propagation();
                             e.prevent_default();
+                            // Keep the pointer while dragging, so overshooting the lane's
+                            // edge still moves the point instead of ending the drag.
+                            if let Some(dot) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) {
+                                dot.set_pointer_capture(e.pointer_id()).ok();
+                            }
                             let l = lane.get_value();
                             let Some(pt) = l.points.get(p) else {
                                 return;
@@ -1050,7 +1057,7 @@ fn Lanes(
                         on:dblclick=add
                         on:pointermove=moving
                         on:pointerup=up
-                        on:pointerleave=up
+                        on:pointercancel=up
                     >
                         <svg viewBox="0 0 1000 100" preserveAspectRatio="none" class="seq-svg" aria-hidden="true">
                             {move || {

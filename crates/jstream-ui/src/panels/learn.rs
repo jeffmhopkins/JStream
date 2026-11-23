@@ -233,6 +233,32 @@ pub fn follows(channel_id: &str, target: &ValueTarget, range: (f64, f64)) -> Val
     }
 }
 
+/// A learned MIDI control as a channel's input, reading over the channel's whole 0 to 1
+/// (the binding mapped it onto the setting's range); `None` for any other input.
+pub fn carried(input: MotionKind) -> Option<MotionKind> {
+    match input {
+        MotionKind::Midi {
+            control,
+            controller,
+            channel,
+            input,
+            smoothing_ms,
+            curve,
+            ..
+        } => Some(MotionKind::Midi {
+            control,
+            controller,
+            channel,
+            input,
+            smoothing_ms,
+            curve,
+            from: Finite32::ZERO,
+            to: Finite32::ONE,
+        }),
+        _ => None,
+    }
+}
+
 /// Where `value` sits in `range`, 0 to 1: a new channel's default, so the setting
 /// doesn't move when it starts following it.
 pub fn fraction(value: f64, range: (f64, f64)) -> f32 {
@@ -325,7 +351,7 @@ pub fn Learn(
         let at = current
             .and_then(|c| c.get_untracked())
             .map_or(0.0, |v| fraction(v, range));
-        let channel = studio.collection.with_untracked(|c| {
+        let mut channel = studio.collection.with_untracked(|c| {
             crate::panels::channels::new_channel(
                 &name,
                 scene,
@@ -333,6 +359,10 @@ pub fn Learn(
                 c.as_ref().map_or(&[][..], |c| &c.channels[..]),
             )
         });
+        // A control learned here moves over to the channel, over its whole range.
+        if let Some(input) = bound().and_then(|b| carried(b.input)) {
+            channel.inputs.push(input);
+        }
         let binding = target.with_value(|t| follows(&channel.channel_id, t, range));
         let id = channel.channel_id.clone();
         studio.apply(
@@ -579,5 +609,41 @@ mod tests {
             unit: None,
         };
         assert_eq!(param_range(&param(open, true)), None);
+    }
+
+    /// Make channel carries a learned CC over to the new channel, over 0 to 1.
+    #[test]
+    fn a_learned_control_moves_to_the_channel_over_its_whole_range() {
+        let learned = MotionKind::Midi {
+            control: MotionMidiControl::Cc,
+            controller: Some(7),
+            channel: Some(1),
+            input: Some("Pad".into()),
+            smoothing_ms: 50,
+            curve: MotionCurve::Linear,
+            from: Finite32::new(-60.0).unwrap_or(Finite32::ZERO),
+            to: Finite32::new(6.0).unwrap_or(Finite32::ZERO),
+        };
+        let Some(MotionKind::Midi {
+            controller,
+            from,
+            to,
+            ..
+        }) = carried(learned)
+        else {
+            panic!("a MIDI control is carried");
+        };
+        assert_eq!(controller, Some(7));
+        assert_eq!((from, to), (Finite32::ZERO, Finite32::ONE));
+        assert_eq!(
+            carried(MotionKind::Channel {
+                channel_id: "c".into(),
+                smoothing_ms: 0,
+                curve: MotionCurve::Linear,
+                from: Finite32::ZERO,
+                to: Finite32::ONE,
+            }),
+            None
+        );
     }
 }

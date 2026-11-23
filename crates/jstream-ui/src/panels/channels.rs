@@ -19,9 +19,9 @@ use crate::panels::number::NumberField;
 use crate::store::{Collection, Studio, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Action, ChannelCombine, ChannelDriver, ChannelInfo, ChannelSwitch, ChannelValueInfo, Edit,
-    Finite32, MidiControlInfo, MotionCurve, MotionKind, MotionMidiControl, Query, QueryResult,
-    SceneId, ValueTarget,
+    Action, Call, ChannelCombine, ChannelDriver, ChannelInfo, ChannelSwitch, ChannelValueInfo,
+    Edit, Finite32, MidiControlInfo, MotionCurve, MotionKind, MotionMidiControl, Query,
+    QueryResult, SceneId, ValueTarget,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -367,16 +367,17 @@ pub fn Channels() -> impl IntoView {
         studio.apply(&s, vec![Edit::ChannelSet { channel }]);
     };
     let pick = move |id: String| studio.channel.set(Some(id));
-    let open = move || {
+    // A memo, so an edit elsewhere doesn't rebuild the card (and cancel a learn in it).
+    let open = Memo::new(move |_| {
         let id = studio.channel.get()?;
         let exists = studio
             .collection
             .with(|c| c.as_ref().is_some_and(|c| c.channel(&id).is_some()));
         exists.then_some(id)
-    };
+    });
     view! {
         <section class="panel chan-panel">
-            {move || match open() {
+            {move || match open.get() {
                 Some(id) => view! {
                     <button type="button" class="chan-back" on:click=move |_| studio.channel.set(None)>
                         "‹ All channels"
@@ -464,15 +465,41 @@ fn ChannelCard(
             },
         });
     };
+    // The value under the hand while the slider is held: the poll doesn't move the
+    // thumb then, and at most one action is in flight, with the latest one queued.
+    let hand = RwSignal::new(None::<f32>);
+    let queued = StoredValue::new(None::<f32>);
+    let sending = StoredValue::new(false);
     let set_level = move |e: leptos::ev::Event| {
-        if let Ok(v) = event_target_value(&e).parse::<f32>() {
-            act(Action::ChannelSetValue {
-                channel_id: id.get_value(),
-                value: Finite32::new(v / 100.0).unwrap_or(Finite32::ZERO),
-                fade_ms: None,
-            });
+        let Ok(v) = event_target_value(&e).parse::<f32>() else {
+            return;
+        };
+        let v = (v / 100.0).clamp(0.0, 1.0);
+        hand.set(Some(v));
+        queued.set_value(Some(v));
+        if sending.get_value() {
+            return;
         }
+        let Some(s) = session.0.get_value() else {
+            return;
+        };
+        sending.set_value(true);
+        let channel_id = id.get_value();
+        spawn_local(async move {
+            while let Some(Some(v)) = queued.try_update_value(Option::take) {
+                let action = Action::ChannelSetValue {
+                    channel_id: channel_id.clone(),
+                    value: Finite32::new(v).unwrap_or(Finite32::ZERO),
+                    fade_ms: None,
+                };
+                if let Err(error) = s.control.call(Call::Action { action }).await {
+                    studio.report(&error);
+                }
+            }
+            sending.try_set_value(false);
+        });
     };
+    let let_go = move |_| hand.set(None);
     let rename = move |e: leptos::ev::Event| {
         let text = event_target_value(&e);
         set(&|c| c.name = text.trim().to_owned());
@@ -752,9 +779,9 @@ fn ChannelCard(
                     step="1"
                     aria-label="Set the value"
                     title="Set the value by hand"
-                    prop:value=move || format!("{:.0}", level() * 100.0)
-
+                    prop:value=move || format!("{:.0}", hand.get().unwrap_or_else(level) * 100.0)
                     on:input=set_level
+                    on:change=let_go
                 />
                 <span class="mono chan-level">{move || format!("{:.0} %", level() * 100.0)}</span>
             </div>
