@@ -4636,7 +4636,7 @@ mod tests {
         // the canvas plane, so the camera sees it nearer the centre: about 10 px out
         // from the card's edge.
         let sides = [(22, 18), (42, 18)];
-        let shot = |light: jstream_sources::ShownLight, receives: bool| {
+        let shot = |graph: &Graph, light: jstream_sources::ShownLight, receives: bool| {
             let kind = jstream_sources::ModelKind::new();
             let mut settings: jstream_protocol::Settings = kind
                 .descriptor()
@@ -4663,7 +4663,7 @@ mod tests {
                 .with_light(Some(light));
             let card = Frame::new(1, 1, &[255; 4], 4).expect("invariant: 1x1 RGBA8");
             let shot = snapshot::plan_with(
-                &graph,
+                graph,
                 Some(&main),
                 None,
                 &mut |id| {
@@ -4691,11 +4691,11 @@ mod tests {
             ))
         };
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
-        let Some(lit) = shot(light(false), true) else {
+        let Some(lit) = shot(&graph, light(false), true) else {
             return;
         };
-        let shadowed = shot(light(true), true).expect("an adapter");
-        let unreceived = shot(light(true), false).expect("an adapter");
+        let shadowed = shot(&graph, light(true), true).expect("an adapter");
+        let unreceived = shot(&graph, light(true), false).expect("an adapter");
         assert!(
             lit.iter().all(|&p| luma(p) > 150),
             "the wall is lit: {lit:?}"
@@ -4713,6 +4713,24 @@ mod tests {
             (1, 1),
             "one side is shadowed: {shadowed:?} against {lit:?}"
         );
+        // ADR-0179: a card that only adds light casts no shadow.
+        for blend in [
+            jstream_protocol::BlendMode::Additive,
+            jstream_protocol::BlendMode::Screen,
+        ] {
+            apply(
+                &mut graph,
+                vec![Edit::ItemSetBlend {
+                    item_id: ItemId::new("card"),
+                    blend,
+                }],
+            );
+            let light_only = shot(&graph, light(true), true).expect("an adapter");
+            assert!(
+                (0..2).all(|side| luma(light_only[side]).abs_diff(luma(lit[side])) <= 6),
+                "a {blend:?} card casts no shadow: {light_only:?} against {lit:?}"
+            );
+        }
     }
 
     /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition

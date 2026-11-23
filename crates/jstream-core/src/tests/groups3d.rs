@@ -98,7 +98,11 @@ const BLUE: [u8; 4] = [0, 0, 0xff, 0xff];
 /// top. The group holds one red card, 400 px square at its centre, 200 px toward the
 /// camera. Returns the connected engine, with its sources built.
 fn rig(share_space: bool) -> (Engine, crate::InProcessControl) {
-    let engine = Engine::new();
+    rig_with(share_space, Engine::new())
+}
+
+/// [`rig`] in `engine`.
+fn rig_with(share_space: bool, engine: Engine) -> (Engine, crate::InProcessControl) {
     let control = connected(&engine);
     batch(
         &control,
@@ -256,5 +260,298 @@ fn an_anchored_camera_rides_with_its_group() {
         pixel(&control, 960, 540),
         Some([0, 0, 0, 0xff]),
         "without it, the child is off the centre"
+    );
+}
+
+/// A Move between two views of a 3D scene with a video chain moves item by item through
+/// the moving camera (ADR-0180), and keeps a shared group's children in the scene's
+/// space while it runs: the red child, 200 px nearer than the wall, stays in front of
+/// it half-way through, as it is at either end.
+#[test]
+fn a_3d_groups_children_stay_in_its_space_during_a_move() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    if pixel(&control, 960, 540).is_none() {
+        return;
+    }
+    batch(
+        &control,
+        edits(vec![
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("wall"),
+                scene_id: Some(SceneId::new("k")),
+                geometry: boxed(960.0, 540.0, (1920.0, 1080.0), 100.0),
+            },
+            // The scene has a chain, as a 3D set with depth effects has: the Move still
+            // moves by item (ADR-0180).
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            // The child has an effect, so it is drawn in a box of its own.
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("part"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("fx"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            // The view moves too: the camera steps back.
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some({
+                    let mut camera = SceneCamera::framing(Canvas::DEFAULT);
+                    camera.position.z = finite(camera.position.z.get() + 300.0);
+                    camera
+                }),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("a keyframe and a move");
+    let switch = |scene: &str| {
+        let action = Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+            preset_id: Some(TransitionPresetId::new("move")),
+            via: Vec::new(),
+        };
+        super::block_on(control.call(Call::Action { action })).expect("switch");
+    };
+    switch("k");
+    clock.advance(200_000);
+    engine.replan();
+    let loaded = engine.render_hub().load();
+    let shot = loaded.shot();
+    assert!(shot.transitioning(), "the Move runs");
+    let cameras = shot.track_cameras(200.0).expect("tracks");
+    assert!(
+        cameras.len() > 1 && cameras.iter().all(|camera| camera.is_some()),
+        "item by item, through the moving camera: {cameras:?}"
+    );
+    assert_eq!(
+        pixel(&control, 960, 540),
+        Some(RED),
+        "the child is still in front of the wall half-way"
+    );
+}
+
+/// An item with an effect shown with a Fade on a keyframe scene of a 3D scene is drawn
+/// through the keyframe's camera while it appears: the red card, 400 px square, fades in
+/// at its place, and the wall around it stays as it is.
+#[test]
+fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    if pixel(&control, 960, 540).is_none() {
+        return;
+    }
+    let call = |action: Action| {
+        super::block_on(control.call(Call::Action { action })).expect("action");
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("rig_item"),
+            },
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(960.0, 540.0, (400.0, 400.0), 200.0),
+            ),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("card"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("fx"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            // The scene has a chain: a transition draws it as one picture.
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("card"),
+                scene_id: None,
+                visible: false,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some({
+                    let mut camera = SceneCamera::framing(Canvas::DEFAULT);
+                    camera.position.z = finite(camera.position.z.get() + 300.0);
+                    camera
+                }),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("a card to show and a keyframe");
+    call(Action::SceneSwitch {
+        scene_id: SceneId::new("k"),
+        preset_id: None,
+        via: Vec::new(),
+    });
+    batch(
+        &control,
+        edits(vec![Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("fade"),
+        }]),
+    )
+    .expect("fade by default");
+    assert_eq!(pixel(&control, 200, 200), Some(BLUE), "the wall, before");
+    call(Action::ItemShow {
+        item_id: ItemId::new("card"),
+        scene_id: None,
+    });
+    clock.advance(200_000);
+    engine.replan();
+    assert!(
+        engine.render_hub().load().shot().transitioning(),
+        "it appears"
+    );
+    // The scene has a chain, so it crossfades as one picture (ADR-0065 §6): the wall
+    // is still there, seen through k's camera, not the picture seen through it again.
+    let [red, green, blue, _] = pixel(&control, 200, 200).expect("an adapter");
+    assert!(
+        red == 0 && green == 0 && blue > 150,
+        "the wall, while it appears: {red} {green} {blue}"
+    );
+    let [red, green, _, _] = pixel(&control, 960, 540).expect("an adapter");
+    assert!(
+        red > 64 && green == 0,
+        "the card coming in at its place: {red} {green}"
+    );
+    clock.advance(400_000);
+    engine.replan();
+    assert_eq!(pixel(&control, 200, 200), Some(BLUE), "the wall, after");
+    assert_eq!(pixel(&control, 960, 540), Some(RED), "the card, after");
+}
+
+/// An effect's setting changed after its first frame reaches the card in a 3D scene:
+/// the chain draws into the same layer, which is marked changed so the card's mips are
+/// made again (ADR-0050 decision 5). The hologram pop-up drives `reveal` this way.
+#[test]
+fn an_effect_setting_changed_later_reaches_a_3d_card() {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let owner = FilterOwner::Item {
+        item_id: ItemId::new("card"),
+    };
+    let brightness = |value: f64| {
+        serde_json::from_value(serde_json::json!({ "brightness": value })).expect("settings")
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("main"),
+            fill("red", "#ff0000ff"),
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(SceneCamera::framing(Canvas::DEFAULT)),
+            },
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(960.0, 540.0, (400.0, 400.0), 200.0),
+            ),
+            Edit::FilterAdd {
+                owner: owner.clone(),
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("fx"),
+                kind: "color_correction".into(),
+                settings: brightness(-1.0),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let set = |value: f64| {
+        batch(
+            &control,
+            edits(vec![Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: FilterId::new("fx"),
+                patch: brightness(value),
+            }]),
+        )
+        .expect("set");
+    };
+    let Some(dark) = pixel(&control, 960, 540) else {
+        return;
+    };
+    assert_eq!(dark, [0, 0, 0, 0xff], "at brightness -1 the card is black");
+    set(0.0);
+    assert_eq!(pixel(&control, 960, 540), Some(RED), "then red");
+    set(-1.0);
+    assert_eq!(
+        pixel(&control, 960, 540),
+        Some([0, 0, 0, 0xff]),
+        "then black again"
     );
 }

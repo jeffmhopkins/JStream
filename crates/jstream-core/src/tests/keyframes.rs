@@ -1349,6 +1349,64 @@ fn the_shown_clock_starts_when_the_item_is_first_drawn() {
     assert!((x - 200.0).abs() < 0.01, "{x}");
 }
 
+/// An item of a scene with a video chain, which a chain phase's pass draws, is drawn
+/// too: its `shown` clock runs.
+#[test]
+fn the_shown_clock_runs_in_a_scene_with_a_chain() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            drift_x("a1", None, 100.0, jstream_protocol::MotionClock::Shown),
+            sharpen(
+                jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+                "look",
+            ),
+        ],
+    );
+    switch(&control, "a", None);
+    assert!(
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .shown()
+            .contains_key(&ItemId::new("a1")),
+        "a1 is drawn"
+    );
+}
+
+#[test]
+fn the_shown_clock_runs_for_an_item_with_effects() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            drift_x("a1", None, 100.0, jstream_protocol::MotionClock::Shown),
+            sharpen(
+                jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("a1"),
+                },
+                "look",
+            ),
+        ],
+    );
+    switch(&control, "a", None);
+    assert!(
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .shown()
+            .contains_key(&ItemId::new("a1")),
+        "a1 is drawn"
+    );
+}
+
 // Audio-reactive motion modifiers (ADR-0100): an item's opacity follows the program
 // mix's level through the render thread's follower.
 

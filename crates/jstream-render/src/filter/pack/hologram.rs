@@ -9,7 +9,8 @@
 //! The time-driven parts (the roll, the sweep, the flicker, the glitch and the grain's
 //! seed) are worked out on the CPU in `f64` from the clock, as `scanlines` does, so two
 //! machines draw the same frame at the same time. Coverage is kept: a transparent pixel
-//! stays transparent. One draw of the input's size, a handful of texture reads a pixel.
+//! stays transparent, except that a glitch band shifts the coverage with the picture.
+//! One draw of the input's size, a handful of texture reads a pixel.
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 

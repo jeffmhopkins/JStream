@@ -1115,6 +1115,9 @@ impl Compositor {
         // anywhere in its output, unless what it reads is bounded and its kind says how
         // far past that it draws, and every draw is then cut to that.
         for (image, content) in written {
+            // A filter's output is placed in 3D through mips rebuilt only after a change
+            // (ADR-0050 decision 5): new settings over the same input draw new texels.
+            image.mark_changed();
             image.set_content(content);
         }
         drop(submitting);

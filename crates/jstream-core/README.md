@@ -694,8 +694,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   downscale in `frames.rs`), nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, 3D groups drawn
   through `video.snapshot` (a sharing group's child sorting in front of a scene item a
-  flat group sits under, moving and fading with the group item, and a camera anchored to
-  the group riding with it, in `src/tests/groups3d.rs`), the render
+  flat group sits under, moving and fading with the group item, a camera anchored to
+  the group riding with it, its children staying in its space through a Move, and an
+  item shown with a Fade on a filtered 3D keyframe drawn through its camera, and an
+  effect setting changed after the first frame reaching a 3D card, in
+  `src/tests/groups3d.rs`), the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
   the same for a GPU capture of another size), a mix of another aspect ratio
@@ -898,7 +901,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   are left out of the shot while a `scene` video mix showing the group or the new side
   still plans that scene in full, chain and boxes, and a child appearing or
   disappearing with the group item's timing, and a `data` motion modifier moving an
-  item while a sender's transport plays and back once it stops, ADR-0171; `snapshot.rs` draws such a child where its
+  item while a sender's transport plays and back once it stops, ADR-0171, and the
+  `shown` clock starting for an item in a scene with a chain and for an item with
+  effects; `snapshot.rs` draws such a child where its
   track is at the frame's time; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
@@ -2052,7 +2057,17 @@ both and the floor to the filter in `ViewDepth::reflection`
 In a transition the scene is one picture
 (ADR-0065 §6): one track over the canvas that pairs with nothing, so Fade crossfades
 it, Move falls back to that, and a filtered nested scene is never flattened into its
-items.
+items. A Move by item within a 3D scene's family is the exception
+([ADR-0180](../../docs/adr/0180-a-move-within-a-3d-family-glides-through-its-chain.md)):
+it plans each side's items one by one (`Planner::moves_within_3d_family`,
+`Planner::end_of`), so the views glide, and the chain waits for it to end. A 3D
+scene's picture was drawn through its own camera, so its track is drawn flat, through
+no camera (`Visual::is_whole_scene`, `Transitioning::whole`): a Fade into or out of a
+filtered 3D scene, and an item shown or hidden there with a transition, which
+crossfades the scene, show it as it is (`a_3d_scene_with_a_chain_fades_as_a_flat_picture`,
+`an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera`). A model's layer that a
+track draws is drawn through that track's camera (`track_camera`), so a glide turns
+it with the rest.
 
 A `scene` source's own video chain (ADR-0065 §4) runs where it places its scene, after
 the scene's own (#1018). Its chain (`ChainOwner::Placed`, shown as `SourceRef::Placed`)
@@ -2168,7 +2183,9 @@ scene's maps (`draw_shadows`): for each of the first 2 such lights, a
 `GpuKey::ShadowMap` layer of 2048² holding the view depth of the scene's pass (found
 among the chains', the program's and the mixes' passes, `scene_pass`) seen from the
 light, its cards through `render_view_depth` and its models through `draw_view_depth`'s
-model loop, leaving out a model whose source doesn't cast (`casts_shadows`). A spot
+model loop, leaving out a model whose source doesn't cast (`casts_shadows`) and a card
+with the `additive` or `screen` blend, which only adds light (`casts_shadow`,
+[ADR-0179](../../docs/adr/0179-cards-that-only-add-light-cast-no-shadow.md)). A spot
 light looks from where it is along its aim, through its cone and a tenth more; a
 directional light from far back along its aim, at the sphere around what the pass places
 (`caster_bounds`), through a 30° view that holds it, which stands in for an orthographic
