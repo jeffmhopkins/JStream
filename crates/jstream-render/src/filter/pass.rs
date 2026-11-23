@@ -205,6 +205,8 @@ struct Cached {
     source: String,
     /// The pipeline, or why wgpu refused it, so a refused shader isn't rebuilt each frame.
     built: Result<wgpu::RenderPipeline, String>,
+    /// Its key among the device's shared pipelines, while it is kept there.
+    shared: Option<Key>,
 }
 
 /// The most sources kept per label: a reloaded pack's old and new filters may both be
@@ -412,13 +414,19 @@ fn cached<'a>(
     let index = match entries.iter().position(|c| c.source == shader.source) {
         Some(index) => index,
         None => {
-            let built = build(layout, gpu, shader, prelude);
+            let (built, shared) = build(layout, gpu, shader, prelude);
             if entries.len() >= SOURCES_PER_LABEL {
-                entries.remove(0);
+                // The shared pipelines let it go with this compositor, so a pack's
+                // shader edited over and over leaves no trail of old versions there.
+                // Another compositor still drawing it holds its own clone.
+                if let Some(key) = entries.remove(0).shared {
+                    gpu.built.forget(&key);
+                }
             }
             entries.push(Cached {
                 source: shader.source.to_owned(),
                 built,
+                shared,
             });
             entries.len() - 1
         }
@@ -437,33 +445,40 @@ fn build(
     gpu: &Gpu,
     shader: ShaderRef<'_>,
     prelude: &str,
-) -> Result<wgpu::RenderPipeline, String> {
+) -> (Result<wgpu::RenderPipeline, String>, Option<Key>) {
     let device = &gpu.device;
     // Validation errors (wgpu's own checks) and internal ones (a backend compiler
     // refusing naga's output) both go to wgpu's panicking default handler unless a
     // scope catches them.
+    // An internal refusal is marked, to tell it from wgpu's own verdict on the shader.
+    const INTERNAL: &str = "internal: ";
     let caught = |make: &mut dyn FnMut() -> Option<wgpu::RenderPipeline>| {
         let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
         let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let made = make();
-        match ready(validation.pop()).or_else(|| ready(internal.pop())) {
-            None => Ok(made),
-            Some(error) => Err(error.to_string()),
+        let (validation, internal) = (ready(validation.pop()), ready(internal.pop()));
+        match (validation, internal) {
+            (None, None) => Ok(made),
+            (Some(error), _) => Err(error.to_string()),
+            (None, Some(error)) => Err(format!("{INTERNAL}{error}")),
         }
     };
     let source = format!("{prelude}\n{}", shader.source);
     // The module is this compositor's own, so a source wgpu can't read is refused
     // here, whether or not another compositor tried it.
     let mut module = None;
-    caught(&mut || {
+    let read = caught(&mut || {
         module = Some(device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(shader.label),
             source: wgpu::ShaderSource::Wgsl(source.as_str().into()),
         }));
         None
-    })?;
+    });
+    if let Err(error) = read {
+        return (Err(error), None);
+    }
     let Some(module) = module else {
-        return Err("no shader module".into());
+        return (Err("no shader module".into()), None);
     };
     let blend = match shader.blend {
         Blend::Replace => None,
@@ -496,10 +511,20 @@ fn build(
     };
     // The scopes are the making thread's, so a refusal is kept with the pipeline's key
     // for every compositor that asks after.
-    gpu.built.get(Key::of(&source, layout, &desc), || {
+    let key = Key::of(&source, layout, &desc);
+    let made = gpu.built.get(key.clone(), || {
         caught(&mut || Some(device.create_render_pipeline(&desc)))?
             .ok_or_else(|| "no pipeline".to_owned())
-    })
+    });
+    match made {
+        // A backend's own failure (out of memory in its compiler, say) may not happen
+        // again, so only this compositor keeps it: the next one tries the shader anew.
+        Err(error) if error.starts_with(INTERNAL) => {
+            gpu.built.forget(&key);
+            (Err(error), None)
+        }
+        made => (made, Some(key)),
+    }
 }
 
 /// The value of a future that native wgpu resolves at once (an error scope's pop).

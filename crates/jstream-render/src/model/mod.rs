@@ -1554,6 +1554,8 @@ impl ModelRuntime {
             // Last to first: where two primitives lie in one plane both pass the equal
             // test and the later draw replaces the earlier, so this order shows the
             // first of them, as one pass that kept the first nearest fragment did.
+            // Inside one primitive its triangles still draw in index order, so of two
+            // of its own triangles in one plane the later now shows.
             pass.set_pipeline(&self.opaque);
             for p in model.primitives.iter().rev().filter(opaque) {
                 draw_one(&mut pass, p);

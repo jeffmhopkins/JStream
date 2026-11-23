@@ -664,7 +664,12 @@ impl Compositor {
                 let bind_group = match (item.placement, item.depth) {
                     // A model's layer with its depth: the depth it was drawn with, over
                     // the layer's own triangles, as a scene's pass writes it.
-                    (Placement::Layer(_), Some(depth)) if depth.owner().is(&self.owner) => {
+                    // Only at half opacity or more, as a card and a model drawn here
+                    // count (ADR-0143 decision 4): a model its group has faded further
+                    // adds no depth.
+                    (Placement::Layer(_), Some(depth))
+                        if depth.owner().is(&self.owner) && item.opacity >= 0.5 =>
+                    {
                         pass.set_pipeline(&self.depth_copier);
                         depth.bind_group()
                     }

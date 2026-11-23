@@ -94,7 +94,8 @@ and calls this crate.
   `Placement::Layer` that carries its model's depth layer (`Item::depth`) writes that
   layer's `1 / w` where the model covers (`fs_copy_depth`, over the layer's own
   triangles and with `Max` too), so a model already drawn with its depth isn't drawn
-  again; one without writes nothing. `draw_model_depth(draw, target)` adds a model's
+  again; one without writes nothing, and so does one under half opacity (a model its
+  group has faded), as a card that faded adds no depth. `draw_model_depth(draw, target)` adds a model's
   own per-fragment `1 / w` the same way (`model.wgsl`'s `fs_depth`: both faces, masked
   and blended materials under half alpha discarded), and nothing without a camera. A
   scene with no camera leaves the target all 0. Depth-aware filters read it
@@ -217,7 +218,7 @@ and calls this crate.
   otherwise made at the first draw that needs them). This covers the blend, depth,
   model, sky, sky bake and filter pipelines; the mip, resolve, wipe, NV12 and ingest ones are still each
   compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
-  edited over and over adds one per source). `Compositor::pipelines_made` counts the
+  edited over and over keeps only the versions a compositor still holds, 4 a filter). `Compositor::pipelines_made` counts the
   ones made on the device, so a draw that leaves it as it was waited for no compile.
   `Compositor::open` is the other
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
@@ -1051,7 +1052,10 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
   `RenderError`, not a panic: error scopes for both catch the module and the build, and
   the refusal is cached, in the compositor and with the shared pipelines, so it isn't
-  recompiled every frame or by the next compositor. An external filter's uniform bytes that
+  recompiled every frame or by the next compositor. A backend's internal error (its
+  compiler out of memory, say) is cached in the compositor alone, so the next
+  compositor tries the shader again. When a compositor drops a filter's old source to
+  keep a newer one, the shared pipelines let go of it too. An external filter's uniform bytes that
   aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.

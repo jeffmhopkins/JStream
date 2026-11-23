@@ -1681,7 +1681,8 @@ scene into its items only when it and they are all `normal`.
 scene of it is planned alone, as a frame sheet of that scene plans it (reaching no
 source), and queued to the snapshot thread (`SnapshotWorker::prime`), which draws each
 once, at most 256 pixels on its longer side, with no captures and no readback, and
-throws the picture away. The draw makes the pipelines the scene draws with, and every
+throws the picture away. A snapshot or a frame sheet queued behind scenes to prime is
+drawn before them, so a preview waits for no more than the scene being primed. The draw makes the pipelines the scene draws with, and every
 compositor on the engine's context shares them
 ([jstream-render › Scope](../jstream-render/README.md#purpose)), so the program stage
 compiles no shader on its first frame of a scene it never showed: on Direct3D 12 a 3D

@@ -13,7 +13,7 @@
 //! answers, so the GPU wait and the encode never block the caller's executor thread
 //! or other sessions. This is control-plane work, not the render thread (R-RT-002).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future::Future;
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
@@ -4972,19 +4972,37 @@ type Gpu = (Compositor, ResourceCache<GpuKey>, Chains);
 
 /// Serves snapshot jobs in order until the queue closes. A panic while drawing is
 /// caught per job: that job answers `internal` and the compositor is reopened next time.
+/// The job to do now, when one is queued: a snapshot or a frame sheet before any
+/// scene waiting to be primed, so nobody's picture waits for more than the prime
+/// under way. The primes taken off the queue on the way wait in `primes`, which a
+/// closed queue still empties.
+fn next_job(jobs: &Receiver<Job>, primes: &mut VecDeque<Job>) -> Option<Job> {
+    loop {
+        match jobs.try_recv() {
+            Ok(job) if matches!(job.work, Work::Prime { .. }) => primes.push_back(job),
+            Ok(job) => return Some(job),
+            Err(_) => return primes.pop_front(),
+        }
+    }
+}
+
 fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<PreviewCapture>>) {
     let mut gpu: Option<Gpu> = None;
     let mut backoff = OpenBackoff::default();
     let mut captures = SnapshotCaptures::default();
+    let mut primes: VecDeque<Job> = VecDeque::new();
     loop {
-        let Job { work, reply } = match jobs.recv_timeout(CAPTURE_IDLE) {
-            Ok(job) => job,
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // No snapshot for a while: the captures stop until the next one.
-                captures.stop();
-                continue;
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        let Job { work, reply } = match next_job(jobs, &mut primes) {
+            Some(job) => job,
+            None => match jobs.recv_timeout(CAPTURE_IDLE) {
+                Ok(job) => job,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // No snapshot for a while: the captures stop until the next one.
+                    captures.stop();
+                    continue;
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            },
         };
         // A compositor whose device is gone draws nothing again: it reopens, on the
         // engine's context as it is now.
@@ -10897,5 +10915,52 @@ pub(crate) mod tests {
         );
         let frame = Frame::new(1, 1, &[9, 8, 7, 6], 3).expect("one pixel");
         assert_eq!(frame.rgba(), &[9, 8, 7, 6]);
+    }
+
+    /// A snapshot or a frame sheet queued behind scenes to prime is served before
+    /// them, and the primes still follow in their order.
+    #[test]
+    fn a_picture_queued_behind_primes_is_served_first() {
+        use super::{Job, ReplyTx, Shot, Work, next_job};
+        use std::collections::VecDeque;
+        let at = MediaTime::zero(Timebase::MILLIS);
+        let prime = |ms: i64| Job {
+            work: Work::Prime {
+                shot: Box::new(Shot::default()),
+                at: MediaTime::new(ms, Timebase::MILLIS),
+            },
+            reply: ReplyTx { slot: None },
+        };
+        let sheet = || Job {
+            work: Work::Sheet(Box::new(crate::frames::Sheet {
+                samples: Vec::new(),
+                start: at,
+                answer: crate::frames::query_answer,
+            })),
+            reply: ReplyTx { slot: None },
+        };
+        let (queue, jobs) = std::sync::mpsc::channel();
+        let mut primes = VecDeque::new();
+        for job in [prime(1), prime(2), sheet()] {
+            queue.send(job).expect("the queue is open");
+        }
+        let kind = |job: Option<Job>| match job.map(|job| job.work) {
+            Some(Work::Prime { at, .. }) if at == MediaTime::new(1, Timebase::MILLIS) => {
+                "prime 1".to_owned()
+            }
+            Some(Work::Prime { .. }) => "prime 2".into(),
+            Some(Work::Sheet(_)) => "sheet".into(),
+            Some(Work::Picture { .. }) => "picture".into(),
+            None => "none".into(),
+        };
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "sheet");
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "prime 1");
+        // One that arrives while a prime is drawn goes ahead of the primes left.
+        queue.send(sheet()).expect("the queue is open");
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "sheet");
+        // A closed queue still leaves its primes to draw.
+        drop(queue);
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "prime 2");
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "none");
     }
 }

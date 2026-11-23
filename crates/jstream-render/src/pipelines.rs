@@ -117,6 +117,15 @@ impl Built {
         .clone()
     }
 
+    /// Lets go of `key`'s pipeline or refusal, so the next ask makes it again. A
+    /// compositor that draws with it holds its own clone.
+    pub(crate) fn forget(&self, key: &Key) {
+        let mut made = self.made.lock().unwrap_or_else(PoisonError::into_inner);
+        if made.made.remove(key).is_some() {
+            made.order.retain(|kept| kept != key);
+        }
+    }
+
     /// [`Self::get`] for a pipeline of the engine's own shaders, which wgpu does not
     /// refuse: `desc`'s, made on `device`.
     pub(crate) fn render(
@@ -196,6 +205,9 @@ mod tests {
             let _ = built.get(key(&n.to_string()), || Err(String::new()));
         }
         let _ = built.get(key("1"), || panic!("the second oldest is kept"));
+        built.forget(&key("1"));
+        let forgotten = built.get(key("1"), || Err("forgotten".into()));
+        assert_eq!(forgotten.err().as_deref(), Some("forgotten"));
         let again = built.get(key("0"), || Err("again".into()));
         assert_eq!(again.err().as_deref(), Some("again"));
     }
