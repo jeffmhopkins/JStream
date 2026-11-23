@@ -289,6 +289,53 @@ pub(crate) fn move_focus(menu: &leptos::web_sys::Element, delta: isize, to: Opti
     }
 }
 
+/// Keyboard use of a menu a panel draws itself rather than through [`ContextMenu`], as
+/// its root's `keydown`: Up, Down, Home and End move through its items, and Escape or Tab
+/// calls `close`.
+pub(crate) fn keys(close: impl Fn() + Copy + 'static) -> impl Fn(ev::KeyboardEvent) + Copy {
+    move |event: ev::KeyboardEvent| {
+        let Some(menu) = event
+            .current_target()
+            .and_then(|t| t.dyn_into::<leptos::web_sys::Element>().ok())
+        else {
+            return;
+        };
+        let (delta, to) = match event.key().as_str() {
+            "ArrowDown" => (1, None),
+            "ArrowUp" => (-1, None),
+            "Home" => (0, Some(true)),
+            "End" => (0, Some(false)),
+            "Escape" | "Tab" => {
+                event.prevent_default();
+                event.stop_propagation();
+                close();
+                return;
+            }
+            _ => return,
+        };
+        event.prevent_default();
+        event.stop_propagation();
+        move_focus(&menu, delta, to);
+    }
+}
+
+/// Focuses the first item of the panel-drawn menu `node` once it is drawn, so the keys
+/// of [`keys`] work from the start.
+pub(crate) fn focus_first(node: NodeRef<html::Div>) {
+    Effect::new(move |_| {
+        if let Some(menu) = node.get() {
+            move_focus(&menu, 0, Some(true));
+        }
+    });
+}
+
+/// Whether `event` asks for an element's menu from the keyboard: the Menu key, or
+/// Shift+F10.
+pub(crate) fn asks_for_menu(event: &ev::KeyboardEvent) -> bool {
+    let key = event.key();
+    key == "ContextMenu" || (key == "F10" && event.shift_key())
+}
+
 /// The open submenu: which item opened it, and where it is drawn.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct SubAt {

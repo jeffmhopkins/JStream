@@ -3165,7 +3165,10 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   1). A `model` takes `color` (its base colour), `metallic` and `roughness` (0 to 1) and
   `emissive_strength` (a multiplier of the glow, 1 at rest, kept within 0 to 64) on
   every material, or with `material` on the file's materials of that name, which also
-  take `emissive` (the glow's colour). Numbers and colours change as an `effect`
+  take `emissive` (the glow's colour). A number driven with no `material` adds to the
+  same number driven by name, so a material driven both ways takes the sum, within its
+  range.
+  Numbers and colours change as an `effect`
   setting's do. One naming a setting the source doesn't have, or a material its model
   doesn't have, adds nothing; it never moves the box. `source` is omitted for every other
   property, and a client before 0.145 reads the property as `Unknown`.

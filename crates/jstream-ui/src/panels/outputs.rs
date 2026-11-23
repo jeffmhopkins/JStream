@@ -537,16 +537,6 @@ pub fn describe_kind(kind: &OutputKind) -> String {
     }
 }
 
-/// The icon of an output of this kind (WS-04): the broadcast arcs for a stream, film
-/// for a recording, the webcam for the virtual camera.
-pub fn kind_icon(kind: &OutputKind) -> &'static str {
-    match kind {
-        OutputKind::Record { .. } => "film",
-        OutputKind::VirtualCam => "webcam",
-        _ => "out",
-    }
-}
-
 /// The warning an output's row and settings show when the engine says its server is plain
 /// `rtmp://` to another machine (`output.status`'s `cleartext`): the stream key would
 /// cross the network unencrypted (#353). The rule is the engine's
@@ -571,9 +561,19 @@ pub fn state_label(state: OutputState) -> &'static str {
     }
 }
 
-/// An FX button's label (spec-panels.md U1): "FX" and how many filters the chains hold.
-pub fn fx_label(chains: &FilterChains) -> String {
-    format!("FX {}", chains.video.len() + chains.audio.len())
+/// How many filters the chains hold: the count beside an FX button's funnel, shown
+/// once there is one (spec-panels.md U1).
+pub fn fx_count(chains: &FilterChains) -> usize {
+    chains.video.len() + chains.audio.len()
+}
+
+/// An FX button's tooltip: what its filters apply to, and how many there are.
+pub fn fx_title(what: &str, count: usize) -> String {
+    match count {
+        0 => format!("{what}: no filters yet"),
+        1 => format!("{what}: 1 filter"),
+        n => format!("{what}: {n} filters"),
+    }
 }
 
 /// How many `stats.tick` intervals [`Health`] sums over: about five seconds.
@@ -679,7 +679,7 @@ impl HealthReading {
 }
 
 impl HealthReading {
-    /// The reading in a word or two, for the panel's header: "Healthy", "Dropping (N)"
+    /// The reading in a few words, for the panel's header: "Healthy", "N frames dropped"
     /// with everything dropped over the window, or "No stats yet". [`summary`] is the
     /// detail, on hover.
     ///
@@ -702,7 +702,10 @@ impl HealthReading {
         if total == 0 {
             "Healthy".into()
         } else {
-            format!("Dropping ({total})")
+            format!(
+                "{total} {} dropped",
+                if total == 1 { "frame" } else { "frames" }
+            )
         }
     }
 }
@@ -1428,7 +1431,7 @@ pub fn Outputs() -> impl IntoView {
     view! {
         <section class="outputs">
             <div class="outputs-head">
-                <h2>"Outputs"</h2>
+                <h2 class="visually-hidden">"Outputs"</h2>
                 <span
                     class="health"
                     class:dropping=move || reading().dropping()
@@ -1441,7 +1444,7 @@ pub fn Outputs() -> impl IntoView {
                 </span>
                 <button
                     type="button"
-                    class="all-outputs"
+                    class="all-outputs secondary"
                     disabled=move || all.with(|all| all.start.is_empty())
                     title=move || {
                         if all.with(|all| all.start.is_empty()) {
@@ -1452,7 +1455,7 @@ pub fn Outputs() -> impl IntoView {
                     }
                     on:click=move |_| start_or_stop_all_now(true)
                 >
-                    "▶ Start all"
+                    "Start all"
                 </button>
                 <Show when=move || all.with(|all| !all.stop.is_empty())>
                     <button
@@ -1461,7 +1464,7 @@ pub fn Outputs() -> impl IntoView {
                         title="Stop every running output"
                         on:click=move |_| start_or_stop_all_now(false)
                     >
-                        "■ Stop all"
+                        "Stop all"
                     </button>
                 </Show>
             </div>
@@ -1488,7 +1491,11 @@ pub fn Outputs() -> impl IntoView {
                 </For>
             </ul>
             <div class="outputs-foot">
-                <button type="button" on:click=move |_| panel.settings.set(Some(Editing::New))>
+                <button
+                    type="button"
+                    class="link add-output"
+                    on:click=move |_| panel.settings.set(Some(Editing::New))
+                >
                     "+ Add output"
                 </button>
                 <button type="button" class="secondary" on:click=move |_| panel.open_library(None)>
@@ -1562,19 +1569,16 @@ pub fn Outputs() -> impl IntoView {
     .into_any()
 }
 
-/// The program's row, first: "master" and the FX button of the master chain
+/// The program's row, first: "Master" and the FX button of the master chain
 /// (spec-panels.md U1). What the program filters do is its tooltip.
 #[component]
 fn ProgramRow(panel: Panel) -> impl IntoView {
     let master = move || {
-        panel.studio.map_or_else(
-            || fx_label(&FilterChains::default()),
-            |studio| {
-                studio
-                    .collection
-                    .with(|c| fx_label(&c.as_ref().map(|c| c.master.clone()).unwrap_or_default()))
-            },
-        )
+        panel.studio.map_or(0, |studio| {
+            studio
+                .collection
+                .with(|c| c.as_ref().map_or(0, |c| fx_count(&c.master)))
+        })
     };
     view! {
         <li class="output-row program" title=PROGRAM_NOTE>
@@ -1582,16 +1586,20 @@ fn ProgramRow(panel: Panel) -> impl IntoView {
             <span class="output-row-main">
                 <span class="output-row-name">"Program output"</span>
             </span>
-            <span class="output-row-status">"master"</span>
+            <span class="output-row-status">"Master"</span>
             <button
                 type="button"
-                class="fx-button on"
-                title="Filters on everything leaving JStream"
+                class="fx-button"
+                class:on=Signal::derive_local(move || master() > 0)
+                title=move || fx_title("Filters on everything leaving JStream", master())
                 aria-label="Program output filters"
                 disabled=panel.fx.is_none()
                 on:click=move |_| panel.show_chains(FilterOwner::Master)
             >
-                {master}
+                <Icon name="funnel" size=15 />
+                <Show when=move || { master() > 0 }>
+                    <span class="fx-count">{master}</span>
+                </Show>
             </button>
         </li>
     }
@@ -1601,8 +1609,8 @@ fn ProgramRow(panel: Panel) -> impl IntoView {
 pub const PROGRAM_NOTE: &str =
     "Program filters apply to every output; each output can add its own after them.";
 
-/// One output's row: its kind, name and where it sends, its state, Start or Stop, its
-/// FX button and its ⋯ menu. A double-click opens its settings. A live row is marked,
+/// One output's row: a dot for its state, its name, and where it sends with its state
+/// in words, then Start or Stop, its FX button and its ⋯ menu. A double-click opens its settings. A live row is marked,
 /// and a stopped one that can't start says why under its name.
 #[component]
 fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
@@ -1632,8 +1640,7 @@ fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
     };
     let full = move || row.with(|row| row.as_ref().map(|row| describe_kind(&row.info.kind)));
     let warning = move || row.with(|row| row.as_ref().and_then(cleartext_warning));
-    let label = move || row.with(|r| r.as_ref().map(|r| fx_label(&r.info.filters)));
-    let filtered = move || row.with(|r| r.as_ref().is_some_and(|r| !r.info.filters.is_empty()));
+    let count = move || row.with(|r| r.as_ref().map_or(0, |r| fx_count(&r.info.filters)));
     let live = {
         let output_id = output_id.clone();
         move || {
@@ -1664,16 +1671,19 @@ fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
             }
             on:contextmenu=move |event| panel.open_menu(&event, id.get_value())
         >
-            <span class="output-row-icon">
-                {move || {
-                    row.with(|row| row.as_ref().map(|row| kind_icon(&row.info.kind)))
-                        .map(|icon| view! { <Icon name=icon size=15 /> })
-                }}
-            </span>
+            <span
+                class="output-dot"
+                class:live=move || state() == Some(OutputState::Active)
+                class:busy=move || running() && state() != Some(OutputState::Active)
+                class:failed=move || state() == Some(OutputState::Failed)
+                aria-hidden="true"
+            ></span>
             <span class="output-row-main" title=full>
                 <span class="output-row-name">{name.clone()}</span>
                 <span class="output-row-target">
                     {summary}
+                    " · "
+                    <span class="output-row-state">{move || state().map_or("Gone", state_label)}</span>
                     {move || {
                         warning()
                             .map(|warning| {
@@ -1696,14 +1706,6 @@ fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
                         .map(|why| view! { <span class="output-row-note">{why}</span> })
                 }}
                 {move || live().map(|line| view! { <span class="output-row-stats">{line}</span> })}
-            </span>
-            <span
-                class="badge"
-                class:live=move || state() == Some(OutputState::Active)
-                class:busy=move || running() && state() != Some(OutputState::Active)
-                class:failed=move || state() == Some(OutputState::Failed)
-            >
-                {move || state().map_or("Gone", state_label)}
             </span>
             <Show
                 when=running
@@ -1735,13 +1737,19 @@ fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
             <button
                 type="button"
                 class="fx-button"
-                class:on=filtered
-                title=format!("Filters for {name} only")
+                class:on=Signal::derive_local(move || count() > 0)
+                title={
+                    let what = format!("Filters for {name} only");
+                    move || fx_title(&what, count())
+                }
                 aria-label=format!("{name} filters")
                 disabled=panel.fx.is_none()
                 on:click=move |_| panel.show_chains(owner.clone())
             >
-                {label}
+                <Icon name="funnel" size=15 />
+                <Show when=move || { count() > 0 }>
+                    <span class="fx-count">{count}</span>
+                </Show>
             </button>
             <button
                 type="button"
@@ -2836,7 +2844,7 @@ mod tests {
 
     #[test]
     fn an_fx_button_counts_both_chains() {
-        use super::fx_label;
+        use super::{fx_count, fx_title};
         use jstream_control::protocol::{FilterChains, FilterId, FilterInfo, Settings};
         let filter = |id: &str| FilterInfo {
             filter_id: FilterId::new(id),
@@ -2844,12 +2852,18 @@ mod tests {
             settings: Settings::new(),
             enabled: true,
         };
-        assert_eq!(fx_label(&FilterChains::default()), "FX 0");
+        assert_eq!(fx_count(&FilterChains::default()), 0);
         let chains = FilterChains {
             video: vec![filter("v")],
             audio: vec![filter("a"), filter("b")],
         };
-        assert_eq!(fx_label(&chains), "FX 3");
+        assert_eq!(fx_count(&chains), 3);
+        assert_eq!(
+            fx_title("Filters for out", 0),
+            "Filters for out: no filters yet"
+        );
+        assert_eq!(fx_title("Filters for out", 1), "Filters for out: 1 filter");
+        assert_eq!(fx_title("Filters for out", 3), "Filters for out: 3 filters");
     }
 
     #[test]
@@ -3046,7 +3060,7 @@ mod tests {
                 ..DropCounts::default()
             },
         );
-        assert_eq!(health.reading().short(), "Dropping (5)");
+        assert_eq!(health.reading().short(), "5 frames dropped");
         assert!(health.reading().summary().contains("3 output packets"));
     }
 

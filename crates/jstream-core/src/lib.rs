@@ -65,6 +65,7 @@ mod ptz;
 mod quality;
 mod reactive;
 mod rendering_file;
+mod resolution;
 mod runtime;
 mod sequences;
 mod session;
@@ -81,6 +82,7 @@ mod transition;
 mod value_bindings;
 mod values;
 mod warm_file;
+mod warp_aim;
 mod youtube;
 
 /// The threads whose panics the engine catches and reports itself, for an app's crash

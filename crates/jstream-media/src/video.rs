@@ -3,6 +3,10 @@
 //! GPU textures never appear here; they belong to the render and platform crates. A
 //! [`VideoFrame`] is for CPU paths: readback, upload fallbacks, test patterns and tests.
 
+use std::fmt;
+use std::ops::Range;
+use std::sync::Arc;
+
 use crate::{ColorInfo, FrameSize, MediaError, MediaTime, PixelFormat, PlaneGeometry};
 
 /// What a frame is, without its pixels: size, format, color and presentation time.
@@ -29,9 +33,16 @@ impl VideoFrameInfo {
 }
 
 /// One plane's bytes and the distance between the starts of consecutive rows.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// The bytes are a plane's own ([`Plane::new`]) or a range of a buffer shared with
+/// other planes and frames ([`Plane::shared`]), so one read-back frame can go to several
+/// readers without a copy for each. Two planes are equal when their bytes and strides
+/// are, however they are held. Cloning a plane shares its bytes.
+#[derive(Clone)]
 pub struct Plane {
-    data: Vec<u8>,
+    data: Arc<Vec<u8>>,
+    /// The plane's bytes within `data`.
+    range: Range<usize>,
     stride: usize,
 }
 
@@ -39,22 +50,78 @@ impl Plane {
     /// A plane of `data` with rows `stride` bytes apart. It is checked against a format
     /// when it becomes part of a [`VideoFrame`].
     pub fn new(data: Vec<u8>, stride: usize) -> Self {
-        Self { data, stride }
+        let range = 0..data.len();
+        Self {
+            data: Arc::new(data),
+            range,
+            stride,
+        }
+    }
+
+    /// A plane of the bytes of `data` in `range`, with rows `stride` bytes apart, which
+    /// copies nothing. `None` when `range` reaches outside `data`.
+    pub fn shared(data: Arc<Vec<u8>>, range: Range<usize>, stride: usize) -> Option<Self> {
+        data.get(range.clone())?;
+        Some(Self {
+            data,
+            range,
+            stride,
+        })
     }
 
     /// The plane's bytes, including any row padding.
     pub fn data(&self) -> &[u8] {
-        &self.data
+        // In range since the plane was made: `data` is never written while shared.
+        self.data.get(self.range.clone()).unwrap_or_default()
     }
 
-    /// The plane's bytes, mutably.
+    /// The plane's bytes, mutably. A plane whose bytes are shared, or a range of a
+    /// longer buffer, takes a copy of its own first.
     pub fn data_mut(&mut self) -> &mut [u8] {
-        &mut self.data
+        let whole = self.range == (0..self.data.len());
+        if !whole || Arc::get_mut(&mut self.data).is_none() {
+            let own = self.data().to_vec();
+            self.range = 0..own.len();
+            self.data = Arc::new(own);
+        }
+        Arc::make_mut(&mut self.data).as_mut_slice()
     }
 
     /// Bytes from the start of one row to the start of the next.
     pub fn stride(&self) -> usize {
         self.stride
+    }
+
+    /// The plane's buffer, giving up the plane: for a producer that fills it again for
+    /// its next frame instead of allocating one. A plane whose bytes are still shared,
+    /// or a range of a longer buffer, gives a copy of its own bytes.
+    pub fn into_data(self) -> Vec<u8> {
+        let whole = self.range == (0..self.data.len());
+        match Arc::try_unwrap(self.data) {
+            Ok(data) if whole => data,
+            Ok(data) => data.get(self.range).map(<[u8]>::to_vec).unwrap_or_default(),
+            Err(shared) => shared
+                .get(self.range)
+                .map(<[u8]>::to_vec)
+                .unwrap_or_default(),
+        }
+    }
+}
+
+impl PartialEq for Plane {
+    fn eq(&self, other: &Self) -> bool {
+        self.stride == other.stride && self.data() == other.data()
+    }
+}
+
+impl Eq for Plane {}
+
+impl fmt::Debug for Plane {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Plane")
+            .field("data", &self.data())
+            .field("stride", &self.stride)
+            .finish()
     }
 }
 
@@ -110,10 +177,10 @@ impl VideoFrame {
                 });
             }
             let required = required_len(g, plane.stride)?;
-            if plane.data.len() < required {
+            if plane.data().len() < required {
                 return Err(MediaError::PlaneTooSmall {
                     plane: i,
-                    len: plane.data.len(),
+                    len: plane.data().len(),
                     required,
                 });
             }
@@ -161,7 +228,7 @@ impl VideoFrame {
             return None;
         }
         let start = usize::try_from(y).ok()?.checked_mul(p.stride)?;
-        p.data.get(start..start.checked_add(g.row_bytes)?)
+        p.data().get(start..start.checked_add(g.row_bytes)?)
     }
 
     /// Row `y` of `plane` without padding, mutably, or `None` when either is out of
@@ -173,7 +240,7 @@ impl VideoFrame {
             return None;
         }
         let start = usize::try_from(y).ok()?.checked_mul(p.stride)?;
-        p.data.get_mut(start..start.checked_add(g.row_bytes)?)
+        p.data_mut().get_mut(start..start.checked_add(g.row_bytes)?)
     }
 
     /// Sets the presentation timestamp.
@@ -243,6 +310,30 @@ mod tests {
         let f = VideoFrame::new(i, vec![y, uv]).unwrap();
         assert_eq!(f.row(0, 1).map(<[u8]>::len), Some(1918));
         assert_eq!(f.row(1, 0), Some(&[7u8; 1918][..]));
+    }
+
+    /// Planes over one shared buffer read their own ranges, equal an owned plane of the
+    /// same bytes, and a write to one copies it and leaves the buffer as it was.
+    #[test]
+    fn shared_planes_read_their_range_and_copy_on_write() {
+        use std::sync::Arc;
+        let buffer = Arc::new(vec![1u8, 1, 1, 1, 9, 9]);
+        let y = Plane::shared(Arc::clone(&buffer), 0..4, 2).unwrap();
+        let uv = Plane::shared(Arc::clone(&buffer), 4..6, 2).unwrap();
+        assert!(Plane::shared(Arc::clone(&buffer), 4..7, 2).is_none());
+        assert_eq!(y, Plane::new(vec![1; 4], 2));
+        assert_ne!(y, Plane::new(vec![1; 4], 4));
+        let mut f = VideoFrame::new(info(PixelFormat::Nv12, 2, 2), vec![y, uv]).unwrap();
+        assert_eq!(f.row(1, 0), Some(&[9u8, 9][..]));
+        f.row_mut(1, 0).unwrap().copy_from_slice(&[5, 6]);
+        assert_eq!(f.row(1, 0), Some(&[5u8, 6][..]));
+        assert_eq!(f.row(0, 1), Some(&[1u8, 1][..]));
+        assert_eq!(*buffer, [1, 1, 1, 1, 9, 9]);
+        // A plane that owns its bytes is written where it is.
+        let mut own = Plane::new(vec![0; 2], 2);
+        let before = own.data().as_ptr();
+        own.data_mut()[0] = 3;
+        assert_eq!(own.data().as_ptr(), before);
     }
 
     #[test]

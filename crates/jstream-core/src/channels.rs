@@ -4,9 +4,9 @@
 //! The collection holds each channel's definition; the [`ChannelDriver`] holds what is
 //! live: each input's smoothing and whether it has moved, the value actions set and its
 //! ramp, the switch, the averaging window and the fade. The engine's `jstream-values`
-//! thread ticks it about 30 times a second, under the engine's lock, while the collection
-//! holds a channel, before it ticks the value bindings, so a binding reads this tick's
-//! value. Each tick stores every channel's value in its cell in the engine's
+//! thread ticks it about 30 times a second (60 while a value is still moving, ADR-0190),
+//! under the engine's lock, while the collection holds a channel, before it ticks the
+//! value bindings, so a binding reads this tick's value. Each tick stores every channel's value in its cell in the engine's
 //! [`ChannelLevels`], where the render thread, value bindings and other channels load it
 //! without a lock.
 //!
@@ -304,25 +304,30 @@ impl ChannelDriver {
     }
 
     /// Follows `graph`'s channels for the time since the last tick, storing each one's
-    /// value in its cell in `data`'s channel levels.
+    /// value in its cell in `data`'s channel levels. Returns whether any value moved, so
+    /// the engine ticks at a frame's pace while one is still settling.
     pub(crate) fn tick(
         &mut self,
         graph: &Graph,
         midi: Option<&MidiInputs>,
         data: &LiveData,
         now: Instant,
-    ) {
+    ) -> bool {
         let dt_ms = self.last.map_or(0.0, |last| {
             now.saturating_duration_since(last).as_secs_f32() * 1000.0
         });
         self.last = Some(now);
         self.keep(graph, midi, data);
+        let mut moved = false;
         for id in &self.order {
             let Some(followed) = self.followed.get_mut(id) else {
                 continue;
             };
+            let was = followed.value;
             step(followed, &mut self.changes, midi, dt_ms, now);
+            moved |= followed.value != was;
         }
+        moved
     }
 
     /// Follows each of `graph`'s channels it doesn't yet, takes a changed definition,
@@ -520,8 +525,27 @@ impl ChannelDriver {
     }
 }
 
+/// Whether `a` and `b` read the same source the same way but for their `smoothing_ms`,
+/// so a follower of one keeps following the other: its rest, whether it moved and its
+/// smoothed level stay, and only the smoothing time changes (ADR-0190's smoothing
+/// fields edit it while a control drives).
+pub(crate) fn same_but_smoothing(a: &MotionKind, b: &MotionKind) -> bool {
+    fn plain(kind: &MotionKind) -> MotionKind {
+        let mut kind = kind.clone();
+        match &mut kind {
+            MotionKind::Midi { smoothing_ms, .. }
+            | MotionKind::Data { smoothing_ms, .. }
+            | MotionKind::Channel { smoothing_ms, .. } => *smoothing_ms = 0,
+            _ => {}
+        }
+        kind
+    }
+    plain(a) == plain(b)
+}
+
 /// Brings `followed`'s inputs in line with its definition: an input whose kind changed
-/// starts afresh, one the same keeps its smoothing and whether it moved.
+/// starts afresh, one the same keeps its smoothing and whether it moved, and one that
+/// changed only its smoothing time keeps following with the new time.
 fn keep_inputs(followed: &mut Followed, midi: Option<&MidiInputs>, data: &LiveData) {
     let kinds = &followed.info.inputs;
     let same = followed.inputs.len() == kinds.len()
@@ -540,8 +564,18 @@ fn keep_inputs(followed: &mut Followed, midi: Option<&MidiInputs>, data: &LiveDa
     for kind in kinds {
         let kept = old
             .iter_mut()
-            .find(|i| i.as_ref().is_some_and(|i| i.kind == *kind && !i.unresolved))
-            .and_then(Option::take);
+            .find(|i| {
+                i.as_ref()
+                    .is_some_and(|i| same_but_smoothing(&i.kind, kind) && !i.unresolved)
+            })
+            .and_then(Option::take)
+            .map(|mut i| {
+                if let Some(params) = mapping(kind) {
+                    i.midi = params;
+                }
+                i.kind = kind.clone();
+                i
+            });
         let input = kept.or_else(|| {
             let (reader, unresolved) = reader(kind, midi, data)?;
             let midi = mapping(kind)?;
@@ -822,10 +856,11 @@ mod tests {
             self.t0 + Duration::from_millis(ms)
         }
 
-        fn tick(&mut self, ms: u64) {
+        /// Ticks at `ms`; whether a value moved.
+        fn tick(&mut self, ms: u64) -> bool {
             let now = self.at(ms);
             self.driver
-                .tick(&self.graph, Some(&self.midi), &self.data, now);
+                .tick(&self.graph, Some(&self.midi), &self.data, now)
         }
 
         fn value(&self, id: &str) -> Option<f32> {
@@ -876,6 +911,72 @@ mod tests {
         rig.tick(133);
         assert_eq!(cell.read(), None);
         assert!(rig.driver.is_empty());
+    }
+
+    /// A new smoothing time on a moved input keeps it driving from where it is, rather
+    /// than starting it again at rest, where the channel would fall back to its default.
+    #[test]
+    fn a_new_smoothing_keeps_a_moved_control_driving() {
+        let mut rig = Rig::new();
+        set(
+            &mut rig.graph,
+            ChannelInfo {
+                default: f(0.5),
+                inputs: vec![cc(7)],
+                ..ChannelInfo::new("lights")
+            },
+        );
+        rig.tick(0);
+        rig.midi.push("Pad", 0, &message(&[0xB0, 7, 127]));
+        rig.tick(33);
+        assert_eq!(rig.value("lights"), Some(1.0));
+        let mut slower = cc(7);
+        if let MotionKind::Midi { smoothing_ms, .. } = &mut slower {
+            *smoothing_ms = 200;
+        }
+        set(
+            &mut rig.graph,
+            ChannelInfo {
+                default: f(0.5),
+                inputs: vec![slower],
+                ..ChannelInfo::new("lights")
+            },
+        );
+        rig.tick(66);
+        assert_eq!(
+            rig.value("lights"),
+            Some(1.0),
+            "still driven by the control"
+        );
+        assert!(matches!(
+            rig.driver.values()[0].driver,
+            Some(jstream_protocol::ChannelDriver::Input { index: 0 })
+        ));
+    }
+
+    /// A tick says a value moved while a fade is under way and not once it has landed,
+    /// which is what keeps the values thread at a frame's pace (ADR-0190).
+    #[test]
+    fn a_tick_reports_moving_until_the_fade_lands() {
+        let mut rig = Rig::new();
+        set(
+            &mut rig.graph,
+            ChannelInfo {
+                default: f(1.0),
+                fall_ms: 100,
+                ..ChannelInfo::new("group")
+            },
+        );
+        assert!(!rig.tick(0), "starts at its default");
+        assert!(!rig.tick(17), "at rest");
+        rig.driver
+            .switch("group", ChannelSwitch::Off)
+            .expect("a channel");
+        assert!(rig.tick(34), "fading");
+        assert!(rig.tick(84), "still fading");
+        assert!(rig.tick(150), "lands");
+        assert_eq!(rig.value("group"), Some(0.0));
+        assert!(!rig.tick(167), "settled");
     }
 
     #[test]

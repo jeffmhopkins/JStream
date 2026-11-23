@@ -58,6 +58,30 @@ pub struct SkyDraw<'a> {
     /// than fade. 1 while it drops, easing to 0 as it arrives at a setting above 0, so a
     /// drop to a cruise doesn't snap.
     pub dropping: f32,
+    /// The pictures pinned in the sky over everything else it draws (ADR-0188), bottom
+    /// first, each over those before it.
+    pub pictures: [Option<SkyPicture<'a>>; MAX_SKY_PICTURES],
+}
+
+/// The most pictures one backdrop pins in its sky at once (ADR-0198).
+pub const MAX_SKY_PICTURES: usize = 4;
+
+/// A flat picture pinned in a backdrop's sky, infinitely far away (ADR-0188): a planet or
+/// a nebula to arrive at. It covers the sky, the nebulae and the stars behind it where it
+/// is opaque, at the sky's intensity, and fades as the deep sky does at warp.
+#[derive(Clone, Copy, Debug)]
+pub struct SkyPicture<'a> {
+    /// The picture, a layer or upload of this compositor's.
+    pub image: &'a Image,
+    /// Where its centre is, in the sky's own frame (x right, y down, z toward the viewer
+    /// at rest): the frame the sky's layout is in, before its orientation. Need not be
+    /// unit length; a zero direction draws nothing.
+    pub direction: [f32; 3],
+    /// How wide it is across the sky, in degrees, 1 to 120; its height follows its
+    /// shape. Its top is toward the sky's up.
+    pub width_deg: f32,
+    /// How opaque it is, 0 to 1.
+    pub opacity: f32,
 }
 
 /// A backdrop's nebulae and galaxy band (ADR-0167), drawn over its sky, under its stars.
@@ -156,27 +180,44 @@ struct Kept {
     /// it on.
     generation: u64,
     /// The shader's values ([`sky_values`]), compared bit for bit.
-    values: [u32; 44],
+    values: [u32; VALUES],
     /// The sky's picture and its generation when it was read, for a sky with one.
     picture: Option<(Weak<AtomicU64>, u64)>,
+    /// The pictures pinned in it (ADR-0188) and their generations, where it has them.
+    pinned: [Option<(Weak<AtomicU64>, u64)>; MAX_SKY_PICTURES],
 }
+
+/// How many numbers the shader's uniform holds ([`sky_values`]).
+const VALUES: usize = 44 + 16 * MAX_SKY_PICTURES;
 
 impl Kept {
     /// Whether `target` still holds the sky of `values` and `picture`.
-    fn holds(&self, target: &Image, values: &[u32; 44], picture: Option<&Image>) -> bool {
+    fn holds(
+        &self,
+        target: &Image,
+        values: &[u32; VALUES],
+        (picture, pinned): (Option<&Image>, [Option<&Image>; MAX_SKY_PICTURES]),
+    ) -> bool {
         let same = |kept: &Weak<AtomicU64>, image: &Image| {
             std::ptr::eq(kept.as_ptr(), std::sync::Arc::as_ptr(image.identity()))
         };
+        let read =
+            |kept: &Option<(Weak<AtomicU64>, u64)>, image: Option<&Image>| match (kept, image) {
+                (None, None) => true,
+                (Some((kept, generation)), Some(image)) => {
+                    same(kept, image) && *generation == image.generation()
+                }
+                _ => false,
+            };
         same(&self.target, target)
             && self.generation == target.generation()
             && self.values == *values
-            && match (&self.picture, picture) {
-                (None, None) => true,
-                (Some((kept, generation)), Some(picture)) => {
-                    same(kept, picture) && *generation == picture.generation()
-                }
-                _ => false,
-            }
+            && read(&self.picture, picture)
+            && self
+                .pinned
+                .iter()
+                .zip(pinned)
+                .all(|(kept, image)| read(kept, image))
     }
 }
 
@@ -491,6 +532,11 @@ impl SkyRuntime {
                     },
                     count: None,
                 },
+                // The pictures pinned in the sky (ADR-0188).
+                pinned_entry(7),
+                pinned_entry(8),
+                pinned_entry(9),
+                pinned_entry(10),
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -686,13 +732,17 @@ impl SkyRuntime {
             .environment
             .image
             .filter(|image| image.owner().is(owner));
-        let values = sky_values(sky, image, &camera);
+        let shown = sky
+            .pictures
+            .map(|picture| picture.filter(|picture| picture.image.owner().is(owner)));
+        let values = sky_values(sky, (image, &shown), &camera);
+        let pinned = shown.map(|picture| picture.map(|picture| picture.image));
         let bits = values.map(f32::to_bits);
         self.kept.retain(|kept| kept.target.strong_count() > 0);
         if self
             .kept
             .iter()
-            .any(|kept| kept.holds(target, &bits, image))
+            .any(|kept| kept.holds(target, &bits, (image, pinned)))
         {
             return Ok(());
         }
@@ -725,6 +775,14 @@ impl SkyRuntime {
                 .texture()
                 .create_view(&wgpu::TextureViewDescriptor::default())
         });
+        let arrivals = pinned.map(|image| {
+            image.map(|image| {
+                image
+                    .texture()
+                    .create_view(&wgpu::TextureViewDescriptor::default())
+            })
+        });
+        let arrival = |i: usize| arrivals[i].as_ref().unwrap_or(&self.blank);
         // A sky with stars reads the bright ones' table, written first by a pass that
         // can't read what it writes.
         let stars = sky.stars > 0.0;
@@ -762,6 +820,22 @@ impl SkyRuntime {
                     wgpu::BindGroupEntry {
                         binding: 6,
                         resource: wgpu::BindingResource::TextureView(table),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::TextureView(arrival(0)),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 8,
+                        resource: wgpu::BindingResource::TextureView(arrival(1)),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 9,
+                        resource: wgpu::BindingResource::TextureView(arrival(2)),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 10,
+                        resource: wgpu::BindingResource::TextureView(arrival(3)),
                     },
                 ],
             })
@@ -824,9 +898,31 @@ impl SkyRuntime {
                         image.generation(),
                     )
                 }),
+                pinned: pinned.map(|image| {
+                    image.map(|image| {
+                        (
+                            std::sync::Arc::downgrade(image.identity()),
+                            image.generation(),
+                        )
+                    })
+                }),
             },
         );
         Ok(())
+    }
+}
+
+/// The layout entry of pinned picture texture `binding` (ADR-0188).
+fn pinned_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
     }
 }
 
@@ -841,12 +937,13 @@ fn finite(value: f32, low: f32, high: f32) -> f32 {
 
 /// `sky` in the shader's terms (`sky.wgsl`'s `Sky`): the camera's axes, principal point
 /// and focal length, the colours as linear light times the intensity, the opacity, the
-/// turn, how the picture stores alpha (-1 for none), and the stars.
+/// turn, how the picture stores alpha (-1 for none), the stars, and the picture pinned
+/// in it ([`picture_values`]).
 fn sky_values(
     sky: &SkyDraw<'_>,
-    image: Option<&Image>,
+    (image, pinned): (Option<&Image>, &[Option<SkyPicture<'_>>; MAX_SKY_PICTURES]),
     view: &jstream_protocol::CameraView,
-) -> [f32; 44] {
+) -> [f32; VALUES] {
     let environment = &sky.environment;
     let intensity = finite(environment.intensity, 0.0, f32::MAX);
     let linear = |color: Color| {
@@ -862,7 +959,7 @@ fn sky_values(
     let warp = finite(sky.warp, 0.0, 1.0);
     let bright = cells(sky.travel, BRIGHT_COLUMNS);
     let faint = cells(sky.travel, FAINT_COLUMNS);
-    [
+    let head = [
         right[0],
         right[1],
         right[2],
@@ -907,6 +1004,67 @@ fn sky_values(
         warp * MAX_WARP_BETA,
         finite(sky.dropping, 0.0, 1.0),
         warp,
+    ];
+    let mut values = [0.0; VALUES];
+    values[..head.len()].copy_from_slice(&head);
+    for (slot, picture) in values[head.len()..].chunks_exact_mut(16).zip(pinned) {
+        let p = picture_values(picture.as_ref());
+        let flat = [
+            p[0][0], p[0][1], p[0][2], p[3][0], p[1][0], p[1][1], p[1][2], p[3][1], p[2][0],
+            p[2][1], p[2][2], p[3][2], p[3][3], 0.0, 0.0, 0.0,
+        ];
+        slot.copy_from_slice(&flat);
+    }
+    values
+}
+
+/// A pinned picture in the shader's terms (four of `sky.wgsl`'s `pictures`): its
+/// centre's direction, its right and down axes, all
+/// unit length in the sky's frame, then the tangents of half its width and half its
+/// height, how opaque it is and how it stores alpha; all 0 for none.
+fn picture_values(picture: Option<&SkyPicture<'_>>) -> [[f32; 4]; 4] {
+    let none = [[0.0; 4]; 4];
+    let Some(picture) = picture else {
+        return none;
+    };
+    let d = picture
+        .direction
+        .map(|v| if v.is_finite() { v } else { 0.0 });
+    let length = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    let opacity = finite(picture.opacity, 0.0, 1.0);
+    if length < 1e-6 || opacity <= 0.0 {
+        return none;
+    }
+    let f = d.map(|v| v / length);
+    let cross = |a: [f32; 3], b: [f32; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let unit = |v: [f32; 3]| {
+        let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+        v.map(|c| c / l)
+    };
+    // Its top toward the sky's up (-y); straight up or down, toward ahead (-z).
+    let up = if f[1].abs() > 0.999 {
+        [0.0, 0.0, -1.0]
+    } else {
+        [0.0, -1.0, 0.0]
+    };
+    let right = unit(cross(up, f));
+    let down = cross(right, f);
+    let half = finite(picture.width_deg, 1.0, 120.0).to_radians() * 0.5;
+    let wide = half.tan();
+    let (w, h) = (picture.image.width().max(1), picture.image.height().max(1));
+    let tall = wide * h as f32 / w as f32;
+    let four = |v: [f32; 3]| [v[0], v[1], v[2], 0.0];
+    [
+        four(f),
+        four(right),
+        four(down),
+        [wide, tall, opacity, picture.image.alpha().shader_mode()],
     ]
 }
 

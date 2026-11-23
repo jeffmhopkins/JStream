@@ -455,7 +455,18 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   streams the sky past, Doppler shifted, with the nebulae fading out,
   reaching a new value over `warp_ramp_s` (0 to 10 s, default 1.5)
   ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md); settings saved
-  without them read as no backdrop, nothing added and still). Its frame is one transparent pixel: it
+  without them read as no backdrop, nothing added and still). `warp_aim` is `sky`
+  (default: toward the sky's centre, which the item turns) or `ahead` (along the scene's
+  straight ahead from the moment the warp starts, the travel swinging at most
+  `warp_look_deg`, 0 to 180, default 10, while at warp), carried as a `WarpAim`
+  ([ADR-0187](../../docs/adr/0187-a-warp-can-travel-straight-ahead.md)). `sky_pictures`
+  (a scene reference, or null) names a scene of pictures the backdrop arrives at (an item
+  showing a nested scene is one arrival of up to four pictures, placed by their items'
+  turn and tilt from its first, [ADR-0198](../../docs/adr/0198-an-arrival-can-be-a-planet-with-its-sun.md)), each
+  `sky_picture_deg` wide (1 to 120, default 30) times its item's width over the canvas's,
+  and lighting the scene by
+  `sky_picture_light` (0 to 8, default 1)
+  ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)). Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that
   places it gives a position, an aim and a strength (`jstream-core`'s README).
 - `reflection_probe`

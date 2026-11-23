@@ -6,12 +6,15 @@
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0032-live-edits-and-undo.md
 
+use crate::canvas::camera::Shape;
 use crate::store::{Collection, Sizes, SourceDepths};
 use jstream_control::protocol::{
     Action, Batch, Call, CallResult, Canvas, Crop, Edit, GestureId, HistoryCall, HistoryOp,
-    ItemGeometry, ItemId, PlacementForm, Rev, SceneCamera, SceneId, SolidBounds,
+    ItemGeometry, ItemId, ItemInfo, PlacementForm, Rev, SceneCamera, SceneId, SceneRole,
+    SolidBounds, SourceKind,
 };
 use jstream_control::{Control, ControlError};
+use std::collections::BTreeSet;
 use std::fmt;
 
 /// Why a canvas call failed.
@@ -67,6 +70,9 @@ pub struct CanvasItem {
     pub source_depth: Option<u32>,
     /// Whether its box is locked (ADR-0096): the canvas selects it but never drags it.
     pub locked: bool,
+    /// What a 3D scene outlines and hits it by: its box, its model's bounds
+    /// ([`CanvasItem::solid`]), or a 3D group's children (ADR-0164 decision 6).
+    pub shape: Shape,
 }
 
 /// The scene being edited, at one revision.
@@ -111,13 +117,12 @@ impl Layout {
             .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?)))
     }
 
-    /// [`Self::boxes`], each with the bounds of the model it shows, if it shows one.
-    pub fn shapes(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (&ItemId, &ItemGeometry, Option<SolidBounds>)> {
+    /// [`Self::boxes`], each with what a 3D scene outlines and hits it by
+    /// ([`CanvasItem::shape`]).
+    pub fn shapes(&self) -> impl DoubleEndedIterator<Item = (&ItemId, &ItemGeometry, &Shape)> {
         self.items
             .iter()
-            .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?, item.solid())))
+            .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?, &item.shape)))
     }
 
     /// The bounds of the model the item shows, if it shows one ([`CanvasItem::solid`]).
@@ -174,10 +179,23 @@ impl Layout {
                 camera: None,
             };
         };
+        let camera = collection.camera_of(&scene.scene_id);
+        let mut groups = Groups {
+            collection,
+            sizes,
+            depths,
+            path: BTreeSet::from([scene.scene_id.clone()]),
+            shared: BTreeSet::new(),
+        };
         let items = scene
             .items
             .iter()
             .map(|item| CanvasItem {
+                shape: if camera.is_some() {
+                    groups.shape(item, 0)
+                } else {
+                    Shape::Box
+                },
                 item_id: item.item_id.clone(),
                 name: collection.source_name(&item.source_id),
                 geometry: match item.placement {
@@ -199,7 +217,81 @@ impl Layout {
                 .parent_of(&scene.scene_id)
                 .map(|p| p.name.clone()),
             items,
-            camera: collection.camera_of(&scene.scene_id),
+            camera,
+        }
+    }
+}
+
+/// How many 3D groups deep the canvas follows a group's children, as the engine does
+/// (its `MAX_NESTING`): a group placed deeper draws flat, so it is outlined by its box.
+const MAX_GROUP_NESTING: usize = 8;
+
+/// Works out the shapes of a 3D scene's items, in stacking order, as the engine plans
+/// its pass (ADR-0164 decision 1): an item placing a group with the `group` role and
+/// `share_space` on, by a geometry, is drawn as its children, each group shared once per
+/// scene (the first visible item placing it), never through itself, and to
+/// [`MAX_GROUP_NESTING`] deep. Anything else is drawn as one box.
+struct Groups<'a> {
+    collection: &'a Collection,
+    sizes: &'a Sizes,
+    depths: &'a SourceDepths,
+    /// The scenes being drawn into one another, the shown one first.
+    path: BTreeSet<SceneId>,
+    /// The groups already shared in this scene.
+    shared: BTreeSet<SceneId>,
+}
+
+impl Groups<'_> {
+    /// The group `item` places when it is drawn as a 3D group at `depth` groups down.
+    fn sharing(&self, item: &ItemInfo, depth: usize) -> Option<SceneId> {
+        let SourceKind::Scene { scene_id } = &self.collection.source(&item.source_id)?.kind else {
+            return None;
+        };
+        let group = self.collection.scene(scene_id)?;
+        (group.role == SceneRole::Group
+            && group.options.share_space
+            && item.placement == PlacementForm::Geometry
+            && item.geometry.is_some()
+            && depth + 1 < MAX_GROUP_NESTING
+            && !self.path.contains(scene_id)
+            && !self.shared.contains(scene_id))
+        .then(|| scene_id.clone())
+    }
+
+    /// What `item`, `depth` groups down, is outlined and hit by. A hidden item draws
+    /// nothing, so it shares no group with a later item, but the canvas still outlines a
+    /// hidden one of the scene's own by its group's children.
+    fn shape(&mut self, item: &ItemInfo, depth: usize) -> Shape {
+        let Some(group) = self.sharing(item, depth) else {
+            let solid = self
+                .collection
+                .source_size(self.sizes, &item.source_id)
+                .zip(self.depths.get(&item.source_id))
+                .map(|((width, height), depth)| {
+                    SolidBounds::of_size(width as f32, height as f32, *depth as f32)
+                });
+            return solid.map_or(Shape::Box, Shape::Model);
+        };
+        if item.visible {
+            self.shared.insert(group.clone());
+        }
+        self.path.insert(group.clone());
+        let parts: Vec<(ItemGeometry, Shape)> = self
+            .collection
+            .scene(&group)
+            .into_iter()
+            .flat_map(|scene| scene.items.iter())
+            .filter(|child| child.visible && child.placement == PlacementForm::Geometry)
+            .filter_map(|child| Some((child.geometry?, self.shape(child, depth + 1))))
+            .collect();
+        self.path.remove(&group);
+        if parts.is_empty() {
+            // Nothing of it is drawn: its box keeps it on the canvas to pick.
+            return Shape::Box;
+        }
+        Shape::Group {
+            canvas: self.collection.canvas,
+            parts,
         }
     }
 }
@@ -781,5 +873,125 @@ mod tests {
         let empty = load(&engine(), "s1");
         assert_eq!(empty.scene, Some(("s1".into(), "Intro".into())));
         assert!(empty.items.is_empty());
+    }
+
+    /// A 3D scene, `s3`, placing a group, `rig`, over the whole canvas, whose two small
+    /// children sit in opposite corners; `share` turns the group's `share_space` on.
+    fn rig(share: bool) -> Layout {
+        let control = MockEngine::new().connect();
+        now(control.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("hello");
+        let canvas = Canvas::DEFAULT;
+        let (w, h) = (canvas.width as f32, canvas.height as f32);
+        let child = |item_id: &str, x: f32, y: f32| Edit::ItemAdd {
+            scene_id: "g".into(),
+            item_id: item_id.into(),
+            source_id: SourceId::new("cam"),
+            transform: None,
+            geometry: Some(geometry(x, y, 200.0, 200.0)),
+            opacity: None,
+            blend: None,
+        };
+        let edits = vec![
+            Edit::SceneCreate {
+                scene_id: "s3".into(),
+                name: "Set".into(),
+                role: None,
+            },
+            Edit::SceneCreate {
+                scene_id: "g".into(),
+                name: "Rig".into(),
+                role: Some(SceneRole::Group),
+            },
+            Edit::SceneSetOptions {
+                scene_id: "g".into(),
+                options: jstream_control::protocol::SceneOptions {
+                    share_space: share,
+                    ..Default::default()
+                },
+            },
+            Edit::SceneSetCamera {
+                scene_id: "s3".into(),
+                camera: Some(SceneCamera::framing(canvas)),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("cam"),
+                name: "Camera".into(),
+                kind: SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+                settings: Settings::default(),
+                duplicated_from: None,
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("grp"),
+                name: "Rig".into(),
+                kind: SourceKind::Scene {
+                    scene_id: "g".into(),
+                },
+                settings: Settings::default(),
+                duplicated_from: None,
+            },
+            child("left", 300.0, 300.0),
+            child("right", w - 300.0, h - 300.0),
+            Edit::ItemAdd {
+                scene_id: "s3".into(),
+                item_id: "rig".into(),
+                source_id: SourceId::new("grp"),
+                transform: None,
+                geometry: Some(geometry(w * 0.5, h * 0.5, w, h)),
+                opacity: None,
+                blend: None,
+            },
+        ];
+        now(control.call(Call::Batch(Batch {
+            edits,
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        })))
+        .expect("setup batch");
+        load(&control, "s3")
+    }
+
+    /// ADR-0164 decision 6 (#1596): in a 3D scene a group that shares the space is
+    /// outlined by the hull of its children and hit only inside them, not by its own box
+    /// over the whole canvas; a flat group is still one box.
+    #[test]
+    fn a_3d_group_is_outlined_and_hit_by_its_children() {
+        use crate::canvas::camera;
+        use crate::canvas::transform::Point;
+        let layout = rig(true);
+        let view = camera::view(layout.camera, layout.canvas).expect("a 3D scene");
+        let gap = Point { x: 960.0, y: 540.0 };
+        let on_child = Point { x: 300.0, y: 300.0 };
+        assert_eq!(
+            camera::topmost_at(layout.shapes(), &view, gap),
+            None,
+            "the gap between the children is not the group"
+        );
+        assert_eq!(
+            camera::topmost_at(layout.shapes(), &view, on_child),
+            Some(&"rig".into()),
+            "a child selects the group"
+        );
+        let (_, g, shape) = layout.shapes().next().expect("the group's item");
+        let bounds = camera::screen_box(g, shape, &view).expect("seen");
+        // From the left child's left edge to the right child's right edge.
+        let width = bounds.size.width.get();
+        assert!(
+            (width - 1520.0).abs() < 1.0,
+            "outlined by its children: {width}"
+        );
+
+        let flat = rig(false);
+        assert_eq!(
+            camera::topmost_at(flat.shapes(), &view, gap),
+            Some(&"rig".into()),
+            "a flat group is one card"
+        );
     }
 }

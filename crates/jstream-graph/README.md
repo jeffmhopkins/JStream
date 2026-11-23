@@ -531,8 +531,9 @@ that does not want to change the graph it has.
   256 (at `channel`), and no cycle through its `channel` inputs (at `channel.inputs`).
   `channel.delete` is `not_found` (entity `channel`) for an ID none has, and leaves what
   reads the channel in place. `Graph::channels` and `Graph::channel` read them; the
-  collection file saves them in `channels` (schema version 20) and loads them before
-  the value bindings.
+  collection file saves them in `channels` (schema version 20) and loads them first,
+  before the replayed hotkeys and controller bindings (whose `channel.set_value` or
+  `channel.switch` must find its channel, #1671) and the value bindings.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its

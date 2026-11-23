@@ -126,9 +126,9 @@ pub fn About(
                 <p class="about-tagline">"Live streaming and recording studio"</p>
                 <dl class="about-facts">
                     <dt>"Version"</dt>
-                    <dd class="mono">{VERSION}</dd>
+                    <dd>{VERSION}</dd>
                     <dt>"Build"</dt>
-                    <dd class="mono">
+                    <dd>
                         {match commit_url {
                             Some(url) => view! {
                                 <a href=url target="_blank" rel="noopener noreferrer">{build}</a>
@@ -137,7 +137,7 @@ pub fn About(
                         }}
                     </dd>
                     <dt>"Protocol"</dt>
-                    <dd class="mono">{move || protocol.get()}</dd>
+                    <dd>{move || protocol.get()}</dd>
                     <dt>"License"</dt>
                     <dd>
                         {external(Link::LicenseMit, "")}

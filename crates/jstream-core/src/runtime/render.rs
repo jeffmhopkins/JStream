@@ -431,6 +431,9 @@ pub(crate) enum Garbage {
     Audio(AudioInput),
     /// A frame buffer of a video mix the render thread stopped drawing.
     Pixels(Vec<u8>),
+    /// A frame buffer such a mix shared with its readers (the frame it showed), which
+    /// one of them may still hold; freed here if this is the last hold on it.
+    Shared(Arc<Vec<u8>>),
     /// The emptied list of encoder sessions such a mix fed, dropped here rather than
     /// on the render thread.
     Inputs(Vec<VideoTap>),
@@ -501,6 +504,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Pictures(pictures) => drop(pictures),
             Garbage::Audio(input) => drop(input),
             Garbage::Pixels(pixels) => drop(pixels),
+            Garbage::Shared(pixels) => drop(pixels),
             Garbage::Inputs(inputs) => drop(inputs),
             Garbage::Targets(targets) => drop(targets),
             Garbage::Vcam(tap) => drop(tap),

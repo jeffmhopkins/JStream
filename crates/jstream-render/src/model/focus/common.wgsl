@@ -1,16 +1,19 @@
-// Depth of field on a model's layer (ADR-0165). Shared by its five passes: the camera's
-// focus as a `w` (`focus_px / f`) and its far blur in canvas pixels. A view depth texel
+// Depth of field on a model's layer (ADR-0165). Shared by its first five passes: the camera's
+// focus as a `w` (`focus_px / f`), its far blur and the largest blur, both in the layer's
+// pixels (canvas pixels, fewer when the layer is drawn smaller, ADR-0197). A view depth texel
 // holds `1 / w = f / D`, 0 where the model isn't; there the circle of confusion is 0 and
 // the pixel is infinitely far.
 
 struct Params {
     focus_w: f32,
     blur: f32,
+    max_blur: f32,
 }
 
 @group(0) @binding(4) var<uniform> p: Params;
 
-// The largest blur radius, in canvas pixels: ADR-0108's cap.
+// The largest blur radius a layer can have, in its pixels: ADR-0108's cap, 64 canvas
+// pixels. `p.max_blur` is the layer's own, which is never larger.
 const MAX_BLUR: f32 = 64.0;
 // Pixels on a side of a tile the reach is kept per.
 const TILE: i32 = 8;
@@ -21,7 +24,7 @@ fn coc(inverse_w: f32) -> f32 {
     if inverse_w <= 0.0 {
         return 0.0;
     }
-    return min(p.blur * abs(1.0 - p.focus_w * inverse_w), MAX_BLUR);
+    return min(p.blur * abs(1.0 - p.focus_w * inverse_w), min(p.max_blur, MAX_BLUR));
 }
 
 // A colour read from the model's layer, made safe to spread: NaN becomes 0 and an
@@ -33,4 +36,17 @@ fn finite(c: vec4<f32>) -> vec4<f32> {
     let all_ones = (bits & vec4<u32>(0x7f800000u)) == vec4<u32>(0x7f800000u);
     let fraction = (bits & vec4<u32>(0x007fffffu)) != vec4<u32>(0u);
     return select(clamp(c, vec4<f32>(-65504.0), vec4<f32>(65504.0)), vec4<f32>(0.0), all_ones & fraction);
+}
+
+// The share of a blur of radius `r` the gather spreads, at half size; the resolve spreads
+// the rest at full size (resolve.wgsl has this too).
+fn wide(r: f32) -> f32 {
+    return smoothstep(0.75, 2.0, r);
+}
+
+// The pixel of the layer that texel `texel` of the half-size gather stands for: one corner of its block of two
+// by two, the other corner on every other texel.
+fn chosen(texel: vec2<i32>, size: vec2<i32>) -> vec2<i32> {
+    let corner = (texel.x + texel.y) & 1;
+    return min(texel * 2 + vec2<i32>(corner), size - vec2<i32>(1));
 }

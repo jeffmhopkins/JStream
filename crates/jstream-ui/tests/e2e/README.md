@@ -109,6 +109,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   although Chromium sends that socket an `error` event and no `close` (#305). The
   bundled IBM Plex Sans and Mono load from the page's own origin, and `fonts/OFL.txt`
   is served beside them.
+- **Projects** (`projects.spec.js`, ADR-0121): the mock engine keeps no collection file,
+  so the spec routes the page's WebSocket, answers `collection.info` with an open
+  project and a recent list, and records and answers `collection.open`. File › Open
+  project… lists the recent projects other than the open one, with their folders; a
+  click, Space, Up and Down fill Location and pick that row; a typed path picks none;
+  the list is one tab stop, the picked row or else the first; a double-click or Enter
+  sends one `collection.open` with the row's path and closes the dialog. New project…
+  and Save project as… show no list and start beside the open project.
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
   program scene's "program" badge, selected, and its item listed under the scene's
   caption; a click putting a scene on program, which a second client follows, and in
@@ -209,12 +217,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
   second.
 - **Stream stats** (`stream-stats.spec.js`): added from the View menu, the panel says
-  there are no outputs; with a recording added it is READY with no uptime and shows
-  the default profile's H.264 at 8000 kbps; once the recording starts it is LIVE with
-  the no-data box, and the ticks the test sends give the uptime, the bitrate against
+  there are no outputs; with a recording added it is Ready with no uptime, its full
+  description on hover, and shows the default profile's H.264 at 8000 kbps; once the
+  recording starts it is Live with the no-data state, and the ticks the test sends give the uptime, the bitrate against
   the target, the dropped share, Excellent then Poor, the chart and what was sent;
   hovering the chart's right edge reads the newest sample "now" and further left the
-  one before "1 s ago", gone when the pointer leaves; a stop puts it back to READY and
+  one before "1 s ago", gone when the pointer leaves; a stop puts it back to Ready and
   Waiting.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (the Inspector, Filters and
   Arrange as tabs of one group on the right, Transitions as a tab beside Outputs), with empty zones hidden; the View
@@ -431,8 +439,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   this item of “Backdrop” in this keyframe", after which the keyframe has its own and
   Main's item, still on This item, has none; and Follow the item clearing them as one edit.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
-  output row ("master", "FX 0", the program filters' note as its tooltip), a recording's
-  row under it with its state and FX button, its ID listed only once; the program's FX showing the master chain in the Filters
+  output row ("Master", a funnel with no count, the program filters' note as its tooltip), a recording's
+  row under it with its state and FX button (its tooltip saying it has no filters yet), its ID listed only once; the program's FX showing the master chain in the Filters
   panel from behind the Arrange tab, with its note and its video and audio chains,
   the output's FX its own chain, and selecting an item going back to its source's. With
   Gain and Sharpen described: Add filter on the master offering both, with its foot,
@@ -444,20 +452,20 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   though the first click's toggle scrolls the taller panel (#984), with no scope tabs
   and no picture, and whose bar's Remove filter deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
-  seed's two channels, its Hear button enabled, its "FX 0" showing the program
+  seed's two channels, its Hear button enabled, its funnel showing the program
   output's chain in the Filters panel, and its button (with its tooltip) unfolding the
   channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
-  peak "safe" with nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
-  count, the master first, adding a bus. The Hear button reading "Hear: off", then
+  peak with no note and "safe" as its bar's tooltip, nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
+  count, the master first, adding a bus. The Hear button named "Hear: off", then
   turning the master's monitor on after FX and switching it before FX, one edit each;
   the master's strip under More showing that monitor, naming its device (the tooltip
   follows), switching the tap with the device kept and turning it off, the field going;
   a new bus's own monitor leaving the master's off; and the vertical strip's "Hear
   off" turning it on as "Hear post". A tab click elsewhere in the dock leaving a
   channel's open Routing open (the rows aren't rebuilt). The title bar's flip button turning the meters
-  vertical: the master strip, its "FX 0" enabled, and its channels folded beside it by short name, the
+  vertical: the master strip, its funnel enabled, and its channels folded beside it by short name, the
   Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
   docked in the Right sidebar the strips start vertical, 64px wide, and the button
   flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
@@ -514,11 +522,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Transition and Cut are off while preview is the program scene; a scene clicked onto
   preview goes to program with Transition, and the old program scene comes back on
   preview, where the canvas shows it; with Swap off, Cut takes the preview scene and it
-  stays on preview; the Transitions panel says whether studio mode is on and has no
-  preset switch picker; the preset picker lists the default with its
-  kind and "+ New preset…", the default's editor has no duration, Delete or Make
-  default and counts its overrides, and choosing Fade and "+ New preset…" send their
-  `transition.update` and `transition.create`; a Fade's Custom curve easing shows the
+  stays on preview; the Transitions panel's foot says whether studio mode is on and it has no
+  preset switch picker; the preset picker lists "Cut · Default", whose editor has
+  Type Cut, no duration, and counts its overrides, and whose ⋯ menu has Set as default
+  checked and Delete… off; choosing Fade in Type sends its `transition.update`, Rename
+  swaps the picker for a focused name field whose Enter sends the new name, and +
+  sends `transition.create`; a Fade's Custom curve easing shows the
   curve's drawing and points, and an x1 past 1 is sent as 1 in the easing's
   `transition.update`. The mock engine refuses preset edits,
   so the panel after an edit is tested natively.

@@ -557,6 +557,27 @@ fn ChannelCard(
                     .enumerate()
                     .map(|(n, input)| {
                         let text = input_name(c, input);
+                        // How long the channel takes to follow this input, before its own
+                        // Smooth and fades.
+                        let smoothing = crate::panels::learn::smoothing_of(input).map(|_| {
+                            let value = Signal::derive(move || {
+                                info()
+                                    .and_then(|c| c.inputs.get(n).and_then(crate::panels::learn::smoothing_of))
+                                    .map(f64::from)
+                            });
+                            let send = move |v: f64| {
+                                set(&|ch| {
+                                    if let Some(input) = ch.inputs.get_mut(n) {
+                                        crate::panels::learn::set_smoothing(input, v.round().clamp(0.0, 10_000.0) as u32);
+                                    }
+                                })
+                            };
+                            view! {
+                                <span class="chan-row-smooth" title="How long the channel takes to follow this input">
+                                    <NumberField named=Signal::derive(|| "Input smoothing".to_owned()) unit="ms" value=value step=10.0 decimals=0 min=0.0 max=10000.0 send=send />
+                                </span>
+                            }
+                        });
                         let remove = move |_| {
                             set(&|ch| {
                                 if n < ch.inputs.len() {
@@ -567,6 +588,7 @@ fn ChannelCard(
                         view! {
                             <li class="chan-row">
                                 <span class="chan-row-name">{text}</span>
+                                {smoothing}
                                 <button type="button" class="chan-x" title="Remove this input" aria-label="Remove this input" on:click=remove>
                                     "×"
                                 </button>

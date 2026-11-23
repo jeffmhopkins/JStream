@@ -19,6 +19,8 @@
 
 use crate::app::SessionContext;
 use crate::dock::PanelId;
+use crate::icons::Icon;
+use crate::menu::Entry;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::Fold;
 use crate::panels::learn::{FADER_THROW, Learn, SWITCH};
@@ -477,6 +479,16 @@ pub fn true_peak_note(dbtp: Option<f32>) -> (&'static str, bool) {
     }
 }
 
+/// A level bar's gradient stretched over the whole track, as `background-size`, for a
+/// fill that reaches `fraction` of it: the fill's colour says how far along it is, not
+/// how long it is.
+pub fn spread(fraction: Option<f32>) -> String {
+    match fraction {
+        Some(f) if f > 0.001 => format!("{:.1}% 100%", 100.0 / f.min(1.0)),
+        _ => "100% 100%".into(),
+    }
+}
+
 /// "1 channel", "3 channels".
 pub fn channel_count(n: usize) -> String {
     if n == 1 {
@@ -793,6 +805,27 @@ impl Panel {
     fn hear_button(self, short: bool) -> AnyView {
         let loaded = move || self.snapshot.with(Option::is_some);
         let monitor = move || self.master_monitor();
+        if !short {
+            // The master card's: a headphones icon, its words for a screen reader.
+            return view! {
+                <button
+                    type="button"
+                    class="card-icon hear"
+                    class:on=move || monitor().is_some()
+                    disabled=move || !loaded()
+                    aria-label=move || monitor_label(monitor().as_ref(), false)
+                    aria-pressed=move || monitor().is_some().to_string()
+                    title=move || monitor_title(monitor().as_ref())
+                    on:click=move |_| {
+                        let next = toggled_monitor(self.master_monitor().as_ref());
+                        self.set_monitor(BusId::master(), Some(next));
+                    }
+                >
+                    <Icon name="headphones" size=16 />
+                </button>
+            }
+            .into_any();
+        }
         view! {
             <button
                 class="ghost-button hear"
@@ -1041,6 +1074,37 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
     };
     let dbtp = move || true_peak_dbtp(master().true_peak);
     let over = move || true_peak_note(dbtp()).1;
+    // The ⋯ menu: what the card's icons don't show, the Hear choice by name and the
+    // integrated loudness's reset.
+    let menus = use_context::<crate::menu::Menus>();
+    let more = move |event: leptos::ev::MouseEvent| {
+        let Some(menus) = menus else {
+            panel.act(Action::AudioResetLoudness {});
+            return;
+        };
+        let current = panel.master_monitor();
+        let choice = monitor_choice(current.as_ref());
+        let hear = |label: &'static str, value: &'static str| {
+            let current = current.clone();
+            Entry::item(label, move || {
+                panel.set_monitor(BusId::master(), chosen_monitor(value, current.as_ref()));
+            })
+            .checked(choice == value)
+        };
+        menus.open(
+            &event,
+            vec![
+                Entry::Head("Hear".into()),
+                hear("Off", "off"),
+                hear("After FX", "post_filters"),
+                hear("Before FX", "pre_filters"),
+                Entry::Sep,
+                Entry::item("Reset integrated loudness", move || {
+                    panel.act(Action::AudioResetLoudness {});
+                }),
+            ],
+        );
+    };
     view! {
         <div class="master-card" role="group" aria-label="Master">
             <div class="master-head">
@@ -1052,54 +1116,74 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                     on:click=move |_| open.update(|o| *o = !*o)
                 >
                     <span class="caret" aria-hidden="true">{move || if open.get() { "▾" } else { "▸" }}</span>
-                    <span class="master-name">"Master · program output"</span>
-                    <span class="master-count">{count}</span>
-                </button>
-                <button
-                    class="ghost-button"
-                    title="Starts the integrated loudness over"
-                    on:click=move |_| panel.act(Action::AudioResetLoudness {})
-                >
-                    "Reset"
+                    <span class="master-name">"Master"</span>
+                    <span class="master-sub">"Program output · "<span class="master-count">{count}</span></span>
                 </button>
                 {panel.hear_button(false)}
-                <MasterFx />
+                <MasterFx card=true />
+                <button
+                    type="button"
+                    class="card-icon more"
+                    aria-label="More for the master"
+                    aria-haspopup="menu"
+                    title="More"
+                    on:click=more
+                >
+                    "⋯"
+                </button>
             </div>
             <div class="master-row">
                 <span class="master-label">"Loudness"</span>
                 <div class="level-bar" title=loudness_title aria-hidden="true">
-                    <div class="level-fill" style:width=fill></div>
+                    <div class="level-fill" style:width=fill style:background-size=move || spread(short().map(loudness_fraction))></div>
                     <div class="level-target" title="Target" style:left=target></div>
                 </div>
                 <span class="master-value mono" title=loudness_title>
-                    {move || format!("{} LUFS", format_lufs(master().loudness.and_then(|l| l.short_term)))}
+                    {move || format_lufs(master().loudness.and_then(|l| l.short_term))}
+                    <span class="master-unit">" LUFS"</span>
                 </span>
             </div>
             <div class="master-row" class:over=over>
                 <span class="master-label">"True peak"</span>
-                <span class="master-note" role=move || over().then_some("status")>
-                    {move || true_peak_note(dbtp()).0}
+                <div class="level-bar" title=move || true_peak_note(dbtp()).0 aria-hidden="true">
+                    <div
+                        class="level-fill"
+                        style:width=move || format!("{:.1}%", dbtp().map_or(0.0, loudness_fraction) * 100.0)
+                        style:background-size=move || spread(dbtp().map(loudness_fraction))
+                    ></div>
+                </div>
+                <span class="master-value mono">
+                    {move || format_true_peak(master().true_peak).replace(" dBTP", "")}
+                    <span class="master-unit">" dBTP"</span>
                 </span>
-                <span class="master-value mono">{move || format_true_peak(master().true_peak)}</span>
+                // Only a warning is shown; "safe" is the bar's tooltip.
+                <span class="master-note" role=move || over().then_some("status")>
+                    {move || if over() { true_peak_note(dbtp()).0 } else { "" }}
+                </span>
             </div>
         </div>
     }
     .into_any()
 }
 
-/// The program output's "FX N" button on the master card and strip (spec-panels.md M3,
-/// M5): it counts the master chain's filters, from `Studio`'s collection, and shows that
-/// chain in the Filters panel (FL-07).
+/// The program output's FX button on the master card and strip (spec-panels.md M3, M5):
+/// a funnel with the master chain's filter count, from `Studio`'s collection, once it
+/// has one; it shows that chain in the Filters panel (FL-07). `card` is the card's
+/// borderless icon button.
 #[component]
-fn MasterFx() -> impl IntoView {
+fn MasterFx(#[prop(optional)] card: bool) -> impl IntoView {
     let fx = use_context::<crate::panels::filters::FilterDialogs>();
     let dock = use_context::<crate::workspace::DockState>();
     let studio = use_context::<crate::store::Studio>();
-    let label = move || {
-        let chains = studio
-            .and_then(|s| s.collection.with(|c| c.as_ref().map(|c| c.master.clone())))
-            .unwrap_or_default();
-        crate::panels::outputs::fx_label(&chains)
+    let count = move || {
+        studio
+            .and_then(|s| {
+                s.collection.with(|c| {
+                    c.as_ref()
+                        .map(|c| crate::panels::outputs::fx_count(&c.master))
+                })
+            })
+            .unwrap_or_default()
     };
     let show = move |_| {
         if let Some(fx) = fx {
@@ -1111,12 +1195,19 @@ fn MasterFx() -> impl IntoView {
     };
     view! {
         <button
+            type="button"
             class="fx-button"
+            class:card-icon=card
+            class:on=Signal::derive_local(move || count() > 0)
             disabled=fx.is_none()
-            title="Filters on the program output"
+            aria-label="Program output filters"
+            title=move || crate::panels::outputs::fx_title("Filters on the program output", count())
             on:click=show
         >
-            {label}
+            <Icon name="funnel" size=15 />
+            <Show when=move || { count() > 0 }>
+                <span class="fx-count">{count}</span>
+            </Show>
         </button>
     }
 }

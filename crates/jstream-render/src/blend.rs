@@ -7,6 +7,7 @@
 use jstream_protocol::BlendMode;
 
 use crate::error::RenderError;
+use crate::image::DEPTH_LAYER_FORMAT;
 
 /// The modes whose shader reads the backdrop, in the order of their pipelines and
 /// fragment entry points.
@@ -104,7 +105,7 @@ impl BlendPipelines {
             dst_factor: wgpu::BlendFactor::One,
             operation: wgpu::BlendOperation::Max,
         };
-        let depth = pipeline(
+        let depth = pipeline_with(
             device,
             layouts,
             "jstream-render-view-depth",
@@ -113,7 +114,8 @@ impl BlendPipelines {
                 color: largest,
                 alpha: largest,
             }),
-            depth,
+            depth.map(|compare| (compare, false)),
+            (wgpu::ColorWrites::ALL, DEPTH_LAYER_FORMAT),
         );
         Self {
             depth,
@@ -176,7 +178,7 @@ pub(crate) fn depth_writer(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu
         "fs_write_depth",
         Some(wgpu::BlendState::REPLACE),
         Some((wgpu::CompareFunction::GreaterEqual, true)),
-        wgpu::ColorWrites::empty(),
+        (wgpu::ColorWrites::empty(), crate::image::LAYER_FORMAT),
     )
 }
 
@@ -189,7 +191,7 @@ pub(crate) fn depth_copier(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu
         dst_factor: wgpu::BlendFactor::One,
         operation: wgpu::BlendOperation::Max,
     };
-    pipeline(
+    pipeline_with(
         device,
         layouts,
         "jstream-render-view-depth-copy",
@@ -199,6 +201,7 @@ pub(crate) fn depth_copier(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu
             alpha: largest,
         }),
         None,
+        (wgpu::ColorWrites::ALL, DEPTH_LAYER_FORMAT),
     )
 }
 
@@ -230,7 +233,7 @@ fn pipeline(
         entry,
         blend,
         depth.map(|compare| (compare, false)),
-        wgpu::ColorWrites::ALL,
+        (wgpu::ColorWrites::ALL, crate::image::LAYER_FORMAT),
     )
 }
 
@@ -241,7 +244,7 @@ fn pipeline_with(
     entry: &str,
     blend: Option<wgpu::BlendState>,
     depth: Option<(wgpu::CompareFunction, bool)>,
-    write_mask: wgpu::ColorWrites,
+    (write_mask, format): (wgpu::ColorWrites, wgpu::TextureFormat),
 ) -> wgpu::RenderPipeline {
     let attributes = wgpu::vertex_attr_array![
         0 => Float32x2,
@@ -303,7 +306,7 @@ fn pipeline_with(
                 ..Default::default()
             },
             targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba16Float,
+                format,
                 blend,
                 write_mask,
             })],

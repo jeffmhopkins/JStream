@@ -84,6 +84,7 @@ fn sky(environment: Environment<'_>, camera: SceneCamera) -> SkyDraw<'_> {
         warp: 0.0,
         travel: 0.0,
         dropping: 0.0,
+        pictures: [None; super::MAX_SKY_PICTURES],
     }
 }
 
@@ -869,4 +870,126 @@ fn golden_sky_bakes_are_kept_for_the_seeds_in_use() {
     }
     assert_eq!(opened.compositor.sky_bakes_kept(), 0);
     assert_eq!(opened.compositor.sky_bakes(), 6);
+}
+
+/// ADR-0188: a picture pinned in the sky covers the sky where it is, keeps to its place
+/// in the sky as the camera turns, fades with its opacity and as the warp builds, and
+/// is gone behind the camera.
+#[test]
+fn golden_sky_a_pinned_picture_covers_the_sky_where_it_is() {
+    let Some(opened) = open() else { return };
+    let mut compositor = opened.compositor;
+    // A 4 by 2 picture, red, so it is twice as wide as tall.
+    let red = compositor
+        .upload_rgba8(4, 2, &[255, 0, 0, 255].repeat(8))
+        .expect("the picture uploads");
+    let ahead = looking([0.0; 3], [0.0, 0.0, -1.0]);
+    let with = |camera, direction, opacity, warp| SkyDraw {
+        warp,
+        pictures: [
+            Some(super::SkyPicture {
+                image: &red,
+                direction,
+                width_deg: 30.0,
+                opacity,
+            }),
+            None,
+            None,
+            None,
+        ],
+        ..sky(night(), camera)
+    };
+    let got = shot(&mut compositor, &with(ahead, [0.0, 0.0, -1.0], 1.0, 0.0));
+    let centre = rgb(&got, 80, 50);
+    assert!(
+        centre[0] > 200 && centre[1] < 20,
+        "the picture ahead: {centre:?}"
+    );
+    // Twice as wide as tall: a pixel beside the centre still shows it, one as far above
+    // doesn't.
+    let framing = SceneCamera::framing(canvas());
+    let px_per_rad = framing.view(canvas()).expect("a view").focal_px();
+    let half_wide = (15.0_f32.to_radians().tan() * px_per_rad) as u32;
+    let beside = rgb(&got, 80 + half_wide * 3 / 4, 50);
+    let above = rgb(&got, 80, 50 - half_wide * 3 / 4);
+    assert!(beside[0] > 200, "beside the centre: {beside:?}");
+    assert!(above[0] < 60, "above, past its top: {above:?}");
+    // Turned to look away to the right, it is gone; pinned there, it is ahead again.
+    let right = looking([0.0; 3], [1.0, 0.0, 0.0]);
+    let away = rgb(
+        &shot(&mut compositor, &with(right, [0.0, 0.0, -1.0], 1.0, 0.0)),
+        80,
+        50,
+    );
+    assert!(away[0] < 60, "not where the camera looks: {away:?}");
+    let there = rgb(
+        &shot(&mut compositor, &with(right, [1.0, 0.0, 0.0], 1.0, 0.0)),
+        80,
+        50,
+    );
+    assert!(there[0] > 200, "pinned where it looks: {there:?}");
+    // Half opaque, about half as bright; at warp, gone.
+    let half = rgb(
+        &shot(&mut compositor, &with(ahead, [0.0, 0.0, -1.0], 0.5, 0.0)),
+        80,
+        50,
+    );
+    assert!(half[0] > 60 && half[0] < 220, "half opaque: {half:?}");
+    let warped = rgb(
+        &shot(&mut compositor, &with(ahead, [0.0, 0.0, -1.0], 1.0, 0.6)),
+        80,
+        50,
+    );
+    assert!(warped[0] < 60, "gone at warp: {warped:?}");
+    // Behind the camera, nothing.
+    let behind = rgb(
+        &shot(&mut compositor, &with(ahead, [0.0, 0.0, 1.0], 1.0, 0.0)),
+        80,
+        50,
+    );
+    assert!(behind[0] < 60, "behind: {behind:?}");
+    // More than one: each where it is pinned, a later one over an earlier where they
+    // meet, in any slot.
+    let green = compositor
+        .upload_rgba8(2, 2, &[0, 255, 0, 255].repeat(4))
+        .expect("the picture uploads");
+    let small = |image, direction, width_deg| {
+        Some(super::SkyPicture {
+            image,
+            direction,
+            width_deg,
+            opacity: 1.0,
+        })
+    };
+    let both = SkyDraw {
+        pictures: [
+            small(&red, [0.0, 0.0, -1.0], 30.0),
+            None,
+            None,
+            small(&green, [0.0, 0.0, -1.0], 4.0),
+        ],
+        ..sky(night(), ahead)
+    };
+    let got = shot(&mut compositor, &both);
+    let centre = rgb(&got, 80, 50);
+    assert!(
+        centre[1] > 200 && centre[0] < 20,
+        "the later one over: {centre:?}"
+    );
+    let beside = rgb(&got, 80 + half_wide * 3 / 4, 50);
+    assert!(beside[0] > 200, "the earlier one around it: {beside:?}");
+    let elsewhere = SkyDraw {
+        pictures: [
+            small(&red, [0.0, 0.0, -1.0], 30.0),
+            small(&green, [1.0, 0.0, 0.0], 30.0),
+            None,
+            None,
+        ],
+        ..sky(night(), right)
+    };
+    let there = rgb(&shot(&mut compositor, &elsewhere), 80, 50);
+    assert!(
+        there[1] > 200 && there[0] < 20,
+        "the second where it is pinned: {there:?}"
+    );
 }

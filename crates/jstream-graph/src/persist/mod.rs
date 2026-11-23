@@ -1328,6 +1328,17 @@ impl Graph {
             state: Default::default(),
             kinds: self.kinds,
         };
+        // Channels first: a channel names only other channels (and MIDI and data
+        // inputs), while a replayed hotkey or binding may name a channel, and its edit
+        // checks that the channel exists (#1671).
+        for channel in &file.channels {
+            crate::channel::load(&mut graph.state, channel).map_err(|error| {
+                LoadError::Invalid {
+                    object: format!("channel `{}`", channel.channel_id),
+                    error: Box::new(error),
+                }
+            })?;
+        }
         for (object, edit) in rebuild(&graph, &file)? {
             let applied = match &edit {
                 Edit::FilterAdd {
@@ -1380,14 +1391,6 @@ impl Graph {
             applied.map_err(|error| LoadError::Invalid {
                 object,
                 error: Box::new(error),
-            })?;
-        }
-        for channel in &file.channels {
-            crate::channel::load(&mut graph.state, channel).map_err(|error| {
-                LoadError::Invalid {
-                    object: format!("channel `{}`", channel.channel_id),
-                    error: Box::new(error),
-                }
             })?;
         }
         for binding in &file.value_bindings {
