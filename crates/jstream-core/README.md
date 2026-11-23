@@ -4732,7 +4732,7 @@ ticks: it is drawn with no readback, and nothing of it is pushed
 (`MixFrame::priming`), so a session's first frame is one the next follows on time.
 When a tick drew first draws alone, the next is drawn at the clock and the ticks it
 ran over are not counted as skipped, since no session was owed them
-(`Frames::only_primed`, `a_mixes_first_draw_is_not_read_back`). The first tick is drawn at once; later ones fall
+(`Frames::only_primed`, `a_mixes_first_draw_is_not_read_back`). Each first draw is logged once at `info` with its size and how long its tick took. The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
 (`on_frame_grid`), where the live sources' thread plans for them (*Live sources*). Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and

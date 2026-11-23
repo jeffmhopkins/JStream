@@ -4195,6 +4195,7 @@ fn render_loop(job: RenderJob) {
         index = index.saturating_add(1);
         // Encode targets only while compositing on the context: after a fallback a
         // session on the GPU path has none, which fails the pipeline.
+        let tick_started = Instant::now();
         if !broken && switch.is_none() && drawn > 0 {
             let on = context.as_deref().filter(|_| on_context);
             match frames.prepare(gpu.as_ref(), on, size) {
@@ -4539,6 +4540,16 @@ fn render_loop(job: RenderJob) {
             .checked_add(MediaTime::new(1, due.timebase()))
             .ok()
             .and_then(|after| on_frame_grid(after, period));
+        // Once per mix, so a slow start can be told from a slow frame in the log.
+        for frame in frames.mixes.iter().filter(|frame| frame.priming) {
+            tracing::info!(
+                width = frame.size.width(),
+                height = frame.size.height(),
+                ms = tick_started.elapsed().as_millis(),
+                drawn = frame.primed,
+                "a mix's first draw, which is pushed to no one"
+            );
+        }
         next = match after {
             // After a first draw alone the next tick is drawn at the clock, as the
             // first is, so the sessions' first frame is followed on time.
