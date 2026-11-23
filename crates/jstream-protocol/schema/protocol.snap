@@ -1092,6 +1092,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
           "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds, at most 60000 (ADR-0184, since\n0.170). While it waits, `studio.get` lists it in `waiting`; another play\nstarts the wait again, and `timeline.stop` cancels it. Omitted plays at once.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "timeline_id": {
               "$ref": "#/$defs/TimelineId",
               "description": "The timeline to play."
@@ -1147,6 +1156,93 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "timeline_id",
             "at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets a channel's value from an action (ADR-0183, since 0.169), 0 to 1, ramping\nthere over `fade_ms` when given, on top of the channel's own rise and fall. Under\n`combine` `latest` it is the input that changed last. Runtime state: no `rev`, never\nundone, never saved. A hotkey, a MIDI trigger and a timeline cue can run it. Fails\nwith `not_found` (entity `channel`) for a channel the collection doesn't hold, and\nwith `invalid_argument` at `value` outside 0 to 1 or at `fade_ms` over 60000.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel.",
+              "type": "string"
+            },
+            "fade_ms": {
+              "description": "How long the ramp there takes, in milliseconds, `0..=60000`. Omitted to set it\nat once.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "channel.set_value",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Its new value, 0 to 1."
+            }
+          },
+          "required": [
+            "type",
+            "channel_id",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Switches a channel on or off, or toggles it (ADR-0183, since 0.169): switched off,\nit reads its `off_value` through its own fade. Runtime state, as\n`channel.set_value` is. Fails with `not_found` (entity `channel`) for a channel the\ncollection doesn't hold.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel.",
+              "type": "string"
+            },
+            "to": {
+              "$ref": "#/$defs/ChannelSwitch",
+              "description": "`on`, `off` or `toggle`."
+            },
+            "type": {
+              "const": "channel.switch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel_id",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Adds `by` to a channel's action value, kept within 0 to 1 (ADR-0183, since 0.169),\nfor an encoder or a pair of keys: starting from the channel's value now if no\naction has set it yet. Fails as `channel.set_value` does, and with\n`invalid_argument` at `by` outside -1 to 1.",
+          "properties": {
+            "by": {
+              "$ref": "#/$defs/Finite32",
+              "description": "What to add, -1 to 1."
+            },
+            "channel_id": {
+              "description": "The channel.",
+              "type": "string"
+            },
+            "fade_ms": {
+              "description": "How long the ramp takes, in milliseconds, `0..=60000`. Omitted to move at once.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "channel.nudge",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel_id",
+            "by"
           ],
           "type": "object"
         },
@@ -3053,7 +3149,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "What it follows. Default `cc`."
             },
             "controller": {
-              "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+              "description": "The controller number, 0 to 127, with `control` `cc`, or the note number with\n`note` (since 0.169), and only then.",
               "format": "uint8",
               "maximum": 255,
               "minimum": 0,
@@ -3192,6 +3288,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Follows a channel (ADR-0183, since 0.169): the named channel's value, 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`, as a\n`midi` modifier maps its controller. A channel the collection doesn't hold reads\n0, so the item rests at `from`.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel, by its `channel_id`.",
+              "type": "string"
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+            },
+            "kind": {
+              "const": "channel",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind",
+            "channel_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
           "properties": {
             "amplitude": {
@@ -3228,6 +3364,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ],
       "properties": {
+        "amount": {
+          "description": "A channel whose value, 0 to 1, multiplies what it adds (ADR-0183 decision 7,\nsince 0.169). A channel the collection doesn't hold applies it fully. Omitted for\nnone.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "clock": {
           "$ref": "#/$defs/MotionClock",
           "default": "engine",
@@ -3558,6 +3701,257 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         }
       },
+      "type": "object"
+    },
+    "ChannelCombine": {
+      "description": "How a channel makes one value of its inputs and the value actions set (ADR-0183\ndecision 4). Only inputs that have moved since the engine started following them take\npart, and the actions' value once an action has set it.",
+      "oneOf": [
+        {
+          "const": "latest",
+          "description": "Whichever changed last, as a DAW's pickup takes a moved control.",
+          "type": "string"
+        },
+        {
+          "const": "max",
+          "description": "The largest.",
+          "type": "string"
+        },
+        {
+          "const": "min",
+          "description": "The least.",
+          "type": "string"
+        },
+        {
+          "const": "sum",
+          "description": "The sum, kept within 0 to 1.",
+          "type": "string"
+        },
+        {
+          "const": "product",
+          "description": "The product, so one input gates another.",
+          "type": "string"
+        },
+        {
+          "const": "average",
+          "description": "The mean.",
+          "type": "string"
+        }
+      ]
+    },
+    "ChannelDriver": {
+      "description": "What sets a channel's value now, in `channel.values`.",
+      "oneOf": [
+        {
+          "description": "One of its inputs, by its index in `inputs`.",
+          "properties": {
+            "by": {
+              "const": "input",
+              "type": "string"
+            },
+            "index": {
+              "description": "The input's index.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "by",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`channel.set_value` or `channel.nudge`, from a client, a hotkey, a binding or a\ncue.",
+          "properties": {
+            "by": {
+              "const": "action",
+              "type": "string"
+            }
+          },
+          "required": [
+            "by"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A lane of a playing (or played) sequence: a timeline's lane on this channel\n(ADR-0184, since 0.170).",
+          "properties": {
+            "by": {
+              "const": "sequence",
+              "type": "string"
+            },
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline whose lane drives it."
+            }
+          },
+          "required": [
+            "by",
+            "timeline_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ChannelEdge": {
+      "description": "Which change of a channel fires a trigger.",
+      "oneOf": [
+        {
+          "const": "rises",
+          "description": "Its value crosses the level upward.",
+          "type": "string"
+        },
+        {
+          "const": "falls",
+          "description": "Its value crosses the level downward.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "It switches on.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "It switches off.",
+          "type": "string"
+        }
+      ]
+    },
+    "ChannelInfo": {
+      "description": "A channel: a named value, 0 to 1, with the inputs that set it and how it processes\nthem (ADR-0183 decision 1).",
+      "properties": {
+        "average_ms": {
+          "default": 0,
+          "description": "A moving average over this many milliseconds, `0..=10000`; 0 averages nothing.\nDefault 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "channel_id": {
+          "description": "Its ID, unique among the collection's channels: 1 to 64 bytes of ASCII letters,\ndigits, `_` and `-`.",
+          "type": "string"
+        },
+        "combine": {
+          "$ref": "#/$defs/ChannelCombine",
+          "default": "latest",
+          "description": "How its inputs and actions make one value. Default `latest`."
+        },
+        "curve": {
+          "$ref": "#/$defs/MotionCurve",
+          "default": "linear",
+          "description": "How its value is bent, last. Default `linear`."
+        },
+        "default": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Its value when the engine starts following it, before any input moves or action\nsets it, 0 to 1. Default 0."
+        },
+        "fall_ms": {
+          "default": 0,
+          "description": "How long a full fall from 1 to 0 takes, as `rise_ms`. Default 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inputs": {
+          "description": "What sets it: at most 8 readers, each a `midi`, `data` or `channel` modifier's kind\nand parameters, whose `from` and `to` map the reading onto the channel's 0 to 1.\nA `channel` input can't lead back to this channel. Default none.",
+          "items": {
+            "$ref": "#/$defs/MotionKind"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name, at most 256 bytes. Omitted means empty.",
+          "type": "string"
+        },
+        "off_value": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "What it reads while switched off, 0 to 1, through its fade. Default 0."
+        },
+        "on": {
+          "description": "Whether it starts switched on. Default `true`; omitted when `true`.",
+          "type": "boolean"
+        },
+        "rise_ms": {
+          "default": 0,
+          "description": "How long a full rise from 0 to 1 takes, in milliseconds, `0..=60000`, as a\nstraight ramp; 0 jumps. Default 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene it belongs to, or omitted for the whole collection. It returns to its\n`default` and `on` each time that scene goes on program. The scene need not exist:\ndeleting it leaves the channel in place."
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "type": "object"
+    },
+    "ChannelSwitch": {
+      "description": "What `channel.switch` does to a channel's switch.",
+      "oneOf": [
+        {
+          "const": "on",
+          "description": "Switches it on.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Switches it off: it reads its `off_value`, through its fade.",
+          "type": "string"
+        },
+        {
+          "const": "toggle",
+          "description": "Switches it on if it is off, and off if it is on.",
+          "type": "string"
+        }
+      ]
+    },
+    "ChannelValueInfo": {
+      "description": "One channel's value now, in `channel.values`.",
+      "properties": {
+        "channel_id": {
+          "description": "The channel.",
+          "type": "string"
+        },
+        "driver": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelDriver"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What sets it now, under its `combine`: the input or action that changed last for\n`latest`, and for the others the one whose value it takes (`max`, `min`) or the\nlast to change. Omitted while nothing has moved it and it reads its `default`."
+        },
+        "on": {
+          "description": "Whether it is switched on.",
+          "type": "boolean"
+        },
+        "value": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Its value now, 0 to 1, after its processing."
+        }
+      },
+      "required": [
+        "channel_id",
+        "value",
+        "on"
+      ],
       "type": "object"
     },
     "Chord": {
@@ -6239,6 +6633,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets a channel (since 0.169, ADR-0183): a named value, 0 to 1, that controls and\nactions set and anything a modifier or value binding drives can follow, a new one\nor the whole of one with the same `channel_id` in its place. Its value is never\nstored: a new channel starts at its `default`, and one set again keeps its value.\nRejected with `invalid_argument` at `channel.<field>` for what\n[`ChannelInfo::problem`] refuses, at `channel.inputs` for a `channel` input that\nleads back to it through others, and at `channel` for a 257th channel\n([`MAX_CHANNELS`](crate::MAX_CHANNELS)). A channel input, a `scene_id` or an\n`amount` naming a channel or scene that doesn't exist is taken, as a timeline's\ncue is. Inverse: `channel.delete`, or `channel.set` with the channel it replaced.",
+          "properties": {
+            "channel": {
+              "$ref": "#/$defs/ChannelInfo",
+              "description": "The channel."
+            },
+            "type": {
+              "const": "channel.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a channel. What followed it rests at its `from`, and an `amount` naming it\napplies fully. Rejected with `not_found` (entity `channel`) for an ID no channel\nhas. Inverse: `channel.set` with the channel.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel's ID.",
+              "type": "string"
+            },
+            "type": {
+              "const": "channel.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
           "properties": {
             "scene_id": {
@@ -6988,6 +7418,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "approval",
           "description": "An agent's request to connect, or a row of the approved list (0.108, ADR-0131).\nOnly an error answering `agent.approve` or `agent.forget` names it.",
+          "type": "string"
+        },
+        {
+          "const": "channel",
+          "description": "A channel (0.169, ADR-0183). Only an error answering a `channel.*` command names\nit, so a client that sends none never reads it.",
           "type": "string"
         }
       ]
@@ -8894,6 +9329,21 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "KeyframeEdge": {
+      "description": "Which change of a keyframe fires a trigger.",
+      "oneOf": [
+        {
+          "const": "loads",
+          "description": "The scene starts drawing through it.",
+          "type": "string"
+        },
+        {
+          "const": "leaves",
+          "description": "The scene stops drawing through it.",
+          "type": "string"
+        }
+      ]
+    },
     "KeyframeTiming": {
       "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
       "properties": {
@@ -9183,6 +9633,73 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "timeline_id",
         "scene_id"
+      ],
+      "type": "object"
+    },
+    "LaneCurve": {
+      "description": "How a lane moves into a point.",
+      "oneOf": [
+        {
+          "const": "linear",
+          "description": "A straight line.",
+          "type": "string"
+        },
+        {
+          "const": "ease_in",
+          "description": "Slow at first.",
+          "type": "string"
+        },
+        {
+          "const": "ease_out",
+          "description": "Slow at the end.",
+          "type": "string"
+        },
+        {
+          "const": "ease_in_out",
+          "description": "Slow at both ends.",
+          "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "Stays at the value before, then jumps to this point's at its time: a switch.",
+          "type": "string"
+        }
+      ]
+    },
+    "LanePoint": {
+      "description": "One point of a lane.",
+      "properties": {
+        "at_ms": {
+          "description": "When the lane reaches it, in milliseconds from the timeline's start.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "curve": {
+          "$ref": "#/$defs/LaneCurve",
+          "description": "How the lane moves from the point before (or the starting value) to this one.\nOmitted means `linear`."
+        },
+        "value": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The channel's value there, 0 to 1."
+        }
+      },
+      "required": [
+        "at_ms",
+        "value"
+      ],
+      "type": "object"
+    },
+    "LaneTarget": {
+      "description": "What a lane moves: a channel by its ID. A channel that doesn't exist is taken, and the\nlane drives nothing.",
+      "properties": {
+        "channel": {
+          "description": "The channel.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
       ],
       "type": "object"
     },
@@ -9529,6 +10046,446 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "MotionKind": {
+      "description": "What a modifier does, with its parameters, tagged by `kind`.",
+      "oneOf": [
+        {
+          "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+          "properties": {
+            "amplitude": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The largest value it reaches, `0..=100000`."
+            },
+            "frequency_hz": {
+              "$ref": "#/$defs/Finite32",
+              "description": "About how many turns of direction a second, `0..=60` and not 0."
+            },
+            "kind": {
+              "const": "wiggle",
+              "type": "string"
+            },
+            "octaves": {
+              "default": 1,
+              "description": "How many octaves, `1..=4`. Default 1.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seed": {
+              "default": 0,
+              "description": "Picks the noise. Default 0.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "amplitude",
+            "frequency_hz"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A periodic wave within `-amplitude..=amplitude`.",
+          "properties": {
+            "amplitude": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The largest value it reaches, `0..=100000`."
+            },
+            "kind": {
+              "const": "oscillate",
+              "type": "string"
+            },
+            "period_ms": {
+              "description": "One period, in milliseconds, `1..=3600000`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "phase": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+            },
+            "shape": {
+              "$ref": "#/$defs/MotionShape",
+              "default": "sine",
+              "description": "Its waveform. Default `sine`."
+            }
+          },
+          "required": [
+            "kind",
+            "amplitude",
+            "period_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+          "properties": {
+            "kind": {
+              "const": "drift",
+              "type": "string"
+            },
+            "rate_per_s": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Units per second, within `-100000..=100000`."
+            },
+            "wrap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+            }
+          },
+          "required": [
+            "kind",
+            "rate_per_s"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+          "properties": {
+            "attack_ms": {
+              "default": 10,
+              "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "audio": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+            },
+            "audio_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+            },
+            "ceiling_db": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the envelope is bent. Default `linear`."
+            },
+            "floor_db": {
+              "$ref": "#/$defs/Finite32",
+              "default": -60.0,
+              "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+            },
+            "high_hz": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+            },
+            "kind": {
+              "const": "audio",
+              "type": "string"
+            },
+            "low_hz": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+            },
+            "measure": {
+              "$ref": "#/$defs/MotionMeasure",
+              "default": "level",
+              "description": "What it measures. Default `level`."
+            },
+            "release_ms": {
+              "default": 250,
+              "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "control": {
+              "$ref": "#/$defs/MotionMidiControl",
+              "default": "cc",
+              "description": "What it follows. Default `cc`."
+            },
+            "controller": {
+              "description": "The controller number, 0 to 127, with `control` `cc`, or the note number with\n`note` (since 0.169), and only then.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+            },
+            "input": {
+              "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.160): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+          "properties": {
+            "color_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MotionColorFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Since 0.164, only with `property` `effect` or `source`: on a colour setting,\nset the colour from the field instead of adding to it. While the field gives\na colour it replaces the setting's own, before other modifiers add to it,\nblended over `smoothing_ms`; otherwise the setting's own colour shows. On a\nsetting that isn't a colour it adds nothing. Omitted to add the value."
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "field": {
+              "default": "",
+              "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+              "type": "string"
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+            },
+            "input": {
+              "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "key": {
+              "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "data",
+              "type": "string"
+            },
+            "palette": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "With `color_from` `palette`: a `#rrggbb` colour by the field's text,\n`{\"recording\": \"#ff2020\", \"playing\": \"#20ff40\"}`. At most 32 entries, each\ntext 1 to 100 bytes; a text not listed sets nothing. Default none.",
+              "type": "object"
+            },
+            "range": {
+              "default": [
+                0.0,
+                1.0
+              ],
+              "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+              "items": {
+                "$ref": "#/$defs/Finite32"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "states": {
+              "additionalProperties": {
+                "$ref": "#/$defs/Finite32"
+              },
+              "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+              "type": "object"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Follows a channel (ADR-0183, since 0.169): the named channel's value, 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`, as a\n`midi` modifier maps its controller. A channel the collection doesn't hold reads\n0, so the item rests at `from`.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel, by its `channel_id`.",
+              "type": "string"
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+            },
+            "kind": {
+              "const": "channel",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind",
+            "channel_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+          "properties": {
+            "amplitude": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Its size at the start, `0..=100000`."
+            },
+            "decay_per_s": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+            },
+            "duration_ms": {
+              "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "frequency_hz": {
+              "$ref": "#/$defs/Finite32",
+              "description": "How many times a second it swings, `0..=60` and not 0."
+            },
+            "kind": {
+              "const": "impulse",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "amplitude",
+            "frequency_hz",
+            "duration_ms"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "MotionMeasure": {
       "description": "What an `audio` modifier measures of what it hears (since 0.86).",
       "oneOf": [
@@ -9570,6 +10527,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "pressure",
           "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+          "type": "string"
+        },
+        {
+          "const": "note",
+          "description": "A note held, since 0.169 (ADR-0183): 1 while the note `controller` names is held\n(a note-on with a velocity above 0, until its note-off), 0 otherwise, so a pad\ngates what follows it.",
           "type": "string"
         }
       ]
@@ -9799,7 +10761,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "What it follows. Default `cc`."
             },
             "controller": {
-              "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+              "description": "The controller number, 0 to 127, with `control` `cc`, or the note number with\n`note` (since 0.169), and only then.",
               "format": "uint8",
               "maximum": 255,
               "minimum": 0,
@@ -9938,6 +10900,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Follows a channel (ADR-0183, since 0.169): the named channel's value, 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`, as a\n`midi` modifier maps its controller. A channel the collection doesn't hold reads\n0, so the item rests at `from`.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel, by its `channel_id`.",
+              "type": "string"
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+            },
+            "kind": {
+              "const": "channel",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind",
+            "channel_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
           "properties": {
             "amplitude": {
@@ -9974,6 +10976,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ],
       "properties": {
+        "amount": {
+          "description": "A channel whose value, 0 to 1, multiplies what it adds (ADR-0183 decision 7,\nsince 0.169), so one control sets how much another applies. A channel the\ncollection doesn't hold applies it fully. Omitted for none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "clock": {
           "$ref": "#/$defs/MotionClock",
           "default": "engine",
@@ -12967,6 +13976,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by\nID. Runtime state, so no `rev`.",
+          "properties": {
+            "type": {
+              "const": "channel.values",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom\n`scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether\none is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its\nhome, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.",
           "properties": {
             "scene_id": {
@@ -13423,6 +14445,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "description": "The canvas every scene is laid out on. Missing (from a server older than 0.11)\nparses as 1920×1080."
             },
+            "channels": {
+              "description": "Every channel (ADR-0183), ordered by ID. Omitted when there are none, and\nmissing (from a server older than 0.169) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/ChannelInfo"
+              },
+              "type": "array"
+            },
             "encoders": {
               "default": [],
               "description": "Every encoder profile, ordered by ID. Missing (from a server older than\n0.13) parses as empty.",
@@ -13762,6 +14791,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type": {
               "const": "studio.get",
               "type": "string"
+            },
+            "waiting": {
+              "description": "The timelines waiting to play after a delay (ADR-0184, since 0.170), ordered\nby ID. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/WaitingTimeline"
+              },
+              "type": "array"
             },
             "warm_gpu_mib": {
               "description": "The limit on the warm scenes' estimated GPU memory in MiB, 0 for none, which\n`studio.set_warm` sets (ADR-0150, since 0.117). Omitted by an older server.",
@@ -14215,6 +15251,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "controls"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `channel.values` (0.169).",
+          "properties": {
+            "channels": {
+              "description": "Each channel's value, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/ChannelValueInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "channel.values",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channels"
           ],
           "type": "object"
         },
@@ -15019,6 +16076,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         "target"
       ],
       "type": "object"
+    },
+    "SceneEdge": {
+      "description": "Which change of a scene fires a trigger.",
+      "oneOf": [
+        {
+          "const": "shown",
+          "description": "It goes on program.",
+          "type": "string"
+        },
+        {
+          "const": "hidden",
+          "description": "Another scene replaces it on program.",
+          "type": "string"
+        }
+      ]
     },
     "SceneId": {
       "description": "A scene in the collection.",
@@ -16010,6 +17082,26 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "TimelineEdge": {
+      "description": "Which change of another timeline fires a trigger.",
+      "oneOf": [
+        {
+          "const": "starts",
+          "description": "It starts, or starts again, from 0 or by a seek.",
+          "type": "string"
+        },
+        {
+          "const": "ends",
+          "description": "A `once` timeline reaches its end.",
+          "type": "string"
+        },
+        {
+          "const": "loops",
+          "description": "It starts another pass.",
+          "type": "string"
+        }
+      ]
+    },
     "TimelineId": {
       "description": "A timeline a scene holds (ADR-0115). Unique across the collection, so an action\nnames it alone.",
       "type": "string"
@@ -16038,6 +17130,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "type": "array"
         },
+        "lanes": {
+          "description": "Its lanes (ADR-0184, since 0.170): each moves one channel over time while the\ntimeline plays, as one more input of that channel. At most 32. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/TimelineLane"
+          },
+          "type": "array"
+        },
         "loop": {
           "$ref": "#/$defs/TimelineLoop",
           "default": "once",
@@ -16047,6 +17146,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its display name. Omitted means empty.",
           "type": "string"
         },
+        "starts": {
+          "description": "What plays it (ADR-0184, since 0.170): each trigger, when it fires, plays it from\nits start after the trigger's `delay_ms`. At most 16. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/TimelineTrigger"
+          },
+          "type": "array"
+        },
+        "stops": {
+          "description": "What stops it (ADR-0184, since 0.170), the same way. At most 16. Omitted for\nnone.",
+          "items": {
+            "$ref": "#/$defs/TimelineTrigger"
+          },
+          "type": "array"
+        },
         "timeline_id": {
           "$ref": "#/$defs/TimelineId",
           "description": "Its ID, chosen by the client: 1 to 64 bytes of ASCII letters, digits, `_` and\n`-`, unique across the collection, so an action can name it alone."
@@ -16055,6 +17168,31 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "timeline_id",
         "duration_ms"
+      ],
+      "type": "object"
+    },
+    "TimelineLane": {
+      "description": "One lane: a channel moved through points while its timeline plays (ADR-0184).",
+      "properties": {
+        "on": {
+          "description": "Whether it plays. Omitted means on; a lane that is off does nothing.",
+          "type": "boolean"
+        },
+        "points": {
+          "default": [],
+          "description": "Its points, in time order: each `at_ms` at least the one before it's and at most\nthe timeline's `duration_ms`. A lane with no point at 0 starts from the channel's\nvalue when the timeline starts, and eases from there to its first point. At most\n256.",
+          "items": {
+            "$ref": "#/$defs/LanePoint"
+          },
+          "type": "array"
+        },
+        "target": {
+          "$ref": "#/$defs/LaneTarget",
+          "description": "What it moves."
+        }
+      },
+      "required": [
+        "target"
       ],
       "type": "object"
     },
@@ -16099,6 +17237,149 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "range"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "TimelineTrigger": {
+      "description": "What fires a timeline's `starts` or `stops` entry (ADR-0184), tagged by `type`. Each\nfires on a change only, never when a collection opens, and waits `delay_ms` (at most\n60000) first.",
+      "oneOf": [
+        {
+          "description": "A channel crossing `level` (default 0.5) or switching on or off.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel. One that doesn't exist never fires.",
+              "type": "string"
+            },
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/ChannelEdge",
+              "description": "Which change."
+            },
+            "level": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The level `rises` and `falls` cross, 0 to 1. Omitted means 0.5."
+            },
+            "type": {
+              "const": "channel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel_id",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene going on or off program, by any route.",
+          "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/SceneEdge",
+              "description": "Which change."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene starting or ceasing to draw through a keyframe: a keyframe scene of it\ngoing on program, or `scene.set_keyframe` placing one.",
+          "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/KeyframeEdge",
+              "description": "Which change."
+            },
+            "keyframe_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The keyframe. Omitted means any of its keyframes."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose keyframe it is."
+            },
+            "type": {
+              "const": "keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Another timeline starting, ending or looping.",
+          "properties": {
+            "delay_ms": {
+              "description": "How long to wait first, in milliseconds.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "edge": {
+              "$ref": "#/$defs/TimelineEdge",
+              "description": "Which change."
+            },
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The other timeline."
+            },
+            "type": {
+              "const": "timeline",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id",
+            "edge"
           ],
           "type": "object"
         }
@@ -16613,7 +17894,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "What it follows. Default `cc`."
             },
             "controller": {
-              "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+              "description": "The controller number, 0 to 127, with `control` `cc`, or the note number with\n`note` (since 0.169), and only then.",
               "format": "uint8",
               "maximum": 255,
               "minimum": 0,
@@ -16752,6 +18033,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Follows a channel (ADR-0183, since 0.169): the named channel's value, 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`, as a\n`midi` modifier maps its controller. A channel the collection doesn't hold reads\n0, so the item rests at `from`.",
+          "properties": {
+            "channel_id": {
+              "description": "The channel, by its `channel_id`.",
+              "type": "string"
+            },
+            "curve": {
+              "$ref": "#/$defs/MotionCurve",
+              "default": "linear",
+              "description": "How the 0 to 1 value is bent. Default `linear`."
+            },
+            "from": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+            },
+            "kind": {
+              "const": "channel",
+              "type": "string"
+            },
+            "smoothing_ms": {
+              "default": 50,
+              "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to": {
+              "$ref": "#/$defs/Finite32",
+              "default": 1.0,
+              "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+            }
+          },
+          "required": [
+            "kind",
+            "channel_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
           "properties": {
             "amplitude": {
@@ -16788,6 +18109,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ],
       "properties": {
+        "amount": {
+          "description": "A channel whose value, 0 to 1, sets how much it drives (ADR-0183 decision 7,\nsince 0.169): its mapped value is pulled toward `from` as\n`from + (value - from) * amount`. A channel the collection doesn't hold drives it\nfully. Omitted for none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "binding_id": {
           "description": "Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII\nletters, digits, `_` and `-`.",
           "type": "string"
@@ -17171,6 +18499,31 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "param",
         "equals"
+      ],
+      "type": "object"
+    },
+    "WaitingTimeline": {
+      "description": "A timeline waiting to play, as `studio.get` reports it (ADR-0184): a `timeline.play`\nwith a `delay_ms`, or a trigger with one, not yet due.",
+      "properties": {
+        "due_in_ms": {
+          "description": "How long until it plays, in milliseconds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene that holds it."
+        },
+        "timeline_id": {
+          "$ref": "#/$defs/TimelineId",
+          "description": "The timeline."
+        }
+      },
+      "required": [
+        "timeline_id",
+        "scene_id",
+        "due_in_ms"
       ],
       "type": "object"
     },

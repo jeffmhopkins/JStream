@@ -19,7 +19,9 @@
 //! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
 //! controller (ADR-0168), how a `data` one follows a sender's live data and colours a
 //! setting from it (ADR-0171), how a value binding puts one on any other number
-//! (ADR-0178), and how to write a custom shader the Filters window's
+//! (ADR-0178), how a channel gathers controls into one switched, faded value that
+//! anything can follow or be scaled by (ADR-0183), how a sequence's lanes move channels
+//! from where they are and what starts it (ADR-0184), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -299,7 +301,11 @@ back out from straight ahead as it drops. \
 One `source.set_settings` of `warp` jumps: the sky accelerates to it over \
 `warp_ramp_s` (default 1.5 s) by itself, and setting 0 slows back out; 0.6-1 is a \
 jump, about 0.05-0.15 a slow cruise. Add a brief white flash card or `bloom` at the \
-jump for punch. A flat photo stretched as a panorama smears toward \
+jump for punch. The sky's numbers and colours also follow motion modifiers on the \
+light's item (property `source`, `source` naming `warp`, `stars`, `star_brightness`, \
+`nebula`, `galaxy`, `intensity` or a `*_color`): an `audio` modifier on `warp` surges \
+the sky with the music, and a DAW `data` modifier on `warp` from the transport jumps \
+to warp while it plays. A driven `warp` still ramps. A flat photo stretched as a panorama smears toward \
 the top and bottom, so prefer a real panorama or the procedural sky. \
 A group placed in a 3D scene is one flat card unless it shares the space: \
 `scene.set_options` with `share_space` on the group draws each of its children in the \
@@ -408,6 +414,18 @@ and `binding.clear_value` hands the setting back. Only `live` settings take one 
 (`kind.describe` marks them). An item's placement, effects and source settings and a \
 camera take modifiers instead, which add to what is stored. `width` and `height` stretch \
 an item's box alone, as `scale` does both. \
+When several things should follow one control (a master power switch, a lights \
+level for a scene), make a channel: `channel.set` stores a `channel_id`, a `name`, up \
+to 8 `inputs` (the `midi`, `data` or `channel` fields a modifier takes; a `note` \
+control reads 1 while its note is held), how they `combine` (`latest`, `max`, `min`, \
+`sum`, `product`, `average`), `average_ms`, `rise_ms` and `fall_ms` fades, a `curve`, a \
+`default`, a `scene_id` whose going on program puts it back to its default, and `on` with \
+an `off_value`. Its value, 0 to 1, lives only while JStream runs. Follow it with a \
+modifier or value binding of `kind` `channel` and its `channel_id`, or scale one by it \
+with `amount` set to the channel's ID (a missing channel scales by 1). \
+`channel.set_value` (with an optional `fade_ms`), `channel.nudge` and `channel.switch` \
+(`on`, `off` or `toggle`) change it; a hotkey or a timeline cue can run them, and \
+`channel.values` reads every channel's value and what last drove it. \
 For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
 scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
 `browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \
@@ -437,10 +455,26 @@ loop) belongs in a timeline, not in a page: `timeline.set` stores in a scene a \
 or a `range` with `from_ms` and `to_ms` for an intro then a loop) and `cues` in time order, \
 each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`, \
-`source.restart` (a page or video from its start) or another timeline's `play`, `stop` \
+`channel.set_value`, `channel.switch`, `channel.nudge`, `source.restart` (a page or video from its start) or another timeline's `play`, `stop` \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \
+A timeline with `lanes` is a sequence: it moves a few channels over time while the \
+scene stays as it is (a keyframe repositions the whole scene instead). Each lane is \
+`{target: {channel}, points: [{at_ms, value, curve}]}`, `value` 0 to 1 and `curve` \
+`linear`, `ease_in`, `ease_out`, `ease_in_out` or `hold` (a switch). Leave out a point at 0 \
+so the lane starts from the channel's value at the moment it plays and glides from there, \
+with no jump: one point of 0 at 3000 ms is a lights-down that works from any level. To move \
+a position, a camera or any setting, make a channel it follows (a `channel` modifier or a \
+value binding) and give that channel a lane. A control moved meanwhile takes its channel \
+over; the last sequence started wins a channel; at the end channels hold. A timeline's \
+`starts` and `stops` play or stop it on a change: `{type: \"channel\", channel_id, edge: \
+rises|falls|on|off, level?}`, `{type: \"scene\", scene_id, edge: shown|hidden}`, \
+`{type: \"keyframe\", scene_id, keyframe_id?, edge: loads|leaves}` or `{type: \
+\"timeline\", timeline_id, edge: starts|ends|loops}`, each with an optional `delay_ms` (up \
+to 60000), as `timeline.play` takes one; `studio.get` lists what is `waiting`. A master \
+power switch is a channel with a note or key input whose `rises` starts the power-up \
+sequence and `falls` starts the power-down. \
 Group the parts of one effect (its keyframe scenes, the hotkeys that switch to them, \
 its timelines) under one label: `scene.set_meta` labels a keyframe scene, \
 `hotkey.set_labels` a hotkey and a timeline's own `labels` the timeline, and \

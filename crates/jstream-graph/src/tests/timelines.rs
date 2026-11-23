@@ -10,6 +10,9 @@ use jstream_protocol::{
 
 fn info(id: &str, duration_ms: u32) -> TimelineInfo {
     TimelineInfo {
+        lanes: Vec::new(),
+        starts: Vec::new(),
+        stops: Vec::new(),
         labels: Vec::new(),
         timeline_id: TimelineId::new(id),
         name: String::new(),
@@ -49,6 +52,7 @@ fn bind(chord: &str, id: &str) -> Edit {
     Edit::HotkeySet {
         chord: Chord::new(chord),
         action: Action::TimelinePlay {
+            delay_ms: None,
             timeline_id: TimelineId::new(id),
         },
     }

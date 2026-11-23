@@ -109,6 +109,7 @@ fn camera_motion_redraws_every_frame() {
         },
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     };
     let set = |motion: Vec<CameraMotionModifier>| {
         Batch::single(Edit::SceneSetCameraMotion {
@@ -150,6 +151,7 @@ fn a_controller_drives_a_scene_camera() {
         },
         clock: MotionClock::Engine,
         enabled: true,
+        amount: None,
     };
     batch(
         &control,

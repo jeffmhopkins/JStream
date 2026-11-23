@@ -40,7 +40,8 @@ use crate::panels::tree::{
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary, reset_edits};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Action, DeleteTarget, Edit, FilterOwner, FolderId, LabelId, SceneId, SceneInfo,
+    Action, Chord, DeleteTarget, Edit, FilterOwner, FolderId, LabelId, SceneId, SceneInfo,
+    TimelineId,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -48,6 +49,9 @@ use std::collections::HashSet;
 
 /// The prefix that keeps a folder's row key apart from a scene's.
 const FOLDER_KEY: &str = "folder:";
+
+/// The prefix of a sequence row's key, for renaming it.
+const SEQUENCE_KEY: &str = "sequence:";
 
 /// One row of the tree, as the view needs it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -71,8 +75,14 @@ enum Row {
         depth: usize,
         /// For a keyframe scene, its parent and the parent's name.
         keyframe_of: Option<(SceneId, String)>,
-        /// Whether the scene has keyframe scenes, so its row has a caret.
+        /// Whether the scene has keyframe scenes or sequences, so its row has a caret.
         keyframes: bool,
+    },
+    /// A scene's sequence (ADR-0184), after its keyframes.
+    Sequence {
+        timeline_id: TimelineId,
+        name: String,
+        depth: usize,
     },
 }
 
@@ -234,12 +244,22 @@ impl Walk<'_> {
                 .filter(|k| (self.shows)(&k.name, k.meta.favourite, &k.meta.labels))
                 .copied()
                 .collect();
+            let sequences: Vec<Row> = scene
+                .timelines
+                .iter()
+                .filter(|t| (self.shows)(&crate::panels::sequence::timeline_name(t), false, &[]))
+                .map(|t| Row::Sequence {
+                    timeline_id: t.timeline_id.clone(),
+                    name: crate::panels::sequence::timeline_name(t),
+                    depth: depth + 1,
+                })
+                .collect();
             if (self.shows)(&scene.name, scene.meta.favourite, &scene.meta.labels) {
                 out.push(Row::scene(
                     scene,
                     depth,
                     collection.parent_of(&scene.scene_id),
-                    !keyframes.is_empty(),
+                    !keyframes.is_empty() || !scene.timelines.is_empty(),
                 ));
             }
             if !self.folded.contains(&scene.scene_id) {
@@ -248,6 +268,7 @@ impl Walk<'_> {
                         .into_iter()
                         .map(|k| Row::scene(k, depth + 1, Some(scene), false)),
                 );
+                out.extend(sequences);
             }
         }
     }
@@ -1215,7 +1236,235 @@ pub fn Scenes() -> impl IntoView {
             .into_any()
         };
 
+    // The time now while a sequence plays, for the rows' elapsed time.
+    let clock = RwSignal::new(crate::store::now_ms());
+    if let Ok(handle) = set_interval_with_handle(
+        move || {
+            if studio.playing.with_untracked(|p| !p.is_empty()) {
+                clock.try_set(crate::store::now_ms());
+            }
+        },
+        std::time::Duration::from_millis(200),
+    ) {
+        on_cleanup(move || handle.clear());
+    }
+    // The sequence whose key is being set, by ID.
+    let keying = RwSignal::new(None::<TimelineId>);
+    let sequence_row = move |timeline_id: TimelineId, name: String, depth: usize| {
+        let key = format!("{SEQUENCE_KEY}{timeline_id}");
+        let id = StoredValue::new(timeline_id);
+        let is_renaming = {
+            let key = key.clone();
+            move || renaming.with(|r| r.as_deref() == Some(key.as_str()))
+        };
+        let selected = move || {
+            studio
+                .sequence
+                .with(|s| id.with_value(|id| s.as_ref() == Some(id)))
+        };
+        let play = Action::TimelinePlay {
+            timeline_id: id.get_value(),
+            delay_ms: None,
+        };
+        let play_for_chords = play.clone();
+        let chords = Memo::new(move |_| {
+            studio.collection.with(|c| {
+                c.as_ref()
+                    .map(|c| c.chords_for(&play_for_chords))
+                    .unwrap_or_default()
+            })
+        });
+        let elapsed = move || {
+            let playing = studio
+                .playing
+                .with(|p| id.with_value(|id| p.get(id).copied()))?;
+            let duration = studio.collection.with(|c| {
+                c.as_ref().and_then(|c| {
+                    id.with_value(|id| c.timeline(id))
+                        .map(|(_, t)| t.duration_ms)
+                })
+            })?;
+            let ms = playing.position_at(clock.get(), duration);
+            Some(format!("▶ {:.1} s", f64::from(ms) / 1000.0))
+        };
+        let open = move || crate::panels::sequence::open_sequence(studio, id.get_value());
+        let toggle_play = {
+            let play = play.clone();
+            move || {
+                let Some(s) = session.get() else { return };
+                let on = studio
+                    .playing
+                    .with_untracked(|p| id.with_value(|id| p.contains_key(id)));
+                if on {
+                    studio.act(
+                        &s,
+                        Action::TimelineStop {
+                            timeline_id: id.get_value(),
+                        },
+                    );
+                } else {
+                    studio.act(&s, play.clone());
+                }
+            }
+        };
+        let rename = {
+            let old = name.clone();
+            move |to: String| {
+                renaming.set(None);
+                let to = to.trim().to_owned();
+                if to.is_empty() || to == old {
+                    return;
+                }
+                let found = studio.collection.with_untracked(|c| {
+                    c.as_ref().and_then(|c| {
+                        id.with_value(|id| c.timeline(id))
+                            .map(|(scene, t)| (scene.scene_id.clone(), t.clone()))
+                    })
+                });
+                if let Some((scene_id, mut timeline)) = found {
+                    timeline.name = to;
+                    send(Edit::TimelineSet { scene_id, timeline });
+                }
+            }
+        };
+        let delete = move || {
+            send(Edit::TimelineDelete {
+                timeline_id: id.get_value(),
+            });
+        };
+        let set_key = {
+            move |chord: Option<Chord>| {
+                keying.set(None);
+                let Some(chord) = chord else { return };
+                let play = Action::TimelinePlay {
+                    timeline_id: id.get_value(),
+                    delay_ms: None,
+                };
+                let edits = studio.collection.with_untracked(|c| {
+                    c.as_ref()
+                        .map(|c| crate::hotkeys::bind_edits(c, &play, &chord))
+                        .unwrap_or_default()
+                });
+                send_all(edits);
+            }
+        };
+        let clear_keys = move || {
+            let edits = chords
+                .get_untracked()
+                .into_iter()
+                .map(|chord| Edit::HotkeyClear { chord })
+                .collect();
+            send_all(edits);
+        };
+        let on_row_context = {
+            let key = key.clone();
+            let toggle_play = toggle_play.clone();
+            move |event: leptos::ev::MouseEvent| {
+                event.prevent_default();
+                event.stop_propagation();
+                let Some(menus) = menus else { return };
+                let playing = studio
+                    .playing
+                    .with_untracked(|p| id.with_value(|id| p.contains_key(id)));
+                let has_keys = !chords.get_untracked().is_empty();
+                let key = key.clone();
+                let toggle_play = toggle_play.clone();
+                menus.open(
+                    &event,
+                    vec![
+                        Entry::item(if playing { "Stop" } else { "Play" }, toggle_play),
+                        Entry::item("Open in Sequence", open),
+                        Entry::Sep,
+                        Entry::item("Rename", move || renaming.set(Some(key.clone()))).hint("F2"),
+                        Entry::item("Set key…", move || keying.set(Some(id.get_value()))),
+                        Entry::item("Remove key", clear_keys).disabled_if(!has_keys),
+                        Entry::Sep,
+                        Entry::item("Delete sequence", delete).hint("Del").danger(),
+                    ],
+                );
+            }
+        };
+        let on_key = {
+            let key = key.clone();
+            move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+                "F2" => {
+                    event.prevent_default();
+                    renaming.set(Some(key.clone()));
+                }
+                "Delete" => {
+                    event.prevent_default();
+                    delete();
+                }
+                _ => {}
+            }
+        };
+        let is_keying = move || keying.with(|k| id.with_value(|id| k.as_ref() == Some(id)));
+        let shown_name = name.clone();
+        view! {
+            <li
+                class="row tree-row seq-tree-row"
+                class:selected=selected
+                style:padding-left=indent(depth)
+                title="Sequence: click to open it, right-click for its menu"
+                on:contextmenu=on_row_context
+                on:keydown=on_key
+            >
+                <span class="tree-caret"></span>
+                <Show
+                    when=is_renaming
+                    fallback=move || {
+                        let name = shown_name.clone();
+                        view! {
+                            <button
+                                class="row-main"
+                                on:click=move |_| open()
+                                on:dblclick=move |_| open()
+                            >
+                                <span class="tree-icon seq-icon">
+                                    <Icon name="sequence" size=15 />
+                                </span>
+                                <span class="tree-label">{name}</span>
+                                {move || elapsed().map(|t| view! { <span class="tree-badge seq-badge">{t}</span> })}
+                            </button>
+                        }
+                    }
+                >
+                    <RenameField value=name.clone() done=rename.clone() />
+                </Show>
+                <Show
+                    when=is_keying
+                    fallback=move || view! {
+                        <span class="seq-keys">
+                            <For each=move || chords.get() key=|c| c.clone() children=|chord| view! {
+                                <kbd class="seq-key">{crate::hotkeys::label(&chord)}</kbd>
+                            } />
+                        </span>
+                    }
+                >
+                    <span class="seq-capture">
+                        <crate::panels::learn::KeyCapture done=set_key />
+                    </span>
+                </Show>
+                <button
+                    type="button"
+                    class="hov tree-tool"
+                    aria-label=move || if studio.playing.with(|p| id.with_value(|id| p.contains_key(id))) { "Stop" } else { "Play" }
+                    title=move || if studio.playing.with(|p| id.with_value(|id| p.contains_key(id))) { "Stop this sequence" } else { "Play this sequence" }
+                    on:click=move |_| toggle_play()
+                >
+                    {move || if studio.playing.with(|p| id.with_value(|id| p.contains_key(id))) { "■" } else { "▶" }}
+                </button>
+            </li>
+        }
+        .into_any()
+    };
+
     let row = move |row: Row| match row {
+        Row::Sequence {
+            timeline_id,
+            name,
+            depth,
+        } => sequence_row(timeline_id, name, depth),
         Row::Folder {
             folder_id,
             name,
@@ -1525,6 +1774,7 @@ mod tests {
                     format!("{name}/{mark}@{depth}")
                 }
                 Row::Scene { name, depth, .. } => format!("{name}@{depth}"),
+                Row::Sequence { name, depth, .. } => format!("~{name}@{depth}"),
             })
             .collect()
     }
@@ -1759,6 +2009,56 @@ mod tests {
         assert!(moved(&c, &scene_node("k1"), &scene_node("a"), Side::Before).is_empty());
         assert!(moved(&c, &scene_node("a"), &scene_node("k1"), Side::After).is_empty());
         assert_eq!(keyframe_name(2), "Keyframe 3");
+    }
+
+    /// A scene's sequences follow its keyframes, a level in, fold with them, and give
+    /// the scene a caret on their own.
+    #[test]
+    fn sequences_follow_the_keyframes_and_fold_with_them() {
+        let mut k1 = scene("k1", None, false);
+        k1.variant_of = Some("b".into());
+        let mut b = scene("b", None, false);
+        b.timelines = vec![crate::panels::sequence::empty_sequence(
+            "lights_up".into(),
+            "Lights up".into(),
+        )];
+        let mut a = scene("a", None, false);
+        a.timelines = vec![crate::panels::sequence::empty_sequence(
+            "seq_1".into(),
+            String::new(),
+        )];
+        let c = Collection {
+            scenes: vec![a, b, k1],
+            ..Collection::default()
+        };
+        let all = |_: &str, _: bool, _: &[LabelId]| true;
+        let none = HashSet::new();
+        assert_eq!(
+            shown(&rows(&c, &none, &HashSet::new(), false, &all)),
+            ["A@0", "~seq_1@1", "B@0", "K1@1", "~Lights up@1"]
+        );
+        let rows_now = rows(&c, &none, &HashSet::new(), false, &all);
+        let Row::Scene {
+            keyframes: true, ..
+        } = &rows_now[0]
+        else {
+            panic!("A has a sequence, so a caret: {rows_now:?}");
+        };
+        assert_eq!(
+            shown(&rows(
+                &c,
+                &none,
+                &HashSet::from([SceneId::new("b")]),
+                false,
+                &all
+            )),
+            ["A@0", "~seq_1@1", "B@0"]
+        );
+        let lights = |name: &str, _: bool, _: &[LabelId]| name == "Lights up";
+        assert_eq!(
+            shown(&rows(&c, &none, &HashSet::new(), true, &lights)),
+            ["~Lights up@1"]
+        );
     }
 
     #[test]

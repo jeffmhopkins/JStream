@@ -111,6 +111,11 @@ pub struct CameraMotionModifier {
     /// Whether it runs. Default `true`, which isn't written.
     #[serde(default = "enabled", skip_serializing_if = "is_true")]
     pub enabled: bool,
+    /// A channel whose value, 0 to 1, multiplies what it adds (ADR-0183 decision 7,
+    /// since 0.169). A channel the collection doesn't hold applies it fully. Omitted for
+    /// none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
 }
 
 fn enabled() -> bool {
@@ -165,6 +170,7 @@ pub fn check_camera_motion(motion: &[CameraMotionModifier]) -> Result<(), Motion
             kind: m.kind.clone(),
             clock: m.clock,
             enabled: m.enabled,
+            amount: m.amount.clone(),
         })
         .collect();
     check_motion(&as_items)
@@ -461,6 +467,7 @@ mod tests {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }
     }
 

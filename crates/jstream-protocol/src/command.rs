@@ -12,6 +12,7 @@
 use crate::audio::{AudioFollow, BusMonitor};
 use crate::binding::{Trigger, ValueBinding};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
+use crate::channel::{ChannelInfo, ChannelSwitch};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterInfo, FilterOwner};
@@ -1081,6 +1082,29 @@ pub enum Edit {
         /// The binding's ID.
         binding_id: String,
     },
+    /// Sets a channel (since 0.169, ADR-0183): a named value, 0 to 1, that controls and
+    /// actions set and anything a modifier or value binding drives can follow, a new one
+    /// or the whole of one with the same `channel_id` in its place. Its value is never
+    /// stored: a new channel starts at its `default`, and one set again keeps its value.
+    /// Rejected with `invalid_argument` at `channel.<field>` for what
+    /// [`ChannelInfo::problem`] refuses, at `channel.inputs` for a `channel` input that
+    /// leads back to it through others, and at `channel` for a 257th channel
+    /// ([`MAX_CHANNELS`](crate::MAX_CHANNELS)). A channel input, a `scene_id` or an
+    /// `amount` naming a channel or scene that doesn't exist is taken, as a timeline's
+    /// cue is. Inverse: `channel.delete`, or `channel.set` with the channel it replaced.
+    #[serde(rename = "channel.set")]
+    ChannelSet {
+        /// The channel.
+        channel: ChannelInfo,
+    },
+    /// Deletes a channel. What followed it rests at its `from`, and an `amount` naming it
+    /// applies fully. Rejected with `not_found` (entity `channel`) for an ID no channel
+    /// has. Inverse: `channel.set` with the channel.
+    #[serde(rename = "channel.delete")]
+    ChannelDelete {
+        /// The channel's ID.
+        channel_id: String,
+    },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
     /// an action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't
@@ -1419,6 +1443,8 @@ impl Edit {
             Edit::BindingClear { .. } => "binding.clear",
             Edit::BindingSetValue { .. } => "binding.set_value",
             Edit::BindingClearValue { .. } => "binding.clear_value",
+            Edit::ChannelSet { .. } => "channel.set",
+            Edit::ChannelDelete { .. } => "channel.delete",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",
@@ -2009,6 +2035,11 @@ pub enum Action {
     TimelinePlay {
         /// The timeline to play.
         timeline_id: TimelineId,
+        /// How long to wait first, in milliseconds, at most 60000 (ADR-0184, since
+        /// 0.170). While it waits, `studio.get` lists it in `waiting`; another play
+        /// starts the wait again, and `timeline.stop` cancels it. Omitted plays at once.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delay_ms: Option<u32>,
     },
     /// Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did
     /// stays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing
@@ -2034,6 +2065,48 @@ pub enum Action {
         timeline_id: TimelineId,
         /// Where to play it from, in milliseconds from its start.
         at_ms: u32,
+    },
+    /// Sets a channel's value from an action (ADR-0183, since 0.169), 0 to 1, ramping
+    /// there over `fade_ms` when given, on top of the channel's own rise and fall. Under
+    /// `combine` `latest` it is the input that changed last. Runtime state: no `rev`, never
+    /// undone, never saved. A hotkey, a MIDI trigger and a timeline cue can run it. Fails
+    /// with `not_found` (entity `channel`) for a channel the collection doesn't hold, and
+    /// with `invalid_argument` at `value` outside 0 to 1 or at `fade_ms` over 60000.
+    #[serde(rename = "channel.set_value")]
+    ChannelSetValue {
+        /// The channel.
+        channel_id: String,
+        /// Its new value, 0 to 1.
+        value: Finite32,
+        /// How long the ramp there takes, in milliseconds, `0..=60000`. Omitted to set it
+        /// at once.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fade_ms: Option<u32>,
+    },
+    /// Switches a channel on or off, or toggles it (ADR-0183, since 0.169): switched off,
+    /// it reads its `off_value` through its own fade. Runtime state, as
+    /// `channel.set_value` is. Fails with `not_found` (entity `channel`) for a channel the
+    /// collection doesn't hold.
+    #[serde(rename = "channel.switch")]
+    ChannelSwitch {
+        /// The channel.
+        channel_id: String,
+        /// `on`, `off` or `toggle`.
+        to: ChannelSwitch,
+    },
+    /// Adds `by` to a channel's action value, kept within 0 to 1 (ADR-0183, since 0.169),
+    /// for an encoder or a pair of keys: starting from the channel's value now if no
+    /// action has set it yet. Fails as `channel.set_value` does, and with
+    /// `invalid_argument` at `by` outside -1 to 1.
+    #[serde(rename = "channel.nudge")]
+    ChannelNudge {
+        /// The channel.
+        channel_id: String,
+        /// What to add, -1 to 1.
+        by: Finite32,
+        /// How long the ramp takes, in milliseconds, `0..=60000`. Omitted to move at once.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fade_ms: Option<u32>,
     },
     /// Holds the engine's media clock where it is now (ADR-0172, since 0.134): every
     /// animation it draws (transitions and Moves, motion modifiers, timelines, a sky's
@@ -2388,6 +2461,9 @@ impl Action {
             Action::TimelinePlay { .. } => "timeline.play",
             Action::TimelineStop { .. } => "timeline.stop",
             Action::TimelineSeek { .. } => "timeline.seek",
+            Action::ChannelSetValue { .. } => "channel.set_value",
+            Action::ChannelSwitch { .. } => "channel.switch",
+            Action::ChannelNudge { .. } => "channel.nudge",
             Action::ClockHold => "clock.hold",
             Action::ClockStep { .. } => "clock.step",
             Action::ClockRelease => "clock.release",
@@ -2471,10 +2547,15 @@ impl Action {
                 }
                 named
             }
-            Action::TimelinePlay { timeline_id }
+            Action::TimelinePlay { timeline_id, .. }
             | Action::TimelineStop { timeline_id }
             | Action::TimelineSeek { timeline_id, .. } => {
                 vec![(EntityKind::Timeline, timeline_id.as_str())]
+            }
+            Action::ChannelSetValue { channel_id, .. }
+            | Action::ChannelSwitch { channel_id, .. }
+            | Action::ChannelNudge { channel_id, .. } => {
+                vec![(EntityKind::Channel, channel_id.as_str())]
             }
             Action::SourceRestart { source_id } => vec![(EntityKind::Source, source_id.as_str())],
             // Broadcasts, preview channels and devices are not collection objects, and a
@@ -2655,11 +2736,16 @@ impl Action {
             | Action::PtzFocus { .. }
             | Action::SceneSetKeyframe { .. }
             | Action::ItemTriggerMotion { .. }
-            | Action::TimelinePlay { .. }
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. }
             | Action::SourceRestart { .. }
             | Action::PrivacySet { .. } => None,
+            Action::TimelinePlay { .. } => self.play_problem(),
+            // Bindable, but checked as the call would be, so a saved binding never fails
+            // every press on a value out of range.
+            Action::ChannelSetValue { .. }
+            | Action::ChannelSwitch { .. }
+            | Action::ChannelNudge { .. } => self.channel_problem(),
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on its name or size.
             Action::ValuesSet { name, value } => {
@@ -2723,6 +2809,9 @@ impl Action {
             | Action::TimelinePlay { .. }
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. }
+            | Action::ChannelSetValue { .. }
+            | Action::ChannelSwitch { .. }
+            | Action::ChannelNudge { .. }
             | Action::SourceRestart { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
@@ -2755,11 +2844,30 @@ impl Action {
     /// reason, or `None` if it can (ADR-0099 decision 4, ADR-0115). A cue runs one of a
     /// closed set: `scene.switch`, `scene.set_keyframe` (ADR-0116), `item.show`,
     /// `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
-    /// `source.restart`, and `timeline.play`,
-    /// `timeline.stop` and `timeline.seek`. Each is an action a hotkey can run too, and
-    /// none is an edit, so playing a timeline adds nothing to an undo history. The
-    /// `values.set` checks are `bind_problem`'s.
+    /// `source.restart`, `timeline.play`, `timeline.stop` and `timeline.seek`, and
+    /// since 0.169 `channel.set_value`, `channel.switch` and `channel.nudge`
+    /// (ADR-0183). Each is an action a hotkey can run too, and none is an edit, so
+    /// playing a timeline adds nothing to an undo history. The `values.set` checks are
+    /// `bind_problem`'s and the channel ones `channel_problem`'s.
     pub fn cue_problem(&self) -> Option<(&'static str, &'static str)> {
+        self.cue_problem_of()
+    }
+
+    /// `timeline.play`'s own check (ADR-0184): a `delay_ms` of at most 60000. `None`
+    /// for any other action.
+    pub fn play_problem(&self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Action::TimelinePlay {
+                delay_ms: Some(delay),
+                ..
+            } if *delay > crate::MAX_TRIGGER_DELAY_MS => {
+                Some(("delay_ms", "must be at most 60000 (one minute)"))
+            }
+            _ => None,
+        }
+    }
+
+    fn cue_problem_of(&self) -> Option<(&'static str, &'static str)> {
         match self {
             Action::SceneSwitch { .. }
             | Action::SceneSetKeyframe { .. }
@@ -2768,15 +2876,19 @@ impl Action {
             | Action::ItemToggle { .. }
             | Action::ItemTriggerMotion { .. }
             | Action::SourceRestart { .. }
-            | Action::TimelinePlay { .. }
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. } => None,
+            Action::TimelinePlay { .. } => self.play_problem(),
             Action::ValuesSet { .. } => self.bind_problem(),
+            Action::ChannelSetValue { .. }
+            | Action::ChannelSwitch { .. }
+            | Action::ChannelNudge { .. } => self.channel_problem(),
             _ => Some((
                 "type",
                 "a cue runs scene.switch, scene.set_keyframe, item.show, item.hide, \
                  item.toggle, item.trigger_motion, values.set, source.restart, timeline.play, \
-                 timeline.stop or timeline.seek",
+                 timeline.stop, timeline.seek, channel.set_value, channel.switch or \
+                 channel.nudge",
             )),
         }
     }
@@ -2798,7 +2910,49 @@ impl Action {
                 ))
             }
             Action::ValuesSet { name, .. } => Some(format!("value {name}")),
+            Action::ChannelSetValue { channel_id, .. } => Some(format!("channel {channel_id}")),
+            Action::ChannelSwitch {
+                channel_id,
+                to: ChannelSwitch::On | ChannelSwitch::Off,
+            } => Some(format!("channel switch {channel_id}")),
             _ => None,
+        }
+    }
+
+    /// Why a channel action is out of range, as the field and the reason, or `None`
+    /// (ADR-0183 decision 6): its channel ID, a value within 0 to 1, a nudge within -1 to
+    /// 1, and a fade of at most 60000 ms. `None` for any other action.
+    pub fn channel_problem(&self) -> Option<(&'static str, &'static str)> {
+        let (channel_id, fade_ms) = match self {
+            Action::ChannelSetValue {
+                channel_id,
+                value,
+                fade_ms,
+            } => {
+                if !(0.0..=1.0).contains(&value.get()) {
+                    return Some(("value", "must be within 0..=1"));
+                }
+                (channel_id, *fade_ms)
+            }
+            Action::ChannelNudge {
+                channel_id,
+                by,
+                fade_ms,
+            } => {
+                if !(-1.0..=1.0).contains(&by.get()) {
+                    return Some(("by", "must be within -1..=1"));
+                }
+                (channel_id, *fade_ms)
+            }
+            Action::ChannelSwitch { channel_id, .. } => (channel_id, None),
+            _ => return None,
+        };
+        if let Err(reason) = crate::channel::check_channel_id(channel_id) {
+            Some(("channel_id", reason))
+        } else if fade_ms.is_some_and(|ms| ms > crate::channel::MAX_CHANNEL_FADE_MS) {
+            Some(("fade_ms", "must be within 0..=60000"))
+        } else {
+            None
         }
     }
 }

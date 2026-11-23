@@ -1223,6 +1223,7 @@ fn wiggle(id: &str, amplitude: f32) -> jstream_protocol::MotionModifier {
         },
         clock: jstream_protocol::MotionClock::Engine,
         enabled: true,
+        amount: None,
     }
 }
 

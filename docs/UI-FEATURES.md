@@ -61,7 +61,7 @@ real UI shows the engine's real state instead.
 | [Canvas](#canvas) | 18 | 17 | 0 | 0 | 0 | 1 |
 | [Context menus](#menus) | 8 | 8 | 0 | 0 | 0 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 6 | 1 | 0 | 1 | 0 |
-| [Scenes panel](#scenes) | 11 | 11 | 0 | 0 | 0 | 0 |
+| [Scenes panel](#scenes) | 12 | 12 | 0 | 0 | 0 | 0 |
 | [Sources panel](#objects) | 11 | 11 | 0 | 0 | 0 | 0 |
 | [Inspector](#inspector) | 11 | 11 | 0 | 0 | 0 | 0 |
 | [Arrange panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
@@ -70,8 +70,9 @@ real UI shows the engine's real state instead.
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat and agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
+| [Channels and sequences](#automation) | 6 | 1 | 5 | 0 | 0 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **143** | **129** | **5** | **0** | **5** | **4** |
+| **Total** | **150** | **131** | **10** | **0** | **5** | **4** |
 <!-- @generated end ui-summary -->
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
@@ -238,6 +239,7 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | ✅ | F2 or the menu's Rename renames in place, Del or Delete scene asks with the plan's summary, and the menus' New scene adds one with its name open. A double click opens the scene's Properties dialog ([DL-03](#dialogs)), which renames too (on a keyframe it renames in place); outside studio mode its first click puts the scene on program, as in OBS. |
 | SC-06 | Folders | Folders organise scenes; collapsible. | ✅ | Each level lists its folders, then its scenes, each indented by its depth; a caret folds a folder, and the panel's, a scene's and a folder's menus add folders. `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | ✅ | From `SceneInfo.variant_of` (K1). The scene's caret folds them away; they aren't dragged, and a drop on one does nothing. A new keyframe is selected, so it can be arranged. |
+| SC-12 | Sequence rows | Beyond the prototype ([ADR-0184](adr/0184-sequences-lanes-and-triggers.md)): a scene's sequences nest after its keyframes with a teal sequence icon. | ✅ | `Row::Sequence`, folded with the keyframes by the scene's caret, which a scene with only sequences has too, and searched by name. A click opens the sequence in the Sequence panel; a hover button plays or stops it; while it plays the row shows "▶" and its elapsed time, and it shows the keys bound to play it. Its menu: Play or Stop, Open in Sequence, Rename (F2, in place), Set key… (the next key pressed, Escape cancels), Remove key, and Delete sequence (Del). Not dragged. Not built yet: a countdown while it waits on a delay, and Learn MIDI trigger. |
 | SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | ✅ | The favourite star (`scene.set_meta`, `source.set_meta`), label chips (each icon in its colour on a 16 % tint) and a hover tag button whose popover opens under the row, as the prototype's does, and puts labels on or takes them off, each box filled with its label's colour (`scene.set_meta` on a scene row, `source.set_meta` on a Sources row), and the label manager (`labels.rs`: name, colour, icon picker, + New label, delete), inline in the Scenes or Sources panel, whichever "Edit labels…" was chosen in. Scenes carry labels as the prototype's do ([ADR-0078](adr/0078-scenes-carry-labels.md)); the Inspector's header sets them too, and an item menu's Labels submenu sets a source's. A new collection file starts with the prototype's four sample labels (Intro / outro, Gameplay, Overlay, Sponsor, in its colours and icons). Beyond the prototype, each label in the manager has an Actions view ([ADR-0133](adr/0133-labels-on-hotkeys-and-timelines.md)): the keyframes carrying it, each ticked, with a move preset control that sets the ticked ones' preset in (`scene.set_transitions`, each keeping its preset out) in one batch, so one undo step; then every hotkey and every timeline, each with a check that puts the label on it or takes it off (`hotkey.set_labels`, `timeline.set`). Deleting a label takes it off hotkeys and timelines too, in the same batch. |
 | SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | ✅ | The funnel with its count, Favorites only, Labels · any of (each box filled with its label's colour), Clear and Edit labels…, client-side, in both panels: the Scenes panel's over its scenes' labels, the Sources panel's over its sources'. |
 | SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | ✅ | A click selects the scene and sends `scene.switch` (the engine picks the transition), or, in studio mode ([HD-06](#header)), `studio.set_preview`, sent even for a scene already there (the engine ignores it), so a stale copy never drops a click. A mouse picks on the press, as OBS does, so a switch doesn't wait for the release; a press with Shift, Ctrl or Meta (on macOS a Ctrl+click opens the row menu), a touch and a pen pick on the click. The request goes before the panels redraw for the new selection, and the "program" badge moves at once, before the engine confirms it (a refused switch reads the program back). In studio mode a hover button (broadcast icon) puts the scene on program. The row menu's Show in preview works in either mode. |
@@ -295,9 +297,10 @@ when its root is the collection folder or an absolute path, a Browse… button, 
 where the path starts (Collection, App assets or Absolute); a file under the
 collection folder is stored relative to it. Beyond the prototype, every setting in the form
 that its kind marks live and that is a number with both ends or a switch has a learn
-button after its reset ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): click it and move a control on a MIDI controller, and that
-control drives the setting over its whole range; the button then shows the control (`CC 7`)
-and a click unbinds it.
+button after its reset ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)). A click opens its menu: Learn MIDI control, then move a
+control on a MIDI controller, and that control drives the setting over its whole range;
+make or follow a channel ([Channels and sequences](#automation)); or remove the control. A
+bound button shows its control (`CC 7`) or its channel's name.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -377,8 +380,9 @@ covers = ["crates/jstream-ui/src/panels/mixer.rs"]
 Spec: [panels › mixer](../design/ui-prototype/spec-panels.md#mixer-panel). The real mixer
 does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyond)).
 Beyond it too, each channel, bus and existing send has a learn button after its fader's
-mute or dB field ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): a MIDI control moved after a click drives that fader from -60 to
-+6 dB.
+mute or dB field ([ADR-0178](adr/0178-value-bindings-drive-any-number.md)): its menu's Learn MIDI control makes the next MIDI control moved
+drive that fader from -60 to +6 dB, and its other items make or follow a channel, or remove
+the control.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -482,6 +486,25 @@ Spec: [panels › stream stats](../design/ui-prototype/spec-panels.md#stream-sta
 | CH-01 | Live chat | YouTube chat with badges and Super Chats, pinned message, composer. | 🔒 | Y4 (#363) and the OAuth client. |
 | CH-02 | Show on stream | Feature one message on stream. | 🔒 | Y4 (#363 draws the featured message). |
 | AG-01 | Agent activity | What MCP clients changed, newest first. | ✅ | `activity.list` (protocol 0.51, [ADR-0083](adr/0083-activity-log-over-the-protocol.md)): the engine's sentence for each call under the client's name and how long ago; JStream's own UIs are left out, a failed call shows its error code. A Clear button empties the list shown, for the workspace, until agents act again; the engine's log and undo history are kept. |
+
+<a id="automation"></a>
+## Channels and sequences
+<!-- @section
+covers = ["crates/jstream-ui/src/panels/channels.rs", "crates/jstream-ui/src/panels/sequence.rs"]
+-->
+
+Not in the prototype: [ADR-0183](adr/0183-virtual-control-channels.md) (channels) and
+[ADR-0184](adr/0184-sequences-lanes-and-triggers.md) (sequences), following the plan's
+mockups.
+
+| ID | Feature | Requirement | Status | Notes |
+|---|---|---|---|---|
+| VC-01 | Control button | Beside every live setting, one menu: learn a MIDI control, make a channel, follow one, remove the control. | 🟡 | The learn button is now the control button, on a source's or filter's live settings and the mixer's faders and sends. Make channel names the channel after the setting, starts it where the setting is (in the selected scene), moves a learned MIDI control over to it as an input, and opens it; Follow channel… searches the channels, this scene's first, with "+ New channel" at the foot. Add to sequence › lists this scene's sequences (the open one first) and New sequence, and adds the channel's lane (making the channel if need be) holding where the setting is, then opens the sequence; Set key… binds the next key pressed to switch the channel on and off, making it if need be. Each is one undo step. A setting that follows a channel shows its name as a chip. Not built yet: the "at 0 % / at 100 %" range line, the Inspector's position, size and opacity rows, several selected items making one channel, and arrow-key use of the menu. |
+| VC-02 | Channel card | A channel's live value, switch, inputs, shaping, what it drives and its sequences. | 🟡 | In a Channels panel (by default beside the Inspector) rather than the Inspector itself: a search over the channels, then the card with the live meter (which also sets the value by hand) and the line saying what drives it, the on switch, its inputs (Learn MIDI, or another channel), Fade up, Fade down, Smooth, Curve, Combine, Default and When off, the settings that follow it with their range, a Key row whose Set key binds a key to switch it on and off, and the sequences with a lane on it. Not built yet: a key that sets a value or nudges, a DAW param as an input, changing where it lives, and the triggers listed from the channel's side. |
+| SQ-01 | Sequence panel | The selected scene's sequences: pick or make one, play or stop, loop, length, Add lane by search. | 🟡 | A dockable Sequence panel, by default in the bottom dock. Add lane searches the channels (or makes one) and adds its lane holding the channel's value at the end. Not built yet: Add lane's "Settings (makes a channel)" and "Switches" groups, and Space to play or stop. |
+| SQ-02 | Lanes | One row per lane: points on the timeline's ruler, curves, a dashed start from where the channel is, live value, mute, remove, a play head. | 🟡 | Double-click adds a point (snapped to 0.1 s, Shift for free), a drag moves one (one undo step), a right-click sets the curve into it or deletes it; a click on the ruler plays from there. Not built yet: marquee, copy and paste, typed times and values, dragging the length, switch lanes, preview while scrubbing, and moving a point from the keyboard. |
+| SQ-03 | Triggers | What starts and stops a sequence, as sentences, with "+ Trigger". | 🟡 | Chips for `starts` and `stops`; "+ Trigger" opens an editor for a channel (rises or falls past a level, switches on or off), a scene going on or off program, a keyframe loading or leaving, or another sequence starting, ending or looping, each with Wait first. Keys and MIDI stay hotkeys and bindings. A sequence's key is set from its row in the Scenes panel ([SC-12](#scenes)). Not built yet: the triggers set from a keyframe's or scene's menu, and Learn MIDI trigger. |
+| SQ-04 | Events lane | Timed one-off events as chips on the lanes' ruler; double-click adds one. | ✅ | Above the lanes, the timeline's cues as chips (with a teal edge) reading "Show Title", "Keyframe Wide", "Lights on", "Play Outro". A double-click opens a small editor at that time: what happens (show, hide or toggle an item of the scene, load a keyframe or the scene's own values, put a scene on program, switch a channel on or off, play or stop another sequence, restart a source) and to which. A click on a chip edits it, a drag moves it (0.1 s snap, Shift for free), and the editor deletes it; each is one undo step. A cue with another action reads as its action's type and is kept: a click opens it read-only, so it can be moved or deleted but not overwritten. |
 
 <a id="keyboard"></a>
 ## Keyboard

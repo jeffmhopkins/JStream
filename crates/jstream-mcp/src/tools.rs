@@ -124,12 +124,17 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// another `studio.set_warm` puts it back), the 3D rendering switches (ADR-0170: they
 /// change the collection in no way, and another `studio.set_rendering` puts them back),
 /// and the media clock held for a frame-by-frame render (ADR-0172: `clock.release` lets
-/// it run again, and it never holds while an output runs). A tool whose actions are all
+/// it run again, and it never holds while an output runs), and a channel's live value
+/// (ADR-0183: nothing stores it, and another `channel.set_value` or `channel.switch` puts
+/// it back). A tool whose actions are all
 /// here is not `destructiveHint`. Every other action is: going live or stopping, setting
 /// or clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 23] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 26] = [
     "audio.reset_loudness",
+    "channel.nudge",
+    "channel.set_value",
+    "channel.switch",
     "clock.hold",
     "clock.release",
     "clock.step",

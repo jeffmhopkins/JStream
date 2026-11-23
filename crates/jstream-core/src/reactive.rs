@@ -72,8 +72,8 @@ use jstream_protocol::{
     MotionModifier, MotionProperty, SceneId, SourceId,
 };
 use jstream_sources::{
-    AudioMeter, AudioScope, AudioScopes, DataCell, DataReading, DataWatch, LiveData, MidiInputs,
-    MidiState,
+    AudioMeter, AudioScope, AudioScopes, ChannelCell, DataCell, DataReading, DataWatch, LiveData,
+    MidiInputs, MidiState,
 };
 
 /// What an audio modifier hears.
@@ -136,6 +136,8 @@ pub(crate) enum Control {
     Bend { channel: Option<u8> },
     /// The channel pressure.
     Pressure { channel: Option<u8> },
+    /// A note held (ADR-0183): 1 while held, 0 otherwise.
+    Note { channel: Option<u8>, note: u8 },
 }
 
 impl Control {
@@ -159,6 +161,10 @@ impl Control {
             },
             MotionMidiControl::PitchBend => Control::Bend { channel },
             MotionMidiControl::Pressure => Control::Pressure { channel },
+            MotionMidiControl::Note => Control::Note {
+                channel,
+                note: (*controller)? & 0x7F,
+            },
             _ => return None,
         })
     }
@@ -178,6 +184,15 @@ impl Control {
             Control::Bend { channel: None } => Midi::normalize_bend(state.bend_any()),
             Control::Pressure { channel: Some(c) } => Midi::normalize_cc(state.pressure(c)),
             Control::Pressure { channel: None } => Midi::normalize_cc(state.pressure_any()),
+            Control::Note {
+                channel: Some(c),
+                note,
+            } => f32::from(u8::from(state.held(c, note) > 0)),
+            // Held on any channel: sixteen atomic loads.
+            Control::Note {
+                channel: None,
+                note,
+            } => f32::from(u8::from((0..16).any(|c| state.held(c, note) > 0))),
         }
     }
 }
@@ -332,6 +347,8 @@ enum Input {
         cell: Arc<DataCell>,
         map: DataMap,
     },
+    /// A channel modifier's channel (ADR-0183 decision 5).
+    Channel { midi: Midi, cell: Arc<ChannelCell> },
 }
 
 impl Input {
@@ -341,6 +358,8 @@ impl Input {
             Input::Scope { .. } => None,
             Input::Midi { state, control, .. } => Some(control.read(state)),
             Input::Data { cell, map, .. } => Some(map.read(cell.read())),
+            // A channel that doesn't exist reads 0.
+            Input::Channel { cell, .. } => Some(cell.read().unwrap_or(0.0)),
         }
     }
 
@@ -348,7 +367,7 @@ impl Input {
     fn color(&self) -> Option<[f32; 3]> {
         match self {
             Input::Data { cell, map, .. } => map.color(cell.read()),
-            Input::Scope { .. } | Input::Midi { .. } => None,
+            Input::Scope { .. } | Input::Midi { .. } | Input::Channel { .. } => None,
         }
     }
 
@@ -361,7 +380,9 @@ impl Input {
     fn smoothed(&self) -> Option<&Midi> {
         match self {
             Input::Scope { .. } => None,
-            Input::Midi { midi, .. } | Input::Data { midi, .. } => Some(midi),
+            Input::Midi { midi, .. } | Input::Data { midi, .. } | Input::Channel { midi, .. } => {
+                Some(midi)
+            }
         }
     }
 }
@@ -394,6 +415,9 @@ impl PartialEq for Input {
                     map: p,
                 },
             ) => midi == m && map == p && Arc::ptr_eq(cell, c),
+            (Input::Channel { midi, cell }, Input::Channel { midi: m, cell: c }) => {
+                midi == m && Arc::ptr_eq(cell, c)
+            }
             _ => false,
         }
     }
@@ -463,7 +487,7 @@ impl Binding {
     fn scope(&self) -> Option<&Arc<AudioScope>> {
         match &self.input {
             Input::Scope { scope, .. } => Some(scope),
-            Input::Midi { .. } | Input::Data { .. } => None,
+            Input::Midi { .. } | Input::Data { .. } | Input::Channel { .. } => None,
         }
     }
 
@@ -504,6 +528,47 @@ pub(crate) struct Bindings {
     /// Each scene family's camera bindings (ADR-0176), by modifier ID, in its list's
     /// order.
     by_camera: BTreeMap<SceneId, Vec<(String, Binding)>>,
+    /// Each item's modifiers that take an `amount` channel (ADR-0183 decision 7), of
+    /// any kind, by modifier ID.
+    amounts: BTreeMap<ItemId, Vec<(String, Amount)>>,
+    /// Each scene family's camera modifiers that take an `amount` channel.
+    camera_amounts: BTreeMap<SceneId, Vec<(String, Amount)>>,
+}
+
+/// The channel a modifier's `amount` names (ADR-0183 decision 7).
+#[derive(Debug)]
+pub(crate) struct Amount(Arc<ChannelCell>);
+
+impl PartialEq for Amount {
+    /// The same cell: a value is the tick's, never the plan's.
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+/// What the modifier `modifier` in `amounts` is multiplied by now: its channel's value,
+/// or 1 when it names none or one that doesn't exist. One atomic load; allocates nothing.
+pub(crate) fn amount_of(amounts: &[(String, Amount)], modifier: &str) -> f32 {
+    amounts
+        .iter()
+        .find(|(id, _)| id == modifier)
+        .and_then(|(_, Amount(cell))| cell.read())
+        .unwrap_or(1.0)
+}
+
+/// Records `modifier`'s `amount` channel in `amounts`, once per ID.
+fn record_amount(
+    amounts: &mut Vec<(String, Amount)>,
+    modifier_id: &str,
+    amount: Option<&str>,
+    data: Option<&LiveData>,
+) {
+    let (Some(amount), Some(data)) = (amount, data) else {
+        return;
+    };
+    if amounts.iter().all(|(id, _)| id != modifier_id) {
+        amounts.push((modifier_id.to_owned(), Amount(data.channels().cell(amount))));
+    }
 }
 
 impl Bindings {
@@ -534,6 +599,14 @@ impl Bindings {
                 self.painting
                     .insert((item.clone(), modifier.modifier_id.clone()));
             }
+            if modifier.amount.is_some() && data.is_some() {
+                record_amount(
+                    self.amounts.entry(item.clone()).or_default(),
+                    &modifier.modifier_id,
+                    modifier.amount.as_deref(),
+                    data,
+                );
+            }
             let Some(input) = input_of(modifier, heard, midi, data) else {
                 continue;
             };
@@ -558,6 +631,14 @@ impl Bindings {
     ) {
         let unheard = HeardScopes::default();
         for camera in motion {
+            if camera.amount.is_some() && data.is_some() {
+                record_amount(
+                    self.camera_amounts.entry(family.clone()).or_default(),
+                    &camera.modifier_id,
+                    camera.amount.as_deref(),
+                    data,
+                );
+            }
             if matches!(camera.kind, MotionKind::Audio { .. }) {
                 continue;
             }
@@ -569,6 +650,7 @@ impl Bindings {
                 kind: camera.kind.clone(),
                 clock: camera.clock,
                 enabled: camera.enabled,
+                amount: None,
             };
             let Some(input) = input_of(&modifier, &unheard, midi, data) else {
                 continue;
@@ -606,6 +688,17 @@ impl Bindings {
     /// has it. Allocates nothing.
     pub(crate) fn level(&self, item: &ItemId, modifier: &str) -> Option<f32> {
         Self::find(self.by_item.get(item)?, modifier)
+    }
+
+    /// `item`'s modifiers that take an `amount` channel (ADR-0183 decision 7), for
+    /// [`amount_of`]; empty for none. Allocates nothing.
+    pub(crate) fn amounts(&self, item: &ItemId) -> &[(String, Amount)] {
+        self.amounts.get(item).map_or(&[], Vec::as_slice)
+    }
+
+    /// Scene family `family`'s camera modifiers that take an `amount` channel.
+    pub(crate) fn camera_amounts(&self, family: &SceneId) -> &[(String, Amount)] {
+        self.camera_amounts.get(family).map_or(&[], Vec::as_slice)
     }
 
     /// The level of scene family `family`'s camera modifier `modifier` for the current
@@ -676,6 +769,16 @@ fn input_of(
             Input::Scope {
                 audio,
                 scope: Arc::clone(scope),
+            }
+        }
+        // A channel modifier follows as a MIDI one, on its channel's cell (ADR-0183).
+        jstream_anim::Kind::Midi(params) if matches!(modifier.kind, MotionKind::Channel { .. }) => {
+            let MotionKind::Channel { channel_id, .. } = &modifier.kind else {
+                return None;
+            };
+            Input::Channel {
+                midi: params,
+                cell: data?.channels().cell(channel_id),
             }
         }
         // A data modifier follows as a MIDI one, on its watched field.
@@ -749,7 +852,9 @@ impl Follow {
         match binding.input {
             Input::Scope { .. } => Follow::Envelope(Envelope::default()),
             ref data if data.paints() => Follow::Paint([Smoothing::default(); 3]),
-            Input::Midi { .. } | Input::Data { .. } => Follow::Smoothing(Smoothing::default()),
+            Input::Midi { .. } | Input::Data { .. } | Input::Channel { .. } => {
+                Follow::Smoothing(Smoothing::default())
+            }
         }
     }
 
@@ -776,9 +881,10 @@ impl Follow {
         match (self, &binding.input) {
             (Follow::Envelope(_), Input::Scope { .. }) => true,
             (Follow::Paint(_), input) => input.paints(),
-            (Follow::Smoothing(_), input @ (Input::Midi { .. } | Input::Data { .. })) => {
-                !input.paints()
-            }
+            (
+                Follow::Smoothing(_),
+                input @ (Input::Midi { .. } | Input::Data { .. } | Input::Channel { .. }),
+            ) => !input.paints(),
             _ => false,
         }
     }
@@ -901,7 +1007,7 @@ impl Follower {
                     envelope.advance(audio, measured, dt_s)
                 }
                 (
-                    input @ (Input::Midi { .. } | Input::Data { .. }),
+                    input @ (Input::Midi { .. } | Input::Data { .. } | Input::Channel { .. }),
                     Follow::Smoothing(smoothing),
                 ) => {
                     let (Some(midi), Some(now)) = (input.smoothed(), input.read()) else {
@@ -972,7 +1078,7 @@ impl Follower {
                 Input::Scope { audio, scope } => {
                     matches!(audio.measure, Measure::Band { .. }) && address(scope) == meter.scope
                 }
-                Input::Midi { .. } | Input::Data { .. } => false,
+                Input::Midi { .. } | Input::Data { .. } | Input::Channel { .. } => false,
             });
         }
         let stale = self.envelopes.iter().any(|(item, listed)| {
@@ -1047,6 +1153,7 @@ mod tests {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }
     }
 
@@ -1266,6 +1373,7 @@ mod tests {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }
     }
 
@@ -1287,6 +1395,7 @@ mod tests {
             kind: m.kind,
             clock: m.clock,
             enabled: m.enabled,
+            amount: None,
         };
         let plan = || {
             let mut bindings = Bindings::default();
@@ -1506,6 +1615,7 @@ mod tests {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         }
     }
 

@@ -170,12 +170,26 @@ impl Fired {
 /// and whose `triggered` modifiers were fired as `fires` says. `heard` gives an audio
 /// modifier's level for the tick, by modifier ID (ADR-0100, [`crate::reactive`]); one it
 /// has none for reads as silence. Allocates nothing.
+#[cfg(test)]
 pub(crate) fn offsets(
     motion: &[Modifier],
     at: MediaTime,
     shown: Option<MediaTime>,
     fires: Option<&Fires>,
     heard: impl Fn(&str) -> Option<f32>,
+) -> Offsets {
+    offsets_scaled(motion, at, shown, fires, heard, |_| 1.0)
+}
+
+/// As [`offsets`], each modifier's value multiplied by `amount` of its ID: what its
+/// `amount` channel sets (ADR-0183 decision 7). Allocates nothing.
+pub(crate) fn offsets_scaled(
+    motion: &[Modifier],
+    at: MediaTime,
+    shown: Option<MediaTime>,
+    fires: Option<&Fires>,
+    heard: impl Fn(&str) -> Option<f32>,
+    amount: impl Fn(&str) -> f32,
 ) -> Offsets {
     if motion.is_empty() {
         return Offsets::IDENTITY;
@@ -184,7 +198,7 @@ pub(crate) fn offsets(
     let since = |origin: MediaTime| (engine_s - origin.as_secs_f64()).max(0.0);
     let shown_s = shown.map(since);
     let fired = |id: &str| fires.and_then(|fires| fires.at(id)).map(since);
-    jstream_anim::evaluate_with(motion, engine_s, shown_s, fired, heard)
+    jstream_anim::evaluate_scaled(motion, engine_s, shown_s, fired, heard, amount)
 }
 
 /// `placement`, `crop` and `opacity` moved by `by`. A legacy transform moves and turns

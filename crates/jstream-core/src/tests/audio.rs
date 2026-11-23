@@ -1914,6 +1914,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
         kind,
         clock: MotionClock::Engine,
         enabled,
+        amount: None,
     };
     let webcam = Edit::SourceCreate {
         source_id: SourceId::new("webcam"),
@@ -1924,6 +1925,13 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
         settings: Settings::new(),
         duplicated_from: None,
     };
+    // Channels (ADR-0183) that read a Mod are named after themselves: by name, or by
+    // their ID as words when they have none.
+    let mut power = jstream_protocol::ChannelInfo::new("power");
+    power.name = "Stage Power".into();
+    power.inputs = vec![data(Some("Bitwig"), 7)];
+    let mut house = jstream_protocol::ChannelInfo::new("house_lights");
+    house.inputs = vec![data(None, 9)];
     batch(
         &control,
         edits(vec![
@@ -1948,6 +1956,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
                     kind: data(None, 0),
                     clock: MotionClock::Engine,
                     enabled: true,
+                    amount: None,
                 }],
             },
             Edit::BindingSetValue {
@@ -1957,6 +1966,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
                     target: ValueTarget::BusGain {
                         bus_id: BusId::master(),
                     },
+                    amount: None,
                 },
             },
             Edit::BindingSetValue {
@@ -1966,8 +1976,11 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
                     target: ValueTarget::BusGain {
                         bus_id: BusId::master(),
                     },
+                    amount: None,
                 },
             },
+            Edit::ChannelSet { channel: power },
+            Edit::ChannelSet { channel: house },
         ]),
     )
     .expect("binds");
@@ -1978,6 +1991,8 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
     want[0] = "A Pan".into();
     want[1] = master;
     want[4] = "Webcam X".into();
+    want[7] = "Stage Power".into();
+    want[9] = "House Lights".into();
     assert_eq!(names, want);
     // Sent again beside the next keepalive, so a lost one is put right.
     assert_eq!(next_names(&bitwig), want);
@@ -1999,6 +2014,12 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             },
             Edit::BindingClearValue {
                 binding_id: "master-2".into(),
+            },
+            Edit::ChannelDelete {
+                channel_id: "power".into(),
+            },
+            Edit::ChannelDelete {
+                channel_id: "house_lights".into(),
             },
         ]),
     )

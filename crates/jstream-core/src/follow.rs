@@ -86,12 +86,26 @@ impl CameraMotion {
     /// to 0 to 64, and a camera that would reach its target keeps its unmoved position.
     /// The pan and tilt then turn the view about the moved position, as a live aim does
     /// (ADR-0152). Allocates nothing.
+    #[cfg(test)]
     pub(crate) fn apply(
         &self,
         camera: SceneCamera,
         at: MediaTime,
         shown: Option<MediaTime>,
         heard: impl Fn(&str) -> Option<f32>,
+    ) -> SceneCamera {
+        self.apply_scaled(camera, at, shown, heard, |_| 1.0)
+    }
+
+    /// As [`CameraMotion::apply`], each modifier's value multiplied by `amount` of its
+    /// ID: what its `amount` channel sets (ADR-0183 decision 7).
+    pub(crate) fn apply_scaled(
+        &self,
+        camera: SceneCamera,
+        at: MediaTime,
+        shown: Option<MediaTime>,
+        heard: impl Fn(&str) -> Option<f32>,
+        amount: impl Fn(&str) -> f32,
     ) -> SceneCamera {
         if self.0.is_empty() {
             return camera;
@@ -105,12 +119,13 @@ impl CameraMotion {
         let mut autofocus = if camera.autofocus { 1.0_f32 } else { 0.0 };
         let mut drives_autofocus = false;
         for (property, modifier) in self.0.iter() {
-            let value = jstream_anim::evaluate_with(
+            let value = jstream_anim::evaluate_scaled(
                 std::slice::from_ref(modifier),
                 engine_s,
                 shown_s,
                 |_| None,
                 &heard,
+                &amount,
             )
             .x;
             let value = value as f32;
@@ -212,9 +227,14 @@ impl CameraMoves {
             }
             None => base,
         };
-        self.motion.apply(followed, at, shown, |id| {
-            bindings.camera_level(&self.family, id)
-        })
+        let amounts = bindings.camera_amounts(&self.family);
+        self.motion.apply_scaled(
+            followed,
+            at,
+            shown,
+            |id| bindings.camera_level(&self.family, id),
+            |id| crate::reactive::amount_of(amounts, id),
+        )
     }
 
     /// Whether it changes the camera with time.
@@ -1343,6 +1363,7 @@ mod tests {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         };
         let motion = CameraMotion::of(&[
             drift("x", CameraProperty::PositionX, 10.0),
@@ -1472,6 +1493,7 @@ mod tests {
                 },
                 clock: MotionClock::Engine,
                 enabled: true,
+                amount: None,
             }])
         };
         let on = button(0.0, 1.0);
@@ -1512,6 +1534,7 @@ mod tests {
             },
             clock: MotionClock::Engine,
             enabled: true,
+            amount: None,
         };
         let motion = CameraMotion::of(&[
             fader("fov", CameraProperty::Fov, 0.0, -20.0),
