@@ -326,6 +326,29 @@ impl Collection {
             .collect()
     }
 
+    /// The edits that stop `chord` running `action`, and nothing else it runs
+    /// (ADR-0208): a `hotkey.clear` naming each bound action that matches, where a
+    /// `scene.switch` matches any switch to its scene, as [`Self::chords_for`] reads it.
+    pub fn unbind_edits(&self, chord: &Chord, action: &Action) -> Vec<Edit> {
+        let matches = |bound: &Action| match (action, bound) {
+            (
+                Action::SceneSwitch { scene_id, .. },
+                Action::SceneSwitch {
+                    scene_id: bound, ..
+                },
+            ) => scene_id == bound,
+            _ => action == bound,
+        };
+        self.hotkey_actions(chord)
+            .into_iter()
+            .filter(|bound| matches(bound))
+            .map(|bound| Edit::HotkeyClear {
+                chord: chord.clone(),
+                action: Some(bound),
+            })
+            .collect()
+    }
+
     /// The first action bound to `chord`, if any, and this version knows it.
     pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
         self.hotkey_actions(chord).into_iter().next()

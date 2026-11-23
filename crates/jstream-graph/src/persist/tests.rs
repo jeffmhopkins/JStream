@@ -1842,6 +1842,60 @@ fn a_hotkey_and_a_binding_that_set_a_channel_round_trip() {
     assert_eq!(load(&graph.to_collection_json()), Ok(graph));
 }
 
+/// A chord and a trigger running several actions (ADR-0208) save one entry per action, in
+/// bind order, and load back the same, the chord's labels on each of its entries.
+#[test]
+fn a_chord_and_a_trigger_with_several_actions_round_trip() {
+    use jstream_protocol::Trigger;
+    let mut graph = fixture_graph();
+    let switch = Action::SceneSwitch {
+        scene_id: SceneId::new("a"),
+        preset_id: None,
+        via: Vec::new(),
+    };
+    let toggle = Action::OutputToggle {
+        output_id: OutputId::new("yt"),
+    };
+    let pad = Trigger::MidiNote {
+        note: 36,
+        channel: Some(10),
+        input: None,
+    };
+    let applied = graph.apply(
+        &[
+            Edit::HotkeySet {
+                chord: Chord::new("F9"),
+                action: toggle.clone(),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F9"),
+                action: switch.clone(),
+            },
+            Edit::BindingSet {
+                trigger: pad.clone(),
+                action: switch,
+            },
+            Edit::BindingSet {
+                trigger: pad,
+                action: toggle,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        saved["hotkeys"],
+        json!([
+            {"chord": "F9", "action": {"type": "output.toggle", "output_id": "yt"}},
+            {"chord": "F9", "action": {"type": "scene.switch", "scene_id": "a"}}
+        ])
+    );
+    assert_eq!(saved["bindings"].as_array().map(Vec::len), Some(2));
+    assert_eq!(load(&json), Ok(graph));
+}
+
 /// A binding is checked on load as `hotkey.set` checks it: here its scene is missing.
 #[test]
 fn a_hotkey_naming_a_missing_scene_is_refused() {

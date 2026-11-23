@@ -70,7 +70,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
-  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
+  `Action` (`output.start`, `output.stop`, `output.toggle` (0.182, ADR-0208), `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
@@ -1286,7 +1286,11 @@ covers = ["crates/jstream-protocol/src/output.rs"]
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
 `output.start`; `output.delete` removes one, and is refused with `invalid_argument`
-while it runs. A target URL must be an `rtmp://` or `rtmps://` server URL with a host and an
+while it runs. `output.toggle` (0.182,
+[ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)) starts an output
+that is stopped or failed and stops any other, and is run as the `output.start` or
+`output.stop` it resolves to, with that action's events and errors: it is what a "go
+live" or "record" key binds. A target URL must be an `rtmp://` or `rtmps://` server URL with a host and an
 application name, and is refused if it could carry a credential (`user:password@`, a
 query or a fragment). A key pasted into the path can't be told from a nested
 application name, so it is stored as given. A `record` output (0.9) records to a file
@@ -1366,8 +1370,8 @@ covers = ["crates/jstream-protocol/src/hotkey.rs"]
 Hotkey bindings (0.25) are collection state too
 ([ADR-0024 §5](../../docs/adr/0024-scene-structure.md),
 [ADR-0040 §3](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)):
-a `Chord` bound to an `Action`, which a client that listens for keys sends when the
-chord is pressed. The engine only stores bindings; the desktop host (OS-global
+a `Chord` bound to one or more `Action`s, which a client that listens for keys sends,
+in bind order, when the chord is pressed. The engine only stores bindings; the desktop host (OS-global
 shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon none.
 - **Chords.** Zero or more of the modifiers `Ctrl`, `Alt`, `Shift` and `Meta`, each at
   most once and in that order, then one key, joined by `+`: `F1`, `Ctrl+Digit1`,
@@ -1386,9 +1390,13 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   that takes steps (`Action::takes_steps`: today `scene.zoom_camera`, whose `steps` is
   what one notch zooms). Bound to any other action, `hotkey.set` is `invalid_argument`
   on `action.type`.
-- **`hotkey.set {chord, action}`** binds a chord; its inverse is `hotkey.clear`. It is
-  refused with `already_exists` (entity `hotkey`, the chord as `id`) for a chord that
-  is bound: rebinding is a batch of `hotkey.clear` then `hotkey.set`. `action` is an
+- **`hotkey.set {chord, action}`** binds a chord to an action; its inverse is
+  `hotkey.clear` naming that action. A chord runs several actions (0.182,
+  [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)), in the order
+  they were bound: `hotkey.set` on a bound chord adds the action after its others, and
+  is refused with `already_exists` (entity `hotkey`, the chord as `id`) only for an
+  action the chord runs already. Rebinding a chord to one action is a batch of
+  `hotkey.clear` without `action`, then `hotkey.set`. `action` is an
   action request, checked as an `action` call is, and only actions can be bound, so a
   hotkey never adds to an undo history. `output.set_key` can't be bound (its stream key
   would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
@@ -1410,8 +1418,13 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   (`not_found`, entity `hotkey`), then each label (`not_found`), each listed once
   (`invalid_argument` on `labels`). They are kept ordered by ID, and an empty list
   removes them; its inverse sets the old ones. `hotkey.set` binds with none.
-- **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
-  inverse is `hotkey.set` with the action, then `hotkey.set_labels` when it carried any.
+- **`hotkey.clear {chord, action?}`** unbinds `action` from the chord, or, without
+  `action`, every action it runs; it is `not_found` (entity `hotkey`) for a chord that
+  isn't bound or doesn't run that action. A chord's labels go with its last action. Its
+  inverse restores the order exactly: it unbinds the actions the chord kept after the
+  first one removed, then `hotkey.set`s the removed ones and those again in order, then
+  `hotkey.set_labels` when the chord was emptied and carried any. An action bound to
+  the chord since stays bound.
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
@@ -1420,13 +1433,15 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   item an `item.*` action names), and any edit that takes an item away
   (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
   the item (ADR-0101). A binding goes with its labels. Their inverses restore the
-  bindings, with their labels, after the target. If another client has bound one of those chords since,
-  that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
+  bindings, with their labels, after the target, in their old order beside any action
+  bound to the chord since (ADR-0208). If another client has bound the same action to
+  one of those chords since, that `hotkey.set` fails and so does the undo.
   A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
   lists the ones its batch would (`hotkeys`), so a client can say "this also removes
   the hotkey Ctrl+Digit1".
 - Reads report a binding as a `HotkeyBinding {chord, action, labels}` (`labels` omitted
-  for none) whose `action` is plain
+  for none), one per action, so a chord running several appears once for each, in bind
+  order, every entry carrying the chord's labels (ADR-0208). Its `action` is plain
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
@@ -1504,7 +1519,7 @@ depends_on = ["docs/adr/0122-controller-input-midi-and-one-binding-system.md", "
 
 Controller bindings (0.96) are collection state beside the hotkeys
 ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)
-decision 1): a `Trigger` bound to an `Action`. A key chord stays a hotkey, so
+decision 1): a `Trigger` bound to one or more `Action`s. A key chord stays a hotkey, so
 `state.get`'s `hotkeys` lists chords only, as a client that registers them with the OS
 expects; every other trigger is a binding, in `bindings`. Where a client listens for a
 chord and sends its action, a controller's messages come from an input the engine reads,
@@ -1519,13 +1534,15 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   the same exactly when they are equal, so channel 1 and any channel are two bindings,
   and a message matching both fires both. Anything else is `invalid_argument` on
   `trigger.<field>`, with `Trigger::problem`'s reason.
-- **`binding.set {trigger, action}`** binds a trigger; its inverse is `binding.clear`.
-  It is refused with `already_exists` (entity `binding`, the trigger as `Display`
-  writes it, such as `MIDI note 36 on channel 10`, as `id`) for a trigger that is
-  bound. The action is checked as `hotkey.set` checks it: the same actions can't be
-  bound, and an object it names must exist.
-- **`binding.clear {trigger}`** removes a binding, or is `not_found` (entity
-  `binding`); its inverse is `binding.set` with the action.
+- **`binding.set {trigger, action}`** binds a trigger to an action; its inverse is
+  `binding.clear` naming that action. Like a chord, a trigger runs several actions in
+  bind order (0.182, ADR-0208): it is refused with `already_exists` (entity `binding`,
+  the trigger as `Display` writes it, such as `MIDI note 36 on channel 10`, as `id`)
+  only for an action the trigger runs already. The action is checked as `hotkey.set`
+  checks it: the same actions can't be bound, and an object it names must exist.
+- **`binding.clear {trigger, action?}`** unbinds `action`, or every action without it,
+  or is `not_found` (entity `binding`); its inverse restores the order exactly, as
+  `hotkey.clear`'s does.
 - **Deletes remove bindings** as they remove hotkeys, in the same edit, and their
   inverses restore them after the hotkeys. A batch's result lists them in
   `removed_bindings`, and `delete.plan` in `bindings`, ordered by trigger.
@@ -2646,7 +2663,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
   `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, and `channel.set_value`,
-  `channel.nudge` and `channel.switch`, ADR-0183) and `outputs` (`output.start`, `output.stop`). Everything else is
+  `channel.nudge` and `channel.switch`, ADR-0183) and `outputs` (`output.start`, `output.stop`, `output.toggle`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
   client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), `channel.values` (what the person plays, ADR-0183), creating, deleting and retargeting outputs, their encoders and stream
