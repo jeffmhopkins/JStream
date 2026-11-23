@@ -556,3 +556,90 @@ fn an_effect_setting_changed_later_reaches_a_3d_card() {
         "then black again"
     );
 }
+
+/// #1632: a Move between two views of a 3D scene drawn as one picture through its chain,
+/// started once the Fade onto it from a 2D scene has ended but before a plan let that
+/// go, moves item by item as from the scene at rest, so the group's red child, 200 px
+/// nearer than the wall, stays in front of it half-way; it is not the Fade's flat
+/// picture of the scene leaving under the keyframe's items.
+#[test]
+fn a_3d_groups_children_stay_in_its_space_in_a_move_after_a_fade() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    if pixel(&control, 960, 540).is_none() {
+        return;
+    }
+    let preset = |id: &str, kind: &str| Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new(id),
+        name: id.into(),
+        kind: kind.into(),
+        duration_ms: 400,
+        easing: Easing::Linear,
+        settings: Settings::default(),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("z"),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some({
+                    let mut camera = SceneCamera::framing(Canvas::DEFAULT);
+                    camera.position.z = finite(camera.position.z.get() + 300.0);
+                    camera
+                }),
+            },
+            // The scene has a chain, as a 3D set with depth effects has: a Fade onto it
+            // from another scene shows it as one picture (ADR-0065 §6).
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            preset("move", "move"),
+            preset("fade", "fade"),
+        ]),
+    )
+    .expect("a keyframe and presets");
+    let switch = |scene: &str, preset: Option<&str>| {
+        let action = Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+            preset_id: preset.map(TransitionPresetId::new),
+            via: Vec::new(),
+        };
+        super::block_on(control.call(Call::Action { action })).expect("switch");
+    };
+    switch("z", None);
+    switch("main", Some("fade"));
+    // Past the Fade's end, with no plan since to let it go.
+    clock.advance(600_000);
+    switch("k", Some("move"));
+    clock.advance(200_000);
+    engine.replan();
+    assert!(
+        engine.render_hub().load().shot().transitioning(),
+        "the Move runs"
+    );
+    assert_eq!(
+        pixel(&control, 960, 540),
+        Some(RED),
+        "the child is still in front of the wall half-way"
+    );
+}
