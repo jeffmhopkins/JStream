@@ -231,12 +231,21 @@ field: `focus_px` is the distance along the view that stays sharp and `blur_px` 
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
+`blur_px` is the aperture: 0 keeps everything sharp. With `autofocus: true` the camera \
+focuses each frame on the nearest item at the centre of the frame, gliding there, and \
+`focus_px` is only where it starts; a camera motion modifier on `autofocus` (on at 0.5 \
+or more, added to 1 when the camera's switch is on) lets a CC button switch it. \
 Models blur too, each part by its own distance, so a near part of a model goes soft \
 while the focus sits on something past it. \
-A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
-kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
-`fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
-hand-held camera. To follow the pointer over a screen capture, add a `follow_pointer` \
+A camera can move on its own: `scene.set_camera_motion` gives it up to 32 modifiers, the \
+kinds and clocks of `item.set_motion` (all but `audio`), on `position_x`/`_y`/`_z`, \
+`target_x`/`_y`/`_z`, `pan`, `tilt` (degrees, turning the view about the camera), `fov`, \
+`roll`, `focus`, `blur` or `autofocus`; a slow `wiggle` of 4-8 px on the position is a hand-held \
+camera. A `midi` modifier there takes the same fields as an item's (`controller`, \
+`channel`, `input` such as a JTunnel sender's name, `from`, `to`, `smoothing_ms`), so a \
+fader or knob moves, turns or zooms the camera; a controller reads 0 until it is first \
+sent, so make `from` the value at rest (0 keeps the stored view). A `data` one follows a \
+DAW's live data the same way. To follow the pointer over a screen capture, add a `follow_pointer` \
 filter to the effects of an item showing a `display` or `window` source (`filter.add` \
 on the `item` owner); `scene.set_camera_follow` is a shortcut that does the \
 same. The scene's camera glides after the pointer at an angle (`yaw_deg`, \
@@ -335,7 +344,7 @@ graphic and leave `body` without a background. Fonts and images can come from ht
 URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
 `@keyframes` that run once on load, with `animation-fill-mode: both`. Continuous motion \
 (a sway, a drift, a pulse, a scan) belongs on items, not in pages: `item.set_motion` \
-gives an item up to 8 modifiers (`wiggle`, `oscillate` or `drift` on `x`, `y`, `scale`, \
+gives an item up to 32 modifiers (`wiggle`, `oscillate` or `drift` on `x`, `y`, `scale`, \
 `rotation`, `tilt`, `turn`, `depth`, `opacity` or a crop edge), which the engine draws \
 each frame from one clock, so every item, mask and nested scene showing the same \
 modifiers moves in step. Put a sway on a group's item to move the group and its masks as \
@@ -370,7 +379,7 @@ for the whole message) with `data.list` and `data.get`. A number maps from `rang
 level 0 to 1 from `states`, such as `{\"recording\": 1, \"playing\": 0.5}`, and any other \
 text 0. It glides over `smoothing_ms` (default 50; 0 jumps, which suits a switch), and \
 rests at `from` while the field is absent. On `opacity`, `from` -1 and `to` 0 shows an \
-item only while the field reads 1. A camera takes no `data` modifier. \
+item only while the field reads 1. A scene camera takes `data` modifiers too. \
 To colour something from the DAW (a light in a track's own colour, a clip lamp red while \
 recording), put a `data` modifier on a colour setting (`property` `source` with \
 `source: {param: \"color\"}`, a material's `emissive`, or an effect's colour) with \

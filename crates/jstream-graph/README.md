@@ -347,7 +347,7 @@ that does not want to change the graph it has.
   other scene is `invalid_argument`, and the inverse keeps the addressing.
 - **Motion** (`motion.rs`,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
-  `item.set_motion` checks the whole list with the protocol's `check_motion` (at most 8
+  `item.set_motion` checks the whole list with the protocol's `check_motion` (at most 32
   modifiers, well-formed unique IDs, every parameter in range; `invalid_argument` names
   the field) and stores it in wire form (`MotionList`), undone by the old list. It is a
   placement edit, so addressed to a keyframe scene it writes that keyframe's `motion`

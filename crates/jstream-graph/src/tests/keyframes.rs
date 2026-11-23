@@ -1355,9 +1355,11 @@ fn a_keyframe_overrides_an_items_motion_whole_and_undoes_exactly() {
 fn set_motion_refuses_a_list_the_wire_check_refuses() {
     let mut graph = family();
     let field = |graph: &mut Graph, edit: Edit| invalid_reason(apply_err(graph, vec![edit])).0;
-    let nine: Vec<_> = (0..9).map(|n| wiggle(&format!("m{n}"), 1.0)).collect();
+    let over: Vec<_> = (0..=jstream_protocol::MAX_MOTION_MODIFIERS)
+        .map(|n| wiggle(&format!("m{n}"), 1.0))
+        .collect();
     assert_eq!(
-        field(&mut graph, set_motion("i1", None, nine)),
+        field(&mut graph, set_motion("i1", None, over)),
         "edits.0.motion"
     );
     assert_eq!(

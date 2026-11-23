@@ -17,7 +17,7 @@ use jstream_protocol::{
     check_motion,
 };
 
-/// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 8
+/// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 32
 /// modifiers, unique well-formed IDs, every parameter in range. The field is `motion`,
 /// or `motion.<n>.<param>` for one modifier's.
 pub(crate) fn check(motion: &[MotionModifier], at: usize) -> Result<(), ProtocolError> {

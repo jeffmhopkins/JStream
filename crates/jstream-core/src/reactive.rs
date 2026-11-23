@@ -68,7 +68,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use jstream_anim::{Audio, Envelope, Measure, Midi, Smoothing};
 use jstream_media::MediaTime;
 use jstream_protocol::{
-    BusId, ItemId, MotionColorFrom, MotionKind, MotionMidiControl, MotionModifier, SourceId,
+    BusId, CameraMotionModifier, ItemId, MotionColorFrom, MotionKind, MotionMidiControl,
+    MotionModifier, MotionProperty, SceneId, SourceId,
 };
 use jstream_sources::{
     AudioMeter, AudioScope, AudioScopes, DataCell, DataReading, DataWatch, LiveData, MidiInputs,
@@ -483,7 +484,16 @@ impl Binding {
     }
 }
 
-/// A shot's audio modifiers, by item and modifier ID.
+/// Whose modifier a binding is: an item's, or a scene family's camera (ADR-0176), by
+/// reference, so the follower finds it without allocating.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Owner<'a> {
+    Item(&'a ItemId),
+    Camera(&'a SceneId),
+}
+
+/// A shot's audio, MIDI and data modifiers, by item and modifier ID, and its cameras'
+/// MIDI and data ones, by scene family and modifier ID.
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Bindings {
     /// Each item's bindings, by modifier ID, in its list's order.
@@ -491,6 +501,9 @@ pub(crate) struct Bindings {
     /// Each item's modifiers that paint a colour setting (ADR-0171 decision 5), bound or
     /// not: such a modifier never adds to its setting as a number.
     painting: BTreeSet<(ItemId, String)>,
+    /// Each scene family's camera bindings (ADR-0176), by modifier ID, in its list's
+    /// order.
+    by_camera: BTreeMap<SceneId, Vec<(String, Binding)>>,
 }
 
 impl Bindings {
@@ -521,69 +534,8 @@ impl Bindings {
                 self.painting
                     .insert((item.clone(), modifier.modifier_id.clone()));
             }
-            let Some(kind) = jstream_graph::anim_modifiers(std::slice::from_ref(modifier))
-                .pop()
-                // One that drives an effect setting (ADR-0138) follows as one that moves
-                // the box does.
-                .or_else(|| {
-                    jstream_graph::effect_anim_modifiers(std::slice::from_ref(modifier))
-                        .pop()
-                        .map(|(_, modifier)| modifier)
-                })
-                // So does one that drives a source setting (ADR-0171 decision 4).
-                .or_else(|| {
-                    jstream_graph::source_anim_modifiers(std::slice::from_ref(modifier))
-                        .pop()
-                        .map(|(_, modifier)| modifier)
-                })
-                .map(|modifier| modifier.kind)
-            else {
+            let Some(input) = input_of(modifier, heard, midi, data) else {
                 continue;
-            };
-            let input = match kind {
-                jstream_anim::Kind::Audio(audio) => {
-                    let Some(scope) = hearing(modifier).and_then(|h| heard.get(&h)) else {
-                        continue;
-                    };
-                    Input::Scope {
-                        audio,
-                        scope: Arc::clone(scope),
-                    }
-                }
-                // A data modifier follows as a MIDI one, on its watched field.
-                jstream_anim::Kind::Midi(params)
-                    if matches!(modifier.kind, MotionKind::Data { .. }) =>
-                {
-                    let (Some((watch, map)), Some(data)) = (DataMap::of(modifier), data) else {
-                        continue;
-                    };
-                    Input::Data {
-                        midi: params,
-                        cell: data.watch(&watch),
-                        map,
-                    }
-                }
-                jstream_anim::Kind::Midi(params) => {
-                    let (Some(control), Some(inputs)) = (Control::of(modifier), midi) else {
-                        continue;
-                    };
-                    let state = match &modifier.kind {
-                        MotionKind::Midi {
-                            input: Some(name), ..
-                        } => match inputs.input(name) {
-                            Some(state) => state,
-                            // Past the inputs the engine tracks by name: nothing comes.
-                            None => Arc::new(MidiState::new()),
-                        },
-                        _ => inputs.any(),
-                    };
-                    Input::Midi {
-                        midi: params,
-                        state,
-                        control,
-                    }
-                }
-                _ => continue,
             };
             let listed = self.by_item.entry(item.clone()).or_default();
             if listed.iter().all(|(id, _)| *id != modifier.modifier_id) {
@@ -592,9 +544,45 @@ impl Bindings {
         }
     }
 
+    /// Records scene family `family`'s camera MIDI and data modifiers in `motion`
+    /// (ADR-0176), as [`Bindings::record`] records an item's: the follower smooths them
+    /// by family and modifier ID, so a camera's controller carries across its family's
+    /// keyframes and a Move between them. A camera hears nothing, so an audio one is
+    /// left out, and rests at its `from`.
+    pub(crate) fn record_camera(
+        &mut self,
+        family: &SceneId,
+        motion: &[CameraMotionModifier],
+        midi: Option<&MidiInputs>,
+        data: Option<&LiveData>,
+    ) {
+        let unheard = HeardScopes::default();
+        for camera in motion {
+            if matches!(camera.kind, MotionKind::Audio { .. }) {
+                continue;
+            }
+            let modifier = MotionModifier {
+                modifier_id: camera.modifier_id.clone(),
+                property: MotionProperty::X,
+                effect: None,
+                source: None,
+                kind: camera.kind.clone(),
+                clock: camera.clock,
+                enabled: camera.enabled,
+            };
+            let Some(input) = input_of(&modifier, &unheard, midi, data) else {
+                continue;
+            };
+            let listed = self.by_camera.entry(family.clone()).or_default();
+            if listed.iter().all(|(id, _)| *id != modifier.modifier_id) {
+                listed.push((modifier.modifier_id, Binding::new(input)));
+            }
+        }
+    }
+
     /// Whether there are none.
     pub(crate) fn is_empty(&self) -> bool {
-        self.by_item.is_empty()
+        self.by_item.is_empty() && self.by_camera.is_empty()
     }
 
     /// For `item`'s modifier `modifier` that paints a colour setting (ADR-0171 decision
@@ -617,28 +605,108 @@ impl Bindings {
     /// The level of `item`'s audio modifier `modifier` for the current tick, if the shot
     /// has it. Allocates nothing.
     pub(crate) fn level(&self, item: &ItemId, modifier: &str) -> Option<f32> {
-        self.by_item
-            .get(item)?
+        Self::find(self.by_item.get(item)?, modifier)
+    }
+
+    /// The level of scene family `family`'s camera modifier `modifier` for the current
+    /// tick, if the shot has it (ADR-0176). Allocates nothing.
+    pub(crate) fn camera_level(&self, family: &SceneId, modifier: &str) -> Option<f32> {
+        Self::find(self.by_camera.get(family)?, modifier)
+    }
+
+    fn find(listed: &[(String, Binding)], modifier: &str) -> Option<f32> {
+        listed
             .iter()
             .find(|(id, _)| id == modifier)
             .map(|(_, binding)| binding.level())
     }
 
-    /// Every binding, with its item and modifier ID.
-    fn all(&self) -> impl Iterator<Item = (&ItemId, &str, &Binding)> {
-        self.by_item.iter().flat_map(|(item, listed)| {
+    /// Every binding, with its owner and modifier ID.
+    fn all(&self) -> impl Iterator<Item = (Owner<'_>, &str, &Binding)> {
+        let items = self.by_item.iter().flat_map(|(item, listed)| {
             listed
                 .iter()
-                .map(move |(id, binding)| (item, id.as_str(), binding))
-        })
+                .map(move |(id, binding)| (Owner::Item(item), id.as_str(), binding))
+        });
+        let cameras = self.by_camera.iter().flat_map(|(family, listed)| {
+            listed
+                .iter()
+                .map(move |(id, binding)| (Owner::Camera(family), id.as_str(), binding))
+        });
+        items.chain(cameras)
     }
 
-    /// Whether it has `item`'s modifier `modifier`.
-    fn has(&self, item: &ItemId, modifier: &str) -> bool {
-        self.by_item
-            .get(item)
-            .is_some_and(|listed| listed.iter().any(|(id, _)| id == modifier))
+    /// Whether it has `owner`'s modifier `modifier`.
+    fn has(&self, owner: Owner<'_>, modifier: &str) -> bool {
+        let listed = match owner {
+            Owner::Item(item) => self.by_item.get(item),
+            Owner::Camera(family) => self.by_camera.get(family),
+        };
+        listed.is_some_and(|listed| listed.iter().any(|(id, _)| id == modifier))
     }
+}
+
+/// What `modifier` follows, when it is an audio modifier whose scope `heard` has, a MIDI
+/// one and the engine has `midi` inputs, or a data one and it has `data`.
+fn input_of(
+    modifier: &MotionModifier,
+    heard: &HeardScopes,
+    midi: Option<&MidiInputs>,
+    data: Option<&LiveData>,
+) -> Option<Input> {
+    let kind = jstream_graph::anim_modifiers(std::slice::from_ref(modifier))
+        .pop()
+        // One that drives an effect setting (ADR-0138) follows as one that moves
+        // the box does.
+        .or_else(|| {
+            jstream_graph::effect_anim_modifiers(std::slice::from_ref(modifier))
+                .pop()
+                .map(|(_, modifier)| modifier)
+        })
+        // So does one that drives a source setting (ADR-0171 decision 4).
+        .or_else(|| {
+            jstream_graph::source_anim_modifiers(std::slice::from_ref(modifier))
+                .pop()
+                .map(|(_, modifier)| modifier)
+        })
+        .map(|modifier| modifier.kind)?;
+    Some(match kind {
+        jstream_anim::Kind::Audio(audio) => {
+            let scope = hearing(modifier).and_then(|h| heard.get(&h))?;
+            Input::Scope {
+                audio,
+                scope: Arc::clone(scope),
+            }
+        }
+        // A data modifier follows as a MIDI one, on its watched field.
+        jstream_anim::Kind::Midi(params) if matches!(modifier.kind, MotionKind::Data { .. }) => {
+            let ((watch, map), data) = (DataMap::of(modifier)?, data?);
+            Input::Data {
+                midi: params,
+                cell: data.watch(&watch),
+                map,
+            }
+        }
+        jstream_anim::Kind::Midi(params) => {
+            let (control, inputs) = (Control::of(modifier)?, midi?);
+            let state = match &modifier.kind {
+                MotionKind::Midi {
+                    input: Some(name), ..
+                } => match inputs.input(name) {
+                    Some(state) => state,
+                    // Past the inputs the engine tracks by name: nothing comes.
+                    None => Arc::new(MidiState::new()),
+                },
+                _ => inputs.any(),
+            };
+            Input::Midi {
+                midi: params,
+                state,
+                control,
+            }
+        }
+        _ => return None,
+    })
 }
 
 /// A meter of the [`Follower`]'s, for one heard scope.
@@ -725,6 +793,8 @@ pub(crate) struct Follower {
     meters: Vec<Meter>,
     /// Each binding's envelope or smoothing, by item and modifier ID.
     envelopes: BTreeMap<ItemId, Vec<(String, Follow)>>,
+    /// Each camera binding's smoothing, by scene family and modifier ID (ADR-0176).
+    cameras: BTreeMap<SceneId, Vec<(String, Follow)>>,
     /// The tick it last followed, so a second call for the same tick changes nothing.
     last: Option<MediaTime>,
 }
@@ -740,8 +810,9 @@ impl Follower {
     /// smoothing's first step lands on the control's value (ADR-0168).
     pub(crate) fn follow(&mut self, bindings: &Bindings, now: MediaTime) {
         if bindings.is_empty() {
-            if !self.envelopes.is_empty() || !self.meters.is_empty() {
+            if !self.envelopes.is_empty() || !self.cameras.is_empty() || !self.meters.is_empty() {
                 self.envelopes.clear();
+                self.cameras.clear();
                 self.meters.clear();
             }
             self.last = Some(now);
@@ -777,11 +848,13 @@ impl Follower {
                 meter.meter.measure_levels(scope, ms);
             }
         }
-        for (item, id, binding) in bindings.all() {
-            let Some((_, follow)) = self
-                .envelopes
-                .get_mut(item)
-                .and_then(|listed| listed.iter_mut().find(|(at, _)| at == id))
+        for (owner, id, binding) in bindings.all() {
+            let listed = match owner {
+                Owner::Item(item) => self.envelopes.get_mut(item),
+                Owner::Camera(family) => self.cameras.get_mut(family),
+            };
+            let Some((_, follow)) =
+                listed.and_then(|listed| listed.iter_mut().find(|(at, _)| at == id))
             else {
                 continue;
             };
@@ -843,17 +916,19 @@ impl Follower {
         }
     }
 
-    /// Stores in each of `bindings` that no follower has stored yet the level its item and
-    /// modifier were last followed to, when its state is of its kind and has stepped.
+    /// Stores in each of `bindings` that no follower has stored yet the level its item (or
+    /// camera's family, ADR-0176) and modifier were last followed to, when its state is of its kind and has stepped.
     /// Allocates nothing.
     fn carry(&self, bindings: &Bindings) {
-        for (item, id, binding) in bindings.all() {
+        for (owner, id, binding) in bindings.all() {
             if binding.followed.load(Ordering::Relaxed) {
                 continue;
             }
-            let Some((_, follow)) = self
-                .envelopes
-                .get(item)
+            let listed = match owner {
+                Owner::Item(item) => self.envelopes.get(item),
+                Owner::Camera(family) => self.cameras.get(family),
+            };
+            let Some((_, follow)) = listed
                 .and_then(|listed| listed.iter().find(|(at, _)| at == id))
                 .filter(|(_, follow)| follow.fits(binding))
             else {
@@ -900,20 +975,35 @@ impl Follower {
                 Input::Midi { .. } | Input::Data { .. } => false,
             });
         }
-        let stale = self
-            .envelopes
-            .iter()
-            .any(|(item, listed)| listed.iter().any(|(id, _)| !bindings.has(item, id)));
+        let stale = self.envelopes.iter().any(|(item, listed)| {
+            listed
+                .iter()
+                .any(|(id, _)| !bindings.has(Owner::Item(item), id))
+        }) || self.cameras.iter().any(|(family, listed)| {
+            listed
+                .iter()
+                .any(|(id, _)| !bindings.has(Owner::Camera(family), id))
+        });
         if stale {
             for (item, listed) in &mut self.envelopes {
-                listed.retain(|(id, _)| bindings.has(item, id));
+                listed.retain(|(id, _)| bindings.has(Owner::Item(item), id));
             }
             self.envelopes.retain(|_, listed| !listed.is_empty());
+            for (family, listed) in &mut self.cameras {
+                listed.retain(|(id, _)| bindings.has(Owner::Camera(family), id));
+            }
+            self.cameras.retain(|_, listed| !listed.is_empty());
         }
-        for (item, id, binding) in bindings.all() {
-            let listed = match self.envelopes.get_mut(item) {
-                Some(listed) => listed,
-                None => self.envelopes.entry(item.clone()).or_default(),
+        for (owner, id, binding) in bindings.all() {
+            let listed = match owner {
+                Owner::Item(item) => match self.envelopes.get_mut(item) {
+                    Some(listed) => listed,
+                    None => self.envelopes.entry(item.clone()).or_default(),
+                },
+                Owner::Camera(family) => match self.cameras.get_mut(family) {
+                    Some(listed) => listed,
+                    None => self.cameras.entry(family.clone()).or_default(),
+                },
             };
             match listed.iter_mut().find(|(at, _)| at == id) {
                 Some((_, follow)) if !follow.fits(binding) => *follow = Follow::new(binding),
@@ -1181,6 +1271,70 @@ mod tests {
 
     fn cc(channel: u8, controller: u8, value: u8) -> jstream_midi::Message {
         jstream_midi::Message::parse(&[0xB0 | channel, controller, value]).expect("a CC")
+    }
+
+    /// ADR-0176: a camera's MIDI modifier is followed by scene family and ID, apart from
+    /// an item's with the same ID, and carries into a new shot of the same family.
+    #[test]
+    fn a_camera_binding_follows_by_family_apart_from_items() {
+        let midi = MidiInputs::new();
+        let family = SceneId::new("cockpit");
+        let item = ItemId::new("cockpit");
+        let heard: HeardScopes = Arc::default();
+        let on_camera = |m: MotionModifier| CameraMotionModifier {
+            modifier_id: m.modifier_id,
+            property: jstream_protocol::CameraProperty::Fov,
+            kind: m.kind,
+            clock: m.clock,
+            enabled: m.enabled,
+        };
+        let plan = || {
+            let mut bindings = Bindings::default();
+            bindings.record(
+                &item,
+                &[fader("smooth", 0, None, None)],
+                &heard,
+                Some(&midi),
+                None,
+            );
+            bindings.record_camera(
+                &family,
+                &[
+                    on_camera(fader("smooth", 100, Some(16), Some("Bitwig"))),
+                    on_camera(light("pulse", None, MotionMeasure::Level)),
+                ],
+                Some(&midi),
+                None,
+            );
+            bindings
+        };
+        let first = plan();
+        assert_eq!(first.camera_level(&family, "smooth"), Some(0.0));
+        assert!(
+            first.camera_level(&family, "pulse").is_none(),
+            "a camera hears nothing"
+        );
+        let mut follower = Follower::default();
+        midi.push("Bitwig", 0, &cc(15, 7, 127));
+        follower.follow(&first, at_ms(0));
+        assert_eq!(first.camera_level(&family, "smooth"), Some(1.0), "lands");
+        assert_eq!(first.level(&item, "smooth"), Some(1.0));
+        midi.push("Bitwig", 1, &cc(15, 7, 0));
+        follower.follow(&first, at_ms(100));
+        let smoothed = first.camera_level(&family, "smooth").expect("level");
+        assert!((smoothed - (-1f32).exp()).abs() < 1e-3, "{smoothed}");
+        assert_eq!(first.level(&item, "smooth"), Some(0.0), "the item's jumps");
+        // Another channel moves nothing.
+        midi.push("Bitwig", 2, &cc(0, 7, 127));
+        let second = plan();
+        follower.follow(&second, at_ms(200));
+        let next = second.camera_level(&family, "smooth").expect("level");
+        assert!((next - (-2f32).exp()).abs() < 1e-3, "carried: {next}");
+        assert!(
+            second
+                .camera_level(&SceneId::new("other"), "smooth")
+                .is_none()
+        );
     }
 
     /// ADR-0168: a MIDI binding reads its control on its input and channel, lands on it

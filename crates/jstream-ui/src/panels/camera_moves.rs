@@ -9,7 +9,9 @@
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
-use super::motion::{KINDS, Param, SHAPES, kind_name, param_value, sized_kind, with_param};
+use super::motion::{
+    KINDS, Param, SHAPES, kind_name, param_value, sized_kind, with_input, with_param,
+};
 use super::number::NumberField;
 use super::scene_properties::SceneDraft;
 use crate::store::Collection;
@@ -32,6 +34,9 @@ pub fn property_name(property: CameraProperty) -> &'static str {
         CameraProperty::Roll => "Roll",
         CameraProperty::Focus => "Focus distance",
         CameraProperty::Blur => "Blur",
+        CameraProperty::Pan => "Pan",
+        CameraProperty::Tilt => "Tilt",
+        CameraProperty::Autofocus => "Autofocus",
         // One from a newer engine: shown, but not offered.
         _ => "Other",
     }
@@ -39,7 +44,11 @@ pub fn property_name(property: CameraProperty) -> &'static str {
 
 fn unit(property: CameraProperty) -> &'static str {
     match property {
-        CameraProperty::Fov | CameraProperty::Roll => "°",
+        CameraProperty::Fov | CameraProperty::Roll | CameraProperty::Pan | CameraProperty::Tilt => {
+            "°"
+        }
+        // On at one half or more.
+        CameraProperty::Autofocus => "",
         _ => "px",
     }
 }
@@ -50,6 +59,33 @@ fn gentle(property: CameraProperty) -> f32 {
         "°" => 0.5,
         _ => 6.0,
     }
+}
+
+/// A new camera modifier of the kind named `name`, `size` its amount: a MIDI one
+/// (ADR-0176) follows CC 1 on any input across a range big enough to see, resting at
+/// the camera's stored view, and the clocked kinds are an item's.
+pub fn camera_kind(name: &str, property: CameraProperty, size: f32) -> Option<MotionKind> {
+    if name == "MIDI" {
+        let to = match property {
+            // A zoom in: the field of view narrows.
+            CameraProperty::Fov => -20.0,
+            // A button or a fader past its middle turns autofocus on.
+            CameraProperty::Autofocus => 1.0,
+            _ if unit(property) == "°" => 45.0,
+            _ => 200.0,
+        };
+        return Some(MotionKind::Midi {
+            control: jstream_control::protocol::MotionMidiControl::Cc,
+            controller: Some(1),
+            channel: None,
+            input: None,
+            smoothing_ms: 50,
+            curve: jstream_control::protocol::MotionCurve::Linear,
+            from: jstream_control::protocol::Finite32::ZERO,
+            to: jstream_control::protocol::Finite32::new(to)?,
+        });
+    }
+    sized_kind(name, size)
 }
 
 /// `list` with a new hand-held sway (a slow wiggle on the position's x) at its end,
@@ -251,7 +287,7 @@ pub fn CameraMoves(
                                     }
                                     let size = param_value(&m.kind, Param::Amplitude)
                                         .map_or_else(|| gentle(m.property), |v| v as f32);
-                                    match sized_kind(&name, size) {
+                                    match camera_kind(&name, m.property, size) {
                                         Some(kind) => {
                                             m.kind = kind;
                                             true
@@ -263,8 +299,8 @@ pub fn CameraMoves(
                         >
                             {KINDS
                                 .into_iter()
-                                // A camera hears nothing and follows no live data: an audio
-                                // or data move is an item's.
+                                // A camera hears nothing: an audio move is an item's. A data
+                                // one is set over the protocol (ADR-0176).
                                 .filter(|k| !matches!(*k, "Audio" | "DAW data"))
                                 .map(|k| view! { <option value=k>{k}</option> })
                                 .collect_view()}
@@ -308,6 +344,32 @@ pub fn CameraMoves(
                         </label>
                     </Show>
                     {fields}
+                    <Show when=move || at().is_some_and(|m| matches!(m.kind, MotionKind::Midi { .. }))>
+                        <label class="select-field">
+                            <span class="field-label">"Input"</span>
+                            <input
+                                type="text"
+                                aria-label="Which MIDI input"
+                                placeholder="Any input"
+                                title="A MIDI port or JTunnel sender by name; blank for any"
+                                maxlength="64"
+                                prop:value=move || at().and_then(|m| match m.kind {
+                                    MotionKind::Midi { input, .. } => input,
+                                    _ => None,
+                                }).unwrap_or_default()
+                                on:change=move |event| {
+                                    let name = event_target_value(&event);
+                                    change(n, &|m| match with_input(&m.kind, &name) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            />
+                        </label>
+                    </Show>
                     <label class="select-field">
                         <span class="field-label">"Starts"</span>
                         <select
@@ -395,6 +457,35 @@ pub fn CameraMoves(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ADR-0176: MIDI is offered on a camera, resting at the stored view, and the list
+    /// it makes is one the engine takes.
+    #[test]
+    fn a_camera_takes_a_midi_move() {
+        let fov = camera_kind("MIDI", CameraProperty::Fov, 0.5).expect("midi");
+        assert!(matches!(
+            fov,
+            MotionKind::Midi { from, to, controller: Some(1), .. }
+                if from.get() == 0.0 && to.get() == -20.0
+        ));
+        let pan = camera_kind("MIDI", CameraProperty::Pan, 0.5).expect("midi");
+        assert!(matches!(pan, MotionKind::Midi { to, .. } if to.get() == 45.0));
+        let named = with_input(&pan, "Bitwig").expect("named");
+        let list = [CameraMotionModifier {
+            modifier_id: "pan".into(),
+            property: CameraProperty::Pan,
+            kind: named,
+            clock: MotionClock::Engine,
+            enabled: true,
+        }];
+        assert_eq!(
+            jstream_control::protocol::check_camera_motion(&list),
+            Ok(())
+        );
+        assert!(camera_kind("Audio", CameraProperty::Fov, 0.5).is_none());
+        assert_eq!(property_name(CameraProperty::Tilt), "Tilt");
+        assert_eq!(unit(CameraProperty::Pan), "°");
+    }
 
     #[test]
     fn adding_starts_a_hand_held_sway_and_stops_when_full() {

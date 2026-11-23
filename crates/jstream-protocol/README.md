@@ -228,9 +228,11 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
-  the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
+  the target's x, y and z, `fov`, `roll`, `focus` and `blur`, and since 0.167 `pan` and
+  `tilt`, and `autofocus`, on at one half or more) and `check_camera_motion`,
   which checks a camera's list as `check_motion` checks an item's and refuses an
-  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
+  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); since 0.167
+  it takes `midi` and `data` ones ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
   `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms`, since 0.91 `safe_margin_pct`
   up to `MAX_FOLLOW_MARGIN_PCT` and, since 0.124, `hold_zoom`, each with its default) with `CameraFollow::check`, and
@@ -369,7 +371,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.165 because a scene's surfaces can reflect each other through
+`PROTOCOL_VERSION` is 0.167 because a scene camera's motion takes `midi` and `data`
+modifiers, so a controller or a DAW's live data drives its position, aim, roll and field
+of view, `CameraProperty` gains `pan` and `tilt`, which turn the view about the
+camera, and `autofocus`, `SceneCamera` gains `autofocus`, which focuses on what is at the
+frame's centre, and `MAX_MOTION_MODIFIERS` is 32, for items and cameras alike
+([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md));
+0.165 because a scene's surfaces can reflect each other through
 reflection probes: `SceneOptions`' `reflections`, and `RenderFeatures`'
 `reflection_probes` and `max_probe_resolution` (with `PROBE_RESOLUTIONS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -1532,7 +1540,13 @@ fields, each omitted while it has its default. A scene's **camera**
 (default `true`, not written while true), and since 0.77 a depth of field: `focus_px`,
 the distance along the view of the plane in focus (absent, everything is in focus), and
 `blur_px`, the blur radius of a point infinitely far behind it, 0 to 64 (default 0, not
-written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). A camera
+written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), its
+aperture: 0 keeps everything sharp. Since 0.167 `autofocus` (default `false`, not
+written while false) focuses a camera with a depth of field on the nearest item its
+viewing axis meets each frame, gliding there and holding while nothing is met, with
+`focus_px` the distance it starts from
+([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)
+decision 5). A camera
 omitted removes it. The edit refuses a field of view out of range
 (`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
 position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance
@@ -2882,7 +2896,7 @@ covers = ["crates/jstream-protocol/src/motion.rs"]
 
 Since 0.81 an item carries continuous motion
 ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md), `motion.rs`):
-`ItemInfo.motion`, an ordered list of at most 8 `MotionModifier`s that the engine
+`ItemInfo.motion`, an ordered list of at most 32 (8 before 0.167) `MotionModifier`s that the engine
 evaluates as each frame is drawn. A modifier never writes the item's values: `state.get`
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
@@ -2927,8 +2941,9 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   the first frame an item is drawn lands on the value), bent by `curve` as an audio
   modifier's is, and mapped onto `from` (default 0) to `to` (default 1), each within
   ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
-  preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
-  camera's motion refuses it.
+  preview reads the control as it is, unsmoothed. Its `clock` is ignored. A scene
+  camera's motion takes it since 0.167, smoothed by scene family and ID
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
 - **`data`** (since 0.160,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3)
   follows one field of a JTunnel sender's live data the same way: `field` (a dotted path
@@ -2940,7 +2955,8 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   to 100 bytes, each to a value within 0 to 1) or 0; and a missing sender, key or field,
   or one that went stale, reads 0. That is smoothed, bent and mapped onto `from..to` as a
   `midi` modifier's is, with the same defaults. A preview reads the field as it is,
-  unsmoothed. Its `clock` is ignored, and a scene camera's motion refuses it.
+  unsmoothed. Its `clock` is ignored. A scene camera's motion takes it since 0.167
+  (ADR-0176).
   Since 0.164 (decision 5), on a colour setting (`property` `effect` or `source`; any
   other property refuses it, `motion.N.color_from`) it can set the colour rather than
   add to it: `color_from` `field` takes a `#rrggbb` (or `#rrggbbaa`, alpha ignored) text
