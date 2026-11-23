@@ -7,6 +7,7 @@ use crate::browser::BrowserKind;
 use crate::capture::CaptureKind;
 use crate::chat::ChatKind;
 use crate::color::ColorKind;
+use crate::fog_card::FogCardKind;
 use crate::image::ImageKind;
 use crate::light::LightKind;
 use crate::media::MediaKind;
@@ -28,7 +29,7 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0140, docs/adr/0140-source-types-and-decoding-scope-v3.md).
-    /// `backdrop`, `browser`, `chat_message`, `color`, `image`, `media`, `shape`, `text`, `timer`, `waveform`,
+    /// `backdrop`, `browser`, `chat_message`, `color`, `fog_card`, `image`, `media`, `shape`, `text`, `timer`, `waveform`,
     /// `spectrum`, `youtube_chat` and the MIDI kinds (`midi_keyboard`, `midi_piano_roll`,
     /// `midi_pads`, `midi_particles`, `midi_beat`, `midi_cc`) produce frames (`browser` and its `youtube_chat`
     /// preset through the injected backend, on the GPU). `display` and `window` say what
@@ -44,6 +45,7 @@ impl Registry {
         add(Box::new(BrowserKind::new()));
         add(Box::new(YoutubeChatKind::new()));
         add(Box::new(ColorKind::new()));
+        add(Box::new(FogCardKind::new()));
         add(Box::new(CaptureKind::display()));
         add(Box::new(CaptureKind::window()));
         add(Box::new(CaptureKind::webcam()));

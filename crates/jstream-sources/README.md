@@ -253,6 +253,22 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   kinds': at most 7680 a side and 7680 × 4320 pixels in all, either way round, which
   `create` checks before drawing, naming the side to shrink. A backdrop is soft and
   scales up with no visible loss.
+- `fog_card`: a generated card of fog, `width` by `height` pixels (at most 4096 a
+  side): the `color` everywhere, straight, and the fog in its alpha. It is the cheap
+  stand-in for `volumetric_fog`, which marches every pixel through the scene each
+  frame: a card costs what a still picture does. Placed as an item in a 3D scene in
+  front of what it should veil, it is a plane at a depth, so it shifts against what is
+  behind it as the camera moves, and a few at different depths read as fog with volume.
+  The clouds are the backdrop's seeded gradient noise, domain-warped, on a grid 4 pixels
+  coarse and interpolated. A pixel is fog where the noise passes a threshold that
+  `coverage` (0 to 1) lowers and nearness to the edge raises: over the outer `edge`
+  (0 to 1) of the way from the centre to a rounded outline through the middle of each
+  side, the threshold climbs to above anything the noise reaches. So toward the edges
+  only the densest clouds remain and then none, the fog ends in wisps, and the card
+  never shows as a rectangle (`edge` 0 keeps fog up to the edges). `density` (0 to 1)
+  is the alpha of the thickest fog, `scale` the clouds' size, and `seed` picks other
+  clouds; the alpha is dithered to 8 bits and clear stays exactly clear. Every setting
+  but the size is live, and an update draws the frame again on the sources thread.
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
   alpha), `width` by `height` pixels. The colour is live; a size change needs a new
   source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
@@ -877,7 +893,7 @@ alignment, padding, outline, live updates, font assets and limits, drawing at a
 density (twice the pixels for the same extent, kept across an update, clamped to
 `MAX_DENSITY`, lowered to a 4K canvas's pixels, halved to fit the limits, and a short
 line filling the canvas drawn at the 13x it is shown at, a bundled face picked live, letter spacing widening a line, and a shadow growing the frame but not the background), plus golden PNGs in `tests/data/text`, one of
-them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, that a look changes live while a new size restarts it, and that the size is capped at 7680 a side and 7680 × 4320 pixels, a larger one refused naming the side to shrink (#1025). `tests/shape.rs` draws a
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, that a look changes live while a new size restarts it, and that the size is capped at 7680 a side and 7680 × 4320 pixels, a larger one refused naming the side to shrink (#1025). `tests/fog_card.rs` checks the fog card's descriptor (all but the size live), that a card is its one colour with the fog in its alpha, never above `density`, and the same for the same settings, that its outermost pixels are clear, that there is less fog near the edges than in the middle and where it ends is ragged, that `coverage` and `scale` set how much fog there is and how large its clouds are, that a look changes live while a new size restarts it, and that a setting out of range is refused by name. `tests/shape.rs` draws a
 rectangle at its exact size, a pill whose corners are clear and whose edge is
 antialiased, a circle that is symmetric, linear gradients that run their angle without
 banding and mix in linear light, a radial one, and a border inside the edge, and
