@@ -118,6 +118,9 @@ test('the Sources panel adds a source as a reference', async ({ page, daemon }) 
   await expect(dialog.getByRole('option', { name: 'Color' })).toHaveAttribute('aria-selected', 'true');
   // The engine doesn't list colour, so it can't be created: only placed again.
   await expect(dialog.getByRole('radio', { name: 'Create new' })).toHaveCount(0);
+  // With nothing to create, no New | Existing choice either (C15): the list alone.
+  await expect(dialog.getByRole('group', { name: 'Add as' })).toHaveCount(0);
+  await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveCount(0);
   await expect(dialog.getByText('Or add an existing color as a reference')).toBeVisible();
   const startRev = await rev(page);
   await dialog.getByRole('button', { name: 'Add', exact: true }).click();
