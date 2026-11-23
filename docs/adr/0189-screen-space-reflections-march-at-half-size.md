@@ -67,8 +67,12 @@ as a count above High if anything needs it.
 - The march covers a quarter of the pixels it did. The resolve adds one full-size draw
   of up to nine texture reads a pixel, and the pass keeps one more layer, half the
   picture's size (about 4 MB at 1080p).
-- How much GPU time that saves on the integrated GPU ADR-0185 measured is not yet
-  measured. Nothing here turns the switch on by default: that waits for the number.
+- Measured on the integrated GPU ADR-0185 measured, one reflective 3D scene at 1080p30
+  over 15 seconds: the frame's GPU time went from about 28.4, 29.6 and 32.0 ms at Low,
+  Medium and High to 26.5, 27.0 and 27.7 ms, against 20.3 ms with the pass off. High,
+  which had dropped to 28.6 fps, held 30. The saving grows with the step count because
+  only the march is quartered. Motion was not looked at, only stills. Nothing here turns
+  the switch on by default.
 - A reflection's detail is that of one ray in four. On a mirror-smooth surface a
   reflected edge is softer than before, by about a pixel. The fades by roughness and
   toward the viewer are those of the marched pixels, so where roughness varies from
