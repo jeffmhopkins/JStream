@@ -1237,6 +1237,9 @@ unlocks, and it settles `active` only while that generation is the one in flight
 dropped any threads it opened, then settles `stopped`. The start answers
 `action_failed` and does not settle `active`. Once the pipeline is `active`, stop
 takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
+`output.toggle` (0.182, ADR-0208) reads whether the output runs under the state lock,
+then runs as the `output.start` or `output.stop` that resolves to, with its events,
+audit entry and errors.
 
 - **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
   `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
@@ -4448,7 +4451,8 @@ entries with their sentences in memory (`activity_log.rs`), whether or not the h
 a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
 or action the sentence table doesn't name reads as its command name. A controller
 binding reads by its trigger ("Bound MIDI note 36 on channel 10 from Pads to scene
-switch"), and a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
+switch"), a clear naming one action by it ("Unbound scene switch from F8", ADR-0208),
+and a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
 "Switched channel “Power” off"). A timeline's cues
 get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
 one, and `timeline.cue_fired` reports each cue

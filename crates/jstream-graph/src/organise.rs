@@ -217,8 +217,7 @@ impl Graph {
             .map(|s| s.id.clone())
             .collect();
         let hotkeys = state
-            .hotkeys
-            .iter()
+            .hotkeys()
             .filter(|(chord, _)| {
                 state
                     .hotkey_labels
@@ -1313,6 +1312,7 @@ mod tests {
         apply_ok(
             &mut cleared,
             vec![Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("F1"),
             }],
         );

@@ -1,5 +1,6 @@
 //! Hotkey bindings (ADR-0024 §5) and controller bindings (ADR-0122): the `hotkey.*` and
-//! `binding.*` edits, the labels a hotkey binding carries (ADR-0133), and the removal of
+//! `binding.*` edits, a chord or trigger running several actions in the order they were
+//! bound (ADR-0208), the labels a hotkey binding carries (ADR-0133), and the removal of
 //! the bindings that name a deleted object (ADR-0040 §3). A wheel chord binds only an
 //! action that takes steps (ADR-0112 §3).
 //!
@@ -24,9 +25,9 @@ pub(crate) fn apply(
     Some(match edit {
         Edit::HotkeySet { chord, action } => set(state, chord, action, at),
         Edit::HotkeySetLabels { chord, labels } => set_labels(state, chord, labels, at),
-        Edit::HotkeyClear { chord } => clear(state, chord),
+        Edit::HotkeyClear { chord, action } => clear(state, chord, action.as_ref()),
         Edit::BindingSet { trigger, action } => bind(state, trigger, action, at),
-        Edit::BindingClear { trigger } => unbind(state, trigger),
+        Edit::BindingClear { trigger, action } => unbind(state, trigger, action.as_ref()),
         _ => return None,
     })
 }
@@ -40,13 +41,18 @@ fn set(
     if let Some(reason) = chord.problem() {
         return Err(invalid(at, "chord", reason));
     }
-    if state.hotkeys.contains_key(chord) {
+    if state.hotkey(chord).contains(action) {
         return Err(already_exists(EntityKind::Hotkey, chord.as_str()));
     }
     check_bindable(state, action, chord.is_wheel(), at)?;
-    state.hotkeys.insert(chord.clone(), action.clone());
+    state
+        .hotkeys
+        .entry(chord.clone())
+        .or_default()
+        .push(action.clone());
     Ok(vec![Edit::HotkeyClear {
         chord: chord.clone(),
+        action: Some(action.clone()),
     }])
 }
 
@@ -75,40 +81,70 @@ fn set_labels(
     }])
 }
 
-fn clear(state: &mut State, chord: &Chord) -> Result<Vec<Edit>, ProtocolError> {
-    let removed =
-        take(state, chord).ok_or_else(|| not_found(EntityKind::Hotkey, chord.as_str()))?;
-    Ok(restore(removed))
+fn clear(
+    state: &mut State,
+    chord: &Chord,
+    action: Option<&Action>,
+) -> Result<Vec<Edit>, ProtocolError> {
+    take(state, chord, |bound| {
+        action.is_none_or(|action| bound == action)
+    })
+    .map(|(_, restore)| restore)
+    .ok_or_else(|| not_found(EntityKind::Hotkey, chord.as_str()))
 }
 
-/// Removes the binding of `chord` and its labels, and returns it.
-fn take(state: &mut State, chord: &Chord) -> Option<HotkeyBinding> {
-    let action = state.hotkeys.remove(chord)?;
-    let labels = state
-        .hotkey_labels
-        .remove(chord)
-        .map(|labels| labels.into_iter().collect())
-        .unwrap_or_default();
-    Some(HotkeyBinding::new(chord.clone(), &action).with_labels(labels))
-}
-
-/// The edits that put back a removed binding: its `hotkey.set`, then its
-/// `hotkey.set_labels` when it carried any.
-fn restore(binding: HotkeyBinding) -> Vec<Edit> {
-    let Some(action) = binding.action() else {
-        return Vec::new();
-    };
-    let mut edits = vec![Edit::HotkeySet {
-        chord: binding.chord.clone(),
-        action,
-    }];
-    if !binding.labels.is_empty() {
-        edits.push(Edit::HotkeySetLabels {
-            chord: binding.chord,
-            labels: binding.labels,
+/// Removes the actions of `chord` that `matches` picks, and the chord's labels when it
+/// is left with none. Returns the removed bindings, each with the chord's labels, and
+/// the edits that restore the chord exactly: a `hotkey.clear` of what it kept, if it
+/// kept any, then a `hotkey.set` for each action it had, in their order, then a
+/// `hotkey.set_labels` when it carried labels. `None`, changing nothing, when no action
+/// matches.
+fn take(
+    state: &mut State,
+    chord: &Chord,
+    matches: impl Fn(&Action) -> bool,
+) -> Option<(Vec<HotkeyBinding>, Vec<Edit>)> {
+    let labels = state.hotkey_labels(chord);
+    let actions = state.hotkeys.get_mut(chord)?;
+    if !actions.iter().any(&matches) {
+        return None;
+    }
+    let had = std::mem::take(actions);
+    let kept: Vec<Action> = had.iter().filter(|a| !matches(a)).cloned().collect();
+    let first = had.iter().position(&matches).unwrap_or_default();
+    let emptied = kept.is_empty() || first == 0;
+    // Exactly the order it had: the kept actions after the first removed one leave, so
+    // the removed ones rejoin in their places. An action bound since stays bound.
+    let mut restore: Vec<Edit> = had[first..]
+        .iter()
+        .filter(|a| !matches(a))
+        .map(|action| Edit::HotkeyClear {
+            chord: chord.clone(),
+            action: Some(action.clone()),
+        })
+        .collect();
+    if kept.is_empty() {
+        state.hotkeys.remove(chord);
+        state.hotkey_labels.remove(chord);
+    } else {
+        *actions = kept;
+    }
+    let removed = had
+        .iter()
+        .filter(|a| matches(a))
+        .map(|action| HotkeyBinding::new(chord.clone(), action).with_labels(labels.clone()))
+        .collect();
+    restore.extend(had[first..].iter().map(|action| Edit::HotkeySet {
+        chord: chord.clone(),
+        action: action.clone(),
+    }));
+    if emptied && !labels.is_empty() {
+        restore.push(Edit::HotkeySetLabels {
+            chord: chord.clone(),
+            labels,
         });
     }
-    edits
+    Some((removed, restore))
 }
 
 fn bind(
@@ -120,25 +156,68 @@ fn bind(
     if let Some((field, reason)) = trigger.problem() {
         return Err(invalid(at, &format!("trigger.{field}"), reason));
     }
-    if state.bindings.contains_key(trigger) {
+    if state.trigger_actions(trigger).contains(action) {
         return Err(already_exists(EntityKind::Binding, &trigger.to_string()));
     }
     check_bindable(state, action, false, at)?;
-    state.bindings.insert(trigger.clone(), action.clone());
+    state
+        .bindings
+        .entry(trigger.clone())
+        .or_default()
+        .push(action.clone());
     Ok(vec![Edit::BindingClear {
         trigger: trigger.clone(),
+        action: Some(action.clone()),
     }])
 }
 
-fn unbind(state: &mut State, trigger: &Trigger) -> Result<Vec<Edit>, ProtocolError> {
-    let action = state
-        .bindings
-        .remove(trigger)
-        .ok_or_else(|| not_found(EntityKind::Binding, &trigger.to_string()))?;
-    Ok(vec![Edit::BindingSet {
+fn unbind(
+    state: &mut State,
+    trigger: &Trigger,
+    action: Option<&Action>,
+) -> Result<Vec<Edit>, ProtocolError> {
+    take_trigger(state, trigger, |bound| {
+        action.is_none_or(|action| bound == action)
+    })
+    .map(|(_, restore)| restore)
+    .ok_or_else(|| not_found(EntityKind::Binding, &trigger.to_string()))
+}
+
+/// Removes the actions of `trigger` that `matches` picks, and the trigger when it is
+/// left with none. Returns the removed actions and the edits that restore the trigger
+/// exactly: a `binding.clear` of what it kept, if it kept any, then a `binding.set` for
+/// each action it had, in their order. `None`, changing nothing, when no action matches.
+fn take_trigger(
+    state: &mut State,
+    trigger: &Trigger,
+    matches: impl Fn(&Action) -> bool,
+) -> Option<(Vec<Action>, Vec<Edit>)> {
+    let actions = state.bindings.get_mut(trigger)?;
+    if !actions.iter().any(&matches) {
+        return None;
+    }
+    let had = std::mem::take(actions);
+    let kept: Vec<Action> = had.iter().filter(|a| !matches(a)).cloned().collect();
+    let first = had.iter().position(&matches).unwrap_or_default();
+    let mut restore: Vec<Edit> = had[first..]
+        .iter()
+        .filter(|a| !matches(a))
+        .map(|action| Edit::BindingClear {
+            trigger: trigger.clone(),
+            action: Some(action.clone()),
+        })
+        .collect();
+    if kept.is_empty() {
+        state.bindings.remove(trigger);
+    } else {
+        *actions = kept;
+    }
+    let removed = had.iter().filter(|a| matches(a)).cloned().collect();
+    restore.extend(had[first..].iter().map(|action| Edit::BindingSet {
         trigger: trigger.clone(),
-        action,
-    }])
+        action: action.clone(),
+    }));
+    Some((removed, restore))
 }
 
 /// Checks that `action` can be bound, for a hotkey or a controller binding: the action's
@@ -216,19 +295,14 @@ pub(crate) fn remove_missing_items(state: &mut State, removed: &mut Removed) -> 
                 _ => false,
             })
     };
-    let chords: Vec<Chord> = state
-        .hotkeys
-        .iter()
-        .filter(|(_, action)| gone(action))
-        .map(|(chord, _)| chord.clone())
+    let gone: Vec<Action> = state
+        .hotkeys()
+        .map(|(_, action)| action)
+        .chain(state.bindings().map(|(_, action)| action))
+        .filter(|action| gone(action))
+        .cloned()
         .collect();
-    let triggers: Vec<Trigger> = state
-        .bindings
-        .iter()
-        .filter(|(_, action)| gone(action))
-        .map(|(trigger, _)| trigger.clone())
-        .collect();
-    remove(state, chords, triggers, removed)
+    remove(state, |action| gone.contains(action), removed)
 }
 
 /// Removes every binding whose action names the object `entity` `id`, which its delete
@@ -242,42 +316,53 @@ pub(crate) fn remove_naming(
     id: &str,
     removed: &mut Removed,
 ) -> Vec<Edit> {
-    let names = |action: &Action| action.named_objects().contains(&(entity, id));
+    remove(
+        state,
+        |action| action.named_objects().contains(&(entity, id)),
+        removed,
+    )
+}
+
+/// Removes every bound action `matches` picks, from every chord and trigger (a chord or
+/// trigger keeps its other actions, ADR-0208), records the removed bindings in
+/// `removed`, and returns the edits that restore them.
+fn remove(
+    state: &mut State,
+    matches: impl Fn(&Action) -> bool,
+    removed: &mut Removed,
+) -> Vec<Edit> {
     let chords: Vec<Chord> = state
-        .hotkeys
-        .iter()
-        .filter(|(_, action)| names(action))
+        .hotkeys()
+        .filter(|(_, action)| matches(action))
         .map(|(chord, _)| chord.clone())
         .collect();
     let triggers: Vec<Trigger> = state
-        .bindings
-        .iter()
-        .filter(|(_, action)| names(action))
+        .bindings()
+        .filter(|(_, action)| matches(action))
         .map(|(trigger, _)| trigger.clone())
         .collect();
-    remove(state, chords, triggers, removed)
-}
-
-/// Removes the bindings of `chords` and `triggers`, records them in `removed`, and
-/// returns the edits that restore them.
-fn remove(
-    state: &mut State,
-    chords: Vec<Chord>,
-    triggers: Vec<Trigger>,
-    removed: &mut Removed,
-) -> Vec<Edit> {
     let mut edits = Vec::new();
-    for binding in chords.iter().filter_map(|chord| take(state, chord)) {
-        removed.hotkeys.push(binding.clone());
-        edits.extend(restore(binding));
+    for chord in dedup(chords) {
+        if let Some((bindings, restore)) = take(state, &chord, &matches) {
+            removed.hotkeys.extend(bindings);
+            edits.extend(restore);
+        }
     }
-    for trigger in triggers {
-        if let Some(action) = state.bindings.remove(&trigger) {
-            removed
-                .bindings
-                .push(Binding::new(trigger.clone(), &action));
-            edits.push(Edit::BindingSet { trigger, action });
+    for trigger in dedup(triggers) {
+        if let Some((actions, restore)) = take_trigger(state, &trigger, &matches) {
+            removed.bindings.extend(
+                actions
+                    .iter()
+                    .map(|action| Binding::new(trigger.clone(), action)),
+            );
+            edits.extend(restore);
         }
     }
     edits
+}
+
+/// `items` with each repeat dropped, the first kept: the input is already in order.
+fn dedup<T: PartialEq>(mut items: Vec<T>) -> Vec<T> {
+    items.dedup();
+    items
 }

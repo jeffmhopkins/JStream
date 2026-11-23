@@ -147,7 +147,7 @@ stamp = { hash = "b3:4220d068cf462464", by = "agent:claude", note = "Added the j
 stamp = { hash = "b3:717f84850b5a595c", by = "agent:youtube-sign-in", note = "Re-read jstream-youtube and jstream-sources rows: summaries now cite ADR-0058; nothing else changed" }
 
 ["ARCH#data-model"."body"]
-stamp = { hash = "b3:128f1e707f248207", by = "agent:channels", note = "Scene timelines now list cues, lanes, starts and stops (ADR-0184); the rest of the model is unchanged." }
+stamp = { hash = "b3:b72af094ab929893", by = "agent:bindings", note = "Re-read the collection tree: hotkeys and bindings rows now say a chord or trigger repeats once per action in bind order, as model/mod.rs stores lists." }
 
 ["ARCH#data-model"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -183,7 +183,7 @@ stamp = { hash = "b3:a5d5430cfcf7beeb", by = "agent:claude", note = "Against wav
 stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
 
 ["ARCH#data-model"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:303acef2980bbcfc", by = "agent:channels", note = "Added the channels row and amount on value_bindings in the collection tree for ADR-0183; the rest of the model is unchanged." }
+stamp = { hash = "b3:116351059ea79535", by = "agent:bindings", note = "Re-read the collection tree: hotkeys and bindings rows now say a chord or trigger repeats once per action in bind order, as model/mod.rs stores lists." }
 
 ["ARCH#gpu-pipeline"."body"]
 stamp = { hash = "b3:12b9b9fe8e839ba1", by = "agent:claude", note = "A layer in which a few items changed is drawn again only over their boxes, now cited to ADR-0201 (which adds to ADR-0194) instead of to decisions added to ADR-0194; only the citation changed here, in the text, a comment on Compositor::changed and a test's doc comment. Re-read the layer sentences: Compositor::changed and record_patches are as described, the layer's content box and what a parent draws of it are computed as for a whole redraw, and the layer is marked changed, so mip chains and parents follow as before. rewrite_unit_f16 marks its image, which changes nothing described here. | kept from the merged side: Edited the screen-space reflection sentence: one pixel in each block of two by two marches and each pixel then takes what marched pixels near it on the same surface found (ADR-0189), as screen.rs, trace.wgsl and resolve.wgsl do; the rest of the section (surface written with the layer, merged nearest, the switch off by default) is unchanged and still holds. | merge: #1644 added to this section that the sky backdrop is oriented by its light's item's turn, tilt and rotation (ADR-0182), and to the render README the sky_axes account of the same and a reordered sentence on a drive's glow strength; none of it touches the screen-space reflection sentence this branch edited, which reads as intended after the merge. | merge: #1659 (8c5db51): view depth, model depth and shadow maps become one-channel R16Float depth layers (depth_layer), red still holding 1/w; #1656's half-size SSR march reads the view depth's red as before; both texts hold together | merge: #1654 (a27a210, ADR-0187 warp aimed ahead, ADR-0188 arrival pictures) adds the aimed layout with its half-second cross-fade and the pinned arrival picture to the sky backdrop paragraph; re-read beside the quick wins and #1659 text, holds | merge: #1664 (6caea44) decodes a browser-style pass over a transparent background only over the box the items reached, and not at all when they reached nothing; re-read beside the train's quick wins, #1659 depth layers and #1654 sky text, no overlap, holds | kept from the merged side: The sky is now oriented by the light's item's turn, tilt and rotation (sky pitch and roll, ADR-0182), added beside alpha.8's probe capture, depth-layer copy and shared pipelines in the one-scene compositor paragraph; nothing contradicts. | merge: #1645 (screen-space reflections, 1f65ffa) merged: the surface buffer, model surfaces and the SSR pass join the train's sky pitch and roll and #1643 text; re-read, consistent | kept from the merged side: the backdrop paragraph says the sky is oriented by its item's turn, tilt and rotation (ADR-0182); holds on main (re-read on main after rebasing ADR-0182 from the alpha.8 train) | kept from the merged side: Review round 1: edited the SSR sentence to say the pass runs only while screen_space_reflections is on, off by default (ADR-0185); the march's halving now starts only from a step in front of the depth, and the surface fallback binds live textures, neither of which the sentence states. | kept from the merged side: Depth layers: the view depth is now described as a one-channel half-float depth layer, as a model's depth and a shadow map are; the rest re-read against the render crate's diff, which changes no other statement | kept from the merged side: the backdrop paragraph now also says it shows a picture pinned near straight ahead that changes as each warp ends (ADR-0188) | kept from the merged side: In srgb blending the decode pass now copies and decodes only the box the items reached over a transparent background, and is skipped for an empty pass; edited the sentence that said one decode pass follows the last item. Pipeline order, formats, targets and what a layer holds afterwards are unchanged | kept from the merged side: Edited: the caches paragraph now says a capture's CPU frame is held at the size its items draw it, as a source's frame is; the pipeline steps, formats and the Windows interop text are untouched by cache.rs, compositor.rs and image.rs here." }
@@ -681,7 +681,7 @@ stamp = { hash = "b3:bcb60471022246c7", by = "agent:claude-warp-aim", note = "on
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:10a076cf835a2880", by = "agent:release-alpha9", note = "Added channel to the tool list; MCP guidance now covers sequences, which the section summarises through the design guidance. | merge: #1645 (screen-space reflections, 1f65ffa) merged: the MCP tool snapshot gains SSR's rendering fields beside the train's channel and timeline tools; the summary holds | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: tools.snap's schema now says the switch defaults to false; the MCP design holds." }
+stamp = { hash = "b3:632d748116ea1256", by = "agent:bindings", note = "Re-read the schema-size note: hotkey and binding tools carry every action's schema, now including output.toggle; still true." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:34b92306cdcaa650", by = "agent:claude-sun", note = "design.rs guide gains the ADR-0198 nested-scene arrival sentence; the MCP architecture section names nothing this changes" }
@@ -741,7 +741,7 @@ stamp = { hash = "b3:2c9c7a071e1efde2", by = "agent:dxc-packaging", note = "Re-r
 stamp = { hash = "b3:66bf6e4a1c776796", by = "agent:linux-decoders", note = "NOTICE.txt now also covers symphonia's AAC-LC decoder; it still says JStream holds no AAC patent licence and names Via LA, as ADR-0062 and ADR-0160 require" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:2d09ebc9fa2a93a0", by = "agent:release-alpha9", note = "Added schema version 21 (lanes, starts, stops and timeline.play delay_ms, refused in older files). | merge: #1645 (screen-space reflections, 1f65ffa) merged: SSR changes no collection schema; the train's schema 20 (ADR-0183) and 21 (ADR-0184) text is kept, SCHEMA_VERSION stays 21 | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; edited the rendering.json bullet: steps the file leaves out are 16." }
+stamp = { hash = "b3:eee6aae3af69883f", by = "agent:bindings", note = "Re-read the collection file history: added that several actions need no schema bump, old files load, an older engine refuses a repeated chord via the replayed hotkey.set; round-trip test added in persist/tests.rs." }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
@@ -816,10 +816,10 @@ stamp = { hash = "b3:170a35823fa167a0", by = "agent:page-api-review", note = "Co
 stamp = { hash = "b3:7bed91ce5f40dd64", by = "agent:r9bzj2", note = "merge: The wave's page API took schema 8 (v7_to_v8 turns on page API checkboxes); controller bindings move to schema 9 with v8_to_v9 and fixtures/v9.json, and the text now says so" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:0dec64ac0cbe19b1", by = "agent:issues-thread", note = "Re-read against the #1671 load-order fix: the section describes schema versions, checks on load and file handling, none of which changed; it doesn't state the order channels load in, so it still holds" }
+stamp = { hash = "b3:8a52f20f38ba4836", by = "agent:bindings", note = "Re-read the collection file history: added that several actions need no schema bump, old files load, an older engine refuses a repeated chord via the replayed hotkey.set; round-trip test added in persist/tests.rs. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read against the #1671 load-order fix: the section describes schema versions, checks on load and file handling, none of which changed; it doesn't state the order channels load in, so it still holds" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:cbdd026d4ba5c4c3", by = "agent:issues-thread", note = "Re-read against the #1671 load-order fix: the section describes schema versions, checks on load and file handling, none of which changed; it doesn't state the order channels load in, so it still holds" }
+stamp = { hash = "b3:3a652b08b1973b95", by = "agent:bindings", note = "Re-read the collection file history: added that several actions need no schema bump, old files load, an older engine refuses a repeated chord via the replayed hotkey.set; round-trip test added in persist/tests.rs. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read against the #1671 load-order fix: the section describes schema versions, checks on load and file handling, none of which changed; it doesn't state the order channels load in, so it still holds" }
 
 ["ARCH#principles"."body"]
 stamp = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
@@ -834,7 +834,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:469e300ae477e5ef", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:29bbf97755ed19b5", by = "agent:release-alpha9", note = "Added 0.170's lanes, starts and stops, the play delay and studio.get waiting to the timelines bullet. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; the section's protocol text holds with both sets of additions | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the Reflections bullet: studio.set_rendering turns probes off and screen-space reflections, off by default, on app-wide." }
+stamp = { hash = "b3:940f9ec841a53f51", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."dep:crates/jstream-protocol/README.md#compatibility"]
 stamp = { hash = "b3:c499997af40d7f9e", by = "agent:channels", note = "Added the 0.169 channel edits, actions and channel.values, and the channel motion kind, note control and amount on modifiers." }
@@ -861,7 +861,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "edited the capture.targets entry to add devices with formats at 0.90" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:975ef0991b12f675", by = "agent:release-alpha9", note = "Added 0.170's lanes, starts and stops, the play delay and studio.get waiting to the timelines bullet. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; the section's protocol text holds with both sets of additions | kept from the merged side: Re-read after mock.rs's new steps test: the Reflections bullet's 0.172 text and the mock's refusal agree." }
+stamp = { hash = "b3:87b6404165f2b091", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "output.set_audio_buses (protocol 0.59): one bus per track, one track so far, blocks its bus's delete, delete.plan moves the output to master, refused while it runs; checked against command.rs, output.rs, version.rs, fixtures and plugin.rs, the graph and mock (mock.rs, mock/audio.rs, control README), and the snapshots" }
@@ -885,10 +885,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:1c7c803d0baff39f", by = "agent:release-alpha9", note = "Added 0.170's lanes, starts and stops, the play delay and studio.get waiting to the timelines bullet. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; the section's protocol text holds with both sets of additions | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; the regenerated snapshots and rendering.rs's doc change the default only; the Reflections bullet names no step default and holds." }
+stamp = { hash = "b3:3c31d9cf56b91ba2", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e5a66ff184fa40b3", by = "agent:release-alpha9", note = "Added 0.170's lanes, starts and stops, the play delay and studio.get waiting to the timelines bullet. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; the section's protocol text holds with both sets of additions | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; the regenerated snapshots and rendering.rs's doc change the default only; the Reflections bullet names no step default and holds." }
+stamp = { hash = "b3:c3ea415e47589ed4", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -915,7 +915,7 @@ stamp = { hash = "b3:6bb63aab16b9276c", by = "agent:channels", note = "Added 0.1
 stamp = { hash = "b3:346b89300e9dc7a9", by = "agent:claude-settings", note = "Re-read: the protocol section's envelope, versioning and command model still hold for an additive 0.94 query and action; the mock answers them as an engine without CLAP | merge: wave/alpha5 brought #1275's final Settings dialog, #1269's projects (protocol 0.94, collection.* calls, File menu project items), #1272's MIDI/JTunnel crates and main's #1301/#1302/#1308/#1309; re-read: the CLAP scan text this branch wrote (plugin.clap_scan, plugin.clap_rescan, the Audio plugins page) is independent of what the wave changed here, and any CLAP version it names is now 0.95 | merge: Merged wave/alpha5 (protocol 0.96 to 0.105: controller bindings, the network listener, keyframe timing, labels, blending space, effect quarantine, view reports, wheel chords and camera controls; READMEs trimmed to maps). This branch is renumbered on top as protocol 0.106 (plugin.clap_scan, plugin.clap_rescan, with the since-0.106 notes, and PluginClapRescan classified in Action::takes_steps). The Settings dialog keeps Audio plugins beside the wave's Devices page with its network setting. The core README's CLAP lines sit in the trimmed map, and the platform-windows README takes the wave's map. Snapshots are regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:0c4c4c72ccde7297", by = "agent:release-alpha9", note = "Added 0.170's lanes, starts and stops, the play delay and studio.get waiting to the timelines bullet. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; the section's protocol text holds with both sets of additions" }
+stamp = { hash = "b3:699cc5fb1dfc87bb", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/data.rs"]
 stamp = { hash = "b3:d3d187fa2b9b060e", by = "agent:claude", note = "Renumbered this branch's protocol version from 0.136 to 0.140 as the coordinator's queue assigns (0.136 is #1574's, 0.139 #1595's); only version numbers and regenerated snapshots changed. Still holds." }
@@ -939,7 +939,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Edited: since 0.99 item.set_timing and the three easings; mock and fixtures match" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:d094d47283e84a32", by = "agent:release-alpha9", note = "Added 0.170's lanes, starts and stops, the play delay and studio.get waiting to the timelines bullet. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; the section's protocol text holds with both sets of additions" }
+stamp = { hash = "b3:5dc4ac5cf561e20c", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Queries bullet adds video.frames and the frame sheet scene.switch_and_watch answers with; the protocol inputs add frames.rs (FrameStrip, FrameSheet, SheetFrame), both ops in command.rs, query.rs and envelope.rs, plugin scopes, fixtures and snapshots; control README notes the mock answers both with internal. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); video.frames now says protocol 0.82 beside main's shared values at 0.78 | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The protocol summary keeps #1080's frame-sheet clause (0.82) beside #1125's item.set_motion (0.81); snapshots, fixtures and frames.rs match. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. ARCH#protocol has #1041's Codec downloads bullet (0.69) beside the wave's 0.80 to 0.86 clauses; mock, snapshots and protocol sources match." }
@@ -1002,10 +1002,10 @@ stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 outpu
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:shader-source", note = "The protocol section says pack.write/delete/list/read (0.72, ADR-0097; 0.71 is #1049's) are not people-only, that a write is checked, staged in .staging/<pack>, loaded there and swapped in with two renames while the watcher is held, that pack.list names the last writer and the activity log records each write and delete, and that plugins get only the reads (plugin.rs); the mock (mock.rs, control README) answers unsupported; fixtures.rs, lib.rs and the snapshots are at 0.72. Main's #1079 protocol README wording isn't restated here." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:54abc60954404dc6", by = "agent:channels", note = "Added the 0.169 channel edits, actions and channel.values, and the channel motion kind, note control and amount on modifiers." }
+stamp = { hash = "b3:eec1be263457334a", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:5860f7e537268366", by = "agent:channels", note = "Added the 0.169 channel edits, actions and channel.values, and the channel motion kind, note control and amount on modifiers." }
+stamp = { hash = "b3:0687310adcf95f5f", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "profile.get line now mentions 0.92 streams/mixer and 0.103 views via preview.report (ADR-0132) | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
@@ -1041,7 +1041,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Proto
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3c2542491c7a2677", by = "agent:claude", note = "Updated the Reflections bullet to name the 0.172 screen-space reflections and studio.set_rendering's new switch and steps; checked against rendering.rs, the snapshots, mock.rs and version.rs." }
+stamp = { hash = "b3:da8086e6bcb75666", by = "agent:bindings", note = "Re-read the hotkeys/bindings paragraph; added the 0.182 several-actions and output.toggle sentence." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1674,13 +1674,13 @@ stamp = { hash = "b3:cb2e88cc7f3f5138", by = "agent:mac-browser", note = "The RE
 stamp = { hash = "b3:6b139f7a258f08e0", by = "agent:claude-perf-suite", note = "The bench stays a protocol client; its design now names every call it uses (adding quality.probe and kind.list); scenario sources are made by its batch and cleaned up." }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Re-read against the control README change (mock now keeps channels); the CLI design depends only on the Control trait and the mock feature, which are unchanged. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependency control#design holds | kept from the merged side: Re-read against the screen-space reflections change: the CLI proxy forwards studio.set_rendering's new screen_space_steps and the steps refusal like any other call; nothing in the proxy's design changes." }
+stamp = { hash = "b3:07872d274f206a2e", by = "agent:bindings", note = "Re-read against the args.rs and control#design changes: the hotkeys table and error mapping (already_exists 16) still hold; one row per entry, which may now repeat a chord." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:6fbc7954725137e6", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the design text still holds" }
+stamp = { hash = "b3:645d66573bd58c14", by = "agent:bindings", note = "Re-read against the args.rs and control#design changes: the hotkeys table and error mapping (already_exists 16) still hold; one row per entry, which may now repeat a chord." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/bench.rs"]
 stamp = { hash = "b3:b3481634a6fd72e0", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the design text still holds | kept from the merged side: #1555: bench gate handling unchanged; capture_frames gate doc reworded only" }
@@ -1710,7 +1710,7 @@ stamp = { hash = "b3:1c9936a59c9c02c5", by = "agent:perf-thread", note = "Conten
 stamp = { hash = "b3:4e90635d835b4a5c", by = "agent:claude", note = "ARCH's crate map now says jstream-desktop links jstream-browser with cef on Windows, macOS and Linux (ADR-0157, ADR-0158) and no longer links jstream-sources; this section doesn't describe either, so it holds. | kept from the merged side: The apps/* row changed only in the browser helper's clause (its executable on Linux and macOS, ADR-0157). Re-read this crate's purpose: it says nothing about the helper or macOS browser sources, so it still holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:6fbc7954725137e6", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the purpose text still holds" }
+stamp = { hash = "b3:645d66573bd58c14", by = "agent:bindings", note = "Searched it against the args.rs diff (hotkey.clear action None, output.toggle accepted): no claim about hotkeys or outputs it contradicts." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/bench.rs"]
 stamp = { hash = "b3:b3481634a6fd72e0", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the purpose text still holds | kept from the merged side: #1555: bench.rs only rewords the capture_frames gate's doc to the new meaning (replaced frames beside a repeat); purpose unchanged" }
@@ -1734,10 +1734,10 @@ stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Re
 stamp = { hash = "b3:38de2a71fc23ccec", by = "agent:claude", note = "Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; the studio get golden shows steps 16; the purpose holds." }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:1fb8e51769db6783", by = "agent:release-thread", note = "bench now adds a bench_fade_<pid> fade preset when the default fade is asked for and the collection has none, and deletes it after; usage's Bench paragraph says so. Re-read usage against that: it still holds." }
+stamp = { hash = "b3:f87505261e656e9f", by = "agent:bindings", note = "Re-read the hotkey usage: hotkey.set adds after the chord's actions, hotkey.clear unbinds all, output.toggle bindable, as args.rs parses." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:6fbc7954725137e6", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; 'scene switch <id> [--preset]' is unchanged, so usage still holds" }
+stamp = { hash = "b3:645d66573bd58c14", by = "agent:bindings", note = "Re-read the hotkey usage: hotkey.set adds after the chord's actions, hotkey.clear unbinds all, output.toggle bindable, as args.rs parses." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/bench.rs"]
 stamp = { hash = "b3:b3481634a6fd72e0", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; 'scene switch <id> [--preset]' is unchanged, so usage still holds | kept from the merged side: #1555: the gate list still names capture_frames; only its meaning narrowed, described in the core and protocol docs" }
@@ -1752,10 +1752,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Edited the capture targets row: each device's camera controls are listed after its formats (name, value, range, step, default, auto or manual). Checked against run.rs and capture_targets_prints_each_target." }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Added the mock's channel checks and channel.values answer, and channels in the mock's in-memory state. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs and the protocol text merged; the design holds | kept from the merged side: Checked the mock bullet on studio.set_rendering: it now names the invalid_argument for a screen_space_steps outside SCREEN_SPACE_STEPS before the probe-size refusal, matching mock.rs and the engine; the rest of the mock's rules are unchanged." }
+stamp = { hash = "b3:07872d274f206a2e", by = "agent:bindings", note = "Re-read the mock's hotkey and binding checks: an action already run, clears of an unbound action, exact-order undo, as mock.rs does." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:29bbf97755ed19b5", by = "agent:release-alpha9", note = "Re-read: the mock only gains empty lanes/starts/stops and waiting fields in literals; it plays no lanes and keeps no waits, which the section does not claim. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs and the protocol text merged; the design holds | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: the mock starts from RenderFeatures::default(), now DEFAULT, and its refusals are unchanged; holds." }
+stamp = { hash = "b3:940f9ec841a53f51", by = "agent:bindings", note = "Re-read the mock's hotkey and binding checks: an action already run, clears of an unbound action, exact-order undo, as mock.rs does." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1776,7 +1776,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "edited the capture.targets bullet to name the mock webcam and its two formats" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:975ef0991b12f675", by = "agent:release-alpha9", note = "Re-read: the mock only gains empty lanes/starts/stops and waiting fields in literals; it plays no lanes and keeps no waits, which the section does not claim. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs and the protocol text merged; the design holds | kept from the merged side: Re-read after the mock gained a test that a screen_space_steps of 20 is invalid_argument and 64 is taken, as the design's studio.set_rendering bullet says." }
+stamp = { hash = "b3:87b6404165f2b091", by = "agent:bindings", note = "Re-read the mock's hotkey and binding checks: an action already run, clears of an unbound action, exact-order undo, as mock.rs does." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "Added the output-bus bullet to the mock's checks: output.set_audio_buses's errors and bus.delete's output blocker, matching mock.rs and mock/audio.rs; ARCH#protocol's new output.set_audio_buses paragraph agrees" }
@@ -1815,7 +1815,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "the mock's capture.targets gains MOCK_DEVICE with two formats; the purpose still holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:975ef0991b12f675", by = "agent:release-alpha9", note = "Re-read: the mock's purpose is unchanged by the new timeline fields. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs gains SSR's rendering fields beside the train's channel and timeline mocks; holds | kept from the merged side: Re-read after formatting mock.rs's new steps test: the purpose holds." }
+stamp = { hash = "b3:87b6404165f2b091", by = "agent:bindings", note = "Checked against the mock.rs diff (per-chord action lists, toggle): purpose describes the mock's role only, still true." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "The mock now handles output.set_audio_buses (ghost output, not one bus, a virtual camera, ghost bus), lists audio_buses in output.list and blocks bus.delete for an output carrying the bus with the graph's reason; the purpose still holds" }
@@ -1854,10 +1854,10 @@ stamp = { hash = "b3:fed2781ce96109e2", by = "agent:page-api-3", note = "Added p
 stamp = { hash = "b3:58f7033183d9954c", by = "agent:wave-owner", note = "Re-read: this change only adds warning: None to ParamDescriptor literals for protocol 0.95's new descriptor field; nothing this section says changes | merge: main's #1382 moved filters.rs contents into rustdoc; audio routing text unchanged | kept from the merged side: filters.rs changed only in its module doc (the README's Audio filters bullet moved there). Re-read the routing description of filter chains and sidechain keys; it agrees." }
 
 ["CRATE-jstream-core#audit-log"."body"]
-stamp = { hash = "b3:1dbe263b07d95224", by = "agent:channels", note = "Added that trigger and delay plays get no entry of their own; timeline.play with delay_ms gets its sentence." }
+stamp = { hash = "b3:af22f44b8fd226f3", by = "agent:bindings", note = "Re-read: added the 'Unbound X from Y' sentence activity_log.rs writes for a clear naming one action; a toggle is audited as its resolved start/stop." }
 
 ["CRATE-jstream-core#audit-log"."file:crates/jstream-core/src/activity_log.rs"]
-stamp = { hash = "b3:55923170a336a79c", by = "agent:channels", note = "Added that trigger and delay plays get no entry of their own; timeline.play with delay_ms gets its sentence." }
+stamp = { hash = "b3:c86b39cbf979b8d3", by = "agent:bindings", note = "Re-read: added the 'Unbound X from Y' sentence activity_log.rs writes for a clear naming one action; a toggle is audited as its resolved start/stop." }
 
 ["CRATE-jstream-core#audit-log"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:dc61649a25421166", by = "agent:claude-perf-suite", note = "added that preview.report gets no audit entry or activity line, matching Audit::records" }
@@ -1866,7 +1866,7 @@ stamp = { hash = "b3:dc61649a25421166", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to audit.rs, activity_log.rs, private_file.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
 
 ["CRATE-jstream-core#calls"."body"]
-stamp = { hash = "b3:11c030985e9e28d8", by = "agent:channels", note = "Added channel.set_value, channel.nudge and channel.switch to the actions: no rev or undo, checked with channel_problem, not_found for a missing channel." }
+stamp = { hash = "b3:80e3beec4c0a8162", by = "agent:bindings", note = "Re-read Calls: added output.toggle reading running under the state lock then running as output.start/stop with their locking." }
 
 ["CRATE-jstream-core#calls"."dep:crates/jstream-protocol/README.md#batches"]
 stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "Batches now name removed_bindings beside removed_hotkeys for controller bindings (ADR-0122, protocol 0.96)" }
@@ -1878,7 +1878,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, history.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on 0013-command-model.md, RULES.md#R-API-004, README.md#batches, matching what it relies on" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: item.show and set_keyframe still continue a transition in flight from what is on screen; an ended one now counts as not in flight, as Program scene says" }
+stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Re-read Calls: added output.toggle reading running under the state lock then running as output.start/stop with their locking. | merge: Merging main brought only #1655, the squash of this branch's own alpha.11 base, so the section's inputs are as I re-read them for ADR-0208 (output.toggle added under Calls). | kept from the merged side: Re-read: item.show and set_keyframe still continue a transition in flight from what is on screen; an ended one now counts as not in flight, as Program scene says | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:3396a70c4ea3f458", by = "agent:lane-d", note = "collection.* dispatch through collection_call before the generic path; the call flow, saving after batches and audit described here still hold. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
@@ -1902,7 +1902,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:128b8747967ace26", by = "agent:release-alpha8", note = "added stop_jtunnel beside start_jtunnel and jtunnel_stats; checked engine.rs" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: engine.rs only changes how a switch and screen_now pick what is on screen (still_on_screen); the module list is unchanged" }
+stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff (output.toggle dispatch at the top of execute): the module list is unchanged. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read: engine.rs only changes how a switch and screen_now pick what is on screen (still_on_screen); the module list is unchanged | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2025,7 +2025,7 @@ stamp = { hash = "b3:d1aca46da610447c", by = "agent:claude", note = "B1: a bindi
 stamp = { hash = "b3:6cd45e61e61a2c66", by = "agent:claude", note = "Re-read: the Data-driven motion bullet now describes painting bindings and Bindings::tint, and Driven source settings names set_color and set_emissive and effects, matching reactive.rs, sourced.rs and driven.rs." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: no motion, scene or timeline behaviour changed by the engine.rs switch-start fix" }
+stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: only output.toggle dispatch changed; its motion, value-binding and channel text is untouched by it. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read: no motion, scene or timeline behaviour changed by the engine.rs switch-start fix | kept from the merged side: B1: a binding or a channel input whose input changed only smoothing_ms keeps its follower (same_but_smoothing) and takes the new time; the bullet now says so. ADR renamed 0188 to 0190. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/follow.rs"]
 stamp = { hash = "b3:67a9c13712b51b9d", by = "agent:channels", note = "Added channels.rs to covers and a Channels bullet (driver, cells, values thread, scene reset, note control, amount); value bindings bullet notes amount." }
@@ -2079,7 +2079,7 @@ stamp = { hash = "b3:6ebd00b3324f7775", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:3e114a6d44e4d1ad", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-records"."file:crates/jstream-core/src/activity_log.rs"]
-stamp = { hash = "b3:55923170a336a79c", by = "agent:channels", note = "Re-read: activity_log.rs gains the play-after-delay sentence only." }
+stamp = { hash = "b3:c86b39cbf979b8d3", by = "agent:bindings", note = "Checked against the activity_log.rs diff (toggle and per-action unbind sentences): the records description holds." }
 
 ["CRATE-jstream-core#contents-records"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:dc61649a25421166", by = "agent:claude-perf-suite", note = "merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2268,7 +2268,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:aaad4fc91ed634cc", by = "agent:plugin-uninstall", note = "re-read and edited: the plugin bullet now names plugin.uninstall with no engine lock held, not_found without wasm-plugins, and the differential script sending it | merge: #1575 added Engine::handles (counts handles and sessions keeping the engine alive) and pipeline-thread stop logging; nothing about plugins, and plugin.uninstall still holds no engine handle (its threads hold it weakly) | kept from the merged side: Added that Engine::handles counts the handles and sessions to the Engine and sessions part; the rest of the design is unchanged by this diff." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Re-read: engine handle, sessions and envelope unchanged by channels. | merge: #1645 (screen-space reflections, 1f65ffa) merged: engine.rs gains SSR's rendering switches beside the train's channels, sequences and jtunnel_names; the section holds | kept from the merged side: Re-read the crate's design against engine.rs's new screen_space_steps refusal and the snapshot's surface buffer: no locking, threading or ownership statement changes." }
+stamp = { hash = "b3:07872d274f206a2e", by = "agent:bindings", note = "Checked its output.start/stop blocking note: toggle blocks the same way, as it runs as one of them." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#calls"]
 stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
@@ -2277,13 +2277,13 @@ stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:29bbf97755ed19b5", by = "agent:release-alpha9", note = "Re-read: sessions and envelope unchanged by sequences. | merge: #1645 (screen-space reflections, 1f65ffa) merged: engine.rs gains SSR's rendering switches beside the train's channels, sequences and jtunnel_names; the section holds | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: re-read after the dependency's text changed; the crate design holds." }
+stamp = { hash = "b3:940f9ec841a53f51", by = "agent:bindings", note = "Checked its output.start/stop blocking note: toggle blocks the same way, as it runs as one of them." }
 
 ["CRATE-jstream-core#design"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: engine and session design unchanged by the switch-start fix" }
+stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked its output.start/stop blocking note: toggle blocks the same way, as it runs as one of them. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read: engine and session design unchanged by the switch-start fix | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
 stamp = { hash = "b3:44b5b114d27ed218", by = "agent:claude", note = "ADR-0197: lib.rs only gains the private resolution module; engine and sessions are untouched and the section still holds." }
@@ -2349,7 +2349,7 @@ stamp = { hash = "b3:b7ef33611a15221a", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:fcec80c6a7edbd49", by = "agent:release-alpha9", note = "Added that the values tick plays waited and triggered timelines and moves lanes under the collection lock. | merge: engine.rs's State now holds #1636's jtunnel_names (ADR-0181) beside #1638/#1640's channels, channels_program and sequences; the merge kept both field sets; #1636's names leaf mutex (Receiver::set_names under the collection lock, and the receiver's thread) sits beside #1640's channel and timeline locks with no new order between them | kept from the merged side: the per-sender names leaf mutex (ADR-0181): set_names under the collection lock, the receiver thread alone; start_jtunnel takes the collection lock again after setting the slot | kept from the merged side: The text covers #1628's start_jtunnel/stop_jtunnel emits, #1620's Shared::hearing leaf and gpu-stack's priming order, and now also CC PR 3 value bindings' two leaf-lock uses under the collection lock: midi.last_controls reading MidiInputs, and jstream-values looking up a binding's MIDI input or live data watch." }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: no new lock; still_on_screen runs under the same collection lock on_screen did" }
+stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: toggle takes the state lock only to read running, released before start/stop take theirs; lock order unchanged. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read: no new lock; still_on_screen runs under the same collection lock on_screen did | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2358,7 +2358,7 @@ stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:027e29bed3a16896", by = "agent:channels", note = "The values thread now also starts for channels; updated the warn sentence." }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: no logging changed" }
+stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: toggle logs under the resolved action; nothing here changed. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read: no logging changed | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2373,7 +2373,7 @@ stamp = { hash = "b3:2f3eb14b5244c2c9", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:2729b9a5416da0b9", by = "agent:release-alpha11", note = "Edited: the CPU-path capture sentence now says the render thread hands the frame it replaces back to its stream (CaptureStream::recycle, through a shared device's reader unless another reader holds the device), matching captures.rs's tick and devices.rs's Reader::recycle and their two new tests. | merge: alpha.11: c5a6552 (reviewed in #1663 round 4) shares the mix's shown frame with its encoder sessions and picture streams (Plane::shared, MixFrame::retire, RETIRED_BUFFERS), merged beside alpha.10's #1666 preview yielding, #1668 way-out timing and #1660 frame recycling; re-read, holds | kept from the merged side: The per-tick allocation paragraph now says a CPU-path session's frame is a handle over the mix's shared buffer, not a frame-sized copy; the camera tap's buffers, the probe's copy and the rest of the outputs section are unchanged by this" }
 
 ["CRATE-jstream-core#outputs"."dep:crates/jstream-protocol/README.md#outputs"]
-stamp = { hash = "b3:063edb3f5f8ecd42", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to outputs.rs, youtube.rs, runtime/pipeline.rs, runtime/publish.rs, runtime/sink.rs, runtime/vcam.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#outputs, matching what it relies on" }
+stamp = { hash = "b3:7f62f0d801c721c9", by = "agent:bindings", note = "Checked the output state lines against the protocol outputs edit: toggle runs as start (stopped/failed) or stop (otherwise), so the lifecycle described is unchanged." }
 
 ["CRATE-jstream-core#outputs"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to outputs.rs, youtube.rs, runtime/pipeline.rs, runtime/publish.rs, runtime/sink.rs, runtime/vcam.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#outputs, matching what it relies on" }
@@ -2412,7 +2412,7 @@ stamp = { hash = "b3:62d8d7d707f625e6", by = "agent:release-alpha11", note = "Ed
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
 
 ["CRATE-jstream-core#privacy"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:23025c42843eecb4", by = "agent:release-alpha11", note = "Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds | kept from the merged side: Re-read: nothing about privacy changed" }
+stamp = { hash = "b3:707d49b42c3ade0e", by = "agent:bindings", note = "Checked against the engine.rs diff: toggle stores and sends nothing new; privacy text holds. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read: nothing about privacy changed | kept from the merged side: Re-read after round 1: engine.rs only renames the ADR in a comment (0188 to 0190); nothing here changes. | merge: alpha.11: #1683 (2aecc26) adds snapshot::still_on_screen so a switch, set_keyframe and item.show after an ended but unreleased transition start from the program scene at rest, and a scene's flat picture keeps its own camera; re-read beside c5a6552's shared frames, #1676's NV12 staged preview and alpha.10's sky and model resolution text, holds" }
 
 ["CRATE-jstream-core#program-scene"."body"]
 stamp = { hash = "b3:6ce554deb0186f21", by = "agent:issues-thread", note = "Re-read against the fix: added that a switch, set_keyframe or item.show after a transition ended but not yet let go starts from the program scene (still_on_screen), and that a held whole-scene picture keeps its scene's camera; ADR-0029 §7 and ADR-0180 decision 2 still hold" }
@@ -2565,7 +2565,7 @@ stamp = { hash = "b3:3396a70c4ea3f458", by = "agent:lane-d", note = "Main→wave
 stamp = { hash = "b3:10c130fe918d94d6", by = "agent:plugin-uninstall", note = "re-read and edited (round 1 N2): the Removing bullet says the grant is cut to read at once since the session shares it; matches uninstall" }
 
 ["CRATE-jstream-core#wasm-plugins"."dep:crates/jstream-protocol/README.md#plugins"]
-stamp = { hash = "b3:6852db211184b59f", by = "agent:channels", note = "Re-read against the protocol plugins change (channel edits in edit class, channel actions in live, channel.values never); the host defers to those classes, unchanged." }
+stamp = { hash = "b3:c303bf0e261e8362", by = "agent:bindings", note = "Checked the grant text (a hotkey's bound action's class) against the plugins edit: toggle is in outputs, so a plugin binding it needs outputs, as for start/stop." }
 
 ["CRATE-jstream-core#wasm-plugins"."file:crates/jstream-core/src/plugins/automation.rs"]
 stamp = { hash = "b3:20c20be865c7d3e8", by = "agent:plugin-uninstall", note = "re-read and edited (round 1 N2): the Removing bullet says the grant is cut to read at once since the session shares it; matches uninstall" }
@@ -2613,7 +2613,7 @@ stamp = { hash = "b3:adbde39f9545f9a4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:1d019f8408590d0d", by = "agent:claude", note = "Added that the GPU context is the exception to 'creating the backends opens no device': with its backends the engine opens it on the snapshot thread to prime the collection's scenes. Checked against Engine::with_backends calling prime_scenes and the snapshot worker's open." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#audit-log"]
-stamp = { hash = "b3:1dbe263b07d95224", by = "agent:channels", note = "Re-read against ARCH persistence (schema 21); the daemon names no schema version." }
+stamp = { hash = "b3:af22f44b8fd226f3", by = "agent:bindings", note = "Checked its output.start mentions and storage notes against the audit-log and persistence edits: unaffected, toggle runs as start/stop and the file version is unchanged." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:aaad4fc91ed634cc", by = "agent:plugin-uninstall", note = "re-read: the daemon wires the plugin folder and CLAP scan only; plugin.uninstall needs nothing from it | merge: #1575 added Engine::handles (counts handles and sessions keeping the engine alive) and pipeline-thread stop logging; nothing about plugins, and plugin.uninstall still holds no engine handle (its threads hold it weakly) | kept from the merged side: The daemon doesn't use the desktop host; its dependency on core's sections changed only by Engine::handles and the join log lines, which don't alter what this section says." }
@@ -2634,7 +2634,7 @@ stamp = { hash = "b3:10c130fe918d94d6", by = "agent:plugin-uninstall", note = "r
 stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: jstream-server's Design gained TCP_NODELAY on accepted connections (#1440); the daemon's design (one engine, per-platform backends) depends on no socket options and still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:2d09ebc9fa2a93a0", by = "agent:release-alpha9", note = "Re-read against ARCH persistence (schema 21); the daemon names no schema version. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependencies core#snapshots and ARCH#persistence hold | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; re-read after ARCH persistence (steps left out are 16) and core Snapshots (reflecting models only) changed; the daemon's rendering file paragraph holds." }
+stamp = { hash = "b3:eee6aae3af69883f", by = "agent:bindings", note = "Checked its output.start mentions and storage notes against the audit-log and persistence edits: unaffected, toggle runs as start/stop and the file version is unchanged." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:7f92a178a393bbc2", by = "agent:mac-e2e", note = "Cargo.toml change is only the jstream-render dev-dependency comment (Linux-only use in the harness); Live on macOS still matches serve.rs's macos_backends, which the harness now mirrors" }
@@ -2769,7 +2769,7 @@ stamp = { hash = "b3:fbab93da6f1f4bc6", by = "agent:ptz-builder", note = "#1181 
 stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "token.rs only moved its file logic to jstream_server::token_file with the same checks and messages; --token-file, reuse and output lines unchanged" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:73e371d14e9b99cb", by = "agent:release-alpha8", note = "checked the paragraph on jtunnel::apply (start, start again or stop_jtunnel), the File's weak engine handle from Host::engine and shell.rs managing it" }
+stamp = { hash = "b3:541e725e463d7b97", by = "agent:bindings", note = "Re-read the global hotkeys bullet: each chord registered once, a press runs every bound action in order and carries on past a failure, as hotkeys.rs does." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
@@ -2814,7 +2814,7 @@ stamp = { hash = "b3:10d401e349489dcb", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:1a45a33ae9c2a310", by = "agent:release-alpha8", note = "checked the paragraph on jtunnel::apply (start, start again or stop_jtunnel), the File's weak engine handle from Host::engine and shell.rs managing it" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/hotkeys.rs"]
-stamp = { hash = "b3:79fa605c1a88dac5", by = "agent:smooth-paths", note = "Only mechanical: hotkeys.rs's scene.switch test constructor gains via: Vec::new() for ADR-0166's new field; the desktop's hotkey handling is unchanged; the design text still holds" }
+stamp = { hash = "b3:f832f84c7638028d", by = "agent:bindings", note = "Re-read the global hotkeys bullet: each chord registered once, a press runs every bound action in order and carries on past a failure, as hotkeys.rs does." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/jtunnel.rs"]
 stamp = { hash = "b3:a6f6b4346c290040", by = "agent:release-alpha8", note = "checked the paragraph on jtunnel::apply (start, start again or stop_jtunnel), the File's weak engine handle from Host::engine and shell.rs managing it" }
@@ -2883,7 +2883,7 @@ stamp = { hash = "b3:10d401e349489dcb", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:1a45a33ae9c2a310", by = "agent:release-alpha8", note = "JTunnel bullet now says a saved setting applies at once; checked against jtunnel::set_jtunnel calling apply on the live engine" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/hotkeys.rs"]
-stamp = { hash = "b3:79fa605c1a88dac5", by = "agent:smooth-paths", note = "Only mechanical: hotkeys.rs's scene.switch test constructor gains via: Vec::new() for ADR-0166's new field; the desktop's hotkey handling is unchanged; the purpose text still holds" }
+stamp = { hash = "b3:f832f84c7638028d", by = "agent:bindings", note = "Re-read the Global hotkeys bullet: 'runs their actions' still holds with several actions per chord." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/jtunnel.rs"]
 stamp = { hash = "b3:a6f6b4346c290040", by = "agent:release-alpha8", note = "JTunnel bullet now says a saved setting applies at once; checked against jtunnel::set_jtunnel calling apply on the live engine" }
@@ -3039,7 +3039,7 @@ stamp = { hash = "b3:417ecc80c7c9baea", by = "agent:issues-thread", note = "Test
 stamp = { hash = "b3:ed2392b83b660388", by = "agent:claude", note = "The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:128f1e707f248207", by = "agent:channels", note = "Re-read against ARCH data-model (timelines gain lanes); encoder sessions are unaffected." }
+stamp = { hash = "b3:b72af094ab929893", by = "agent:bindings", note = "Checked against the data-model edit (hotkeys/bindings lists): nothing in encode's purpose names them." }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:2f31bb6009aa1da4", by = "agent:claude", note = "ARCH#threading gained one row, the jstream-models thread that uploads the program stage's 3D models (ADR-0177). Re-read this section's statements about threads: they describe this crate's own threads and rules, and none lists the engine's threads or says where a model is uploaded, so the new row changes nothing here." }
@@ -3072,7 +3072,7 @@ stamp = { hash = "b3:96cd71b98ff1e82e", by = "agent:lane-d", note = "VideoSessio
 stamp = { hash = "b3:da598d986fcdf80f", by = "agent:lane-d", note = "VideoSession gains stats_handle (StatsHandle, a Weak reader); Purpose's API list says so | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: VideoInput::format and NV12 sessions converting RGBA8/BGRA8 on the encode thread fit the crate's purpose; unchanged" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:3d2c63f280c0c8fa", by = "agent:issues-thread", note = "Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
+stamp = { hash = "b3:5f628983e4ab0bb6", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#batches"]
 stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "Added bindings to the state, the controller bindings bullet, delete.plan and state.get, the file's bindings, schema 8 and its migration, the rebuild order and the tests for controller bindings (ADR-0122, protocol 0.96); SCHEMA_VERSION now 8 (was written 6)" }
@@ -3090,7 +3090,7 @@ stamp = { hash = "b3:13b8346827f3b8ac", by = "agent:claude", note = "Edited: sch
 stamp = { hash = "b3:95dbeb7275d807fb" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:128f1e707f248207", by = "agent:channels", note = "Added that lanes, starts and stops are checked by TimelineInfo::problem alone and saved from schema 21." }
+stamp = { hash = "b3:b72af094ab929893", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
 stamp = { hash = "b3:06872e7586282401", by = "agent:channels", note = "Added the Channels bullet (channel.rs: set, delete, checks, cycles, file); model, read, touched and persist changes match it." }
@@ -3114,7 +3114,7 @@ stamp = { hash = "b3:42485db0e5133b45" }
 stamp = { hash = "b3:8d7fc996cfd697e8", by = "agent:claude", note = "Added the value bindings bullet (value.rs checks, inverse, left in place, value_range, value_edit), value_bindings in the state, SCHEMA_VERSION 18, version 18 and the 17 to 18 migration." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/hotkey.rs"]
-stamp = { hash = "b3:bb0fb609e1564b71", by = "agent:claude", note = "hotkeys bullet: the objects an action names now include a channel action's channel (hotkey.rs exists gains EntityKind::Channel), so a key or controller binds to channel.switch; checked against hotkey.rs and the new test" }
+stamp = { hash = "b3:ea7607d4621d0c7f", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/keyframe.rs"]
 stamp = { hash = "b3:eb22de98333b61e8", by = "agent:3d-groups", note = "Added Scene::camera_anchor, scene.set_camera_anchor's checks and undo, share_space among the scene options, and schema 16 with v15_to_v16 and the anchor set after items on load; matches camera.rs, model/mod.rs and persist/mod.rs." }
@@ -3126,13 +3126,13 @@ stamp = { hash = "b3:5b6c15225a469736", by = "agent:channels", note = "Added the
 stamp = { hash = "b3:f504267e720dfacc", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Body unions E2's video_mixes state, mix blockers and delete.plan repoints with K1's hotkeys (state, plan listing removed bindings, rebuild last) and the parity fixture text (two mixes, less the vcam and hotkeys); matches lib.rs, plan.rs, read.rs, persist/mod.rs and tests.rs (48 random edits)" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:303acef2980bbcfc", by = "agent:channels", note = "Added the Channels bullet (channel.rs: set, delete, checks, cycles, file); model, read, touched and persist changes match it." }
+stamp = { hash = "b3:116351059ea79535", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/motion.rs"]
 stamp = { hash = "b3:8c7e632c64b2c9cb", by = "agent:channels", note = "Added the Channels bullet (channel.rs: set, delete, checks, cycles, file); model, read, touched and persist changes match it." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/organise.rs"]
-stamp = { hash = "b3:644bae54b68705d1", by = "agent:channels", note = "Added that lanes, starts and stops are checked by TimelineInfo::problem alone and saved from schema 21." }
+stamp = { hash = "b3:bdc0c1c58778cb76", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/fixtures/v1.json"]
 stamp = { hash = "b3:52aa2ed74cad735b", by = "agent:builder-b8rnvf", note = "D9 0.42: Bus gains monitor(); bus.set_monitor (bus first, then BusMonitor::problem on monitor.<field>, inverse the previous monitor) and bus.delete's inverse restoring it; touched gains a bus's monitor property; the file's buses carry monitor, rebuilt after the fader; file-without-monitors and unknown-tap tests described." }
@@ -3198,10 +3198,10 @@ stamp = { hash = "b3:170a35823fa167a0", by = "agent:page-api-review", note = "Sc
 stamp = { hash = "b3:7bed91ce5f40dd64", by = "agent:r9bzj2", note = "merge: The wave's page API took schema 8 (v7_to_v8 turns on page API checkboxes); controller bindings move to schema 9 with v8_to_v9 and fixtures/v9.json, and the text now says so" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:0dec64ac0cbe19b1", by = "agent:issues-thread", note = "Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
+stamp = { hash = "b3:8a52f20f38ba4836", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:cbdd026d4ba5c4c3", by = "agent:issues-thread", note = "Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
+stamp = { hash = "b3:3a652b08b1973b95", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Channels bullet now says the file loads channels first, before the replayed hotkeys and controller bindings that may set a channel and the value bindings (#1671); rest of the section unchanged by this fix" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/plan.rs"]
 stamp = { hash = "b3:017871c4d75d5766", by = "agent:claude", note = "This PR: hotkey.rs's set_labels and take/restore. These are now combined with #1299's remove helper, so a removed hotkey's labels come back after it. State.hotkey_labels comes with hotkey_bindings(), renamed because #1299's bindings() lists controller bindings. Persist gains v10_to_v11 and fixtures/v11.json, built on #1319's v10. plan.rs and read.rs report labels through State::binding, with the import HotkeyBinding no longer needs dropped. Merge: #1299 bindings, #1316 camera and #1319 timing (schemas 9 and 10), plus #1269, #1272, #1280, #1281, #1289, #1307, #1314, #1315, #1329, #1364, #1366, #1368 and #1374. On re-reading, the body says bindings are 9, timing 10 and labels 11, and 'now 11', matching the code. | kept from the merged side: Added bindings to the state, the controller bindings bullet, delete.plan and state.get, the file's bindings, schema 8 and its migration, the rebuild order and the tests for controller bindings (ADR-0122, protocol 0.96); SCHEMA_VERSION now 8 (was written 6)" }
@@ -3213,7 +3213,7 @@ stamp = { hash = "b3:9e828b48165481a7", by = "agent:channels", note = "Added the
 stamp = { hash = "b3:8960b4b274aed818", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the Outputs bullet to list the DOS device file-name refusal (#503: NUL, CON, PRN, AUX, COM0-9/COM1-3 superscripts, LPT likewise, CONIN$/CONOUT$, any case, any extension), matching target.rs's new is_dos_device_name mirror of check_asset_path's rule; dep on protocol Design re-read, consistent" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:26a5ba5f8845c976", by = "agent:release-alpha9", note = "Added the Channels bullet (channel.rs: set, delete, checks, cycles, file); model, read, touched and persist changes match it. | merge: #1645 (screen-space reflections, 1f65ffa) merged: persist keeps the train's schema 21 and v19_to_v20, v20_to_v21 migrations and fixtures v20/v21; SSR's graph changes (rendering features) merged; holds" }
+stamp = { hash = "b3:66261a28b917f681", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/cameras.rs"]
 stamp = { hash = "b3:837db457e5b3ef31", by = "agent:channels", note = "Added the Channels bullet (channel.rs: set, delete, checks, cycles, file); model, read, touched and persist changes match it." }
@@ -3237,7 +3237,7 @@ stamp = { hash = "b3:903d7989fb3e002e", by = "agent:channels", note = "Added the
 stamp = { hash = "b3:c68f267a80a0acce", by = "agent:claude", note = "Edited for ADR-0133: State's hotkey_labels, timeline.set's label check at timeline.labels, binding and timeline label.delete blockers and plan order, hotkey.set_labels and its inverse, labels going and coming with a removed binding, touched uses, label.members in reads, and schema 9 with the 8 to 9 migration (refuse a binding's labels, drop a timeline's). Re-read against hotkey.rs, organise.rs, timeline.rs, persist and the new tests." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/touched.rs"]
-stamp = { hash = "b3:9a5c1915e6e9023e", by = "agent:channels", note = "Added the Channels bullet (channel.rs: set, delete, checks, cycles, file); model, read, touched and persist changes match it." }
+stamp = { hash = "b3:139d7524a960b950", by = "agent:bindings", note = "Re-read the hotkeys and controller bindings bullets and the state list: per-chord/trigger action lists, take/take_trigger exact-order restore, already_exists only for an equal action." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/transition.rs"]
 stamp = { hash = "b3:bc365c27a1f12a16", by = "agent:claude", note = "Edited: schema_version 9 placeholder for an override's timing, the 8 to 9 migration, and item.set_timing on load; set_timing, Prop::Timing and the preset easing check hold" }
@@ -4557,7 +4557,7 @@ stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "The batch r
 stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to command.rs, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-004, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#batches"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:0c4c4c72ccde7297", by = "agent:release-alpha9", note = "Re-read: timeline.set batches as before. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold" }
+stamp = { hash = "b3:699cc5fb1dfc87bb", by = "agent:bindings", note = "Re-read removed_hotkeys/removed_bindings and delete inverses: still true, a delete's inverse ends with a hotkey.set per removed action." }
 
 ["CRATE-jstream-protocol#binary-streams"."body"]
 stamp = { hash = "b3:e90844923a76aa3e", by = "agent:claude-perf-suite", note = "added 'Views report back': preview.report's label rules, ViewCounts fields, run restart, session-only, 16-view limit, errors; checked against command.rs, preview.rs and the engine | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
@@ -4566,7 +4566,7 @@ stamp = { hash = "b3:e90844923a76aa3e", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "added 'Views report back': preview.report's label rules, ViewCounts fields, run restart, session-only, 16-view limit, errors; checked against command.rs, preview.rs and the engine | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
 
 ["CRATE-jstream-protocol#bindings"."body"]
-stamp = { hash = "b3:039ca86064f22c60", by = "agent:channels", note = "Added the channel kind and amount on value bindings, and the Channels subsection (ChannelInfo, set, delete, actions, values)." }
+stamp = { hash = "b3:ec5cfa104e7f5d3a", by = "agent:bindings", note = "Re-read: binding.set/clear follow the hotkeys' several-actions rules (ADR-0208), matching take_trigger in the graph and the mock." }
 
 ["CRATE-jstream-protocol#bindings"."dep:docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
 stamp = { hash = "b3:90465e14077d637b", by = "agent:r9bzj2", note = "New section for 0.96 controller bindings (ADR-0122): binding.set/clear, Trigger, Binding, state.get bindings, delete.plan bindings, removed_bindings, entity binding, checked against binding.rs, the graph's and the mock's checks, and the parity cases | merge: Merged wave/alpha5 (page API schema 8, projects 0.94, collection tool, #1272's crates): re-read for what it changed here; the binding text holds beside it" }
@@ -4587,7 +4587,7 @@ stamp = { hash = "b3:24e470838185e418", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to command.rs, envelope.rs, query.rs, the modules its text names; #purpose still covers all of src/**; depends_on 0013-command-model.md, RULES.md#R-ARCH-006, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:0c4c4c72ccde7297", by = "agent:release-alpha9", note = "Re-read: the envelope is unchanged. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold" }
+stamp = { hash = "b3:699cc5fb1dfc87bb", by = "agent:bindings", note = "Checked against command.rs: call shapes unchanged; an action variant and an optional clear field added." }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/envelope.rs"]
 stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
@@ -4617,16 +4617,16 @@ stamp = { hash = "b3:c499997af40d7f9e", by = "agent:channels", note = "Added 0.1
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:1c7c803d0baff39f", by = "agent:release-alpha9", note = "Re-read: 0.170 adds fields and a ChannelDriver variant that older clients parse as unknown; snapshots regenerated. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; protocol.snap's schema default for screen_space_steps is 16 and examples.snap's studio.get shows 16, both regenerated; still an additive 0.172 field." }
+stamp = { hash = "b3:3c31d9cf56b91ba2", by = "agent:bindings", note = "Checked the snapshot diffs: additive (new action, optional field), minor per R-API-001; plain-JSON actions keep older clients parsing." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e5a66ff184fa40b3", by = "agent:release-alpha9", note = "Re-read: 0.170 adds fields and a ChannelDriver variant that older clients parse as unknown; snapshots regenerated. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; protocol.snap's schema default for screen_space_steps is 16 and examples.snap's studio.get shows 16, both regenerated; still an additive 0.172 field." }
+stamp = { hash = "b3:c3ea415e47589ed4", by = "agent:bindings", note = "Checked the snapshot diffs: additive (new action, optional field), minor per R-API-001; plain-JSON actions keep older clients parsing." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3c2542491c7a2677", by = "agent:claude", note = "Re-read against the regenerated protocol.snap and examples.snap: the change adds two optional, serde-defaulted fields to RenderFeatures and RenderFeaturesChange, a minor change under R-API-001, and the version is 0.172." }
+stamp = { hash = "b3:da8086e6bcb75666", by = "agent:bindings", note = "Checked the snapshot diffs: additive (new action, optional field), minor per R-API-001; plain-JSON actions keep older clients parsing." }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
 stamp = { hash = "b3:676067bd06525692", by = "agent:channels", note = "Added channel.values to the query list and the channel actions to the actions list." }
@@ -4644,7 +4644,7 @@ stamp = { hash = "b3:0abc1408609095ff", by = "agent:claude", note = "Edited: ite
 stamp = { hash = "b3:53a91a0fd2352131", by = "agent:claude", note = "kind.rs: ParamType::Looks and check_looks (32 entries, 1-63 byte names, #rrggbb or cell, brightness 0-1, blink 0-16); the schema now carries a control-character pattern and a bytes note; the contents list still names it right" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:5860f7e537268366", by = "agent:channels", note = "Added channel.values to the query list and the channel actions to the actions list." }
+stamp = { hash = "b3:0687310adcf95f5f", by = "agent:bindings", note = "Checked against plugin.rs (one scope row added): the calls contents list holds." }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "Preview streams entry now names ViewCounts, check_view_label and the limits; profile.get's shapes list ViewProfile; plugin.rs places preview.report under never | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed | merge: Merged wave/alpha5 (#1271 stream profiles, #1287 page-API warnings, #1269 projects, #1286 main sync): both sides kept; this PR's preview-rate change and 0.95 still hold" }
@@ -4668,10 +4668,10 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "trans
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#contents-commands"."body"]
-stamp = { hash = "b3:d0349d1ec8839a40", by = "agent:release-alpha9", note = "Added channel.set and channel.delete to the edit list. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold | kept from the merged side: Checked the studio.set_rendering entry: it names the screen-space switch and steps since 0.172 with SCREEN_SPACE_STEPS in rendering.rs, matching the types and the lib.rs export." }
+stamp = { hash = "b3:ebeb66f0e286c2b8", by = "agent:bindings", note = "Re-read the Action list: output.toggle added; hotkey and binding commands unchanged in name." }
 
 ["CRATE-jstream-protocol#contents-commands"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:0c4c4c72ccde7297", by = "agent:release-alpha9", note = "Re-read: no new edits; timeline.set carries the new fields. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold" }
+stamp = { hash = "b3:699cc5fb1dfc87bb", by = "agent:bindings", note = "Re-read the Action list: output.toggle added; hotkey and binding commands unchanged in name." }
 
 ["CRATE-jstream-protocol#contents-errors"."body"]
 stamp = { hash = "b3:48cac978f9b0df1d", by = "agent:claude-timelines", note = "Added TimelineId as a client-chosen ID; EntityKind::Timeline is described under compatibility and Timelines; version.rs is at minor 87 (placeholder)." }
@@ -4686,7 +4686,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3c2542491c7a2677", by = "agent:claude", note = "Re-read against version.rs, which only moves PROTOCOL_VERSION to 0.172; the IDs and versions bullet holds." }
+stamp = { hash = "b3:da8086e6bcb75666", by = "agent:bindings", note = "Checked against version.rs: no error code added or changed." }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:626ba3cd643e0e61", by = "agent:claude", note = "Added solid_outline (hull of the eight projected corners, None if one is behind the viewer), outline_contains and SolidBounds::of_size to the solid.rs entry; checked against solid.rs." }
@@ -4716,10 +4716,10 @@ stamp = { hash = "b3:f04efc8b542328fd", by = "agent:claude", note = "Added solid
 stamp = { hash = "b3:c1a63b9ead949330", by = "agent:claude", note = "This PR: the body names a hotkey binding's labels and label.members of a missing label among the parity cases. Merge: #1299's binding checks there (#1284, #1299, #1316, #1319, #1364 and #1368). On re-reading, fixtures.rs and parity.rs match. | kept from the merged side: The parity collection now also holds two controller bindings, one rebound, and its rejected batches check bindings: updated the fixture description for 0.96 controller bindings (ADR-0122): binding.set/clear, Trigger, Binding, state.get bindings, delete.plan bindings, removed_bindings, entity binding" }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:d094d47283e84a32", by = "agent:release-alpha9", note = "Re-read: fixtures gain a sequence with every lane curve and trigger, a delayed play, waiting and the sequence driver; the description holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold" }
+stamp = { hash = "b3:5dc4ac5cf561e20c", by = "agent:bindings", note = "Re-read the fixture and parity descriptions: still accurate with the added second-action, clear-with-action and not_found cases." }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:54abc60954404dc6", by = "agent:channels", note = "Re-read: fixtures and parity gain channel examples; the schema description holds." }
+stamp = { hash = "b3:eec1be263457334a", by = "agent:bindings", note = "Re-read the fixture and parity descriptions: still accurate with the added second-action, clear-with-action and not_found cases." }
 
 ["CRATE-jstream-protocol#contents-schema"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to schema.rs, parity.rs, fixtures.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -4767,7 +4767,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:02c803fcc8de8b7a", by = "agent:release-alpha9", note = "Re-read: version 0.170 and new re-exports; the design holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold | kept from the merged side: Re-read the envelope and versioning design against version.rs at 0.172 and lib.rs's new export: a minor bump with an additive field; the handshake rules hold." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3c2542491c7a2677", by = "agent:claude", note = "Re-read the envelope and versioning design against version.rs at 0.172 and lib.rs's new export: a minor bump with an additive field; the handshake rules hold." }
+stamp = { hash = "b3:da8086e6bcb75666", by = "agent:bindings", note = "Checked against version.rs: a minor additive bump; the design text holds." }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4824,7 +4824,7 @@ stamp = { hash = "b3:a7da933b1a640b96", by = "agent:3d-groups", note = "Review r
 stamp = { hash = "b3:f04efc8b542328fd", by = "agent:claude", note = "solid_outline goes through ItemGeometry::solid, which faces a billboard first, so the geometry section's rules (facing, near plane) hold for it." }
 
 ["CRATE-jstream-protocol#hotkeys"."body"]
-stamp = { hash = "b3:5e31f64c92d7f7ac", by = "agent:plugin-uninstall", note = "Re-read after merging main (#1590: one dialog shell, a property grid and a helper line per setting; #1593: protocol 0.138, a Move's via and camera_path, ADR-0166) and renumbering plugin.uninstall and plugin.uninstalled to 0.143: every tag says 0.143, the versions line opens on 0.143 then 0.138, the snapshots are regenerated, and the plugin remove dialog and its tests still hold on #1590's shell | kept from the merged side: Binding deletion now names via scenes too (Action::named_objects), matching ADR-0166's bindings rule" }
+stamp = { hash = "b3:eacfd2d383bb2533", by = "agent:bindings", note = "Re-read: hotkey.set appends in bind order and refuses only an equal action, hotkey.clear takes an optional action with an exact-order inverse, reads repeat a chord per action, as hotkey.rs/command.rs and the graph do (ADR-0208)." }
 
 ["CRATE-jstream-protocol#hotkeys"."file:crates/jstream-protocol/src/hotkey.rs"]
 stamp = { hash = "b3:c5830a6b5289cf5e", by = "agent:smooth-paths", note = "Binding deletion now names via scenes too (Action::named_objects), matching ADR-0166's bindings rule" }
@@ -4872,7 +4872,7 @@ stamp = { hash = "b3:29622b5c7fe4520a", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:2031d27ef862a130", by = "agent:claude", note = "Edited: bindings and timelines carry labels from the same set, label.members and what it lists in which order, and label.delete's blockers and plan now in source, scene, binding, timeline order (ADR-0133); checked against organise.rs and the graph's label_plan and label_blockers." }
 
 ["CRATE-jstream-protocol#outputs"."body"]
-stamp = { hash = "b3:063edb3f5f8ecd42", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to output.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
+stamp = { hash = "b3:7f62f0d801c721c9", by = "agent:bindings", note = "Re-read: added output.toggle, start when stopped or failed, stop otherwise, run as the start/stop it resolves to, as engine.rs and the mock do." }
 
 ["CRATE-jstream-protocol#outputs"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to output.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
@@ -4881,16 +4881,16 @@ stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:13b8346827f3b8ac", by = "agent:claude", note = "Edited: a Timing bullet for item.set_timing (keyframe only, range checks, empty clears, inverse) and what a switch into the keyframe uses" }
 
 ["CRATE-jstream-protocol#placement"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:0c4c4c72ccde7297", by = "agent:release-alpha9", note = "Re-read: placement edits unaffected. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold" }
+stamp = { hash = "b3:699cc5fb1dfc87bb", by = "agent:bindings", note = "Checked against command.rs: no placement edit changed." }
 
 ["CRATE-jstream-protocol#placement"."file:crates/jstream-protocol/src/keyframe.rs"]
 stamp = { hash = "b3:0abc1408609095ff", by = "agent:claude", note = "Edited: a Timing bullet for item.set_timing (keyframe only, range checks, empty clears, inverse) and what a switch into the keyframe uses" }
 
 ["CRATE-jstream-protocol#plugins"."body"]
-stamp = { hash = "b3:6852db211184b59f", by = "agent:channels", note = "Added channel edits to edit, channel actions to live, channel.values to never granted." }
+stamp = { hash = "b3:c303bf0e261e8362", by = "agent:bindings", note = "Re-read: output.toggle in the outputs class beside start and stop, as PLUGIN_SCOPES in plugin.rs has it." }
 
 ["CRATE-jstream-protocol#plugins"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:5860f7e537268366", by = "agent:channels", note = "Added channel edits to edit, channel actions to live, channel.values to never granted." }
+stamp = { hash = "b3:0687310adcf95f5f", by = "agent:bindings", note = "Re-read: output.toggle in the outputs class beside start and stop, as PLUGIN_SCOPES in plugin.rs has it." }
 
 ["CRATE-jstream-protocol#ptz"."body"]
 stamp = { hash = "b3:d6abf5fc2292df72", by = "agent:ptz-builder", note = "round 1: ptz.drive can't be bound (bind_problem), and a moving drive stops when its session ends; checked against command.rs and ADR-0146 §3 | merge: merged wave/alpha5, which brought #1334/#1338 agent approval (0.108), #1417 pulse motion-driven effect settings (0.109, schema 13, ADR-0138), #1424 quality.probe (0.110), #1410 H.264 decoder, #1419 Linux desktop window and #1415 JTunnel MIDI; re-read: the PTZ text in this section holds beside them, at protocol 0.111 and schema 14" }
@@ -4932,7 +4932,7 @@ stamp = { hash = "b3:6bb63aab16b9276c", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:346b89300e9dc7a9", by = "agent:claude-settings", note = "Re-read: clap.rs is a new module of plain wire types (ClapScanInfo, ClapFolder, ClapFound, ClapFailed), within the crate's purpose; the Contents sections list it | merge: wave/alpha5 brought #1275's final Settings dialog, #1269's projects (protocol 0.94, collection.* calls, File menu project items), #1272's MIDI/JTunnel crates and main's #1301/#1302/#1308/#1309; re-read: the CLAP scan text this branch wrote (plugin.clap_scan, plugin.clap_rescan, the Audio plugins page) is independent of what the wave changed here, and any CLAP version it names is now 0.95 | merge: Merged wave/alpha5 (protocol 0.96 to 0.105: controller bindings, the network listener, keyframe timing, labels, blending space, effect quarantine, view reports, wheel chords and camera controls; READMEs trimmed to maps). This branch is renumbered on top as protocol 0.106 (plugin.clap_scan, plugin.clap_rescan, with the since-0.106 notes, and PluginClapRescan classified in Action::takes_steps). The Settings dialog keeps Audio plugins beside the wave's Devices page with its network setting. The core README's CLAP lines sit in the trimmed map, and the platform-windows README takes the wave's map. Snapshots are regenerated." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:0c4c4c72ccde7297", by = "agent:release-alpha9", note = "Re-read: the crate's purpose holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold" }
+stamp = { hash = "b3:699cc5fb1dfc87bb", by = "agent:bindings", note = "Checked against the command/fixtures/parity diffs: purpose holds; new action and optional field are additive." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/data.rs"]
 stamp = { hash = "b3:d3d187fa2b9b060e", by = "agent:claude", note = "Renumbered this branch's protocol version from 0.136 to 0.140 as the coordinator's queue assigns (0.136 is #1574's, 0.139 #1595's); only version numbers and regenerated snapshots changed. Still holds." }
@@ -4956,7 +4956,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read against ADR-0129 (keyframe timing in switches into a keyframe, item.set_timing, ease_in/hold/cubic_bezier, protocol 0.99 and schema 9 placeholders); holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:d094d47283e84a32", by = "agent:release-alpha9", note = "Re-read: the crate's purpose holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: protocol 0.172 over the train's 0.170 (#1640) and 0.169 (#1638); RenderFeatures gains screen_space_reflections and screen_space_steps, studio.set_rendering takes them; re-read with the train's channel and timeline text, both hold" }
+stamp = { hash = "b3:5dc4ac5cf561e20c", by = "agent:bindings", note = "Checked against the command/fixtures/parity diffs: purpose holds; new action and optional field are additive." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/frames.rs"]
 stamp = { hash = "b3:5fc2e1a197c77868", by = "agent:release-thread", note = "Added video.frames to the queries, scene.switch_and_watch to the actions, a Frame sheets bullet for frames.rs (FrameStrip with its limits and check, FrameSheet, SheetFrame), and the frame sheets to the version history. Renumbered to tentative 0.78 (0.76 and 0.77 held by other PRs), restoring item.set_locked's since 0.71; main merged up to #1109 with nothing there touching frame sheets. | merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | merge: wave/alpha4 into #1080 (protocol 0.82): the merge brought into crates/jstream-protocol/src/frames.rs no merged PR, only the conflict resolution. The file list holds: frames.rs (#1080), command.rs, fixtures.rs (scene.switch_and_watch and the item actions both), plugin.rs, lib.rs and query.rs carry the merged motion; version.rs is 0.82. | merge: main into wave/alpha4 (second sync): main didn't change crates/jstream-protocol/src/frames.rs. command.rs, fixtures.rs, lib.rs, plugin.rs and query.rs carry #1041's codec downloads (codec.downloads, codec.download, codec.delete, protocol 0.69, people-only) beside the wave's motion work (0.80 to 0.86); lib.rs's Docs line now names both #motion and #codec-downloads (the one conflict in it). frames.rs is the wave's and unchanged by main." }
@@ -5019,10 +5019,10 @@ stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 outpu
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:shader-source", note = "For 0.72 (ADR-0097; the release thread gave 0.71 to #1049): the Action list names pack.write and pack.delete, the Query list pack.list and pack.read, and PROTOCOL_VERSION's history says 0.72 is the pack commands, with pack.rs's PackFile, PackContent, PackInfo (written_by by pack ID, omitted when unnamed), PackFileInfo (text left out past a whole-pack read's budget) and the MAX_PACK_* limits; lib.rs re-exports them, fixtures.rs adds the pack actions, queries, results and EntityKind::Pack, plugin.rs classes list/read as read and the writes never; version.rs minor is 72." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:54abc60954404dc6", by = "agent:channels", note = "Re-read: the crate's purpose holds with the channel module added." }
+stamp = { hash = "b3:eec1be263457334a", by = "agent:bindings", note = "Checked against the command/fixtures/parity diffs: purpose holds; new action and optional field are additive." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:5860f7e537268366", by = "agent:channels", note = "Re-read: the crate's purpose holds with the channel module added." }
+stamp = { hash = "b3:0687310adcf95f5f", by = "agent:bindings", note = "Checked against the command/fixtures/parity diffs: purpose holds; new action and optional field are additive." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "contents still accurate after adding ViewCounts, ViewProfile and preview.report | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
@@ -5058,7 +5058,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Addit
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3c2542491c7a2677", by = "agent:claude", note = "Re-read against rendering.rs (two new RenderFeatures fields and SCREEN_SPACE_STEPS), its lib.rs export, query.rs's reflections doc and version.rs at 0.172: the crate's purpose holds." }
+stamp = { hash = "b3:da8086e6bcb75666", by = "agent:bindings", note = "Checked against the command/fixtures/parity diffs: purpose holds; new action and optional field are additive." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -5112,13 +5112,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:d4bc57aee028e42c", by = "agent:release-alpha9", note = "Added the 0.170 paragraph. | merge: #1645 (screen-space reflections, 1f65ffa) merged: the versions paragraph now reads 0.172 (SSR), then the train's 0.170 and 0.169, then 0.168 on; 0.171 is unused (SSR took 0.172 to stay clear of the train), and the version test checks only the opening | kept from the merged side: Checked the 0.172 entry: it leads the list, names screen_space_reflections and screen_space_steps with SCREEN_SPACE_STEPS and ADR-0170 decision 4, and version.rs is minor 172." }
+stamp = { hash = "b3:2549a97eac607270", by = "agent:bindings", note = "Re-read: 0.182 entry matches version.rs and names the several-actions, optional clear action and output.toggle changes." }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:3c2542491c7a2677", by = "agent:claude", note = "Checked the 0.172 entry: it leads the list, names screen_space_reflections and screen_space_steps with SCREEN_SPACE_STEPS and ADR-0170 decision 4, and version.rs is minor 172." }
+stamp = { hash = "b3:da8086e6bcb75666", by = "agent:bindings", note = "Re-read: 0.182 entry matches version.rs and names the several-actions, optional clear action and output.toggle changes." }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -6351,10 +6351,10 @@ stamp = { hash = "b3:707bdcd17bc89e64", by = "agent:claude", note = "tests.rs ga
 stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed | merge: the wave's #1366 (Allow devices on my network turns on the network listener) merged in cleanly; this section's text is untouched by the renumber | kept from the merged side: open question 1 says the desktop app turns the listener on with Allow devices on my network; merged with #1364's N1 restamp | merge: the wave brought #1364's squash, which this branch already had; this branch's desktop network switch text is unchanged | kept from the merged side: The host's side now says pairing.start carries network (0.101), absent without a listener; open question 1 now says the panel and jstream pair show addresses and fingerprint, only the desktop setting remains; matches admitted.rs, lib.rs and the new network test | kept from the merged side: listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Re-read against the control design change (mock channels); the server forwards calls and is unaffected. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependencies control#design and ARCH#protocol hold | kept from the merged side: Re-read against the control design's new mock refusal for screen_space_steps: the server forwards calls to the control trait and its own checks are unchanged." }
+stamp = { hash = "b3:07872d274f206a2e", by = "agent:bindings", note = "Checked against the control#design and ARCH#protocol edits: the server forwards calls unchanged." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:29bbf97755ed19b5", by = "agent:release-alpha9", note = "Re-read against the control design; the server forwards calls unchanged. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependencies control#design and ARCH#protocol hold | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: re-read after the control design's dependency change; the server is unaffected." }
+stamp = { hash = "b3:940f9ec841a53f51", by = "agent:bindings", note = "Checked against the control#design and ARCH#protocol edits: the server forwards calls unchanged." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the server's Host, Origin and token checks are unchanged" }
@@ -6804,7 +6804,7 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:285e8bffe3cfc9e6", by = "agent:mappings-panel", note = "Mapping mode and Mappings bullets re-read after moving [ ] stepping into stepped_in: a named Mod is armed and stepped as its channel, the panel no longer steps" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed. | merge: #1645 (screen-space reflections, 1f65ffa) merged: the rendering page's new switch and steps, beside the train's control button and panels; holds | kept from the merged side: Checked the scene dialog's Reflections paragraph: updated it to say the info tip also covers models reflecting what is on screen and the Settings switch, as scene_properties.rs's tip now reads; the rest holds against the control design." }
+stamp = { hash = "b3:07872d274f206a2e", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -6817,6 +6817,9 @@ stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 re
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
 stamp = { hash = "b3:20c44f735b82a602", by = "agent:mappings-panel", note = "Mappings bullet re-read against mappings.rs after the swap to the shared MappingMode: the bar steps a Mod reader and Escape disarms, the panel steps a named Mod's channel" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/bindings.rs"]
+stamp = { hash = "b3:9a210ac86dc5ecb5", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
@@ -6945,7 +6948,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Updated t
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = """Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. | merge: The Add source text lists reflection_probe after light (#1609) and the Fog card's 1024 x 576 box (fog card), matching the 20-kind ORDER; "+ Add motion" up to 32 and the camera's Autofocus and Aperture (blur) (#1631), the Reflections check (#1609), the hologram's Style and presets (hologram follow-up) and the Controller learn bullet (CC PR 3 value bindings) match too, as does the control mock keeping value bindings.""" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/inspector.rs"]
-stamp = { hash = "b3:07c779d3c72ccfd4", by = "agent:ui-design", note = "Added the two tab levels (.segmented in the Inspector and the Filters window, the 32 px Settings rail), the Inspector's 88 px label column and segmented control, number fields without steppers but the mixer's gain, the caption inside the box that scrubs, and the Arrange panel's name; checked against style.css, inspector.rs, number.rs and transform.rs." }
+stamp = { hash = "b3:8dae814cb2db9042", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/keyframe_timing.rs"]
 stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged main's #1341 Properties & filters dialog, #1345 AxisRow number rows and #1373 Outputs follow-ups with the wave's follow-pointer-as-filter note, curve editor, keyframe timing fields and pairing toggle; the scene dialog keeps only camera motion as a draft (no set_camera_follow on the wave)" }
@@ -6987,10 +6990,10 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scene_properties.rs only adds a sentence to the Share the 3D space note; the design section's Share the 3D space and Moves with lines still hold" }
+stamp = { hash = "b3:82a4282fac6f1525", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: scene_properties.rs only adds a sentence to the Share the 3D space note; the design section's Share the 3D space and Moves with lines still hold" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
+stamp = { hash = "b3:0520ba26c94a9a69", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sequence.rs"]
 stamp = { hash = "b3:df107152d161984e", by = "agent:claude", note = "Right-click menus bullet names menu::keys/focus_first/asks_for_menu; control button bullet says an existing lane only opens and the keyboard opening; sequences bullet covers unchanged edits sending nothing, point focus keys, the Events editor's editable/(missing)/position rules and chip keys; style.css only adds a .seq-dot focus ring" }
@@ -7012,6 +7015,9 @@ stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fm
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read Scenes and sources: the panels are Scenes and Sources (the prototype's Scene objects), each with ToolBar (add, remove, properties, filters, up, down) sticky at the foot; dock list says Sources; the rest holds against the diff." }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/triggers.rs"]
+stamp = { hash = "b3:034c96cb009bbba0", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/plugins.rs"]
 stamp = { hash = "b3:21472b2516d7a36f", by = "agent:claude", note = "C18: the Install plugin passage now says it is a medium dialog on the property grid (Folder, ID); other design bullets unaffected by the project/plugin dialog restyle and the new .project-recent / .install-dialog CSS." }
@@ -7035,7 +7041,7 @@ stamp = { hash = "b3:cb07004e872fb0bf", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/settings.rs"]
-stamp = { hash = "b3:232e1fd4f554fb51", by = "agent:claude", note = "Round 1 fixes: the pairing paragraph names the refused-code card (N1); the Settings and Video text holds against the base-tracking VideoDraft and the alive guard (B1, N3). | merge: #1594's Rendering page joins settings.rs's rail between Video and Audio after the merge; the design section's Settings text holds. | kept from the merged side: This branch's rendering.rs follows docs/UI-DESIGN#forms (input.toggle with a label for, Info, one .help line, grouped under an eyebrow) and adds no new design choice; the merge (#1590) brought that pattern and the dialog shell; nothing in Design needed changing | kept from the merged side: #1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
+stamp = { hash = "b3:d3264f0e4f706532", by = "agent:bindings", note = "Re-read the Hotkeys and Inspector entries; added Keys and MIDI triggers (bindings.rs, panels/triggers.rs) and the × unbinding only the switch." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
 stamp = { hash = "b3:4cf7970a2766f6f5", by = "agent:mappings-panel", note = "Mappings design bullet re-read against mappings.rs and mapping_index.rs: readers, rows, write_all, name_mods_edits, MappingMode, live_sources reads; Collection.bindings in store.rs; PanelId::Mappings in dock.rs" }
@@ -7075,6 +7081,9 @@ stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 re
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
 stamp = { hash = "b3:20c44f735b82a602", by = "agent:mappings-panel", note = "The Mappings panel entry now says it arms through the Shell's MappingMode; mapping_mode.rs is described by the Map control thread's entry" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/bindings.rs"]
+stamp = { hash = "b3:9a210ac86dc5ecb5", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
@@ -7203,7 +7212,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Re-read: 
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = "Added learn.rs to the panels and value_bindings to the store's Collection. | merge: The contents list covers the panels code that #1609 (Reflections check, probe switch and cap), the fog card bundle (fog_card in ORDER), the hologram follow-up (hologram in filters.rs KNOWN) and CC PR 3 value bindings (learn.rs, the store's value bindings, learn in both filters.rs forms) changed; the panels it names and their tests match the merged files." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/inspector.rs"]
-stamp = { hash = "b3:07c779d3c72ccfd4", by = "agent:ui-design", note = "Renamed the Transform panel to Arrange in the module list and the keyframe-children note (PanelId::Transform keeps its key); NumberField now has no steppers unless asked (the mixer's gain fields); the Filters window's scope switcher is segmented with counts; checked against dock.rs, number.rs, transform.rs, filters.rs and inspector.rs." }
+stamp = { hash = "b3:8dae814cb2db9042", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/keyframe_timing.rs"]
 stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged main's #1341 Properties & filters dialog, #1345 AxisRow number rows and #1373 Outputs follow-ups with the wave's follow-pointer-as-filter note, curve editor, keyframe timing fields and pairing toggle; the scene dialog keeps only camera motion as a draft (no set_camera_follow on the wave)" }
@@ -7245,10 +7254,10 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "C20-C22 (ou
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scene_properties.rs only adds a sentence to the Share the 3D space note (a scene shares a group once); the purpose section names no note text; holds" }
+stamp = { hash = "b3:82a4282fac6f1525", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: scene_properties.rs only adds a sentence to the Share the 3D space note (a scene shares a group once); the purpose section names no note text; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
+stamp = { hash = "b3:0520ba26c94a9a69", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sequence.rs"]
 stamp = { hash = "b3:df107152d161984e", by = "agent:claude", note = "Events lane entry now names editable and position tests; menu.rs, learn.rs and sequence.rs entries still hold for the keyboard additions" }
@@ -7270,6 +7279,9 @@ stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fm
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: Panels now names tree.rs's tool bar and the arrows' edits tested natively in scenes.rs; icons.rs gains the tool bars' icons; the panel is Sources everywhere (dock title, labels, clipboard docs)." }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/triggers.rs"]
+stamp = { hash = "b3:034c96cb009bbba0", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/plugins.rs"]
 stamp = { hash = "b3:21472b2516d7a36f", by = "agent:claude", note = "C18: project.rs ProjectDialog gains Open's Recent list (recent prop, header passes the recent projects other than the open one), a Location prop-grid row and the callout; plugins.rs InstallDialog moves Folder and ID onto the prop grid with a callout; icons.rs adds a file icon. Edited the Projects bullet to say so." }
@@ -7293,7 +7305,7 @@ stamp = { hash = "b3:cb07004e872fb0bf", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/settings.rs"]
-stamp = { hash = "b3:232e1fd4f554fb51", by = "agent:claude", note = "Round 1 B1 fix: the Video settings bullet now says the VideoDraft follows the collection until edited (differs from its base); checked against video_settings.rs and settings.rs, including the alive guard on Save's close. | merge: #1594 adds the 3D rendering Settings page (rendering.rs); resolved the conflict so SettingsPage lists General, Video, 3D rendering, Audio, Plugins, Devices and kept main's 3D rendering bullet beside this branch's Audio plugins one. | kept from the merged side: This branch adds Settings › 3D rendering (rendering.rs): RenderingSettings with one toggle per Switch in a property grid under Effects, one help line and an (i) each, studio.get to read and studio.set_rendering naming one switch, a refusal putting back only that switch, and a none line for engines older than 0.136; the Contents entry says so. The merge (#1590) brought the dialog shell and prop-grid pattern this follows and renamed the General page's settings, which the entries already match | kept from the merged side: #1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
+stamp = { hash = "b3:d3264f0e4f706532", by = "agent:bindings", note = "Re-read the Hotkeys bullet (now every action in bind order) and the store bullet; the new modules fit the crate's purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
 stamp = { hash = "b3:4cf7970a2766f6f5", by = "agent:mappings-panel", note = "Contents list the Mappings panel over live_sources and mapping_index with what is tested natively; the module list matches lib.rs and panels/mod.rs after the Map control merge" }
@@ -7405,6 +7417,9 @@ stamp = { hash = "b3:6487f69c20b2a0e1", by = "agent:ui-design", note = "Specs no
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/keyframes.spec.js"]
 stamp = { hash = "b3:20b6435bb10e0c51", by = "agent:claude", note = "Re-read against the spec edits: connect, menus (new sub() submenu helper), keyframes and polish specs use the same harness, mock engine and fixtures; nothing in the harness changed." }
+
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/keys-and-midi.spec.js"]
+stamp = { hash = "b3:687b0e945a2dbef3", by = "agent:bindings", note = "Checked keys-and-midi.spec.js uses the existing fixtures (connect, daemon) and no new flag; harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/labels.spec.js"]
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, so the harness holds." }
@@ -7546,6 +7561,9 @@ stamp = { hash = "b3:6487f69c20b2a0e1", by = "agent:ui-design", note = "Updated 
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/keyframes.spec.js"]
 stamp = { hash = "b3:20b6435bb10e0c51", by = "agent:claude", note = "Updated the connect, menus, keyframes and sharing descriptions for Connection details, the Order, Duplicate and Reference or clone submenus and the canvas menu's new order; re-read the rest against the specs." }
+
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/keys-and-midi.spec.js"]
+stamp = { hash = "b3:687b0e945a2dbef3", by = "agent:bindings", note = "Re-read: added the Keys & MIDI entry matching what keys-and-midi.spec.js drives." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/labels.spec.js"]
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
@@ -7995,7 +8013,7 @@ stamp = { hash = "b3:22c3015c6af03877", by = "agent:claude", note = "Added the v
 stamp = { hash = "b3:6be7d361d99aa3ff", by = "agent:claude-settings", note = "Step 3 now walks through the Agent wants to connect prompt (Always allow, Allow once, two-minute timeout) and where Settings lists approved agents and turns asking off; the token note says asking is a notice, not a lock. Matches agents.rs and host.rs" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:1fb8e51769db6783", by = "agent:release-thread", note = "Re-read: the change to its dependency is only the bench adding its own fade preset when the collection has none; this section doesn't mention the bench or presets and still holds." }
+stamp = { hash = "b3:f87505261e656e9f", by = "agent:bindings", note = "Checked against the CLI usage edit (hotkey wording): agent steps don't use hotkeys." }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The desktop usage dep only added the 3D rendering switches' file bullet; connecting agents is unchanged. | merge: the desktop usage dep gained #1580 (projects default to Documents\JStream, screenshots say where they saved, ADR-0163, paths::user_folder); agents hold. | merge: #1590 renamed settings in the desktop usage and UI-FEATURES header sections this depends on; #1590 already updated the names this section uses, and the 3D rendering page needs no getting-started step | merge: merged #1597 (a DAW's JTunnel state as live data: data.list, data.get, NetworkProfile state counters, ADR-0171, protocol 0.140); its desktop usage input gains jtunnel.json's state flag; this section names neither it nor the 3D rendering page and holds | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only the desktop README's setting names changed (Keep ready, Ask before connecting); this section quotes neither and holds. | merge: Merged #1580 (projects in Documents\JStream, a screenshot's toast with Open and Show in folder, .toast-action in style.css) and #1587 (model depth of field, render only). Neither touches this section's subject; this branch's text still holds against the merged inputs. | kept from the merged side: Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds.''' }
@@ -8016,7 +8034,7 @@ stamp = { hash = "b3:57db58043cad8447", by = "agent:claude", note = "Step 1 keep
 stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The deps only added Settings › 3D rendering and its file; going live is unchanged. | merge: the desktop usage dep gained #1580 (projects default to Documents\JStream, screenshots say where they saved, ADR-0163, paths::user_folder); going live holds. | merge: #1590 renamed settings in the desktop usage and UI-FEATURES header sections this depends on; #1590 already updated the names this section uses, and the 3D rendering page needs no getting-started step | merge: merged #1597 (a DAW's JTunnel state as live data: data.list, data.get, NetworkProfile state counters, ADR-0171, protocol 0.140); its desktop usage input gains jtunnel.json's state flag; this section names neither it nor the 3D rendering page and holds | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Going live steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold. | kept from the merged side: Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds.''' }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Checked against the HD-01 edit: going live steps unchanged; nothing about Settings pages. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:946bde14bc7e59a5", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8028,7 +8046,7 @@ stamp = { hash = "b3:23d99288d10a6118", by = "agent:claude", note = "Pick Record
 stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The deps only added Settings › 3D rendering and its file; recording is unchanged. | merge: the desktop usage dep gained #1580 (projects default to Documents\JStream, screenshots say where they saved, ADR-0163, paths::user_folder); recording holds. | merge: #1590 renamed settings in the desktop usage and UI-FEATURES header sections this depends on; #1590 already updated the names this section uses, and the 3D rendering page needs no getting-started step | merge: merged #1597 (a DAW's JTunnel state as live data: data.list, data.get, NetworkProfile state counters, ADR-0171, protocol 0.140); its desktop usage input gains jtunnel.json's state flag; this section names neither it nor the 3D rendering page and holds | kept from the merged side: Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds. | kept from the merged side: Only setting names in UI-FEATURES header and the desktop README changed; the Recording steps hold. | merge: Merged #1580 (projects saved in Documents\JStream, the screenshot toast's Open and Show in folder, .toast-action) and #1587 (model depth of field). Re-read: this branch's renamed settings (Keep ready, Ask before connecting, Check for updates, Global hotkeys, Scale existing scenes to fit) and the dialog shell text sit beside main's new folder and toast text without conflict; all still hold. | kept from the merged side: Re-read: the desktop usage section changed only the JTunnel state default (Jeff asked for Use this sender's state on by default once a sender is accepted); this section does not cover JTunnel state. Still holds. | merge: #1593 (ADR-0166, protocol 0.138: scene.switch via, the move kind's camera_path), #1590 (one dialog shell, property grid, helper lines) and #1602 (release 0.1.0-alpha.7): this section's dependency on the desktop usage gained nothing about JTunnel; unaffected by this branch. Still holds.''' }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Checked against the HD-01 edit: recording steps unchanged. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:946bde14bc7e59a5", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8058,10 +8076,10 @@ stamp = { hash = "b3:58f92aed22ff4a94", by = "agent:release-alpha11", note = "UI
 stamp = { hash = "b3:915b2e49a1c906e1", by = "agent:ui-design", note = "Step 3 now says the Inspector holds the exact numbers and the Arrange panel aligns and fits; checked against the renamed panel (dock.rs) and UI-FEATURES inspector and transform." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Checked against the HD-01 edit (Keys & MIDI page): this walkthrough lists no Settings pages. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
-stamp = { hash = "b3:3f0a4004877ab302", by = "agent:claude", note = "UI-FEATURES inspector and mixer now describe the control menu; this walkthrough doesn't mention the learn button, so it holds" }
+stamp = { hash = "b3:ee04cdff297d3730", by = "agent:bindings", note = "Checked against the HD-01 edit (Keys & MIDI page): this walkthrough lists no Settings pages." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#menus"]
 stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited: File › Video settings… opens Settings on Video with Save, and Check for updates is a desktop-app item; checked against header.rs and settings.rs." }
@@ -8232,10 +8250,10 @@ stamp = { hash = "b3:92af4dc02f396840", by = "agent:claude", note = "New section
 stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "R-API-002 now points at PEOPLE_ONLY and DEPRECATED in jstream-mcp tools.rs instead of naming youtube as the one exception; rest of the section unchanged" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:2d09ebc9fa2a93a0", by = "agent:release-alpha9", note = "Re-read against ARCH persistence (schema 21 with its refusing migration); the rule holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependencies ARCH#protocol and #persistence hold (protocol 0.172, schema 21) | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; ARCH persistence's default changed; additive, so R-API-001 holds." }
+stamp = { hash = "b3:eee6aae3af69883f", by = "agent:bindings", note = "Checked against the ARCH protocol and persistence edits: an additive minor bump, no file schema change; the rules hold." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:29bbf97755ed19b5", by = "agent:release-alpha9", note = "Re-read against ARCH persistence (schema 21 with its refusing migration); the rule holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependencies ARCH#protocol and #persistence hold (protocol 0.172, schema 21) | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: ARCH protocol's Reflections bullet changed wording; an additive minor field, so R-API-001 holds." }
+stamp = { hash = "b3:940f9ec841a53f51", by = "agent:bindings", note = "Checked against the ARCH protocol and persistence edits: an additive minor bump, no file schema change; the rules hold." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:9b1de3f0c0d6da7f", by = "agent:dxc-packaging", note = "R-DEP-001 now names the DXC DLLs as a shipped binary under Microsoft's terms beside the CEF exception (ADR-0175); the other rules are unchanged" }
@@ -8292,7 +8310,7 @@ stamp = { hash = "b3:08311638b1b2369d", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:994677f799d9b9e9", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:1fb8e51769db6783", by = "agent:release-thread", note = "Re-read: the change to its dependency is only the bench adding its own fade preset when the collection has none; this section doesn't mention the bench or presets and still holds." }
+stamp = { hash = "b3:f87505261e656e9f", by = "agent:bindings", note = "Checked against the CLI usage edit: smoke checks unchanged." }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:08311638b1b2369d", by = "agent:claude", note = "Re-read: the daemon usage changed only --jtunnel-state to --jtunnel-no-state (Jeff asked for Use this sender's state on by default once a sender is accepted); this runbook uses neither. Still holds." }
@@ -8304,7 +8322,7 @@ stamp = { hash = "b3:f8133a4bc39c3167", by = "agent:claude-linux-daemon", note =
 stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 now says stats.tick lines come about once a second before and while live, and end with the load (program_frames about 30 a second while live, cpu_ms), matching the CLI's line and the 1/30 s base tick." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:1fb8e51769db6783", by = "agent:release-thread", note = "Re-read: the change to its dependency is only the bench adding its own fade preset when the collection has none; this section doesn't mention the bench or presets and still holds." }
+stamp = { hash = "b3:f87505261e656e9f", by = "agent:bindings", note = "Checked against the CLI usage edit: steps use output.start/stop, unchanged." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:08311638b1b2369d", by = "agent:claude", note = "Re-read: the daemon usage changed only --jtunnel-state to --jtunnel-no-state (Jeff asked for Use this sender's state on by default once a sender is accepted); this runbook uses neither. Still holds." }
@@ -8721,7 +8739,7 @@ stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the e
 stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. dialog.rs's Info component unchanged | kept from the merged side: dialog.rs's Info component is unchanged; the copy rules still hold" }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22) | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
@@ -8730,7 +8748,7 @@ stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the l
 stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Dialog layout rules unchanged by the Escape listener | kept from the merged side: The dialog layout rules are unchanged by the Escape listener; this section doesn't describe keys" }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:18163062a555daee", by = "agent:release-alpha10", note = "C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
+stamp = { hash = "b3:d26a6f6e50405965", by = "agent:bindings", note = "Re-read against the new Keys & MIDI CSS: tokens only, plain and primary buttons, 12-13 px type, Close-footer Settings page; nothing here changed. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: C20-C22's CSS (flat output rows, icon buttons, master card bars, preset toolbar, stats line, empty states, About grid) uses the existing tokens and type sizes and adds no rule here; re-read, holds | merge: wave 2: #1662 (d319aec, C20-C22) restyles the outputs, mixer master card, transitions toolbar and live panels in style.css with existing tokens and the new 28 px Icon button; re-read beside #1657's control-menu-row and chan-row-smooth and #1648's dialog rules, all hold" }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
@@ -8847,7 +8865,7 @@ stamp = { hash = "b3:beb5beb8909eae52", by = "agent:release-alpha8", note = "DL-
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude-ui-features", note = "panels/confirm.rs: Confirm is the inline delete confirmation showing the plan summary, the only dialog-like UI today, which DL-01 keeps; the rest (DL-02 Properties tab, DL-06 add-under-list) live in other panels as the notes say." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "DL-03 now says the Share the 3D space note adds that a scene shares a group once, a second placement being a flat card, as scene_properties.rs shows" }
+stamp = { hash = "b3:82a4282fac6f1525", by = "agent:bindings", note = "Re-read DL-03: scene_edits now unbinds only the scene's switch from the old chord; clear-then-set and the refusal of a taken chord still hold. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: DL-03 now says the Share the 3D space note adds that a scene shares a group once, a second placement being a flat card, as scene_properties.rs shows" }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Re-read: source_properties.rs passes LearnOwner::Source to the form; the dialog list holds, and the inspector section describes the button." }
@@ -8877,7 +8895,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "FL-11 now
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = "With the hologram follow-up's Transmission, Steady, Broken signal and Amber presets FL-11 names every kind filter_presets.rs gives presets, and the text below the table describes CC PR 3 value bindings' learn button on any chain's live settings, wired through LearnOwner::Filter in both forms." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:b2a16c3d37a93346", by = "agent:claude", note = "HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
+stamp = { hash = "b3:eb65f834fe29f267", by = "agent:bindings", note = "Re-read HD-01's Settings page list: Keys & MIDI after Audio, as SettingsPage::ALL orders it. | merge: Merging main brought only #1655, the squash of this branch's alpha.11 base, so the inputs are those I re-read for ADR-0208; nothing more changed for this section. | kept from the merged side: HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
@@ -8895,7 +8913,7 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "HD-10's Abo
 stamp = { hash = "b3:8385e7f9b58814f5", by = "agent:claude", note = "Round 1 N1: HD-12 now names the recent list's keys (Space, Up and Down fill Location; Enter or a double-click opens)." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/settings.rs"]
-stamp = { hash = "b3:232e1fd4f554fb51", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs. | merge: Resolved HD-01: kept main's 3D rendering page text (switches, studio.set_rendering, ADR-0170) and placed it after Video and before Audio, matching the merged settings.rs order. | kept from the merged side: HD-01 now lists the 3D rendering Settings page (four switches, all on, off draws nowhere, studio.set_rendering, rendering.rs, old engines show none); matches settings.rs and rendering.rs. | merge: #1590 rewrote HD-01's Settings description (pages grouped under eyebrows, renamed settings); the 3D rendering page clause is kept, placed after the General page's Memory limit, and still matches rendering.rs | kept from the merged side: #1590 B1: HD-01 now names the General page's settings as they read (Check for updates, Global hotkeys, Ask before connecting, Keep ready, Memory limit, under Updates, Hotkeys, Agents and Performance) and HD-10 the Check for updates and Global hotkeys toggles; HD-11 Scale existing scenes to fit; HD-12's callout; checked against updates.rs, agents.rs, warm.rs, settings.rs, video_settings.rs, project.rs and outputs.rs." }
+stamp = { hash = "b3:d3264f0e4f706532", by = "agent:bindings", note = "Re-read HD-01's Settings page list: Keys & MIDI after Audio, as SettingsPage::ALL orders it." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1: HD-01 now names the General page's settings as they read (Check for updates, Global hotkeys, Ask before connecting, Keep ready, Memory limit, under Updates, Hotkeys, Agents and Performance) and HD-10 the Check for updates and Global hotkeys toggles; HD-11 Scale existing scenes to fit; HD-12's callout; checked against updates.rs, agents.rs, warm.rs, settings.rs, video_settings.rs, project.rs and outputs.rs." }
@@ -8904,16 +8922,16 @@ stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1
 stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#inspector"."body"]
-stamp = { hash = "b3:3f0a4004877ab302", by = "agent:claude", note = "learn button paragraph now describes the control menu (learn, make or follow a channel, remove) and the bound button's label" }
+stamp = { hash = "b3:ee04cdff297d3730", by = "agent:bindings", note = "Re-read IN-08: × now unbinds only the scene's switch from the chord, via Collection::unbind_edits." }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/inspector.rs"]
-stamp = { hash = "b3:07c779d3c72ccfd4", by = "agent:ui-design", note = "IN-01 kind falls back to its ID with a capital; IN-02 Position and size with the 88 px label column; IN-04 the 20 px chain between W and H; IN-06 crop two by two; IN-07 the opacity slider; IN-11 the segmented control. Checked against inspector.rs, number.rs and style.css." }
+stamp = { hash = "b3:8dae814cb2db9042", by = "agent:bindings", note = "Re-read IN-08: × now unbinds only the scene's switch from the chord, via Collection::unbind_edits." }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.rs passes the setting's label and value to the control button; the Inspector rows still hold, the menu is described under Channels and sequences." }
 
 ["UI-FEATURES#keyboard"."body"]
-stamp = { hash = "b3:55d82fbadddc32cb", by = "agent:claude", note = "KB-01 lists K, D, R and Esc leaving camera mode; KB-02 adds Ctrl-drag depth in 3D; checked against on_key and on_down" }
+stamp = { hash = "b3:d5a92854b670d2f2", by = "agent:bindings", note = "Re-read KB-07 (every action in bind order) and added KB-08 for Settings › Keys & MIDI; covers gained bindings.rs and triggers.rs." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Re-read: the mod.rs change only passes a shape instead of a model's bounds to outline and hit; no key binding changed" }
@@ -8973,7 +8991,7 @@ stamp = { hash = "b3:39da914c97d83463", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:5da0006a6faf1847", by = "agent:claude", note = "new SC-12 for sequence rows (caret, open, play/stop, elapsed, keys, menu with Set key and Delete); matches scenes.rs Row::Sequence and sequence_row" }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "new SC-12 for sequence rows (caret, open, play/stop, elapsed, keys, menu with Set key and Delete); matches scenes.rs Row::Sequence and sequence_row" }
+stamp = { hash = "b3:0520ba26c94a9a69", by = "agent:bindings", note = "Checked against the scenes.rs diff: a sequence's clear keys unbinds only its play action; rows unchanged." }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }

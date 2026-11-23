@@ -52,15 +52,16 @@ pub struct Collection {
     pub labels: Vec<LabelInfo>,
     /// The master stage's chains, which apply to everything leaving JStream (ADR-0080).
     pub master: FilterChains,
-    /// Every hotkey binding, ordered by chord (ADR-0024 §5).
+    /// Every hotkey binding, ordered by chord (ADR-0024 §5), then by the order a chord's
+    /// actions were bound (ADR-0208).
     pub hotkeys: Vec<HotkeyBinding>,
+    /// Every controller binding (ADR-0122), ordered by trigger, then by the order a
+    /// trigger's actions were bound (ADR-0208).
+    pub bindings: Vec<jstream_control::protocol::Binding>,
     /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
     pub folders: Vec<FolderInfo>,
     /// The transition presets and which one is the default.
     pub transitions: TransitionsInfo,
-    /// The controller bindings, ordered by trigger (ADR-0122): which MIDI message runs
-    /// which action.
-    pub bindings: Vec<jstream_control::protocol::Binding>,
     /// The value bindings, ordered by ID (ADR-0178): which settings a controller drives.
     pub value_bindings: Vec<jstream_control::protocol::ValueBinding>,
     /// The channels, ordered by ID (ADR-0183): named live values that controls set and
@@ -84,9 +85,9 @@ impl Collection {
                 labels,
                 master,
                 hotkeys,
+                bindings,
                 folders,
                 transitions,
-                bindings,
                 value_bindings,
                 channels,
                 ..
@@ -129,9 +130,9 @@ impl Collection {
                     labels,
                     master: master.filters,
                     hotkeys,
+                    bindings,
                     folders,
                     transitions: *transitions,
-                    bindings,
                     value_bindings,
                     channels: *channels,
                 })
@@ -325,12 +326,52 @@ impl Collection {
             .collect()
     }
 
-    /// The action bound to `chord`, if any, and this version knows it.
+    /// The edits that stop `chord` running `action`, and nothing else it runs
+    /// (ADR-0208): a `hotkey.clear` naming each bound action that matches, where a
+    /// `scene.switch` matches any switch to its scene, as [`Self::chords_for`] reads it.
+    pub fn unbind_edits(&self, chord: &Chord, action: &Action) -> Vec<Edit> {
+        let matches = |bound: &Action| match (action, bound) {
+            (
+                Action::SceneSwitch { scene_id, .. },
+                Action::SceneSwitch {
+                    scene_id: bound, ..
+                },
+            ) => scene_id == bound,
+            _ => action == bound,
+        };
+        self.hotkey_actions(chord)
+            .into_iter()
+            .filter(|bound| matches(bound))
+            .map(|bound| Edit::HotkeyClear {
+                chord: chord.clone(),
+                action: Some(bound),
+            })
+            .collect()
+    }
+
+    /// The first action bound to `chord`, if any, and this version knows it.
     pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
+        self.hotkey_actions(chord).into_iter().next()
+    }
+
+    /// Every action bound to `chord` that this version knows, in the order they were
+    /// bound: what a press runs (ADR-0208).
+    pub fn hotkey_actions(&self, chord: &Chord) -> Vec<Action> {
         self.hotkeys
             .iter()
-            .find(|binding| &binding.chord == chord)
-            .and_then(HotkeyBinding::action)
+            .filter(|binding| &binding.chord == chord)
+            .filter_map(HotkeyBinding::action)
+            .collect()
+    }
+
+    /// Every action bound to the controller trigger `trigger` that this version knows,
+    /// in the order they were bound (ADR-0208).
+    pub fn trigger_actions(&self, trigger: &jstream_control::protocol::Trigger) -> Vec<Action> {
+        self.bindings
+            .iter()
+            .filter(|binding| &binding.trigger == trigger)
+            .filter_map(jstream_control::protocol::Binding::action)
+            .collect()
     }
 
     /// The scenes the scene list shows, in display order: groups are left out

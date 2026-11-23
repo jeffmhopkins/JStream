@@ -142,8 +142,9 @@ Contents ([Design](#design) explains the choices):
   quarantined kinds does. `kinds.changed` (0.107), from a CLAP scan or the effect packs,
   perhaps another client's, and `events.dropped` read it again too. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
-- **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
-  while the page has the focus and no dialog or menu is open, and the chord of a key
+- **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs every action bound to a pressed
+  chord, in bind order (ADR-0208), while the page has the focus and no dialog or menu is
+  open, and the chord of a key
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
   `Collection::chords_for` lists a row's chords), tested natively. A wheel chord
@@ -169,6 +170,19 @@ Contents ([Design](#design) explains the choices):
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
   registers reaches JStream as a hotkey even while the page has the focus, so the page
   doesn't see that key press.
+- **Keys and MIDI triggers** (`bindings.rs`, `panels/triggers.rs`,
+  [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)): `bindings.rs`
+  is pure and tested natively. `When` is a key chord or a MIDI `Trigger` with its label
+  and the edits that bind or unbind an action on it; `rows` lists every chord and
+  trigger with the actions it runs, in order (`Collection::bindings` beside the
+  hotkeys), `filtered` finds rows by their words and `describe` names an action in
+  words. `Pick` is the action picker's list, each with the object it needs (`targets`)
+  and the actions it makes: Go live and Record toggle every stream or recording output.
+  `add_edits` skips actions a row runs already and `in_use` says what a chord runs.
+  `panels/triggers.rs` holds the components: `KeysAndMidi`, Settings › Keys & MIDI;
+  `TriggerList`, the rows with a chip per action; `ActionPicker`, which adds an action
+  to a `When`; and `MidiTriggerForm`, a typed trigger or one Learn fills from
+  `midi.last_controls`. Each is public so another panel can show the same list.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -694,7 +708,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   one yet). One that drives a setting of its item's source (ADR-0171) shows "Source
   setting" the same way. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
-  `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
+  `scene.switch`, an × that unbinds the switch from one chord, leaving its other actions, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
   presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit

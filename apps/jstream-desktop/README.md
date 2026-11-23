@@ -477,8 +477,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   its own, installed only while one is set. The tap needs the Accessibility permission,
   asked for the first time a wheel chord is set; without it `set` returns the wheel
   chords with that reason, which is logged, and they are heard only while JStream has
-  the focus. So the app never sees any other key; a press
-  runs the binding's action as an `action` call from that session, and nothing it
+  the focus. So the app never sees any other key; each chord is registered once, and a
+  press runs every action bound to it, in bind order, as `action` calls from that
+  session, carrying on past one that fails
+  ([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)), and nothing it
   hears is kept or sent anywhere else. A registered chord goes to JStream even while
   its window has the focus, so the page doesn't run it twice. A chord another
   application holds already is logged and heard only while JStream has the focus. The

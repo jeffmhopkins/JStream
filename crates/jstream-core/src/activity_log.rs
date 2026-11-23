@@ -162,6 +162,9 @@ fn describe_action(action: &Action, state: &State) -> String {
             format!("Started output {}", quote(output_id.as_str()))
         }
         Action::OutputStop { output_id } => format!("Stopped output {}", quote(output_id.as_str())),
+        Action::OutputToggle { output_id } => {
+            format!("Started or stopped output {}", quote(output_id.as_str()))
+        }
         Action::OutputSetKey { output_id, .. } => {
             format!("Set the stream key of output {}", quote(output_id.as_str()))
         }
@@ -586,11 +589,29 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::HotkeySetLabels { chord, .. } => {
             format!("Changed the labels of the hotkey {}", chord.as_str())
         }
-        Edit::HotkeyClear { chord } => format!("Cleared the hotkey {}", chord.as_str()),
+        Edit::HotkeyClear {
+            chord,
+            action: None,
+        } => format!("Cleared the hotkey {}", chord.as_str()),
+        Edit::HotkeyClear {
+            chord,
+            action: Some(action),
+        } => format!(
+            "Unbound {} from {}",
+            humanize(action.name()),
+            chord.as_str()
+        ),
         Edit::BindingSet { trigger, action } => {
             format!("Bound {trigger} to {}", humanize(action.name()))
         }
-        Edit::BindingClear { trigger } => format!("Cleared the binding of {trigger}"),
+        Edit::BindingClear {
+            trigger,
+            action: None,
+        } => format!("Cleared the binding of {trigger}"),
+        Edit::BindingClear {
+            trigger,
+            action: Some(action),
+        } => format!("Unbound {} from {trigger}", humanize(action.name())),
         Edit::TimelineSet {
             scene_id,
             timeline: info,
@@ -883,7 +904,13 @@ mod tests {
             "Bound MIDI note 36 on channel 10 from Pads to scene switch"
         );
         assert_eq!(
-            super::describe_edit(&Edit::BindingClear { trigger }, graph.state()),
+            super::describe_edit(
+                &Edit::BindingClear {
+                    action: None,
+                    trigger
+                },
+                graph.state()
+            ),
             "Cleared the binding of MIDI note 36 on channel 10 from Pads"
         );
     }

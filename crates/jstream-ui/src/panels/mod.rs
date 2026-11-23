@@ -44,6 +44,7 @@ pub mod stats;
 pub mod studio;
 pub mod transform;
 mod tree;
+pub mod triggers;
 
 pub use add_source::AddSource;
 pub use agent::AgentActivity;

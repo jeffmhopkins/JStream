@@ -1309,6 +1309,7 @@ pub fn remove_trigger(collection: &Collection, when: &When) -> Option<Edit> {
             .any(|h| &h.chord == chord)
             .then(|| Edit::HotkeyClear {
                 chord: chord.clone(),
+                action: None,
             }),
         When::Midi(trigger) => collection
             .bindings
@@ -1316,6 +1317,7 @@ pub fn remove_trigger(collection: &Collection, when: &When) -> Option<Edit> {
             .any(|b| &b.trigger == trigger)
             .then(|| Edit::BindingClear {
                 trigger: trigger.clone(),
+                action: None,
             }),
         When::Sequence {
             timeline_id,
@@ -1657,7 +1659,8 @@ mod tests {
         assert_eq!(
             remove_trigger(&c, &rows[0].when),
             Some(Edit::HotkeyClear {
-                chord: Chord::new("F5")
+                chord: Chord::new("F5"),
+                action: None,
             })
         );
         assert_eq!(

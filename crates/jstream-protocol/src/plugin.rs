@@ -243,6 +243,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_keyframe", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),
+    ("output.toggle", Class(O)),
     ("output.set_key", N),
     ("output.clear_key", N),
     ("youtube.sign_in", N),
