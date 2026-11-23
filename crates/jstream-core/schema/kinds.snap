@@ -2399,6 +2399,202 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "hologram",
+    "category": "video_filter",
+    "name": "Hologram",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#5ad2ff",
+        "label": "Color",
+        "description": "The hologram's colour. The picture's brightness is kept.",
+        "live": true
+      },
+      {
+        "id": "tint",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.85,
+        "label": "Tint",
+        "description": "How far the picture turns to the colour: 0 keeps its own colours.",
+        "live": true
+      },
+      {
+        "id": "see_through",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "See-through",
+        "description": "How far the picture's dark parts turn see-through: 0 keeps them opaque.",
+        "live": true
+      },
+      {
+        "id": "brightness",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.3,
+        "label": "Brightness",
+        "description": "How bright the picture is drawn, a gain on its light: 1 keeps it.",
+        "live": true
+      },
+      {
+        "id": "lines",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.35,
+        "label": "Scanlines",
+        "description": "How dark the scanlines are: 0 draws none.",
+        "live": true
+      },
+      {
+        "id": "spacing",
+        "type": "float",
+        "min": 1.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 3.0,
+        "label": "Line spacing",
+        "description": "One scanline every this many pixels.",
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 30.0,
+        "label": "Roll speed",
+        "description": "How fast the lines roll; positive moves them down. 0 holds them still.",
+        "live": true
+      },
+      {
+        "id": "sweep",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.35,
+        "label": "Sweep",
+        "description": "How bright the band that sweeps down the picture is: 0 is none.",
+        "live": true
+      },
+      {
+        "id": "sweep_period",
+        "type": "float",
+        "min": 0.5,
+        "max": 60.0,
+        "unit": "s",
+        "default": 4.0,
+        "label": "Sweep period",
+        "description": "How long the band takes to sweep from top to bottom.",
+        "live": true
+      },
+      {
+        "id": "edge",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Edge glow",
+        "description": "How bright the glow along the edges is: 0 is none.",
+        "live": true
+      },
+      {
+        "id": "edge_width",
+        "type": "float",
+        "min": 1.0,
+        "max": 200.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Edge width",
+        "description": "How far in from the edges the glow reaches.",
+        "live": true
+      },
+      {
+        "id": "flicker",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.2,
+        "label": "Flicker",
+        "description": "How far the picture dims at random from moment to moment. 0 holds it steady.",
+        "live": true
+      },
+      {
+        "id": "glitch",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.15,
+        "label": "Glitch",
+        "description": "How often a band of the picture jumps sideways for a moment. 0 is never.",
+        "live": true
+      },
+      {
+        "id": "fringe",
+        "type": "float",
+        "min": 0.0,
+        "max": 16.0,
+        "unit": "px",
+        "default": 1.5,
+        "label": "Color fringe",
+        "description": "Red is read this far to the left and blue to the right. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "grain",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.1,
+        "label": "Grain",
+        "description": "Noise that changes every moment. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "reveal",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Reveal",
+        "description": "How much of the hologram is materialised: 0 shows nothing, 1 all of it. Between them a bright edge crosses it. Glide it with a Move between keyframes to project it in and out.",
+        "live": true
+      },
+      {
+        "id": "reveal_from",
+        "type": "enum",
+        "options": [
+          {
+            "value": "bottom",
+            "label": "Bottom"
+          },
+          {
+            "value": "top",
+            "label": "Top"
+          },
+          {
+            "value": "middle",
+            "label": "The middle out"
+          }
+        ],
+        "default": "bottom",
+        "label": "Reveal from",
+        "description": "Where the reveal starts.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "image",
     "category": "source",
     "name": "Image",

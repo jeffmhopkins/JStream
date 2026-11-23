@@ -1248,7 +1248,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
   `midi` one to follow a controller, a `data` one to follow a sender's live data)
   and one-shot jolts that
-  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), the hologram effect, borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live
   texture or a reflection, a camera
   that sways or follows the pointer, and
