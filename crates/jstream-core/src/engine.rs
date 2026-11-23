@@ -4963,8 +4963,11 @@ struct State {
     ticking: bool,
     /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
     driver: crate::value_bindings::ValueDriver,
-    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`] and
-    /// [`State::driver`] while the collection holds a channel or a value binding.
+    /// How far the action bindings have read each MIDI input (ADR-0122, ADR-0207).
+    action_bindings: crate::action_bindings::ActionBindings,
+    /// Whether the `jstream-values` thread is running: it ticks [`State::channels`],
+    /// [`State::action_bindings`] and [`State::driver`] while the collection holds a
+    /// channel, an action binding or a value binding.
     values_ticking: bool,
     /// The channels' live values (ADR-0183): never stored.
     channels: crate::channels::ChannelDriver,
@@ -5856,10 +5859,11 @@ impl State {
         Ok(())
     }
 
-    /// Whether the `jstream-values` thread has work: a value binding, a channel, a
-    /// timeline trigger or a wait.
+    /// Whether the `jstream-values` thread has work: a value binding, an action binding,
+    /// a channel, a timeline trigger or a wait.
     fn needs_values(&self) -> bool {
         self.graph.value_bindings().len() > 0
+            || self.graph.state().bindings().len() > 0
             || self.graph.channels().len() > 0
             || self.sequences.is_waiting()
             || crate::sequences::Sequences::has_triggers(&self.graph)
@@ -7536,6 +7540,16 @@ impl State {
             }
         }
         self.channels.tick(&self.graph, midi.as_deref(), data, now);
+        // The action bindings a MIDI input fired since the last tick (ADR-0122, ADR-0207),
+        // each run as its call would be, credited to the engine.
+        let fired = self.action_bindings.tick(&self.graph, midi.as_deref());
+        let by = ClientId::new(crate::history::ENGINE_CLIENT);
+        for action in fired {
+            let name = action.name();
+            if let Err(error) = self.action(&by, &RequestId::new("binding"), action, wake) {
+                tracing::debug!(%error, action = name, "a bound action failed");
+            }
+        }
         let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
         if changed && self.refresh_shown() {
             self.redraw();

@@ -1,0 +1,202 @@
+//! Action bindings as the engine runs them
+//! ([ADR-0122](../../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)
+//! decision 1, [ADR-0207](../../../docs/adr/0207-mute-actions-and-held-triggers.md)):
+//! a `binding.set` trigger heard on a MIDI input runs its action, and its release runs
+//! the action's [`Action::on_release`].
+//!
+//! The `jstream-values` thread ticks the runner about 30 times a second while the
+//! collection holds a binding. Each tick reads, from each input a binding listens to
+//! (or every input at once, for a binding with no `input`), the notes and the control
+//! and program changes logged since the last tick, in the order they arrived, so a pad
+//! pressed and let go between two ticks still fires both. Nothing heard before the
+//! first tick that follows the input fires.
+//!
+//! - A note binding fires on its note-on and releases on its note-off (or a note-on
+//!   at velocity 0).
+//! - A control change binding fires when the controller crosses the middle (64)
+//!   upward, and releases when it falls back below it, each on its own channel. A
+//!   controller not heard before is taken to rest at 0.
+//! - A program change binding fires on its program change, and has no release.
+//!
+//! Docs: docs/adr/0207-mute-actions-and-held-triggers.md
+
+use std::collections::BTreeMap;
+
+use jstream_graph::Graph;
+use jstream_protocol::{Action, Trigger};
+use jstream_sources::{ControlEvent, ControlKind, MidiInputs, NoteEvent};
+
+/// The value a control change crosses to fire: the middle of 0 to 127.
+const MIDDLE: u8 = 64;
+
+/// One event from an input's logs, notes and controls together.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Heard {
+    /// A note-on, or a note-off at velocity 0.
+    Note(NoteEvent),
+    /// A control change, with the value the controller had before it on that channel.
+    Change { event: ControlEvent, before: u8 },
+    /// A program change.
+    Program(ControlEvent),
+}
+
+impl Heard {
+    fn at_ms(&self) -> u64 {
+        match self {
+            Heard::Note(event) => event.at_ms,
+            Heard::Change { event, .. } | Heard::Program(event) => event.at_ms,
+        }
+    }
+}
+
+/// What a heard event does to a binding's trigger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Fired {
+    /// Runs its action.
+    Press,
+    /// Runs its action's release, if it has one.
+    Release,
+}
+
+/// What `heard` does to `trigger`, or `None` when it doesn't match. The input was
+/// matched already: `heard` came from the input the trigger listens to.
+pub(crate) fn fired(trigger: &Trigger, heard: &Heard) -> Option<Fired> {
+    // A trigger's channel is 1 to 16; an event's 0 to 15.
+    let on_channel = |channel: u8| trigger.channel().is_none_or(|c| c == channel + 1);
+    match (trigger, heard) {
+        (Trigger::MidiNote { note, .. }, Heard::Note(event))
+            if event.key == *note && on_channel(event.channel) =>
+        {
+            Some(if event.velocity > 0 {
+                Fired::Press
+            } else {
+                Fired::Release
+            })
+        }
+        (
+            Trigger::MidiCc { controller, .. },
+            Heard::Change {
+                event:
+                    ControlEvent {
+                        channel,
+                        kind: ControlKind::Change {
+                            controller: heard,
+                            value,
+                        },
+                        ..
+                    },
+                before,
+            },
+        ) if heard == controller && on_channel(*channel) => {
+            match (*before >= MIDDLE, *value >= MIDDLE) {
+                (false, true) => Some(Fired::Press),
+                (true, false) => Some(Fired::Release),
+                _ => None,
+            }
+        }
+        (
+            Trigger::MidiProgram { program, .. },
+            Heard::Program(ControlEvent {
+                channel,
+                kind: ControlKind::Program(heard),
+                ..
+            }),
+        ) if heard == program && on_channel(*channel) => Some(Fired::Press),
+        _ => None,
+    }
+}
+
+/// What the runner has read of one input's logs.
+#[derive(Debug, Default)]
+struct Seen {
+    notes: u64,
+    controls: u64,
+    /// Each controller's last value, by channel and controller.
+    values: BTreeMap<(u8, u8), u8>,
+}
+
+/// The action bindings between ticks: how far each input's logs have been read.
+#[derive(Debug, Default)]
+pub(crate) struct ActionBindings {
+    /// By input, `None` for every input at once.
+    seen: BTreeMap<Option<String>, Seen>,
+    notes: Vec<NoteEvent>,
+    controls: Vec<ControlEvent>,
+}
+
+impl ActionBindings {
+    /// Reads what each input `graph`'s bindings listen to has sent since the last tick,
+    /// and returns the actions to run, in the order their triggers were heard.
+    pub(crate) fn tick(&mut self, graph: &Graph, midi: Option<&MidiInputs>) -> Vec<Action> {
+        let Some(midi) = midi else {
+            self.seen.clear();
+            return Vec::new();
+        };
+        let mut inputs: BTreeMap<Option<String>, Vec<(&Trigger, &Action)>> = BTreeMap::new();
+        for (trigger, action) in graph.state().bindings() {
+            inputs
+                .entry(trigger.input().map(str::to_owned))
+                .or_default()
+                .push((trigger, action));
+        }
+        // An input no binding listens to any more is forgotten, so a binding made later
+        // starts from what it sends then.
+        self.seen.retain(|input, _| inputs.contains_key(input));
+        let mut run = Vec::new();
+        for (input, bindings) in inputs {
+            let state = match &input {
+                Some(name) => match midi.input(name) {
+                    Some(state) => state,
+                    None => continue,
+                },
+                None => midi.any(),
+            };
+            let Some(seen) = self.seen.get_mut(&input) else {
+                self.seen.insert(
+                    input,
+                    Seen {
+                        notes: state.pushed(),
+                        controls: state.controls_pushed(),
+                        values: BTreeMap::new(),
+                    },
+                );
+                continue;
+            };
+            self.notes.clear();
+            self.controls.clear();
+            seen.notes = state.notes_since(seen.notes, &mut self.notes);
+            seen.controls = state.controls_since(seen.controls, &mut self.controls);
+            let mut heard: Vec<Heard> = self.notes.iter().copied().map(Heard::Note).collect();
+            for event in &self.controls {
+                heard.push(match event.kind {
+                    ControlKind::Change { controller, value } => {
+                        let before = seen
+                            .values
+                            .insert((event.channel, controller), value)
+                            .unwrap_or(0);
+                        Heard::Change {
+                            event: *event,
+                            before,
+                        }
+                    }
+                    ControlKind::Program(_) => Heard::Program(*event),
+                });
+            }
+            // Stable, so events at the same millisecond keep the order they came in.
+            heard.sort_by_key(Heard::at_ms);
+            for event in &heard {
+                for (trigger, action) in &bindings {
+                    match fired(trigger, event) {
+                        Some(Fired::Press) => run.push((*action).clone()),
+                        Some(Fired::Release) => run.extend(action.on_release()),
+                        None => {}
+                    }
+                }
+            }
+        }
+        run
+    }
+}
+
+#[cfg(test)]
+mod tests;

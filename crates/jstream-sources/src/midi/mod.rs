@@ -78,6 +78,64 @@ impl NoteEvent {
     }
 }
 
+/// One control or program change as the control log keeps it (ADR-0207), so a binding
+/// hears a button pressed and let go between two looks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ControlEvent {
+    /// When it happened, in milliseconds on the media clock.
+    pub at_ms: u64,
+    /// The channel, 0 to 15.
+    pub channel: u8,
+    /// What it was.
+    pub kind: ControlKind,
+}
+
+/// What a [`ControlEvent`] was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlKind {
+    /// A control change: the controller and its new value, 0 to 127.
+    Change {
+        /// The controller, 0 to 127.
+        controller: u8,
+        /// Its new value, 0 to 127.
+        value: u8,
+    },
+    /// A program change: the program, 0 to 127, as sent.
+    Program(u8),
+}
+
+impl ControlEvent {
+    /// Packs the event into one word: 40 bits of milliseconds, a program flag, the
+    /// channel, the controller or program, and the value.
+    fn pack(self) -> u64 {
+        let (program, number, value) = match self.kind {
+            ControlKind::Change { controller, value } => (0, controller, value),
+            ControlKind::Program(program) => (1, program, 0),
+        };
+        (self.at_ms & ((1 << 40) - 1)) << 24
+            | program << 23
+            | u64::from(self.channel & 0x0F) << 16
+            | u64::from(number & 0x7F) << 8
+            | u64::from(value & 0x7F)
+    }
+
+    fn unpack(word: u64) -> Self {
+        let number = (word >> 8) as u8 & 0x7F;
+        Self {
+            at_ms: word >> 24,
+            channel: (word >> 16) as u8 & 0x0F,
+            kind: if word >> 23 & 1 == 1 {
+                ControlKind::Program(number)
+            } else {
+                ControlKind::Change {
+                    controller: number,
+                    value: word as u8 & 0x7F,
+                }
+            },
+        }
+    }
+}
+
 /// One slot of the note log: the event, and which push wrote it.
 struct Slot {
     /// One more than the push's index, so 0 is a slot never written; 0 again while a
@@ -116,6 +174,10 @@ pub struct MidiState {
     changes: AtomicU64,
     /// The tempo the input's clock gives, which its [`MidiFeed`] publishes.
     tempo: tempo::TempoCell,
+    /// A log of the latest control and program changes (ADR-0207), as `log` is of notes.
+    control_log: Box<[Slot]>,
+    /// Control and program changes pushed: change `n` is in slot `n % LOG`.
+    controls_pushed: AtomicU64,
     /// The latest control change, for a client that learns a controller (ADR-0178):
     /// how many there have been in its top 48 bits, then its channel (0 to 15) and
     /// controller.
@@ -155,6 +217,13 @@ impl MidiState {
                 })
                 .collect(),
             pushed: AtomicU64::new(0),
+            control_log: (0..LOG)
+                .map(|_| Slot {
+                    seq: AtomicU64::new(0),
+                    event: AtomicU64::new(0),
+                })
+                .collect(),
+            controls_pushed: AtomicU64::new(0),
             last_ms: AtomicU64::new(0),
             changes: AtomicU64::new(0),
             tempo: tempo::TempoCell::new(),
@@ -180,6 +249,11 @@ impl MidiState {
                 value,
             } => {
                 let channel = channel.wire();
+                self.log_control(ControlEvent {
+                    at_ms,
+                    channel,
+                    kind: ControlKind::Change { controller, value },
+                });
                 self.controllers[index(channel, controller)].store(value, Ordering::Relaxed);
                 self.any_controllers[usize::from(controller & 0x7F)]
                     .store(value, Ordering::Relaxed);
@@ -200,6 +274,11 @@ impl MidiState {
                     }
                 }
             }
+            Message::ProgramChange { channel, program } => self.log_control(ControlEvent {
+                at_ms,
+                channel: channel.wire(),
+                kind: ControlKind::Program(program),
+            }),
             Message::PitchBend { channel, value } => {
                 self.bend[usize::from(channel.wire())].store(value, Ordering::Relaxed);
                 self.any_bend.store(value, Ordering::Relaxed);
@@ -217,20 +296,17 @@ impl MidiState {
     fn note(&self, at_ms: u64, channel: u8, key: u8, velocity: u8) {
         let key = key & 0x7F;
         self.keys[index(channel, key)].store(velocity, Ordering::Relaxed);
-        let n = self.pushed.fetch_add(1, Ordering::Relaxed);
-        let slot = &self.log[(n % LOG as u64) as usize];
-        slot.seq.store(0, Ordering::Relaxed);
-        // Keeps the event store below from being seen before the slot is marked as
-        // being written.
-        fence(Ordering::Release);
         let event = NoteEvent {
             at_ms,
             channel,
             key,
             velocity,
         };
-        slot.event.store(event.pack(), Ordering::Relaxed);
-        slot.seq.store(n + 1, Ordering::Release);
+        write_log(&self.log, &self.pushed, event.pack());
+    }
+
+    fn log_control(&self, event: ControlEvent) {
+        write_log(&self.control_log, &self.controls_pushed, event.pack());
     }
 
     /// The tempo the input's MIDI clock gave last, from its [`MidiFeed`]; `None` before
@@ -314,18 +390,67 @@ impl MidiState {
         out.clear();
         let end = self.pushed();
         let start = end.saturating_sub(most.min(LOG) as u64);
-        for n in start..end {
-            let slot = &self.log[(n % LOG as u64) as usize];
-            if slot.seq.load(Ordering::Acquire) != n + 1 {
-                continue;
-            }
-            let word = slot.event.load(Ordering::Relaxed);
-            // Keeps the second `seq` load from being seen before the event load.
-            fence(Ordering::Acquire);
-            // Overwritten while it was read: skip it rather than show a mix.
-            if slot.seq.load(Ordering::Relaxed) == n + 1 {
-                out.push(NoteEvent::unpack(word));
-            }
+        read_log(&self.log, start, end, |word| out.push(NoteEvent::unpack(word)));
+    }
+
+    /// Appends to `out` the note events pushed since `from` (a count [`Self::pushed`] or
+    /// an earlier call returned), oldest first, and returns the count to pass next time.
+    /// Events the log has already overwritten (more than its 1024 since `from`) and any a
+    /// push is writing at that moment are skipped (ADR-0207).
+    pub fn notes_since(&self, from: u64, out: &mut Vec<NoteEvent>) -> u64 {
+        let end = self.pushed();
+        read_log(&self.log, from.max(end.saturating_sub(LOG as u64)), end, |word| {
+            out.push(NoteEvent::unpack(word));
+        });
+        end
+    }
+
+    /// Control and program changes pushed so far.
+    pub fn controls_pushed(&self) -> u64 {
+        self.controls_pushed.load(Ordering::Acquire)
+    }
+
+    /// Appends to `out` the control and program changes pushed since `from`, as
+    /// [`Self::notes_since`] does for notes, and returns the count to pass next time.
+    pub fn controls_since(&self, from: u64, out: &mut Vec<ControlEvent>) -> u64 {
+        let end = self.controls_pushed();
+        read_log(
+            &self.control_log,
+            from.max(end.saturating_sub(LOG as u64)),
+            end,
+            |word| out.push(ControlEvent::unpack(word)),
+        );
+        end
+    }
+}
+
+/// Writes `word` as the next entry of `log`, whose writes `pushed` counts: entry `n` is
+/// in slot `n % LOG`.
+fn write_log(log: &[Slot], pushed: &AtomicU64, word: u64) {
+    let n = pushed.fetch_add(1, Ordering::Relaxed);
+    let slot = &log[(n % LOG as u64) as usize];
+    slot.seq.store(0, Ordering::Relaxed);
+    // Keeps the event store below from being seen before the slot is marked as being
+    // written.
+    fence(Ordering::Release);
+    slot.event.store(word, Ordering::Relaxed);
+    slot.seq.store(n + 1, Ordering::Release);
+}
+
+/// Reads entries `start..end` of `log` into `each`, oldest first, skipping any a push
+/// is writing or has overwritten.
+fn read_log(log: &[Slot], start: u64, end: u64, mut each: impl FnMut(u64)) {
+    for n in start..end {
+        let slot = &log[(n % LOG as u64) as usize];
+        if slot.seq.load(Ordering::Acquire) != n + 1 {
+            continue;
+        }
+        let word = slot.event.load(Ordering::Relaxed);
+        // Keeps the second `seq` load from being seen before the event load.
+        fence(Ordering::Acquire);
+        // Overwritten while it was read: skip it rather than show a mix.
+        if slot.seq.load(Ordering::Relaxed) == n + 1 {
+            each(word);
         }
     }
 }

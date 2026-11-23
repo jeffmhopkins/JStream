@@ -79,7 +79,8 @@ pub use jstream_browser::BrowserBackend;
 pub use light::{LightType, ShownEnvironment, ShownLight};
 pub use media::MediaAudio;
 pub use midi::{
-    CLOCK_TIMEOUT_MS, MAX_INPUTS, MidiFeed, MidiInputs, MidiState, NoteEvent, TempoReading,
+    CLOCK_TIMEOUT_MS, ControlEvent, ControlKind, MAX_INPUTS, MidiFeed, MidiInputs, MidiState,
+    NoteEvent, TempoReading,
 };
 pub use model::ModelKind;
 pub use page_api::{BusLevels, PageView};

@@ -18,6 +18,7 @@ mod gpu_capture;
 mod groups3d;
 mod history;
 mod item_actions;
+mod mute;
 mod keyframe_tracks;
 mod keyframes;
 mod live_values;
