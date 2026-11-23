@@ -871,7 +871,9 @@ under the studio rig, fixed to the viewing frame, or unlit.
 the base-colour texture of the material it names (by its glTF name), or of every
 material, with another image: `draw_model` samples it through a mip chain of the whole
 image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
-image changed), bound with the material's own repeating anisotropic sampler, and the
+image changed), bound with the material's own repeating anisotropic sampler (16× for the
+base colour; the normal, surface, occlusion and emissive maps are read through a second
+sampler at 4×, binding 7, [ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)), and the
 material's uniform marks it a premultiplied linear picture (`card.y`), which the shader
 divides by its alpha before multiplying. The material bind groups that carry it are
 kept on the `GpuModel` while the chain's texture and the material stay the same, so a
@@ -927,7 +929,9 @@ a steady frame makes none). A map whose light isn't packed, or of another compos
 left out. `visibility` in `model.wgsl` pushes the fragment off its surface by a map
 pixel's size there, projects it into the light's view, and counts 12 disc samples,
 rotated per pixel, whose stored `1 / w` isn't nearer the light than the fragment's by
-more than 0.2%; outside the map is lit. A shadowed light's light is scaled by that share
+more than 0.2%; outside the map is lit. It reads the disc's middle and four points of
+its rim first, and where those five agree, away from a shadow's edge, they answer for
+the disc ([ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)). A shadowed light's light is scaled by that share
 (`golden_model_a_shadow_map_shadows_a_scene_lit_model`, a cube's and a card's map).
 
 **Environment** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
@@ -949,7 +953,11 @@ filters' `to_premul_linear` from `filter/colour.wgsl`, which the model shader is
 with, so a page painted as premultiplied sRGB code values reads as an upload of the same
 colour does, `golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a
 ring of 8 taps around the direction for a spread: the reflection at the square of the
-roughness, the diffuse light at 1. `draw_model` and `light_card` read a sky picture of
+roughness. The diffuse light is one read (`sky_matte`) a level above the one a spread of
+1 reads, where a filtered texel spans about what that ring's nine reads did
+([ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)); a gradient has no reads to save. Where the fragment is wholly its probe's and the capture saw
+something all along the ray (its alpha at least 0.999, `probe_covers`), the sky's
+reflection would be multiplied by nothing and is not read. `draw_model` and `light_card` read a sky picture of
 this compositor through a mip chain of its whole picture (`Panoramas`, built as a live
 texture's is and rebuilt only when the picture changed, premultiplied linear, so the
 uniform's mode then says so), and a spread reads the level whose texels are about as
@@ -1496,20 +1504,24 @@ it out; `filter::testing` reads both lists.
   decision 5, `depth/occlusion.rs`): `radius_px` (1 to 2000, default 48), `strength`
   (0 to 2, default 1), `color` (default black) and `quality` (`low`, 8 samples a pixel,
   the default, or `high`, 16). Two draws. The first (`occlusion/sample.wgsl`) reads only
-  the depth: it rebuilds each pixel's point `((px − c) D / f, D)` about the canvas
+  the depth, and is drawn at half the picture's width and height, rounded up
+  ([ADR-0190](../../docs/adr/0190-cheaper-sampling-in-3d-scenes.md)): each texel samples for one pixel of its block of two by two (`chosen`, one corner and
+  the other on every other texel). It rebuilds that pixel's point `((px − c) D / f, D)` about the canvas
   centre, its normal from neighbours two pixels away (each side the one nearer in
   depth, so an edge doesn't bend it), and counts the hemisphere samples about the
-  normal, rotated per pixel by a 4 × 4 ordered pattern, that land behind a nearer
+  normal, rotated per texel by a 4 × 4 ordered pattern, that land behind a nearer
   depth by more than a small bias, faded where that occluder is far past the radius.
   The samples' points and the pattern's 16 rotations are made once on the CPU and
   handed in the uniform (`kernel`, `sample_uniforms`), so no pixel works out a sine and
   a cosine per sample.
   It writes the share and the pixel's `1 / w` into a scratch layer. The second
-  (`occlusion/apply.wgsl`) averages the share over the 4 × 4 tile, keeping to pixels
-  within 1% of the distance (or a quarter of the radius), and lays
+  (`occlusion/apply.wgsl`, through `Ctx::draw_program` for its three textures: the
+  picture, the shares and the view depth) averages the share over the 4 × 4 texels
+  around the pixel, keeping to those whose pixel is
+  within 1% of the pixel's own distance (or a quarter of the radius), and lays
   `c · (1 − k) + color · c.alpha · k`, `k = share · strength` at most 1, so alpha is
-  kept. Where nothing was drawn, at no strength, and without a matching depth, it
-  copies its input.
+  kept. Where nothing was drawn, where no texel near is as far, at no strength, and
+  without a matching depth, it leaves its input.
 - `depth_bloom` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 8, `depth/bloom.rs`): `threshold` (0 to 4 of linear luma, default 0.8),
   `strength` (0 to 4, default 1), `radius_px` (0 to 100, default 24, its outset),

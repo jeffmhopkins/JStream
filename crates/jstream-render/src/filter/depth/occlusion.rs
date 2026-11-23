@@ -1,9 +1,10 @@
 //! `ambient_occlusion` (ADR-0151 decision 5): darkens creases and contact points in a 3D
 //! scene, read from its view depth. A first pass rebuilds each pixel's point and normal
 //! from the depth and counts the samples of a hemisphere of `radius_px` around it that
-//! the depth puts behind something nearer, in a pattern rotated per pixel over a 4 × 4
-//! tile; a second blurs that share over the tile, keeping to pixels at about the same
-//! distance, and multiplies the picture toward `color` by it times `strength`. Where
+//! the depth puts behind something nearer, in a pattern rotated over a 4 × 4 tile, for
+//! one pixel of each block of two by two, at half the picture's size; a second blurs
+//! that share over the tile, keeping to pixels at about the same distance, and
+//! multiplies the picture toward `color` by it times `strength`. Where
 //! nothing was drawn, and without a view depth (a 2D scene, any chain but a scene's), it
 //! passes its input through.
 
@@ -18,7 +19,8 @@ use crate::image::Image;
 
 pub(super) const KIND: &str = "ambient_occlusion";
 
-/// Counts each pixel's occluded share into red, with its `1 / w` kept in green.
+/// Counts the occluded share of one pixel in each block of two by two into red, with its
+/// `1 / w` kept in green.
 const SAMPLE: Shader = Shader {
     label: "filter-ambient-occlusion-sample",
     source: include_str!("occlusion/sample.wgsl"),
@@ -204,7 +206,7 @@ impl Pass for AmbientOcclusion {
         let Some(depth) = depth else {
             return copy(ctx, input, output);
         };
-        let share = ctx.scratch(input.width(), input.height())?;
+        let share = ctx.scratch(input.width().div_ceil(2), input.height().div_ceil(2))?;
         ctx.draw(&Draw {
             shader: SAMPLE,
             input: depth.image.as_ref(),
@@ -212,13 +214,15 @@ impl Pass for AmbientOcclusion {
             params: &sample_uniforms(&self.values, depth),
             target: &share,
         })?;
-        ctx.draw(&Draw {
-            shader: APPLY,
-            input,
-            aux: Some(&share),
-            params: &apply_uniforms(&self.values, depth),
-            target: output,
-        })
+        let inputs = [input.clone(), share.clone(), depth.image.as_ref().clone()];
+        let system = super::screen::system(input, output, &inputs);
+        ctx.draw_program(
+            APPLY.into(),
+            &inputs,
+            &system,
+            &apply_uniforms(&self.values, depth),
+            output,
+        )
     }
 }
 

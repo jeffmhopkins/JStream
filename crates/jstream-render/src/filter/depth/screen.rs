@@ -71,7 +71,7 @@ fn uniforms(steps: u32, depth: &ViewDepth) -> Option<Vec<u8>> {
 
 /// The `sys` uniform of the program prelude a shader is drawn with into `target`: the
 /// sizes, and how each of its inputs stores alpha.
-fn system(input: &Image, target: &Image, inputs: &[Image]) -> [u8; 96] {
+pub(super) fn system(input: &Image, target: &Image, inputs: &[Image]) -> [u8; 96] {
     let mut bytes = [0u8; 96];
     let size = [input.width() as f32, input.height() as f32];
     let pass = [target.width() as f32, target.height() as f32];
