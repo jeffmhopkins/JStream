@@ -69,4 +69,7 @@ one key couldn't start the stream and, pressed again, end it.
   check what the chord runs first.
 - The engine's MIDI runner and the desktop app's global listener run every action of a
   matched trigger or chord in order, and a held trigger's release (ADR-0207) releases each.
+- An undo that restores a cleared action unbinds the actions kept after it and binds
+  them again; if one of those was unbound since, the undo fails with `not_found` rather
+  than restoring part of the chord, as any undo that conflicts with a later change does.
 - A data trigger (ADR-0202) gets several actions per trigger with no more protocol.

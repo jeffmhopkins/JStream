@@ -201,26 +201,45 @@ pub fn default_zoom_edits(collection: &Collection, scene_id: &SceneId) -> Option
     Some(vec![zoom(up, 1), zoom(down, -1)])
 }
 
-/// The edits that bind `chord` to `action` (a scene's [`switch_to`], or an item's
-/// `item.toggle`, `item.show` or `item.hide`): a `hotkey.clear` of whatever the chord
-/// ran before, then the `hotkey.set`. Empty when it already does.
+/// The edits that bind `chord` to `action` (a scene's [`switch_to`], an item's
+/// `item.toggle`, `item.show` or `item.hide`, or any other action a row binds). Empty
+/// when the chord runs it already. A chord runs several actions (ADR-0208), so the
+/// chord keeps every other action, except one `action` would fight: another scene's
+/// switch, or another of the same item's show, hide or toggle, each unbound by name
+/// (`hotkey.clear` with its `action`) before the `hotkey.set`.
 pub fn bind_edits(collection: &Collection, action: &Action, chord: &Chord) -> Vec<Edit> {
-    let bound = collection.hotkeys.iter().find(|b| &b.chord == chord);
-    if bound.is_some_and(|b| b.action().as_ref() == Some(action)) {
+    let bound = collection.hotkey_actions(chord);
+    if bound.contains(action) {
         return Vec::new();
     }
-    let mut edits = Vec::new();
-    if bound.is_some() {
-        edits.push(Edit::HotkeyClear {
-            action: None,
+    let mut edits: Vec<Edit> = bound
+        .into_iter()
+        .filter(|old| conflicts(old, action))
+        .map(|old| Edit::HotkeyClear {
             chord: chord.clone(),
-        });
-    }
+            action: Some(old),
+        })
+        .collect();
     edits.push(Edit::HotkeySet {
         chord: chord.clone(),
         action: action.clone(),
     });
     edits
+}
+
+/// Whether one press running both `a` and `b` would undo itself: two scene switches,
+/// or two of one item's show, hide and toggle.
+fn conflicts(a: &Action, b: &Action) -> bool {
+    let item = |action: &Action| match action {
+        Action::ItemToggle { item_id, scene_id }
+        | Action::ItemShow { item_id, scene_id }
+        | Action::ItemHide { item_id, scene_id } => Some((item_id.clone(), scene_id.clone())),
+        _ => None,
+    };
+    match (a, b) {
+        (Action::SceneSwitch { .. }, Action::SceneSwitch { .. }) => true,
+        _ => item(a).is_some_and(|ia| item(b) == Some(ia)),
+    }
 }
 
 /// Whether a key press belongs to what has the focus: a text field, a select or an
@@ -542,7 +561,7 @@ mod tests {
         assert_eq!(
             bind_edits(&collection, &switch_to(&a), &f1).len(),
             2,
-            "cleared, then set"
+            "the old switch unbound, then set"
         );
         assert!(
             bind_edits(&collection, &switch_to(&b), &f1).is_empty(),
@@ -551,6 +570,59 @@ mod tests {
         assert_eq!(collection.hotkey(&f1), Some(switch_to(&b)));
         assert_eq!(collection.scene_chords(&b), vec![f1]);
         assert!(collection.scene_chords(&a).is_empty());
+    }
+
+    /// A chord running several actions (ADR-0208) keeps the ones the new action doesn't
+    /// fight: re-binding an action it runs is nothing, and another item's toggle is added.
+    #[test]
+    fn binding_keeps_a_chords_other_actions() {
+        let f9 = Chord::new("F9");
+        let live = Action::OutputToggle {
+            output_id: jstream_control::protocol::OutputId::new("yt"),
+        };
+        let cam = Action::ItemToggle {
+            item_id: jstream_control::protocol::ItemId::new("cam"),
+            scene_id: None,
+        };
+        let mic = Action::ItemToggle {
+            item_id: jstream_control::protocol::ItemId::new("mic"),
+            scene_id: None,
+        };
+        let a = SceneId::new("a");
+        let b = SceneId::new("b");
+        let collection = Collection {
+            hotkeys: vec![
+                HotkeyBinding::new(f9.clone(), &live),
+                HotkeyBinding::new(f9.clone(), &cam),
+                HotkeyBinding::new(f9.clone(), &switch_to(&b)),
+            ],
+            ..Collection::default()
+        };
+        assert!(
+            bind_edits(&collection, &cam, &f9).is_empty(),
+            "runs it already"
+        );
+        assert_eq!(
+            bind_edits(&collection, &mic, &f9),
+            vec![Edit::HotkeySet {
+                chord: f9.clone(),
+                action: mic,
+            }]
+        );
+        assert_eq!(
+            bind_edits(&collection, &switch_to(&a), &f9),
+            vec![
+                Edit::HotkeyClear {
+                    chord: f9.clone(),
+                    action: Some(switch_to(&b)),
+                },
+                Edit::HotkeySet {
+                    chord: f9,
+                    action: switch_to(&a),
+                },
+            ],
+            "only the other switch goes"
+        );
     }
 
     #[test]

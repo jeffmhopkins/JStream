@@ -703,8 +703,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   one yet). One that drives a setting of its item's source (ADR-0171) shows "Source
   setting" the same way. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
-  `scene.switch`, an × that unbinds the switch from one chord, leaving its other actions, and Set key, which binds the next chord pressed
-  and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
+  `scene.switch`, an × that unbinds the switch from one chord, leaving its other actions, and Set key, which binds the next chord pressed,
+  adding the switch beside any other action the chord runs and unbinding only another scene's switch, `bind_edits`, ADR-0208), and its Transition in and out (`scene.set_transitions`, with the
   presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
