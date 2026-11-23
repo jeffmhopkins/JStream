@@ -479,6 +479,141 @@ fn golden_sky_dropping_out_of_warp_zooms_the_nebulae_back() {
     );
 }
 
+/// Draws `draw` into `layer` and reads the layer back over a red background.
+fn shot_into(compositor: &mut Compositor, draw: &SkyDraw<'_>, layer: &Image) -> Snapshot {
+    compositor.draw_sky(draw, layer).expect("the sky draws");
+    let items = [crate::tests::item(
+        layer,
+        Placement::Legacy(LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    let scene = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::rgb(1.0, 0.0, 0.0),
+        items: &items,
+    };
+    compositor
+        .render(&scene, true)
+        .expect("the scene renders")
+        .pixels()
+        .expect("readback was requested")
+        .clone()
+}
+
+/// The same sky asked for again, into the layer that holds it, is not drawn again, and
+/// the layer shows what it showed. Moving the camera without turning it asks for the
+/// same sky; turning it, or changing a setting, draws.
+#[test]
+fn a_layer_that_holds_the_sky_is_not_drawn_again() {
+    let Some(opened) = open() else { return };
+    let mut compositor = opened.compositor;
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let level = [0.0, 0.0, -1.0];
+    let draw = deep(0.8, 0.6, 7);
+    let draw = SkyDraw {
+        camera: looking([80.0, 50.0, 400.0], level),
+        ..draw
+    };
+    let first = shot_into(&mut compositor, &draw, &layer);
+    assert_eq!(compositor.sky_draws(), 1);
+    let again = shot_into(&mut compositor, &draw, &layer);
+    assert_eq!(compositor.sky_draws(), 1, "the same sky draws once");
+    assert_eq!(first.rgba(), again.rgba());
+
+    let moved = SkyDraw {
+        camera: looking([300.0, -120.0, 900.0], level),
+        ..draw
+    };
+    let elsewhere = shot_into(&mut compositor, &moved, &layer);
+    assert_eq!(compositor.sky_draws(), 1, "the sky is infinitely far away");
+    assert_eq!(first.rgba(), elsewhere.rgba());
+
+    let turned = SkyDraw {
+        camera: looking([80.0, 50.0, 400.0], [0.6, 0.0, -0.8]),
+        ..draw
+    };
+    let other = shot_into(&mut compositor, &turned, &layer);
+    assert_eq!(
+        compositor.sky_draws(),
+        2,
+        "a turned camera sees another sky"
+    );
+    assert_ne!(first.rgba(), other.rgba());
+
+    let dimmer = SkyDraw {
+        opacity: 0.5,
+        ..turned
+    };
+    shot_into(&mut compositor, &dimmer, &layer);
+    assert_eq!(compositor.sky_draws(), 3, "a changed setting draws");
+
+    // Back to the first sky: the layer holds another now.
+    let back = shot_into(&mut compositor, &draw, &layer);
+    assert_eq!(compositor.sky_draws(), 4);
+    assert_eq!(first.rgba(), back.rgba());
+}
+
+/// A layer something else drew into since no longer holds its sky, and neither does
+/// another layer: each is drawn.
+#[test]
+fn a_layer_written_since_gets_its_sky_again() {
+    let Some(opened) = open() else { return };
+    let mut compositor = opened.compositor;
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let draw = deep(0.8, 0.6, 7);
+    let first = shot_into(&mut compositor, &draw, &layer);
+    let empty = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::rgb(0.0, 1.0, 0.0),
+        items: &[],
+    };
+    compositor
+        .render_into(&empty, &layer)
+        .expect("the layer is drawn over");
+    let again = shot_into(&mut compositor, &draw, &layer);
+    assert_eq!(compositor.sky_draws(), 2, "the layer had been drawn over");
+    assert_eq!(first.rgba(), again.rgba());
+
+    let second = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let there = shot_into(&mut compositor, &draw, &second);
+    assert_eq!(compositor.sky_draws(), 3, "another layer holds nothing yet");
+    assert_eq!(first.rgba(), there.rgba());
+    // Each layer holds its own.
+    shot_into(&mut compositor, &draw, &layer);
+    shot_into(&mut compositor, &draw, &second);
+    assert_eq!(compositor.sky_draws(), 3);
+}
+
+/// A sky with a picture is drawn again when the picture's texels change, and not while
+/// they stay.
+#[test]
+fn a_sky_is_drawn_again_when_its_picture_changes() {
+    let Some(opened) = open() else { return };
+    let mut compositor = opened.compositor;
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let picture = quarters(&compositor);
+    let environment = Environment {
+        image: Some(&picture),
+        ..gradient()
+    };
+    let draw = sky(environment, looking([80.0, 50.0, 400.0], [0.0, 0.0, -1.0]));
+    let first = shot_into(&mut compositor, &draw, &layer);
+    shot_into(&mut compositor, &draw, &layer);
+    assert_eq!(compositor.sky_draws(), 1);
+    let white = vec![255u8; 16 * 2 * 4];
+    compositor
+        .rewrite_rgba8(&picture, &white)
+        .expect("the picture is rewritten");
+    let after = shot_into(&mut compositor, &draw, &layer);
+    assert_eq!(compositor.sky_draws(), 2, "the picture changed");
+    assert_ne!(first.rgba(), after.rgba());
+    // Without the picture it is another sky.
+    let plain = sky(gradient(), looking([80.0, 50.0, 400.0], [0.0, 0.0, -1.0]));
+    shot_into(&mut compositor, &plain, &layer);
+    assert_eq!(compositor.sky_draws(), 3);
+}
+
 /// The nebulae and the band are baked once per seed (ADR-0174): turning the camera,
 /// warping, and changing their colours or amounts read the same bake, another seed
 /// makes its own, and a sky without them makes none.

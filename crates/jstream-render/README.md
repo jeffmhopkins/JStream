@@ -57,7 +57,11 @@ and calls this crate.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
   `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
   `Environment`, the camera, the stars, the deep sky, the warp and travel, and an opacity) into a canvas-sized layer, every
-  texel written by one triangle (`sky.wgsl`). Each pixel looks along its ray from the
+  texel written by one triangle (`sky.wgsl`). A layer that still holds the sky asked for is
+  left as it is: the compositor remembers, for the last 4 layers it drew a sky into, the
+  shader's values, the layer's change count after the draw and the picture's, and draws only
+  when one of them differs, so a camera that holds still pays for its sky once
+  (`a_layer_that_holds_the_sky_is_not_drawn_again`). Each pixel looks along its ray from the
   camera (its axes, principal point and focal length, never its position) into the
   gradient or the panorama spun by the turn. Over it go nebulae and a galaxy band
   (`DeepSky`: warped fractal value noise on the direction, baked once per seed into two
@@ -410,11 +414,16 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    measured a mean error of 17 against 2.7 for a 512² one; it is now 2.7 too. Each `Image` counts its changes (its clones share
    the count and the chains, as they share the texture), and a chain is
    rebuilt when the count moved since its last build: `rewrite_rgba8` marks an upload,
-   `render_into` the layer it drew into, and `ResourceCache::import` an import it hands
+   `render_into` the layer it drew into, a filter every layer it drew into (its output,
+   which is one layer for as long as its chain lives, included), and
+   `ResourceCache::import` an import it hands
    a new frame (one whose hold or info, its presentation time included, differs from
    the last one's, since a platform may reuse a hold for every frame it writes into a
    texture), not the same frame shown again. `Image::mark_changed` marks an import the
-   caller keeps outside the cache, whose texture the platform rewrites. So a source
+   caller keeps outside the cache, whose texture the platform rewrites. `Image::seen`
+   gives a caller that count with which image it is (`Seen`), and `GpuModel::seen` which
+   upload a model is (`SeenModel`), neither keeping it alive, to tell later whether what
+   it drew from has changed (the engine keeps its shadow maps by them). So a source
    drawn in 3D by several items or calls (two mixes, a nested scene) is rebuilt once per
    change, and not at all while it is unchanged. A 3D item samples its chain, which is
    always premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp`
@@ -505,9 +514,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    A layer drawn over a transparent background also keeps what its scene could have
    drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current
-   change count only, so any later write forgets them. `apply_filter_into` sets its
-   output's, which it does not count: a bounded filter's reach past its input's, or
-   unknown ([Filters](#filters)). A scene placing the layer as a 2D item
+   change count only, so any later write forgets them. `apply_filter_into` counts its
+   write of each layer it drew into, then sets that layer's bounds: for its output, a
+   bounded filter's reach past its input's, or unknown ([Filters](#filters)). A scene placing the layer as a 2D item
    in `normal`, `additive` or `screen`, at a size that needs no chain, draws only the
    part of its quad whose UVs are inside those bounds (`Shape::trim_to`, the same
    affine map cut down). Outside them every bilinear tap reads only transparent
@@ -597,7 +606,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
-| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
+| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per sky drawn (none for a call whose layer already holds the sky) |
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |

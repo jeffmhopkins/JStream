@@ -1734,6 +1734,9 @@ counts toward the same limit, and a deeper one draws flat.
 before each of its colour passes, through the camera that pass's items are seen
 through, into a canvas-sized `GpuKey::Sky` layer (`draw_sky`), which `under_sky` puts
 under its items, flat and seen through no camera, only in the cache frame that drew it.
+The compositor leaves the layer as it is when it still holds the sky asked for (the same
+values, a camera looking the same way), so a scene whose camera and sky hold still pays
+for its sky once, not once a frame.
 `Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
 streams at now, which moves toward the setting at its ramp's pace (dropping while it
 is above it, which zooms the deep sky back in), and how far its
@@ -2237,6 +2240,22 @@ cache let go captures again. The warm scenes' estimate counts a probe's capture 
 warm scene whose `reflections` is on while the switch is (`probe_bytes`, its panorama and
 faces in half-float RGBA at its capped face size,
 `a_reflection_probe_counts_its_capture`).
+
+A map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,
+for each scene, what its maps were last drawn of (`KeptShadows`): every card a view depth
+draws, by its picture's `jstream_render::Seen`, placement, crop and opacity, and every
+casting model `depth_models` lists, by its upload (`SeenModel`), where its item places
+it and its pose; and for each map the light's view it was drawn through and what its
+layer held after the draw. A map whose casters, light view and layer all match is left
+as it is, so a scene whose lights and casters hold still pays for its shadow maps once,
+not once a frame; a card showing a new frame, a moved item, a clip's next pose, a moved
+light or a layer the cache made again draws it
+(`a_shadow_map_is_drawn_again_only_when_what_casts_changes`). A card whose picture is a
+filter chain's output changes every time the filter runs, since the compositor counts each
+run as a change of that layer, so its map is drawn every frame, of the picture the filter
+drew the frame before, as it was before maps were kept: the maps are drawn before that
+card's chain runs (`a_filtered_cards_shadow_follows_its_picture`). `Chains::begin` drops
+what is kept for a scene whose shadows the last run didn't draw.
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 7) is posed before it is drawn: `pose` writes its source's `ShownModel::pose`

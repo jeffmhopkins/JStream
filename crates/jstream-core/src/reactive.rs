@@ -685,11 +685,21 @@ impl Follow {
         }
     }
 
-    /// Its level as last followed, or `None` for a smoothing that hasn't stepped yet.
+    /// Its level as last followed, or `None` for a smoothing that hasn't stepped yet or a
+    /// painting binding, which has a colour instead ([`Follow::color`]).
     fn level(&self) -> Option<f32> {
         match self {
             Follow::Envelope(envelope) => Some(envelope.level()),
             Follow::Smoothing(smoothing) => smoothing.followed(),
+            Follow::Paint(_) => None,
+        }
+    }
+
+    /// A painting binding's colour as last followed, once each channel has stepped.
+    fn color(&self) -> Option<[f32; 3]> {
+        match self {
+            Follow::Paint([r, g, b]) => Some([r.followed()?, g.followed()?, b.followed()?]),
+            Follow::Envelope(_) | Follow::Smoothing(_) => None,
         }
     }
 
@@ -841,13 +851,19 @@ impl Follower {
             if binding.followed.load(Ordering::Relaxed) {
                 continue;
             }
-            let level = self
+            let Some((_, follow)) = self
                 .envelopes
                 .get(item)
                 .and_then(|listed| listed.iter().find(|(at, _)| at == id))
                 .filter(|(_, follow)| follow.fits(binding))
-                .and_then(|(_, follow)| follow.level());
-            if let Some(level) = level {
+            else {
+                continue;
+            };
+            // A painting binding carries its colour, as `follow` stores it.
+            if let Some(color) = follow.color() {
+                binding.store_color(Some(color));
+                binding.store(0.0);
+            } else if let Some(level) = follow.level() {
                 binding.store(level);
             }
         }

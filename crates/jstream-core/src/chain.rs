@@ -739,6 +739,12 @@ pub(crate) struct Chains {
     /// run that drew them: drawn once a run, by the first `scene`-lit model there that
     /// receives shadows.
     shadows: BTreeMap<jstream_protocol::SceneId, (u64, Vec<crate::snapshot::DrawnShadow>)>,
+    /// What each scene's shadow maps were last drawn of, to leave a map that still
+    /// holds its shadows as it is.
+    pub(crate) shadow_maps: BTreeMap<jstream_protocol::SceneId, crate::snapshot::KeptShadows>,
+    /// How many shadow maps were drawn, for tests.
+    #[cfg(test)]
+    pub(crate) shadow_draws: std::cell::Cell<u64>,
     /// The shadowed lights of the scene a model is drawn in this frame, by index into
     /// [`Self::lights`] with their softness, kept to reuse its allocation.
     pub(crate) shadowed: Vec<(usize, f32)>,
@@ -794,6 +800,14 @@ impl Chains {
                 cache.retire_image(Image::clone(&depth.image));
             }
             keep
+        });
+        // So are the shadow maps kept for a scene whose shadows the last run didn't
+        // draw: a scene that is gone, or shown no more.
+        let shadows = &self.shadows;
+        self.shadow_maps.retain(|scene, _| {
+            shadows
+                .get(scene)
+                .is_some_and(|(drawn, _)| Some(*drawn) == last)
         });
         self.ran = Some(frame);
         #[cfg(test)]
@@ -4817,13 +4831,10 @@ mod tests {
         assert_eq!(maps(false), Some(Vec::new()), "no shadows, no map");
     }
 
-    /// ADR-0151 decision 3: a card between a directional light that casts shadows and a
-    /// `scene`-lit wall shadows the wall, through the shadow map the first model that
-    /// receives them draws; without shadows, or for a wall that receives none, the wall
-    /// is lit there.
-    #[test]
-    fn a_card_shadows_a_scene_lit_wall() {
-        use jstream_sources::SourceKind as _;
+    /// A 3D scene for shadows: `cam`, a wall behind the canvas plane that a model source
+    /// shows; `logo`, a lamp in front of it turned 30 degrees to one side; and `card`, a
+    /// small card on the canvas plane between them, moved `nudge` px across.
+    fn shadow_wall(nudge: f32) -> Graph {
         let mut graph = placed(&[("cam", (32.0, 18.0), (96.0, 72.0), 0.0)]);
         let main = SceneId::new("main");
         let geometry = |(x, y): (f32, f32), size: f32, depth: f32, turn: f32| {
@@ -4865,12 +4876,12 @@ mod tests {
                     item_id: ItemId::new("card"),
                     source_id: SourceId::new("card"),
                     transform: None,
-                    geometry: Some(geometry((32.0, 18.0), 12.0, 0.0, 0.0)),
+                    geometry: Some(geometry((32.0 + nudge, 18.0), 12.0, 0.0, 0.0)),
                     opacity: None,
                     blend: None,
                 },
                 Edit::SceneSetCamera {
-                    scene_id: main.clone(),
+                    scene_id: main,
                     camera: Some(jstream_protocol::SceneCamera::framing(
                         jstream_protocol::Canvas {
                             width: CANVAS.0,
@@ -4880,7 +4891,12 @@ mod tests {
                 },
             ],
         );
-        let light = |shadows| jstream_sources::ShownLight {
+        graph
+    }
+
+    /// The directional light [`shadow_wall`]'s lamp shows, casting shadows or not.
+    fn shadow_wall_light(shadows: bool) -> jstream_sources::ShownLight {
+        jstream_sources::ShownLight {
             kind: jstream_sources::LightType::Directional,
             color: [1.0; 3],
             intensity: 2.0,
@@ -4890,54 +4906,80 @@ mod tests {
             shadows,
             shadow_softness: 0.0,
             environment: None,
-        };
+        }
+    }
+
+    /// The model [`shadow_wall`]'s wall shows: a white plane lit by its scene, which
+    /// `receives` shadows or doesn't.
+    fn shadow_wall_model(receives: bool) -> Option<jstream_sources::ShownModel> {
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        settings.insert(String::from("roughness"), serde_json::json!(1.0));
+        settings.insert(
+            String::from("receives_shadows"),
+            serde_json::json!(receives),
+        );
+        kind.create(&settings, &jstream_sources::Context::default())
+            .expect("a model")
+            .model()
+    }
+
+    /// `graph`, a [`shadow_wall`], planned: its wall showing `model`, its lamp `light`,
+    /// and its card the frame `card`.
+    fn shadow_wall_shot(
+        graph: &Graph,
+        model: Option<jstream_sources::ShownModel>,
+        light: jstream_sources::ShownLight,
+        card: &Frame,
+    ) -> Shot {
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(model);
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(light));
+        snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    match id.as_str() {
+                        "cam" => stand_in.clone(),
+                        "logo" => lamp.clone(),
+                        _ => card.clone(),
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot
+    }
+
+    /// ADR-0151 decision 3: a card between a directional light that casts shadows and a
+    /// `scene`-lit wall shadows the wall, through the shadow map the first model that
+    /// receives them draws; without shadows, or for a wall that receives none, the wall
+    /// is lit there.
+    #[test]
+    fn a_card_shadows_a_scene_lit_wall() {
+        let graph = shadow_wall(0.0);
         // The card's shadow falls 17 px to one side of it on the wall, which is behind
         // the canvas plane, so the camera sees it nearer the centre: about 10 px out
         // from the card's edge.
         let sides = [(22, 18), (42, 18)];
         let shot = |light: jstream_sources::ShownLight, receives: bool| {
-            let kind = jstream_sources::ModelKind::new();
-            let mut settings: jstream_protocol::Settings = kind
-                .descriptor()
-                .params
-                .iter()
-                .map(|p| (p.id.clone(), p.default.clone()))
-                .collect();
-            settings.insert(String::from("shape"), serde_json::json!("plane"));
-            settings.insert(String::from("lighting"), serde_json::json!("scene"));
-            settings.insert(String::from("color"), serde_json::json!("#ffffff"));
-            settings.insert(String::from("roughness"), serde_json::json!(1.0));
-            settings.insert(
-                String::from("receives_shadows"),
-                serde_json::json!(receives),
-            );
-            let source = kind
-                .create(&settings, &jstream_sources::Context::default())
-                .expect("a model");
-            let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
-                .expect("invariant: 16x9 RGBA8")
-                .with_model(source.model());
-            let lamp = Frame::new(1, 1, &[0; 4], 3)
-                .expect("invariant: 1x1 RGBA8")
-                .with_light(Some(light));
             let card = Frame::new(1, 1, &[255; 4], 4).expect("invariant: 1x1 RGBA8");
-            let shot = snapshot::plan_with(
-                &graph,
-                Some(&main),
-                None,
-                &mut |id| {
-                    Some(Look::frame(
-                        match id.as_str() {
-                            "cam" => stand_in.clone(),
-                            "logo" => lamp.clone(),
-                            _ => card.clone(),
-                        },
-                        None,
-                    ))
-                },
-                &FilterAssets::default(),
-            )
-            .shot;
+            let shot = shadow_wall_shot(&graph, shadow_wall_model(receives), light, &card);
             let _gpu = crate::tests::one_gpu_test_at_a_time();
             let mut compositor = gpu()?;
             let mut cache = ResourceCache::new();
@@ -4949,6 +4991,7 @@ mod tests {
                 &sides,
             ))
         };
+        let light = shadow_wall_light;
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
         let Some(lit) = shot(light(false), true) else {
             return;
@@ -4972,6 +5015,103 @@ mod tests {
             (1, 1),
             "one side is shadowed: {shadowed:?} against {lit:?}"
         );
+    }
+
+    /// A shadow map is drawn once while nothing that casts into it changes: frames of
+    /// the same scene leave it as it is and show the same shadow; a card that shows a
+    /// new picture, or moves, draws it again.
+    #[test]
+    fn a_shadow_map_is_drawn_again_only_when_what_casts_changes() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let sides = [(22, 18), (42, 18)];
+        let model = shadow_wall_model(true);
+        let card = |generation| Frame::new(1, 1, &[255; 4], generation).expect("1x1 RGBA8");
+        let mut frame = |graph: &Graph, card: &Frame, chains: &mut Chains| {
+            let shot = shadow_wall_shot(graph, model.clone(), shadow_wall_light(true), card);
+            let pixels = draw_points(
+                &mut compositor,
+                (&mut cache, &mut *chains),
+                (&shot, &LiveParams::default()),
+                &sides,
+            );
+            (pixels, chains.shadow_draws.get())
+        };
+        let still = shadow_wall(0.0);
+        let (first, draws) = frame(&still, &card(4), &mut chains);
+        assert_eq!(draws, 1, "the map is drawn");
+        let (again, draws) = frame(&still, &card(4), &mut chains);
+        assert_eq!(draws, 1, "nothing changed: the map is kept");
+        assert_eq!(again, first, "and shows the same shadow");
+        let (_, draws) = frame(&still, &card(5), &mut chains);
+        assert_eq!(draws, 2, "the card shows a new picture");
+        let (_, draws) = frame(&still, &card(5), &mut chains);
+        assert_eq!(draws, 2, "which is then kept");
+        let (moved, draws) = frame(&shadow_wall(20.0), &card(5), &mut chains);
+        assert_eq!(draws, 3, "the card moved");
+        assert_ne!(moved, first, "and its shadow with it");
+    }
+
+    /// A card whose picture comes out of a filter chain casts the shadow of what the
+    /// filter drew this frame: the chain's output layer is one image for as long as it
+    /// lives, and each run of the filter counts as a change of it, so the kept map is
+    /// drawn again. Here the card's shadow comes once the filter has drawn it, and goes
+    /// once its picture has turned transparent.
+    #[test]
+    fn a_filtered_cards_shadow_follows_its_picture() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let sides = [(22, 18), (42, 18)];
+        let mut graph = shadow_wall(0.0);
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("card"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: [("multiply".to_owned(), serde_json::json!("#ffffff"))]
+                    .into_iter()
+                    .collect(),
+                enabled: None,
+                index: None,
+            }],
+        );
+        let model = shadow_wall_model(true);
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let mut frame = |card: &Frame, chains: &mut Chains| {
+            let shot = shadow_wall_shot(&graph, model.clone(), shadow_wall_light(true), card);
+            let pixels = draw_points(
+                &mut compositor,
+                (&mut cache, &mut *chains),
+                (&shot, &LiveParams::default()),
+                &sides,
+            );
+            (pixels, chains.shadow_draws.get())
+        };
+        let solid = Frame::new(1, 1, &[255; 4], 4).expect("1x1 RGBA8");
+        let clear = Frame::new(1, 1, &[0; 4], 5).expect("1x1 RGBA8");
+        let darkest = |pixels: &[[u8; 4]]| pixels.iter().map(|&p| luma(p)).min().unwrap_or(0);
+        // The maps are drawn before the card's chain runs, so they show the picture
+        // the filter drew the frame before: nothing yet in the first frame.
+        let (unshadowed, draws) = frame(&solid, &mut chains);
+        assert_eq!(draws, 1);
+        let (shadowed, draws) = frame(&solid, &mut chains);
+        assert_eq!(draws, 2, "the filter has drawn the card since");
+        assert!(
+            darkest(&shadowed) + 100 < darkest(&unshadowed),
+            "the card casts a shadow: {shadowed:?} after {unshadowed:?}"
+        );
+        frame(&clear, &mut chains);
+        let (lit, draws) = frame(&clear, &mut chains);
+        assert_eq!(draws, 4, "the filter drew a new picture");
+        assert_eq!(lit, unshadowed, "a card that shows nothing casts none");
     }
 
     /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition

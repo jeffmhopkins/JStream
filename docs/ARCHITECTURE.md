@@ -1333,8 +1333,8 @@ under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene'
 lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
 spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
 `f64`; a spot or directional light may cast shadows, up to 2 a scene, each through a
-2048² map of the scene's view depth drawn from the light once a frame and sampled with a
-soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
+2048² map of the scene's view depth drawn from the light, again only when the light or
+what casts into it has changed, and sampled with a soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
 studio gradient). A model's `texture` names another source whose picture, after its
 own filters, replaces its base colour, sampled through a mip chain of the whole picture
@@ -1359,7 +1359,8 @@ with nebulae and a galaxy band baked once per seed into cube maps
 and procedural stars laid out about the direction of travel,
 which at warp streak away from it as the render thread's per-scene travel advances, and
 its layer is placed under every item, through no camera, so it sorts with nothing and
-has no view depth. Its
+has no view depth. The pass is skipped while the layer still holds the sky asked for, so a
+still camera pays for it once. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)

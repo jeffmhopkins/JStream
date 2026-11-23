@@ -11,6 +11,11 @@
 //! only on the direction and the sky's seed. So they are baked once per seed into two
 //! cube maps ([`Bake`], ADR-0174), and a frame's sky reads them: a turning camera, a
 //! warp and a change of colour or amount all cost a few texture reads a pixel.
+//!
+//! What is left still costs a full-canvas pass, and depends only on where the camera
+//! looks and on the sky's own settings. So a layer that still holds a sky is not drawn
+//! again while the same sky is asked for ([`Kept`]): a scene whose camera holds still
+//! pays for its sky once.
 
 use crate::error::RenderError;
 use crate::gpu::Gpu;
@@ -18,6 +23,8 @@ use crate::image::{Image, LAYER_FORMAT, Owner};
 use crate::model::Environment;
 use crate::scene::Color;
 use jstream_protocol::{Canvas, SceneCamera};
+use std::sync::Weak;
+use std::sync::atomic::AtomicU64;
 use wgpu::util::DeviceExt;
 
 /// The most a star layer's brightness setting scales its stars.
@@ -108,6 +115,9 @@ pub(crate) struct SkyRuntime {
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     blank: wgpu::TextureView,
+    /// The skies the layers drawn last still hold, most recently drawn first, at most
+    /// [`MAX_KEPT`].
+    kept: Vec<Kept>,
     /// Reads a bake: linear, so a view finer than its texels shows no texel.
     deep_sampler: wgpu::Sampler,
     /// The stand-in bake of a sky with no nebula and no band: one black texel a face.
@@ -116,11 +126,51 @@ pub(crate) struct SkyRuntime {
     baker: Option<Baker>,
     /// The seeds' bakes, most recently drawn first, at most [`MAX_BAKES`].
     bakes: Vec<Bake>,
-    /// How many skies were drawn: the clock a bake's last use is told by.
-    draws: u64,
+    /// How many skies were drawn, not counting the ones a layer already held: the clock
+    /// a bake's last use is told by.
+    pub(crate) draws: u64,
     /// How many bakes were made.
     #[cfg(test)]
     pub(crate) baked: u64,
+}
+
+/// The most layers whose skies are remembered: a scene has one, and a transition
+/// between two 3D scenes draws both.
+const MAX_KEPT: usize = 4;
+
+/// A sky a layer holds: what was drawn into it, and the state it was left in. While the
+/// layer and the sky's picture are as they were then, drawing the same values again
+/// would write the same texels.
+struct Kept {
+    /// The layer, by the counter its clones share. `Weak`, so a layer the cache let go
+    /// of is forgotten, not kept alive.
+    target: Weak<AtomicU64>,
+    /// The layer's [`Image::generation`] once the sky was drawn: any later write moves
+    /// it on.
+    generation: u64,
+    /// The shader's values ([`sky_values`]), compared bit for bit.
+    values: [u32; 44],
+    /// The sky's picture and its generation when it was read, for a sky with one.
+    picture: Option<(Weak<AtomicU64>, u64)>,
+}
+
+impl Kept {
+    /// Whether `target` still holds the sky of `values` and `picture`.
+    fn holds(&self, target: &Image, values: &[u32; 44], picture: Option<&Image>) -> bool {
+        let same = |kept: &Weak<AtomicU64>, image: &Image| {
+            std::ptr::eq(kept.as_ptr(), std::sync::Arc::as_ptr(image.identity()))
+        };
+        same(&self.target, target)
+            && self.generation == target.generation()
+            && self.values == *values
+            && match (&self.picture, picture) {
+                (None, None) => true,
+                (Some((kept, generation)), Some(picture)) => {
+                    same(kept, picture) && *generation == picture.generation()
+                }
+                _ => false,
+            }
+    }
 }
 
 /// A bake's face is this many texels square. A face spans a right angle, so a bake has
@@ -501,6 +551,7 @@ impl SkyRuntime {
             layout,
             sampler,
             blank,
+            kept: Vec::new(),
             deep_sampler,
             blank_deep,
             baker: None,
@@ -536,6 +587,8 @@ impl SkyRuntime {
     }
 
     /// Draws `sky` into `target`, a layer of this compositor, replacing every texel.
+    /// A layer that holds this sky already, drawn here and not written since, is left
+    /// as it is.
     pub(crate) fn draw(
         &mut self,
         gpu: &Gpu,
@@ -565,6 +618,15 @@ impl SkyRuntime {
             .image
             .filter(|image| image.owner().is(owner));
         let values = sky_values(sky, image, &camera);
+        let bits = values.map(f32::to_bits);
+        self.kept.retain(|kept| kept.target.strong_count() > 0);
+        if self
+            .kept
+            .iter()
+            .any(|kept| kept.holds(target, &bits, image))
+        {
+            return Ok(());
+        }
         self.draws += 1;
         // Only a sky that shows nebulae or a band needs its seed's bake.
         let deep = sky.deep.nebula > 0.0 || sky.deep.galaxy > 0.0;
@@ -651,6 +713,24 @@ impl SkyRuntime {
         gpu.submit_work(encoder.finish());
         target.mark_changed();
         drop(submitting);
+        let same = std::sync::Arc::as_ptr(target.identity());
+        self.kept
+            .retain(|kept| !std::ptr::eq(kept.target.as_ptr(), same));
+        self.kept.truncate(MAX_KEPT - 1);
+        self.kept.insert(
+            0,
+            Kept {
+                target: std::sync::Arc::downgrade(target.identity()),
+                generation: target.generation(),
+                values: bits,
+                picture: image.map(|image| {
+                    (
+                        std::sync::Arc::downgrade(image.identity()),
+                        image.generation(),
+                    )
+                }),
+            },
+        );
         Ok(())
     }
 }

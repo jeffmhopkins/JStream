@@ -918,6 +918,10 @@ impl Compositor {
     /// pixel's ray from `sky.camera`, infinitely far away, with its stars, at
     /// `sky.opacity`. A scene then places the layer under its items.
     ///
+    /// A layer that still holds the same sky from an earlier call (the same values
+    /// through a camera looking the same way, and a picture that hasn't changed) is not
+    /// drawn again, so a still camera pays for its sky once.
+    ///
     /// # Errors
     /// [`RenderError::Invalid`] when `target` is not a layer this compositor made, or the
     /// camera can't be seen on it.
@@ -952,6 +956,13 @@ impl Compositor {
             .probe
             .get_or_insert_with(|| crate::probe::ProbeRuntime::new(&self.gpu));
         errors.close(runtime.resample(&self.gpu, &self.owner, faces, target))
+    }
+
+    /// How many skies [`Self::draw_sky`] drew, not counting the calls a layer already
+    /// held the sky of.
+    #[cfg(test)]
+    pub(crate) fn sky_draws(&self) -> u64 {
+        self.sky.as_ref().map_or(0, |sky| sky.draws)
     }
 
     /// How many deep skies [`Self::draw_sky`] has baked (ADR-0174).
@@ -1179,8 +1190,18 @@ impl Compositor {
         // What each image drawn into can hold now (#1070, #1449): a filter can draw
         // anywhere in its output, unless what it reads is bounded and its kind says how
         // far past that it draws, and every draw is then cut to that.
+        // Each is marked changed first, as every write of an image's texels is: what
+        // remembers an image by its change count (a mip chain, [`Image::seen`]) must
+        // see a filter's output move on.
+        let marked = written
+            .iter()
+            .any(|(image, _)| image.texture() == output.texture());
         for (image, content) in written {
+            image.mark_changed();
             image.set_content(content);
+        }
+        if !marked {
+            output.mark_changed();
         }
         drop(submitting);
         if let (Some(timer), Some(timing)) = (&self.timer, timing) {
