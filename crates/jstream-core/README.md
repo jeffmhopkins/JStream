@@ -1510,15 +1510,16 @@ its start with its first frame decoded.
 The **3D rendering switches** (`studio.set_rendering`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decision 1) are an application setting too, answered before the collection lock
-(`Engine::rendering_call`): a `max_probe_resolution` that isn't one of
-`PROBE_RESOLUTIONS` is `invalid_argument` and changes nothing; otherwise each switch the
+(`Engine::rendering_call`): a `screen_space_steps` that isn't one of
+`SCREEN_SPACE_STEPS`, or a `max_probe_resolution` that isn't one of
+`PROBE_RESOLUTIONS`, is `invalid_argument` and changes nothing; otherwise each switch the
 call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
 collection lock released, saves them in the file the host named with
 `Engine::with_rendering_file` (`rendering_file.rs`, `rendering.json` in the data folder
 for the desktop app and the daemon), which the next start reads back. A file that can't
-be read is logged and read as none, and a switch it leaves out is on. `studio.get`
+be read is logged and read as none, and a switch it leaves out takes its default (on, but screen-space reflections off). `studio.get`
 reports them as `rendering`. Every plan reads them (see *Snapshots*).
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
@@ -2116,7 +2117,8 @@ leaves the scene composited as before.
 
 A 3D scene whose chain holds a filter that reads depth (`Chain::reads_depth`, the render
 crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetric_fog`,
-`floor_reflection` and `depth_bloom`) also gets its view depth
+`floor_reflection`, `depth_bloom` and the screen-space reflections the engine adds, below)
+also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
 planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
@@ -2335,6 +2337,25 @@ cache let go captures again. The warm scenes' estimate counts a probe's capture 
 warm scene whose `reflections` is on while the switch is (`probe_bytes`, its panorama and
 faces in half-float RGBA at its capped face size,
 `a_reflection_probe_counts_its_capture`).
+Screen-space reflections (ADR-0170 decision 4): while the `screen_space_reflections`
+switch is on, a 3D scene whose `reflections` is on starts its video chain with the
+`screen_space_reflections` pass at `screen_space_steps` (`Chain::with_screen_reflections`,
+before the scene's own filters, and the whole chain when it has none), so its composite
+draws a view depth. Such a chain reads the scene's surface buffer too
+(`Chain::reads_surface`, `Pass::surface`). Each model item in such a scene that
+reflects it (`scene`-lit, its source's `reflections` on) draws its surface with its layer, into three `GpuKey::ModelSurface` layers of its layer's size
+(`Compositor::draw_model_with_surface`, noted in `Chains::surfaced` for the frame), so
+it is shaded once. After the view depth, `draw_surface` clears the scene's three
+`GpuKey::Surface` layers and merges each reflecting model the view depth holds into them
+(`Compositor::merge_model_surface`); a model whose layer drew no surface this frame is
+drawn into them again through the scene's camera with the scene's lights, sky and probe
+as its layer was lit, and with its live texture and its materials' drives. A model that
+doesn't reflect writes no surface: in front of one that does, it is nearer in the view
+depth, where the pass leaves the picture as it is. Each reflecting model's surface costs three
+canvas-sized half-float layers (about 48 MB at 1080p) while the pass runs.
+`Chains::drew_depth` hands the scene's layers to the pass as `ViewDepth::surface`
+(`a_metal_floor_reflects_a_card_on_screen`, which checks the surface was merged). Since the scene then
+has a chain, a transition shows it as one picture.
 
 A shadow map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,
 for each scene, what its maps were last drawn of (`KeptShadows`): every card a view depth
