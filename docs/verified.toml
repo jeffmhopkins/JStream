@@ -6522,7 +6522,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:4bd2e795146d25d4", by = "agent:claude", note = "Rewrote the Encoders & mixes bullet: rail with + per group and empty texts, editor under the name and summary as property-grid rows, the form's Delete/Cancel/Save as the sticky dialog footer (Close only while nothing is picked); the form's codec offer now sits under its title and is left out when the dialog's offer already shows it (offer_reason)." }
+stamp = { hash = "b3:ec9921443ca56663", by = "agent:claude", note = "Round 1: the Close footer is now keyed on form_open (nothing picked, or a pick not listed: deleted or still saving), so the dialog never has no footer; README states it." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:a2044f7e0a0a81f3", by = "agent:plugin-uninstall", note = "Re-read after merging main (#1590: one dialog shell, a property grid and a helper line per setting; #1593: protocol 0.138, a Move's via and camera_path, ADR-0166) and renumbering plugin.uninstall and plugin.uninstalled to 0.143: every tag says 0.143, the versions line opens on 0.143 then 0.138, the snapshots are regenerated, and the plugin remove dialog and its tests still hold on #1590's shell | merge: #1594 brought protocol 0.147 (studio.set_rendering, studio.get's rendering, RenderFeatures, ADR-0170) into this section's inputs; re-read: plugin.uninstall and plugin.uninstalled stay at 0.149, the current version, with 0.147 as the next clause, and nothing about plugins changed | kept from the merged side: scene_properties.rs: the UI's scene.switch constructors gain via, and after review round 1 a hotkey rebind keeps the old binding's via with its preset, as a_rebind_keeps_the_binding_s_preset checks; its dep, the control README's design, gained the mock's via checks, which the UI's tests don't lean on; the design text still holds | merge: main's #1591 (3D groups share their scene's space, a camera rides with one, protocol 0.127) added the share-space and anchor controls to scene_properties.rs and scenes.rs; the design text holds | kept from the merged side: Review round 1 N4: the Moves with picker lists a stored anchor that names no group here as '(ignored)', with a kept-but-ignored note, and notes a flat group's; rewrote the sentence to match scene_properties.rs. | kept from the merged side: Settings pages now list 3D rendering, and a new 3D rendering bullet describes rendering.rs (RenderingSettings, Switch, read/set, revert on refusal, old-engine line); matches the code. | merge: the control design dep gained #1591 (3D groups share their scene's space: SceneOptions share_space, SceneInfo camera_anchor, scene.set_camera_anchor, ADR-0164, protocol 0.127); the UI design, including the 3D rendering page, holds. | merge: merged #1593 (a Move passes through keyframes with scene.switch's via and may orbit with camera_path, ADR-0166, protocol 0.138); store.rs change is main's; the design holds" }
@@ -6645,7 +6645,7 @@ stamp = { hash = "b3:9bbb001fcee138c7", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:5ff0c8373b6af2f5", by = "agent:claude", note = "Rewrote the Filters window paragraph: bar, picture, ⋯ menu, Close only with Ctrl+Z; the restore batch is described as the Properties dialogs' Cancel; dropped the window's adopt sentence." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/encoders.rs"]
-stamp = { hash = "b3:62c047d0ab7b0ac8", by = "agent:claude", note = "Rewrote the Encoders & mixes bullet: rail with + per group and empty texts, editor under the name and summary as property-grid rows, the form's Delete/Cancel/Save as the sticky dialog footer (Close only while nothing is picked); the form's codec offer now sits under its title and is left out when the dialog's offer already shows it (offer_reason)." }
+stamp = { hash = "b3:182bfb10bb31e2e9", by = "agent:claude", note = "Round 1: the Close footer is now keyed on form_open (nothing picked, or a pick not listed: deleted or still saving), so the dialog never has no footer; README states it." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
 stamp = { hash = "b3:57241f6a72463fc9", by = "agent:lane-d", note = "re-read after merging main's #1296 border, #1279 Outputs panel, #1351 Save as pack and #1372 with the wave's Follow pointer and MIDI UI; filters.rs KNOWN is 26 kinds (border plus follow pointer), and the text still matches | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Edited: Add filter lists the border with vignette and bloom, and the presets include the border's Card, Neon and Broadcast frame; matches filters.rs and filter_presets.rs | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the preset select and the vignette's Subtle, Cinematic and Spotlight hold; only their strength values changed to linear ones | kept from the merged side: Add filter dialog list and the presets sentence now name scanlines and Monitor, CRT and Film grain" }
@@ -6678,7 +6678,7 @@ stamp = { hash = "b3:cebc5cbf7a617a06", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:81324f4139088ee4", by = "agent:claude", note = "Rewrote the Encoders & mixes bullet: rail with + per group and empty texts, editor under the name and summary as property-grid rows, the form's Delete/Cancel/Save as the sticky dialog footer (Close only while nothing is picked); the form's codec offer now sits under its title and is left out when the dialog's offer already shows it (offer_reason)." }
+stamp = { hash = "b3:16028dffd0a4b583", by = "agent:claude", note = "Round 1: the Close footer is now keyed on form_open (nothing picked, or a pick not listed: deleted or still saving), so the dialog never has no footer; README states it." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:b7f3b69e6dc89b0d", by = "agent:claude", note = "Rewrote the Properties dialog bullet (picture on top via SourcePreview, Settings | Filters segmented, first filter picked) and the scene dialog's filters sentence for C12. | merge: #1611 added the Looks table input's description; the Properties dialog bullet this branch rewrote is unaffected. | kept from the merged side: grid source kind: added the looks table (looks.rs): rows, Own colour, brightness, blink, add, remove, the clip launcher preset, whole-object sends" }
@@ -6753,7 +6753,7 @@ stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:63ac58d116477863", by = "agent:studio-two-up", note = "Studio mode rewritten for the two-up: canvas as preview, program monitor (tapped program-mix stream), StudioControls between them sharing one Panel state with the Transitions panel via provide_transitions; Selection notes the canvas follows the preview scene in studio mode; style.css adds the stage-row, stage-label, monitor and studio-controls rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "Rewrote the Encoders & mixes bullet: rail with + per group and empty texts, editor under the name and summary as property-grid rows, the form's Delete/Cancel/Save as the sticky dialog footer (Close only while nothing is picked); the form's codec offer now sits under its title and is left out when the dialog's offer already shows it (offer_reason)." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: the Close footer is now keyed on form_open (nothing picked, or a pick not listed: deleted or still saving), so the dialog never has no footer; README states it." }
 
 ["CRATE-jstream-ui#purpose"."body"]
 stamp = { hash = "b3:fbeffbb9a36c16d6", by = "agent:claude", note = "The outputs.rs entry now says the dialog applies nothing until Save; the rest holds." }
@@ -6876,7 +6876,7 @@ stamp = { hash = "b3:9bbb001fcee138c7", by = "agent:claude", note = "Re-read: on
 stamp = { hash = "b3:5ff0c8373b6af2f5", by = "agent:claude", note = "filters.rs's tested helpers now include shown_by, stepped and history_key; FilterUndo is the Properties dialogs' only (adopt_added removed). Edited the module list." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/encoders.rs"]
-stamp = { hash = "b3:62c047d0ab7b0ac8", by = "agent:claude", note = "encoders.rs gains the rail's + buttons, empty texts, a form title and the single codec offer; outputs.rs hides the libraries Close while a form is open. The Contents list still names these modules correctly." }
+stamp = { hash = "b3:182bfb10bb31e2e9", by = "agent:claude", note = "Round 1: encoders.rs adds is_listed/form_open, outputs.rs keys Close on it; the Contents list still names these modules correctly." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
 stamp = { hash = "b3:57241f6a72463fc9", by = "agent:lane-d", note = "re-read after merging main's #1296 border, #1279 Outputs panel, #1351 Save as pack and #1372 with the wave's Follow pointer and MIDI UI; filters.rs KNOWN is 26 kinds (border plus follow pointer), and the text still matches | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: filter_presets.rs gains the border's presets and filters.rs its KNOWN entry; the contents list holds | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the panel list is unchanged by the presets' new values | kept from the merged side: filters.rs lists scanlines under Style and filter_presets.rs adds its three presets; purpose unchanged" }
@@ -6909,7 +6909,7 @@ stamp = { hash = "b3:cebc5cbf7a617a06", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:81324f4139088ee4", by = "agent:claude", note = "encoders.rs gains the rail's + buttons, empty texts, a form title and the single codec offer; outputs.rs hides the libraries Close while a form is open. The Contents list still names these modules correctly." }
+stamp = { hash = "b3:16028dffd0a4b583", by = "agent:claude", note = "Round 1: encoders.rs adds is_listed/form_open, outputs.rs keys Close on it; the Contents list still names these modules correctly." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:b7f3b69e6dc89b0d", by = "agent:claude", note = "Same modules hold the same parts: device_preview now has SourcePreview (draft or saved source), PropertiesAndFilters takes a filters signal and a preview; the module list still holds. | merge: #1611 added panels/looks.rs (the Looks table input) to the module list; this branch's Properties wording is unaffected. | kept from the merged side: grid source kind: properties.rs draws a looks param with the new looks.rs table editor; crate purpose holds" }
@@ -8340,19 +8340,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:0e2255ff983601b0", by = "agent:claude", note = "Added the dialog link button (button.link): link-coloured text beside a field, as the output dialog's Edit… and New…, shown only when it can act." }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:a1ffb6e5ce1aba11", by = "agent:ui-design", note = "Added the Button row (--button, --button-hover), the tokens that replace the hex fills in style.css (PR #1585 N5); every other token unchanged." }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the naming rule: everything in a chain is a filter, and an item's own are item filters, never effects, as the Filters panel, window and Add filter now say." }
@@ -8361,7 +8361,7 @@ stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: copy rules and the (i) side-with-room placement (dialog.rs tip_side, .info-tip.up/.end) still hold; the merge's toast text 'Saved to …' follows them." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
@@ -8370,7 +8370,7 @@ stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the l
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: the dialog shell text still matches style.css (--dialog-s/m/l 440/600/860, 56px header with .modal-sub, sticky ::after fade, 56px footer with 32px buttons and .footer-left); the merge added only .toast-action." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: the library rule holds as written; the title now renders at 15 px and Close shows whenever no form is open." }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:fe7d423d1ba2d92a", by = "agent:claude", note = "Asset paths now read path, Browse…, then a short root select (Collection / App assets / Absolute); added the file row's order. The grid rules otherwise hold." }
@@ -8379,7 +8379,7 @@ stamp = { hash = "b3:fe7d423d1ba2d92a", by = "agent:claude", note = "Asset paths
 stamp = { hash = "b3:b7f3b69e6dc89b0d", by = "agent:claude", note = "Asset paths now read path, Browse…, then a short root select (Collection / App assets / Absolute); added the file row's order. The grid rules otherwise hold. | merge: #1611 added .looks table rules to style.css (a data grid's Looks setting) and a Looks row in properties.rs; neither touches what this section says, and it still holds. | kept from the merged side: grid source kind: the looks table sits in the settings form's control column, its number fields as the form's other number inputs, its buttons small (button.sm); the form rules hold" }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8388,19 +8388,19 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css change is local to the Encoders & mixes dialog (library rail, profile-field rows, sticky form footer, codec offer as a callout); re-read, this section's rules are unchanged and the dialog follows them." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail and the raised profile title selector are local to the Encoders & mixes dialog; this section's rules are unchanged." }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:6fd304344f110076", by = "agent:claude", note = "The 3D tools bullet now says Depth doubles or halves distance per 200 px with a 10 px floor and Turn leaves billboards alone; matches camera::pose" }
@@ -8520,7 +8520,7 @@ stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:35d1568aba88cf64", by = "agent:claude", note = "Edited HD-01 (pages General, Video, Audio, Plugins, Devices and the Video draft footer), HD-10 (Check for updates off in a browser), HD-11 (Video as a Settings page with Save/Cancel) and HD-12 (eyebrow head keeping the name's case); checked against header.rs, settings.rs and video_settings.rs." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:81324f4139088ee4", by = "agent:claude", note = "outputs.rs only wraps the Encoders & mixes footer's Close in a Show while nothing is picked; the header rows (Record, Go Live, menus) are unchanged and still hold." }
+stamp = { hash = "b3:16028dffd0a4b583", by = "agent:claude", note = "Round 1: outputs.rs only changes when the libraries Close shows; header rows unchanged." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/project.rs"]
 stamp = { hash = "b3:54264da4755dd02b", by = "agent:ui-design", note = "#1590 B1: HD-01 now names the General page's settings as they read (Check for updates, Global hotkeys, Ask before connecting, Keep ready, Memory limit, under Updates, Hotkeys, Agents and Performance) and HD-10 the Check for updates and Global hotkeys toggles; HD-11 Scale existing scenes to fit; HD-12's callout; checked against updates.rs, agents.rs, warm.rs, settings.rs, video_settings.rs, project.rs and outputs.rs." }
@@ -8589,7 +8589,7 @@ stamp = { hash = "b3:0559743a829704ac", by = "agent:builder-3d3", note = '''stor
 stamp = { hash = "b3:954ea1e27eafb1cf", by = "agent:claude", note = "C17: the Encoders & mixes paragraph now describes the rail (rows with right-aligned summaries, an empty text per group, a + per heading named New encoder / New video mix), the picked one edited under its name and summary as property-grid rows, and the form's Delete, Cancel and Save as the dialog footer replacing Close." }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:81324f4139088ee4", by = "agent:claude", note = "C17: the Encoders & mixes paragraph now describes the rail (rows with right-aligned summaries, an empty text per group, a + per heading named New encoder / New video mix), the picked one edited under its name and summary as property-grid rows, and the form's Delete, Cancel and Save as the dialog footer replacing Close." }
+stamp = { hash = "b3:16028dffd0a4b583", by = "agent:claude", note = "Round 1: Close now also shows while the pick isn't listed (deleted or saving); the paragraph's 'replaces Close while a form is open' still holds." }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:366910dd6694f84d", by = "agent:claude", note = "Edited SC-10 for B1: a mouse press with Shift, Ctrl or Meta, a touch and a pen pick on the click; a plain mouse press picks at once." }
@@ -8613,7 +8613,7 @@ stamp = { hash = "b3:4dc24b8738f93064", by = "agent:ui-design", note = "WS-09 mo
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:81e18552b508e902", by = "agent:claude", note = "style.css changes are scoped to the Encoders & mixes dialog (.library*, .profile-*, .codec-offer as a callout); WS-01..09 rows still hold, no token or shared control changed." }
+stamp = { hash = "b3:7fe96bfc91750126", by = "agent:claude", note = "Round 1: --library-rail custom property and a raised .profile-head .profile-title selector, both local to the dialog; WS rows hold." }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }

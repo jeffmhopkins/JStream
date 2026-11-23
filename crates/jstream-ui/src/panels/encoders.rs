@@ -438,6 +438,31 @@ fn created_pick(edit: &Edit) -> Option<LibraryPick> {
     }
 }
 
+/// Whether `pick` names something the dialog can edit: nothing, a new one, or a profile
+/// or mix the engine lists. One it no longer lists (deleted, or saved but not yet
+/// listed) has no form.
+pub fn is_listed(
+    pick: Option<&LibraryPick>,
+    encoders: &[EncoderProfileInfo],
+    mixes: &[VideoMixInfo],
+) -> bool {
+    match pick {
+        Some(LibraryPick::Encoder(Some(id))) => encoders.iter().any(|e| &e.profile_id == id),
+        Some(LibraryPick::Mix(Some(id))) => mixes.iter().any(|m| &m.mix_id == id),
+        _ => true,
+    }
+}
+
+/// Whether the picked encoder or mix has its form open, whose Delete, Cancel and Save
+/// are then the dialog's footer in place of Close (C17).
+pub fn form_open(
+    pick: Option<&LibraryPick>,
+    encoders: &[EncoderProfileInfo],
+    mixes: &[VideoMixInfo],
+) -> bool {
+    pick.is_some() && is_listed(pick, encoders, mixes)
+}
+
 /// The encoder profiles and video mixes, in the Encoders & mixes dialog: a list on the
 /// left, each profile and mix with its name and a short summary, and on the right the
 /// editor of the one `pick` names, or of a new one (#1206). `send` sends one edit and
@@ -458,13 +483,7 @@ pub(crate) fn Profiles(
     // appears or goes, so another client's edit doesn't wipe what is typed.
     let shown = Memo::new(move |_| {
         let picked = pick.get();
-        let listed = match &picked {
-            Some(LibraryPick::Encoder(Some(id))) => {
-                encoders.with(|e| e.iter().any(|e| &e.profile_id == id))
-            }
-            Some(LibraryPick::Mix(Some(id))) => mixes.with(|m| m.iter().any(|m| &m.mix_id == id)),
-            _ => true,
-        };
+        let listed = encoders.with(|e| mixes.with(|m| is_listed(picked.as_ref(), e, m)));
         (picked, listed)
     });
     let editor = move || {
@@ -1193,6 +1212,19 @@ mod tests {
             "profile": profile,
         }))
         .expect("a profile")
+    }
+
+    #[test]
+    fn the_form_is_open_only_on_a_listed_or_new_pick() {
+        let encoders = vec![info("enc_1", "High", EncoderDraft::new().profile())];
+        let listed = LibraryPick::Encoder(Some(EncoderProfileId::new("enc_1")));
+        let gone = LibraryPick::Encoder(Some(EncoderProfileId::new("enc_9")));
+        let new = LibraryPick::Mix(None);
+        assert!(!form_open(None, &encoders, &[]), "nothing picked: Close");
+        assert!(form_open(Some(&listed), &encoders, &[]));
+        assert!(form_open(Some(&new), &encoders, &[]));
+        // Deleted, or saved and not yet listed: no form, so Close stays.
+        assert!(!form_open(Some(&gone), &encoders, &[]));
     }
 
     #[test]

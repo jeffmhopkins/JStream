@@ -1153,7 +1153,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 /* Encoders & mixes (C17): a 240 px list, each group under an eyebrow with its + in the
    header row, and the picked one's form on a property grid, whose Delete, Cancel and
    Save are the dialog's footer. The divider runs the body's full height. */
-.library { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 0; flex: 1 0 auto; }
+.library { --library-rail: 240px; display: grid; grid-template-columns: var(--library-rail) minmax(0, 1fr); gap: 0; flex: 1 0 auto; }
 .library-list { display: grid; align-content: start; gap: 16px; padding: 0 12px 16px 0; border-right: 1px solid var(--line); }
 .library-group { display: grid; gap: 6px; }
 .library-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
@@ -1203,7 +1203,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .codec-installed .codec-terms { flex-basis: 100%; }
 .codec-installed { margin: 0; font-size: 0.85rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; }
 .profile-head { display: grid; gap: 2px; }
-.profile-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.profile-head .profile-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
 .profile-summary { margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 /* The form fills the pane, so its footer sits at the dialog's bottom however short it is. */
 .profile-form { display: flex; flex-direction: column; flex: 1 0 auto; gap: 12px; }
@@ -1213,7 +1213,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
    the body, across its width, as `.modal-footer` is. */
 .profile-form .buttons {
   position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-  margin: auto -16px 0 calc(-16px - 240px - 16px); padding: 12px 16px; min-height: 56px;
+  margin: auto -16px 0 calc(-16px - var(--library-rail) - 16px); padding: 12px 16px; min-height: 56px;
   border-top: 1px solid var(--line); background: var(--panel);
 }
 /* A field is a property-grid row: a 120 px label, then the control and its note. */

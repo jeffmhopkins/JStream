@@ -1138,7 +1138,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   empty text for a group with none, and edits the one picked on the right under its name
   and the whole of it (`encoder_summary`, `mix_summary`), as property-grid rows; the
   form's Delete, Cancel and Save are the dialog's sticky footer, so the libraries
-  footer's Close shows only while nothing is picked. Save makes one (`encoder.create`,
+  footer's Close shows only while no form is open (`form_open`: nothing picked, or a
+  pick the engine doesn't list, deleted or still saving). Save makes one (`encoder.create`,
   `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits it
   (`encoder.update`, `video_mix.update`), and waits for the engine's answer (`SendEdit`):
   "Saving…", then "Saved." and, for a new one, picks it, or the refusal under the form

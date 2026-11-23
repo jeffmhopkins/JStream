@@ -23,7 +23,7 @@ use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::menu::{Entry, Menus};
-use crate::panels::encoders::{LibraryPick, Profiles};
+use crate::panels::encoders::{LibraryPick, Profiles, form_open};
 use crate::panels::filters::FilterDialogs;
 use crate::panels::stats::{mbps, uptime};
 use crate::session::Session;
@@ -1537,7 +1537,13 @@ pub fn Outputs() -> impl IntoView {
                     </div>
                     // While an encoder or mix is open its form's Delete, Cancel and Save
                     // are the footer (C17); otherwise Close is.
-                    <Show when=move || panel.pick.with(Option::is_none)>
+                    <Show when=move || {
+                        panel.pick.with(|pick| {
+                            panel.encoders.with(|e| {
+                                panel.mixes.with(|m| !form_open(pick.as_ref(), e, m))
+                            })
+                        })
+                    }>
                         <div class="modal-footer">
                             <button
                                 type="button"
