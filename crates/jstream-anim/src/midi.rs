@@ -101,7 +101,7 @@ impl Smoothing {
 
     /// Follows `target` (`0..=1`) for `dt_s` seconds with `midi`'s smoothing time: a
     /// one-pole smoothing whose time constant is that time, so it is about two thirds
-    /// of the way there after it. Within [`SNAP`] of the target it lands on it, so a
+    /// of the way there after it. Within `SNAP` (0.0005) of the target it lands on it, so a
     /// held control comes to rest exactly. A time of 0 jumps, and so does the first step. A later
     /// step that isn't a finite, positive time changes nothing. Returns the new value.
     /// Allocates nothing.

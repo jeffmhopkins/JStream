@@ -1239,7 +1239,7 @@ stamp = { hash = "b3:6ad893c8592ec553", by = "agent:claude", note = "Re-read: Fi
 stamp = { hash = "b3:8a09e7689e82b09b", by = "agent:claude", note = "Re-read: notes that a data modifier evaluates as Kind::Midi; matches graph/src/motion.rs." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/midi.rs"]
-stamp = { hash = "b3:3580467b47c875ec", by = "agent:claude-daw", note = "MIDI bullet now says a smoothing step within SNAP (0.0005) of the value lands on it, so a held control rests exactly; rest of the section unchanged by the snap" }
+stamp = { hash = "b3:f35e389a33a56324", by = "agent:claude-daw", note = "re-read after the doc-comment fix: SNAP is now named as plain text in Smoothing::advance's docs, since the const isn't re-exported; the MIDI bullet's SNAP sentence still holds" }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/modifier.rs"]
 stamp = { hash = "b3:d864c9fd9396b50f", by = "agent:claude", note = "Re-read: notes that a data modifier evaluates as Kind::Midi; matches graph/src/motion.rs." }
