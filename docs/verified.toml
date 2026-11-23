@@ -2154,7 +2154,7 @@ stamp = { hash = "b3:b240b3ee178cd690", by = "agent:plugin-uninstall", note = "r
 stamp = { hash = "b3:befb454a30cd273b", by = "agent:channels", note = "Added src/tests/channels.rs and what it checks to the tests list." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/channels.rs"]
-stamp = { hash = "b3:ebeaa4f3f9995e19", by = "agent:channels", note = "Added src/tests/channels.rs and what it checks to the tests list." }
+stamp = { hash = "b3:bd114fa911593220", by = "agent:release-alpha9", note = "merge: f6cece0 (#1647's branch): the channel amount test waits for channel.values to read 0.5 before its CCs, instead of a fixed sleep; the tests bullet holds" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/clock.rs"]
 stamp = { hash = "b3:d3020011a2ccbca3", by = "agent:cockpit-demo", note = "re-read: tests/clock.rs adds an output waiting for a released clock to catch up, and tests/timelines.rs a step past a cue firing it; both files are listed" }
