@@ -1374,9 +1374,11 @@ bright point blurs into a soft glow. While the `screen_space_reflections` switch
 scenes start their video chain with a screen-space reflection pass, before their own
 filters: each model writes a surface (its normal,
 BRDF and the environment's reflection it added) in the same draw as its layer, the
-scene's surface buffer merges the nearest of them, and each pixel of
-a scene-lit model follows its reflected ray through the view depth, putting what the
-picture shows where it hits in place of that reflection. The layer is then placed flat
+scene's surface buffer merges the nearest of them, and one pixel in each block of two
+by two of a scene-lit model follows its reflected ray through the view depth to what the
+picture shows where it hits ([ADR-0186](adr/0186-screen-space-reflections-march-at-half-size.md));
+each of the model's pixels then takes what the marched pixels near it on the same
+surface found, in place of that reflection. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along

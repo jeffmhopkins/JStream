@@ -1,6 +1,6 @@
-//! `screen_space_reflections` (ADR-0170 decision 4): its steps, and what a floor seen
+//! `screen_space_reflections` (ADR-0170 decision 4): its steps, what a floor seen
 //! through the framing camera reflects of a wall behind it, against hand-made depth and
-//! surface images.
+//! surface images, and its march at half the picture's size (ADR-0186).
 
 use std::sync::Arc;
 
@@ -71,6 +71,12 @@ fn upload(opened: &Opened, texel: impl Fn(u32) -> [f32; 4]) -> Image {
 /// replaceable when `replaceable`, showing only the red `env` its environment's
 /// reflection added.
 fn scene(opened: &Opened, replaceable: bool, env: f32) -> (Image, ViewDepth) {
+    scene_with_kerb(opened, replaceable, env, H)
+}
+
+/// [`scene`], with the floor's rows from `kerb` down facing the viewer instead of up: a
+/// second surface, whose reflected rays come back at the viewer and find nothing.
+fn scene_with_kerb(opened: &Opened, replaceable: bool, env: f32, kerb: u32) -> (Image, ViewDepth) {
     let picture = upload(opened, |y| {
         if row_depth(y).1 {
             [env, 0.0, 0.0, 1.0]
@@ -81,8 +87,11 @@ fn scene(opened: &Opened, replaceable: bool, env: f32) -> (Image, ViewDepth) {
     let depth = upload(opened, |y| [row_depth(y).0, 0.0, 0.0, 1.0]);
     let floor = |y: u32, on: [f32; 4]| if row_depth(y).1 { on } else { [0.0; 4] };
     let surface = DepthSurface {
-        // The floor faces up, which is -y.
-        normal: upload(opened, |y| floor(y, [0.0, -1.0, 0.0, row_depth(y).0])),
+        // The floor faces up, which is -y; the kerb faces the viewer, which is +z.
+        normal: upload(opened, |y| {
+            let (up, toward) = if y < kerb { (-1.0, 0.0) } else { (0.0, 1.0) };
+            floor(y, [0.0, up, toward, row_depth(y).0])
+        }),
         brdf: upload(opened, |y| floor(y, [1.0, 1.0, 1.0, 0.05])),
         reflected: upload(opened, |y| {
             floor(y, [env, 0.0, 0.0, if replaceable { 1.0 } else { 0.0 }])
@@ -166,4 +175,34 @@ fn a_hit_replaces_the_environments_reflection() {
     // before it reaches the wall, keeps more of its environment.
     let edge = shot.pixel(1, H - 1).expect("inside");
     assert!(edge[0] > floor[0], "{edge:?} against {floor:?}");
+}
+
+/// ADR-0186: the march is drawn at half the picture's size, and a pixel takes only
+/// what marched pixels of its own surface found. The kerb's rays find nothing, so its
+/// row beside the floor keeps its environment's reflection, and the floor's row beside
+/// the kerb still shows the wall.
+#[test]
+fn the_march_is_half_the_size_and_keeps_to_its_surface() {
+    const KERB: u32 = 54;
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let mut reflections = VideoFilter::new(KIND, &Settings::default()).expect("a pass");
+    let (picture, depth) = scene_with_kerb(&opened, true, 0.5, KERB);
+    reflections.set_depth(Some(depth));
+    let shot = apply(&mut opened, &mut reflections, &picture);
+    let marched = &reflections.scratch().kept()[0];
+    assert_eq!((marched.width(), marched.height()), (W / 2, H / 2));
+    for x in [W / 2, W / 2 + 1] {
+        let kerb = shot.pixel(x, KERB).expect("inside");
+        assert!(
+            kerb[1] < 4 && kerb[0] > 180,
+            "the kerb keeps its environment: {kerb:?}"
+        );
+        let floor = shot.pixel(x, KERB - 1).expect("inside");
+        assert!(
+            floor[1] > 120,
+            "the floor beside it shows the wall: {floor:?}"
+        );
+    }
 }

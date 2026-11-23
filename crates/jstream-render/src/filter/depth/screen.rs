@@ -1,11 +1,13 @@
 //! `screen_space_reflections` (ADR-0170 decision 4): what a 3D scene's surfaces reflect
 //! of what is on screen. The engine puts it first in the video chain of a scene whose
 //! `reflections` is on, while the switch for it is on, and draws the scene's surface
-//! buffer ([`DepthSurface`]) with its view depth for it; no chain lists it. Each pixel
-//! of a surface that may have its environment's reflection replaced follows its
-//! reflected ray through the view depth in `steps` steps and puts what the picture
-//! shows where it hits in place of that reflection, under the same BRDF
-//! (`screen/screen.wgsl`). Everywhere else, and without a view depth, its camera or a
+//! buffer ([`DepthSurface`]) with its view depth for it; no chain lists it. Of a surface
+//! that may have its environment's reflection replaced, one pixel of each block of two
+//! by two follows its reflected ray through the view depth in `steps` steps to what the
+//! picture shows where it hits (`screen/trace.wgsl`, at half the picture's size:
+//! ADR-0186). Each of the surface's pixels then takes what the marched pixels near it on
+//! the same surface found in place of that reflection, under its own BRDF
+//! (`screen/resolve.wgsl`). Everywhere else, and without a view depth, its camera or a
 //! surface buffer, it passes its input through.
 
 use jstream_protocol::{KindDescriptor, Settings};
@@ -20,9 +22,17 @@ use crate::image::Image;
 /// The kind's ID, which the engine names when it puts the pass in a scene's chain.
 pub const KIND: &str = "screen_space_reflections";
 
-const SHADER: Shader = Shader {
+/// The march, at half the picture's size: one pixel of each block of two by two.
+const TRACE: Shader = Shader {
+    label: "filter-screen-space-reflections-trace",
+    source: include_str!("screen/trace.wgsl"),
+    blend: Blend::Replace,
+};
+
+/// What spreads the march over the picture's pixels and adds it to the picture.
+const RESOLVE: Shader = Shader {
     label: "filter-screen-space-reflections",
-    source: include_str!("screen/screen.wgsl"),
+    source: include_str!("screen/resolve.wgsl"),
     blend: Blend::Replace,
 };
 
@@ -59,12 +69,13 @@ fn uniforms(steps: u32, depth: &ViewDepth) -> Option<Vec<u8>> {
     )
 }
 
-/// The `sys` uniform of the program prelude the shader is drawn with: the sizes, and
-/// how each of its five inputs stores alpha.
-fn system(input: &Image, inputs: &[Image; 5]) -> [u8; 96] {
+/// The `sys` uniform of the program prelude a shader is drawn with into `target`: the
+/// sizes, and how each of its inputs stores alpha.
+fn system(input: &Image, target: &Image, inputs: &[Image]) -> [u8; 96] {
     let mut bytes = [0u8; 96];
     let size = [input.width() as f32, input.height() as f32];
-    for (at, value) in [size[0], size[1], size[0], size[1]].iter().enumerate() {
+    let pass = [target.width() as f32, target.height() as f32];
+    for (at, value) in [size[0], size[1], pass[0], pass[1]].iter().enumerate() {
         bytes[at * 4..at * 4 + 4].copy_from_slice(&value.to_le_bytes());
     }
     for (n, image) in inputs.iter().enumerate() {
@@ -121,15 +132,20 @@ impl Pass for ScreenReflections {
         let (Some((depth, surface)), Some(params)) = (drawn, params) else {
             return copy(ctx, input, output);
         };
+        let traced = ctx.scratch(size.0.div_ceil(2), size.1.div_ceil(2))?;
         let inputs = [
             input.clone(),
             depth.image.as_ref().clone(),
             surface.normal.clone(),
             surface.brdf.clone(),
             surface.reflected.clone(),
+            traced.clone(),
         ];
-        let system = system(input, &inputs);
-        ctx.draw_program(SHADER.into(), &inputs, &system, &params, output)
+        let marched = &inputs[..5];
+        let sys = system(input, &traced, marched);
+        ctx.draw_program(TRACE.into(), marched, &sys, &params, &traced)?;
+        let sys = system(input, output, &inputs);
+        ctx.draw_program(RESOLVE.into(), &inputs, &sys, &params, output)
     }
 }
 
