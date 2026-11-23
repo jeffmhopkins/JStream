@@ -355,7 +355,12 @@ pub fn Sequence() -> impl IntoView {
         let Some((scene, mut t)) = open.get_untracked() else {
             return false;
         };
+        let before = t.clone();
         f(&mut t);
+        // An edit that changes nothing sends nothing, so it leaves no empty undo step.
+        if t == before {
+            return false;
+        }
         apply(scene, t);
         true
     };
@@ -978,9 +983,44 @@ fn Lanes(
                                 y: f64::from(e.client_y()),
                             }));
                         };
+                        // From the keyboard: Enter, Space, the Menu key or Shift+F10
+                        // open the point's menu beside it, and Delete removes it.
+                        let key = move |e: leptos::ev::KeyboardEvent| {
+                            let k = e.key();
+                            if k == "Enter" || k == " " || crate::menu::asks_for_menu(&e) {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                let Some(dot) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
+                                    return;
+                                };
+                                let r = dot.get_bounding_client_rect();
+                                menu.set(Some(PointMenu {
+                                    lane: n,
+                                    point: p,
+                                    x: r.right(),
+                                    y: r.bottom(),
+                                }));
+                            } else if k == "Delete" || k == "Backspace" {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                change(&|t| {
+                                    if let Some(l) = t.lanes.get_mut(n)
+                                        && p < l.points.len()
+                                    {
+                                        l.points.remove(p);
+                                    }
+                                });
+                            }
+                        };
+                        let label = title.clone();
                         view! {
                             <span
                                 class="seq-dot"
+                                tabindex="0"
+                                role="button"
+                                aria-haspopup="menu"
+                                aria-label=label
+                                on:keydown=key
                                 class:dragging=move || drag.get().is_some_and(|d| d.lane == n && d.point == p)
                                 style:left=format!("{left:.3}%") style:top=format!("{top:.3}%")
                                 title=title
@@ -1090,8 +1130,12 @@ fn Lanes(
             }
         })
         .collect_view();
+    let close_menu = move || menu.set(None);
+    let point_keys = crate::menu::keys(close_menu);
     let point_menu = move || {
         let m = menu.get()?;
+        let node = NodeRef::<leptos::html::Div>::new();
+        crate::menu::focus_first(node);
         let set_curve = move |curve: LaneCurve| {
             menu.set(None);
             change(&|t| {
@@ -1116,7 +1160,8 @@ fn Lanes(
         };
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
-            <div class="context-menu" role="menu" style:left=format!("{}px", m.x) style:top=format!("{}px", m.y)>
+            <div class="context-menu" role="menu" aria-label="Point" node_ref=node on:keydown=point_keys
+                style:left=format!("{}px", m.x) style:top=format!("{}px", m.y)>
                 <div class="ctx-head">"Curve into this point"</div>
                 {[LaneCurve::Linear, LaneCurve::EaseIn, LaneCurve::EaseOut, LaneCurve::EaseInOut, LaneCurve::Hold]
                     .into_iter()

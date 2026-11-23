@@ -352,6 +352,16 @@ pub fn Learn(
     let label = StoredValue::new(label.unwrap_or_else(|| "Control".into()));
     let learning = RwSignal::new(false);
     let menu = RwSignal::new(None::<Menu>);
+    // The control button, which the menus give the focus back to when the keyboard
+    // closes them.
+    let opener = NodeRef::<leptos::html::Button>::new();
+    let close = move || {
+        menu.set(None);
+        if let Some(button) = opener.get_untracked() {
+            _ = button.focus();
+        }
+    };
+    let menu_keys = crate::menu::keys(close);
     let bound = move || {
         studio.collection.with(|c| {
             c.as_ref().and_then(|c| {
@@ -479,10 +489,16 @@ pub fn Learn(
         let level = current
             .and_then(|c| c.get_untracked())
             .map_or(0.0, |v| fraction(v, range));
-        crate::panels::sequence::with_lane(&mut timeline, &id, level);
+        // A sequence that already has the channel's lane needs no `timeline.set`, so no
+        // empty undo step: it only opens.
+        let added = crate::panels::sequence::with_lane(&mut timeline, &id, level);
         let timeline_id = timeline.timeline_id.clone();
-        edits.push(Edit::TimelineSet { scene_id, timeline });
-        studio.apply(&s, edits);
+        if added {
+            edits.push(Edit::TimelineSet { scene_id, timeline });
+        }
+        if !edits.is_empty() {
+            studio.apply(&s, edits);
+        }
         crate::panels::sequence::open_sequence(studio, timeline_id);
     };
     // Binds `chord` to switch this setting's channel (made if need be) on and off.
@@ -521,7 +537,15 @@ pub fn Learn(
             learning.set(false);
             return;
         }
-        let (x, y) = (f64::from(e.client_x()), f64::from(e.client_y()));
+        // A click from the keyboard (Enter or Space) has no pointer, so the menu opens
+        // under the button.
+        let (x, y) = match opener.get_untracked() {
+            Some(button) if e.detail() == 0 => {
+                let rect = button.get_bounding_client_rect();
+                (rect.left() + rect.width() / 2.0, rect.bottom() - 12.0)
+            }
+            _ => (f64::from(e.client_x()), f64::from(e.client_y())),
+        };
         menu.set(Some(Menu::Open(x, y)));
     };
     let title = move || match (learning.get(), bound()) {
@@ -578,9 +602,12 @@ pub fn Learn(
         let name = label.get_value();
         let linked = channel();
         let has = bound().is_some();
+        let node = NodeRef::<leptos::html::Div>::new();
+        crate::menu::focus_first(node);
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
-            <div class="context-menu control-menu" role="menu" style:left=place(x, y).0 style:top=place(x, y).1>
+            <div class="context-menu control-menu" role="menu" aria-label="Control" node_ref=node on:keydown=menu_keys
+                style:left=place(x, y).0 style:top=place(x, y).1>
                 <div class="ctx-head">{format!("Control “{name}”")}</div>
                 <button type="button" class="menuitem" role="menuitem" on:click=move |_| { menu.set(None); learn(); }>
                     <span class="ctx-check"></span>
@@ -635,7 +662,14 @@ pub fn Learn(
         };
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
-            <div class="context-menu control-menu follow" style:left=place(x, y).0 style:top=place(x, y).1>
+            <div class="context-menu control-menu follow" style:left=place(x, y).0 style:top=place(x, y).1
+                on:keydown=move |e: leptos::ev::KeyboardEvent| {
+                    if e.key() == "Escape" {
+                        e.prevent_default();
+                        e.stop_propagation();
+                        close();
+                    }
+                }>
                 <crate::panels::channels::ChannelSearch placeholder="Follow a channel" pick=follow make=make />
             </div>
         })
@@ -652,9 +686,12 @@ pub fn Learn(
             let t = list.remove(n);
             list.insert(0, t);
         }
+        let node = NodeRef::<leptos::html::Div>::new();
+        crate::menu::focus_first(node);
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
-            <div class="context-menu control-menu" role="menu" style:left=place(x, y).0 style:top=place(x, y).1>
+            <div class="context-menu control-menu" role="menu" aria-label="Add to sequence" node_ref=node on:keydown=menu_keys
+                style:left=place(x, y).0 style:top=place(x, y).1>
                 <div class="ctx-head">"Add a lane to"</div>
                 {list.into_iter().map(|t| {
                     let name = crate::panels::sequence::timeline_name(&t);
@@ -691,6 +728,7 @@ pub fn Learn(
         <button
             type="button"
             class="learn"
+            node_ref=opener
             class:learning=learning
             class:bound=move || bound().is_some()
             class:chip=move || channel().is_some()
