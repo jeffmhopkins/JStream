@@ -207,7 +207,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
 - **Motion** (`motion.rs`, since 0.81,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
   `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
-  `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
+  `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (32 since 0.167, 8 before) and
   `MAX_MOTION_ID_LEN` (64), `check_motion`, the list check every implementation
   shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
   ([Motion](#motion)). Since 0.86 `MotionKind::Audio`, with its `MotionMeasure`
