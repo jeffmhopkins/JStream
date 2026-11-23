@@ -213,9 +213,9 @@ and calls this crate.
   preview or a snapshot drew is compiled for the program stage, and a caller may
   compile ahead of time on a thread of its own: by drawing what will be drawn on any
   compositor of the context, and with `Compositor::warm_3d` for what a 3D scene alone
-  draws with (the sky's pipeline and the scene passes' depth pipelines, otherwise made
-  at the first draw that needs them). This covers the blend, depth, model, sky and
-  filter pipelines; the mip, resolve, wipe, NV12 and ingest ones are still each
+  draws with (the sky's pipeline, its bake's and the scene passes' depth pipelines,
+  otherwise made at the first draw that needs them). This covers the blend, depth,
+  model, sky, sky bake and filter pipelines; the mip, resolve, wipe, NV12 and ingest ones are still each
   compositor's own. At most 1024 are kept, the oldest let go first (a pack's shader
   edited over and over adds one per source). `Compositor::pipelines_made` counts the
   ones made on the device, so a draw that leaves it as it was waited for no compile.

@@ -1693,8 +1693,8 @@ GPU memory as they were. It runs only with a GPU context to share (`SharedGpu::l
 a scene that fails to draw is logged at `debug`. Not primed: a scene made or changed
 after the collection opened, which is compiled where it is first drawn (its preview,
 while it is edited); a source's filters while the source has no frame; and each
-compositor's own uploads (a model's buffers, a still's texture), which the stage still
-makes when it first draws the scene.
+compositor's own uploads and bakes (a model's buffers, a still's texture, a sky seed's
+cube maps), which the stage still makes when it first draws the scene.
 
 **Nested scenes.** A `scene` source shows its scene composited at the canvas size,
 then placed like any image. The shot is scheduled inside out: each nested scene is
