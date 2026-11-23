@@ -648,6 +648,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -9764,6 +9773,15 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "max_probe_resolution": {
                     "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -21741,6 +21759,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -33299,6 +33326,15 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "max_probe_resolution": {
                     "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -45607,6 +45643,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -46225,6 +46270,15 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "max_probe_resolution": {
                     "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [

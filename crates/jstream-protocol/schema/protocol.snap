@@ -548,6 +548,15 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "model_resolution": {
+              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.173). `studio.set_rendering`\nrefuses any other value.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "reflection_probes": {
               "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
               "type": [
@@ -4410,6 +4419,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "default": 0,
           "description": "The frames it drew.",
           "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_frames_reduced": {
+          "default": 0,
+          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.173).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 100,
+          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.173): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
+          "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
@@ -15890,7 +15913,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "RenderFeatures": {
-      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]).",
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]). `model_resolution` is not a switch of an effect: it\nsets how many pixels 3D models are drawn with (ADR-0197).",
       "properties": {
         "ambient_occlusion": {
           "default": true,
@@ -15905,6 +15928,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         "max_probe_resolution": {
           "default": 512,
           "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.165). A probe set larger captures at this.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 0,
+          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.173): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -18999,5 +19029,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.172"
+  "title": "JStream protocol 0.173"
 }

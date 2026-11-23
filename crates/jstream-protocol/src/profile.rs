@@ -361,6 +361,10 @@ pub enum Drawer {
     Unknown,
 }
 
+fn whole() -> u32 {
+    100
+}
+
 /// One drawing thread's frames in the window.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DrawerProfile {
@@ -387,6 +391,14 @@ pub struct DrawerProfile {
     /// (R-RT-004). Always 0 for the preview, which draws when it can.
     #[serde(default)]
     pub skipped: u64,
+    /// The percentage of their canvas's width and of its height the drawer drew 3D
+    /// models with at the end of the window (ADR-0197, since 0.173): 100 unless the
+    /// program's render thread lowered it, or `RenderFeatures::model_resolution` set it.
+    #[serde(default = "whole")]
+    pub model_resolution: u32,
+    /// The frames of the window drawn with 3D models at less than 100 (since 0.173).
+    #[serde(default)]
+    pub model_frames_reduced: u64,
     /// The average time per frame in each phase.
     #[serde(default)]
     pub phases: PhaseProfile,

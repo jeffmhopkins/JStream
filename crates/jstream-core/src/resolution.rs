@@ -8,12 +8,8 @@
 use std::time::Duration;
 
 /// The percentages of its canvas's width and height a 3D model may be drawn at, largest
-/// first.
+/// first: the protocol's `MODEL_RESOLUTIONS` without its 0.
 pub(crate) const STEPS: [u32; 5] = [100, 85, 75, 67, 50];
-
-/// The environment variable that fixes the size or turns the choice off: `auto` (as
-/// unset), `off` (always 100), or one of [`STEPS`].
-pub(crate) const ENV: &str = "JSTREAM_MODEL_RESOLUTION";
 
 /// A frame's GPU time above this share of its budget is too long: three timed frames
 /// in a row step the size down.
@@ -72,36 +68,14 @@ pub(crate) enum Mode {
 }
 
 impl Mode {
-    /// What `text`, the value of [`ENV`], asks for. Unset, empty or `auto` is
-    /// [`Mode::Auto`]; `off` is 100; a number is that step. Anything else is `Err` with
-    /// the text, and the caller falls back to [`Mode::Auto`].
-    pub(crate) fn parse(text: Option<&str>) -> Result<Self, &str> {
-        let Some(text) = text.map(str::trim).filter(|text| !text.is_empty()) else {
-            return Ok(Self::Auto);
-        };
-        if text.eq_ignore_ascii_case("auto") {
-            return Ok(Self::Auto);
-        }
-        if text.eq_ignore_ascii_case("off") {
-            return Ok(Self::Fixed(0));
-        }
-        text.parse::<u32>()
-            .ok()
-            .and_then(|percent| STEPS.iter().position(|step| *step == percent))
-            .map(Self::Fixed)
-            .ok_or(text)
-    }
-
-    /// The mode [`ENV`] asks for; a value that isn't one is logged and read as `auto`.
-    pub(crate) fn from_env() -> Self {
-        let text = std::env::var(ENV).ok();
-        Self::parse(text.as_deref()).unwrap_or_else(|text| {
-            tracing::warn!(
-                value = text,
-                "{ENV} is not auto, off or one of {STEPS:?}; choosing the size automatically"
-            );
-            Self::Auto
-        })
+    /// What `setting` asks for, the rendering switches' `model_resolution`: 0 is
+    /// [`Mode::Auto`] and one of [`STEPS`] is that step. Any other value, which
+    /// `studio.set_rendering` refuses, is read as [`Mode::Auto`].
+    pub(crate) fn of(setting: u32) -> Self {
+        STEPS
+            .iter()
+            .position(|step| *step == setting)
+            .map_or(Self::Auto, Self::Fixed)
     }
 }
 
@@ -116,11 +90,14 @@ impl Mode {
 /// The expectation is the worst case: all of the frame's GPU time growing with the
 /// model's pixels.
 ///
-/// On a device that can't time its frames it has only the first signal, and steps up
-/// after the wait without one.
+/// It steps down only while the frames before drew a model: with none there is nothing
+/// to gain. On a device that can't time its frames it has only the first signal, and
+/// steps up after the wait without one.
+///
+/// While the rendering switches fix a size ([`Mode::Fixed`]) it draws at that one, and
+/// goes on from it when they hand the choice back.
 #[derive(Debug)]
 pub(crate) struct Governor {
-    mode: Mode,
     step: usize,
     budget: Duration,
     /// Ticks a second.
@@ -143,23 +120,15 @@ pub(crate) struct Governor {
 }
 
 impl Governor {
-    /// A governor for frames of `budget` each, starting at 100, or at `mode`'s size for
-    /// good. Without a budget (a drawer no meter times) the size stays at 100.
-    pub(crate) fn new(mode: Mode, budget: Duration) -> Self {
-        let mode = match mode {
-            Mode::Auto if budget.is_zero() => Mode::Fixed(0),
-            mode => mode,
-        };
+    /// A governor for frames of `budget` each, starting at 100. Without a budget (a
+    /// drawer no meter times) it never chooses a smaller size itself.
+    pub(crate) fn new(budget: Duration) -> Self {
         let fps = match budget.as_secs_f64() {
             period if period > 0.0 => (1.0 / period).round().clamp(1.0, 1000.0) as u32,
             _ => 30,
         };
         Self {
-            mode,
-            step: match mode {
-                Mode::Auto => 0,
-                Mode::Fixed(step) => step.min(STEPS.len() - 1),
-            },
+            step: 0,
             budget,
             fps,
             over: 0,
@@ -177,11 +146,30 @@ impl Governor {
         Percent(STEPS[self.step])
     }
 
-    /// One frame of the program: `gpu` is the GPU time of a timed frame that came back
-    /// since the last tick, if one did, and `behind` whether the GPU has fallen behind
-    /// the frames already handed to it. Returns the size to draw this frame's models at.
-    pub(crate) fn tick(&mut self, gpu: Option<Duration>, behind: bool) -> Percent {
-        if self.mode != Mode::Auto {
+    /// One frame of the program: `mode` is what the rendering switches ask for, `gpu`
+    /// the GPU time of a timed frame that came back since the last tick, if one did,
+    /// `behind` whether the GPU has fallen behind the frames already handed to it, and
+    /// `models` whether a model was drawn since the last tick. Returns the size to draw
+    /// this frame's models at.
+    pub(crate) fn tick(
+        &mut self,
+        mode: Mode,
+        gpu: Option<Duration>,
+        behind: bool,
+        models: bool,
+    ) -> Percent {
+        if let Mode::Fixed(step) = mode {
+            // The next choice starts from here, with nothing known about it.
+            if self.step != step {
+                self.step = step.min(STEPS.len() - 1);
+                self.over = 0;
+                self.calm = 0;
+                self.settle = SETTLE;
+                self.roomy = !self.timed;
+            }
+            return self.percent();
+        }
+        if self.budget.is_zero() {
             return self.percent();
         }
         self.since_up = self.since_up.saturating_add(1);
@@ -204,7 +192,11 @@ impl Governor {
                 };
             }
         }
-        if behind || self.over >= OVER {
+        if !models {
+            // Nothing to gain from fewer pixels: long frames have another cause.
+            self.over = 0;
+        }
+        if models && (behind || self.over >= OVER) {
             self.down(behind);
         } else if self.step > 0 && self.roomy {
             self.calm = self.calm.saturating_add(1);
@@ -257,13 +249,14 @@ impl Governor {
 
 #[cfg(test)]
 mod tests {
+    use super::Mode::Auto;
     use super::{Governor, Mode, STEPS};
     use std::time::Duration;
 
     const FPS: u32 = 30;
 
     fn governor() -> Governor {
-        Governor::new(Mode::Auto, Duration::from_micros(33_333))
+        Governor::new(Duration::from_micros(33_333))
     }
 
     fn ms(ms: f64) -> Option<Duration> {
@@ -274,7 +267,12 @@ mod tests {
     /// size after them.
     fn run(governor: &mut Governor, ticks: u32, gpu_ms: f64) -> u32 {
         for tick in 0..ticks {
-            governor.tick((tick % 4 == 0).then(|| ms(gpu_ms)).flatten(), false);
+            governor.tick(
+                Auto,
+                (tick % 4 == 0).then(|| ms(gpu_ms)).flatten(),
+                false,
+                true,
+            );
         }
         governor.percent().get()
     }
@@ -288,31 +286,31 @@ mod tests {
     #[test]
     fn three_long_frames_in_a_row_step_down_and_one_does_not() {
         let mut governor = governor();
-        governor.tick(ms(31.0), false);
-        governor.tick(ms(31.0), false);
+        governor.tick(Auto, ms(31.0), false, true);
+        governor.tick(Auto, ms(31.0), false, true);
         assert_eq!(governor.percent().get(), 100);
-        governor.tick(ms(20.0), false);
-        governor.tick(ms(31.0), false);
-        governor.tick(ms(31.0), false);
+        governor.tick(Auto, ms(20.0), false, true);
+        governor.tick(Auto, ms(31.0), false, true);
+        governor.tick(Auto, ms(31.0), false, true);
         assert_eq!(governor.percent().get(), 100, "the run was broken");
-        governor.tick(ms(31.0), false);
+        governor.tick(Auto, ms(31.0), false, true);
         assert_eq!(governor.percent().get(), 85);
     }
 
     #[test]
     fn a_gpu_that_is_behind_steps_down_at_once_but_not_twice_while_it_settles() {
         let mut governor = governor();
-        governor.tick(None, true);
+        governor.tick(Auto, None, true, true);
         assert_eq!(governor.percent().get(), 85);
         for _ in 0..super::SETTLE {
-            governor.tick(None, true);
+            governor.tick(Auto, None, true, true);
         }
         assert_eq!(
             governor.percent().get(),
             85,
             "the frames in flight were the old size"
         );
-        governor.tick(None, true);
+        governor.tick(Auto, None, true, true);
         assert_eq!(governor.percent().get(), 75);
     }
 
@@ -320,7 +318,7 @@ mod tests {
     fn it_stops_at_the_smallest_size() {
         let mut governor = governor();
         for _ in 0..1000 {
-            governor.tick(None, true);
+            governor.tick(Auto, None, true, true);
         }
         assert_eq!(governor.percent().get(), STEPS[STEPS.len() - 1]);
     }
@@ -328,7 +326,7 @@ mod tests {
     #[test]
     fn it_steps_back_up_only_after_the_wait_with_room_for_the_larger_size() {
         let mut governor = governor();
-        governor.tick(None, true);
+        governor.tick(Auto, None, true, true);
         assert_eq!(governor.percent().get(), 85);
         // 24 ms at 85% is expected to take 33 ms at 100%: no room.
         assert_eq!(run(&mut governor, 3000, 24.0), 85);
@@ -340,11 +338,11 @@ mod tests {
     #[test]
     fn a_step_up_that_is_undone_waits_twice_as_long_for_the_next() {
         let mut governor = governor();
-        governor.tick(None, true);
+        governor.tick(Auto, None, true, true);
         assert_eq!(run(&mut governor, 6 * FPS, 15.0), 100);
         // At full size it is behind again at once.
         run(&mut governor, super::SETTLE, 15.0);
-        governor.tick(None, true);
+        governor.tick(Auto, None, true, true);
         assert_eq!(governor.percent().get(), 85);
         assert_eq!(
             run(&mut governor, 9 * FPS, 15.0),
@@ -357,46 +355,65 @@ mod tests {
     #[test]
     fn without_timed_frames_it_steps_up_after_the_wait_without_falling_behind() {
         let mut governor = governor();
-        governor.tick(None, true);
+        governor.tick(Auto, None, true, true);
         for _ in 0..4 * FPS {
-            governor.tick(None, false);
+            governor.tick(Auto, None, false, true);
         }
         assert_eq!(governor.percent().get(), 85);
         for _ in 0..2 * FPS {
-            governor.tick(None, false);
+            governor.tick(Auto, None, false, true);
         }
         assert_eq!(governor.percent().get(), 100);
     }
 
     #[test]
-    fn a_fixed_size_never_changes() {
-        let mode = Mode::parse(Some("75")).expect("a step");
-        let mut governor = Governor::new(mode, Duration::from_micros(33_333));
+    fn a_fixed_size_holds_and_the_choice_goes_on_from_it() {
+        let fixed = Mode::of(75);
+        assert_eq!(fixed, Mode::Fixed(2));
+        let mut governor = governor();
         for _ in 0..100 {
-            governor.tick(ms(40.0), true);
+            governor.tick(fixed, ms(40.0), true, true);
         }
         assert_eq!(governor.percent().get(), 75);
-        assert_eq!(run(&mut governor, 3000, 1.0), 75);
+        for _ in 0..3000 {
+            governor.tick(fixed, ms(1.0), false, true);
+        }
+        assert_eq!(governor.percent().get(), 75);
+        // Handed back, it steps up from there once there has been room for the wait.
+        assert_eq!(run(&mut governor, 4 * FPS, 5.0), 75, "not yet");
+        assert_eq!(run(&mut governor, 3 * FPS, 5.0), 85);
+    }
+
+    #[test]
+    fn it_does_not_step_down_while_no_model_is_drawn() {
+        let mut governor = governor();
+        for _ in 0..100 {
+            governor.tick(Auto, ms(40.0), true, false);
+        }
+        assert_eq!(governor.percent().get(), 100);
+        governor.tick(Auto, None, true, true);
+        assert_eq!(governor.percent().get(), 85);
     }
 
     #[test]
     fn a_drawer_with_no_budget_stays_at_full_size() {
-        let mut governor = Governor::new(Mode::Auto, Duration::ZERO);
+        let mut governor = Governor::new(Duration::ZERO);
         for _ in 0..100 {
-            governor.tick(ms(40.0), true);
+            governor.tick(Auto, ms(40.0), true, true);
         }
         assert_eq!(governor.percent().get(), 100);
     }
 
     #[test]
-    fn the_override_reads_auto_off_and_the_steps() {
-        assert_eq!(Mode::parse(None), Ok(Mode::Auto));
-        assert_eq!(Mode::parse(Some("")), Ok(Mode::Auto));
-        assert_eq!(Mode::parse(Some(" Auto ")), Ok(Mode::Auto));
-        assert_eq!(Mode::parse(Some("off")), Ok(Mode::Fixed(0)));
-        assert_eq!(Mode::parse(Some("100")), Ok(Mode::Fixed(0)));
-        assert_eq!(Mode::parse(Some("67")), Ok(Mode::Fixed(3)));
-        assert_eq!(Mode::parse(Some("80")), Err("80"));
-        assert_eq!(Mode::parse(Some("half")), Err("half"));
+    fn the_setting_reads_zero_as_the_choice_and_the_steps_as_themselves() {
+        assert_eq!(Mode::of(0), Mode::Auto);
+        assert_eq!(Mode::of(100), Mode::Fixed(0));
+        assert_eq!(Mode::of(67), Mode::Fixed(3));
+        assert_eq!(Mode::of(80), Mode::Auto, "refused before it gets here");
+        assert_eq!(
+            jstream_protocol::MODEL_RESOLUTIONS[1..],
+            STEPS,
+            "the protocol's sizes are these, after its 0"
+        );
     }
 }
