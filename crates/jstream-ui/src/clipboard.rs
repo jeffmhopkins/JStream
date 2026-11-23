@@ -656,6 +656,7 @@ mod tests {
             },
             clock: jstream_protocol::MotionClock::Engine,
             enabled: true,
+            amount: None,
         }
     }
 
@@ -1000,6 +1001,7 @@ mod tests {
             kind: crate::panels::motion::sized_kind("Wiggle", 6.0).expect("a kind"),
             clock: Default::default(),
             enabled: true,
+            amount: None,
         }];
         c.scenes[0].items[0].effects = vec![filter("follow-pointer", FOLLOW_POINTER_KIND)];
         c.scenes[0].ptz_shots = vec![jstream_control::protocol::PtzShot {

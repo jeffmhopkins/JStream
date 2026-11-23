@@ -33,6 +33,8 @@ enum Object {
     Binding(Trigger),
     /// A value binding, by its ID (ADR-0178).
     ValueBinding(String),
+    /// A channel (ADR-0183), by ID.
+    Channel(String),
     Folder(FolderId),
     Label(LabelId),
     /// A timeline, whole: `timeline.set` writes all of it (ADR-0115).
@@ -569,6 +571,15 @@ impl Touched {
             }
             Edit::BindingClearValue { binding_id } => {
                 self.exists.insert(Object::ValueBinding(binding_id.clone()));
+            }
+            // A channel is left in place when what it names goes, and left named when
+            // it goes, so it uses nothing (ADR-0183).
+            Edit::ChannelSet { channel } => {
+                self.exists
+                    .insert(Object::Channel(channel.channel_id.clone()));
+            }
+            Edit::ChannelDelete { channel_id } => {
+                self.exists.insert(Object::Channel(channel_id.clone()));
             }
             // A timeline is written whole, so any two writes of it conflict, and a write
             // conflicts with deleting its scene.

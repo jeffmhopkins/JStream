@@ -5,14 +5,14 @@
 //! a `data` motion modifier or value binding reads Mod 5 as key `params`, field
 //! `values.4`. [`param_names`] walks the collection for those readers and names each
 //! slot after what it drives: the item's source and property, the scene's camera
-//! property, or the binding's target. The receiver sends each accepted sender whose
+//! property, the binding's target, or the channel (ADR-0183) that reads it as an input. The receiver sends each accepted sender whose
 //! state it uses the names for its slots, and JTunnel shows them in the DAW.
 
 use std::collections::BTreeMap;
 
 use jstream_graph::Graph;
 use jstream_jtunnel::wire::{MAX_MOD_NAME, MOD_SLOTS};
-use jstream_protocol::{FilterOwner, MotionKind, ValueTarget};
+use jstream_protocol::{ChannelInfo, FilterOwner, MotionKind, ValueTarget};
 
 /// The key a JTunnel sender streams its modulation params under.
 pub(crate) const PARAMS_KEY: &str = "params";
@@ -112,9 +112,18 @@ fn target_label(graph: &Graph, target: &ValueTarget) -> String {
     }
 }
 
-/// Every modulation param the collection reads, named after what it drives. A slot read
-/// by more than one reader takes the first one's name and a count of the rest, as
-/// `Logo X +2`. Disabled modifiers name nothing.
+/// What a channel is called: its name, or its ID as words when it has none.
+fn channel_label(channel: &ChannelInfo) -> String {
+    if channel.name.trim().is_empty() {
+        words(&channel.channel_id)
+    } else {
+        channel.name.clone()
+    }
+}
+
+/// Every modulation param the collection reads, named after what it drives, or after the
+/// channel that reads it. A slot read by more than one reader takes the first one's name
+/// and a count of the rest, as `Logo X +2`. Disabled modifiers name nothing.
 pub(crate) fn param_names(graph: &Graph) -> ParamNames {
     let mut found: BTreeMap<Option<String>, Vec<Vec<String>>> = BTreeMap::new();
     let mut add = |kind: &MotionKind, label: String| {
@@ -151,6 +160,12 @@ pub(crate) fn param_names(graph: &Graph) -> ParamNames {
     for binding in graph.value_bindings() {
         add(&binding.input, target_label(graph, &binding.target));
     }
+    for channel in graph.channels() {
+        let label = channel_label(channel);
+        for input in &channel.inputs {
+            add(input, label.clone());
+        }
+    }
     found
         .into_iter()
         .map(|(sender, slots)| {
@@ -165,7 +180,9 @@ pub(crate) fn param_names(graph: &Graph) -> ParamNames {
                         while name.len() + more.len() > MAX_MOD_NAME {
                             name.pop();
                         }
-                        format!("{}{more}", name.trim_end())
+                        // `fit` again: a first label with no words left would
+                        // otherwise start with the space, which JTunnel refuses.
+                        fit(&format!("{}{more}", name.trim_end()))
                     }
                 })
                 .collect();
@@ -244,6 +261,25 @@ mod tests {
             "{} x",
             "a".repeat(39)
         ))));
+    }
+
+    /// Every name `param_names` gives is one JTunnel takes, even where a label has no
+    /// words (a source with an empty name), or the whole names packet would be refused.
+    #[test]
+    fn a_shared_slot_with_an_empty_first_label_is_still_a_name() {
+        let graph = Graph::new();
+        let names = param_names(&graph);
+        assert!(names.is_empty());
+        assert_eq!(fit(&format!("{} +2", fit("  "))), "+2");
+        assert!(jstream_jtunnel::wire::is_mod_name(&fit(" +2")));
+    }
+
+    #[test]
+    fn a_channel_is_called_by_its_name_or_else_its_id() {
+        let mut channel = ChannelInfo::new("stage_power");
+        assert_eq!(channel_label(&channel), "Stage Power");
+        channel.name = "Lights Up".into();
+        assert_eq!(channel_label(&channel), "Lights Up");
     }
 
     #[test]

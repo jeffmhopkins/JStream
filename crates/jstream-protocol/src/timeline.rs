@@ -10,6 +10,7 @@
 
 use crate::command::Action;
 use crate::id::{LabelId, SceneId, TimelineId};
+use crate::{Finite32, check_channel_id};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +29,19 @@ pub const MIN_LOOP_MS: u32 = 100;
 pub const MAX_TIMELINE_ID_LEN: usize = 64;
 /// The longest timeline name, in bytes.
 pub const MAX_TIMELINE_NAME_LEN: usize = 256;
+
+/// The most lanes one timeline holds (ADR-0184).
+pub const MAX_LANES: usize = 32;
+
+/// The most points one lane holds (ADR-0184).
+pub const MAX_LANE_POINTS: usize = 256;
+
+/// The most triggers in a timeline's `starts`, and in its `stops` (ADR-0184).
+pub const MAX_TRIGGERS: usize = 16;
+
+/// The longest wait before a play, in milliseconds: one minute (ADR-0184). It bounds a
+/// trigger's `delay_ms` and `timeline.play`'s.
+pub const MAX_TRIGGER_DELAY_MS: u32 = 60_000;
 
 /// One timeline: cues at times from its start, a length, and how it repeats.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -52,6 +66,276 @@ pub struct TimelineInfo {
     /// Every one must exist. Omitted for none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<LabelId>,
+    /// Its lanes (ADR-0184, since 0.170): each moves one channel over time while the
+    /// timeline plays, as one more input of that channel. At most 32. Omitted for none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lanes: Vec<TimelineLane>,
+    /// What plays it (ADR-0184, since 0.170): each trigger, when it fires, plays it from
+    /// its start after the trigger's `delay_ms`. At most 16. Omitted for none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub starts: Vec<TimelineTrigger>,
+    /// What stops it (ADR-0184, since 0.170), the same way. At most 16. Omitted for
+    /// none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stops: Vec<TimelineTrigger>,
+}
+
+/// One lane: a channel moved through points while its timeline plays (ADR-0184).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TimelineLane {
+    /// What it moves.
+    pub target: LaneTarget,
+    /// Its points, in time order: each `at_ms` at least the one before it's and at most
+    /// the timeline's `duration_ms`. A lane with no point at 0 starts from the channel's
+    /// value when the timeline starts, and eases from there to its first point. At most
+    /// 256.
+    #[serde(default)]
+    pub points: Vec<LanePoint>,
+    /// Whether it plays. Omitted means on; a lane that is off does nothing.
+    #[serde(
+        default = "crate::channel::yes",
+        skip_serializing_if = "crate::channel::is_true"
+    )]
+    pub on: bool,
+}
+
+/// What a lane moves: a channel by its ID. A channel that doesn't exist is taken, and the
+/// lane drives nothing.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LaneTarget {
+    /// The channel.
+    pub channel: String,
+}
+
+/// One point of a lane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LanePoint {
+    /// When the lane reaches it, in milliseconds from the timeline's start.
+    pub at_ms: u32,
+    /// The channel's value there, 0 to 1.
+    pub value: Finite32,
+    /// How the lane moves from the point before (or the starting value) to this one.
+    /// Omitted means `linear`.
+    #[serde(default, skip_serializing_if = "LaneCurve::is_linear")]
+    pub curve: LaneCurve,
+}
+
+/// How a lane moves into a point.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LaneCurve {
+    /// A straight line.
+    #[default]
+    Linear,
+    /// Slow at first.
+    EaseIn,
+    /// Slow at the end.
+    EaseOut,
+    /// Slow at both ends.
+    EaseInOut,
+    /// Stays at the value before, then jumps to this point's at its time: a switch.
+    Hold,
+    /// A value a newer server sends that this version doesn't know.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+impl LaneCurve {
+    fn is_linear(&self) -> bool {
+        *self == LaneCurve::Linear
+    }
+
+    /// Where it is at `t`, 0 to 1 of the way, as 0 to 1 of the change.
+    pub fn at(self, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            LaneCurve::Linear | LaneCurve::Unknown => t,
+            LaneCurve::EaseIn => t * t,
+            LaneCurve::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
+            LaneCurve::EaseInOut => t * t * (3.0 - 2.0 * t),
+            LaneCurve::Hold => {
+                if t >= 1.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+        }
+    }
+}
+
+impl TimelineLane {
+    /// Its value at `at_ms` into a pass, starting from `from` where it has no point at
+    /// 0: the channel's value when the timeline started. Holds its last point's value
+    /// after it, and `from` if it has no points.
+    pub fn value_at(&self, at_ms: f64, from: f32) -> f32 {
+        let mut before = (0.0_f64, from);
+        for point in &self.points {
+            let at = f64::from(point.at_ms);
+            let value = point.value.get();
+            if at_ms < at {
+                let span = at - before.0;
+                let t = if span <= 0.0 {
+                    1.0
+                } else {
+                    ((at_ms - before.0) / span) as f32
+                };
+                return before.1 + (value - before.1) * point.curve.at(t);
+            }
+            before = (at, value);
+        }
+        before.1
+    }
+}
+
+/// What fires a timeline's `starts` or `stops` entry (ADR-0184), tagged by `type`. Each
+/// fires on a change only, never when a collection opens, and waits `delay_ms` (at most
+/// 60000) first.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TimelineTrigger {
+    /// A channel crossing `level` (default 0.5) or switching on or off.
+    Channel {
+        /// The channel. One that doesn't exist never fires.
+        channel_id: String,
+        /// Which change.
+        edge: ChannelEdge,
+        /// The level `rises` and `falls` cross, 0 to 1. Omitted means 0.5.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        level: Option<Finite32>,
+        /// How long to wait first, in milliseconds.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        delay_ms: u32,
+    },
+    /// A scene going on or off program, by any route.
+    Scene {
+        /// The scene.
+        scene_id: SceneId,
+        /// Which change.
+        edge: SceneEdge,
+        /// How long to wait first, in milliseconds.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        delay_ms: u32,
+    },
+    /// A scene starting or ceasing to draw through a keyframe: a keyframe scene of it
+    /// going on program, or `scene.set_keyframe` placing one.
+    Keyframe {
+        /// The scene whose keyframe it is.
+        scene_id: SceneId,
+        /// The keyframe. Omitted means any of its keyframes.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keyframe_id: Option<SceneId>,
+        /// Which change.
+        edge: KeyframeEdge,
+        /// How long to wait first, in milliseconds.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        delay_ms: u32,
+    },
+    /// Another timeline starting, ending or looping.
+    Timeline {
+        /// The other timeline.
+        timeline_id: TimelineId,
+        /// Which change.
+        edge: TimelineEdge,
+        /// How long to wait first, in milliseconds.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        delay_ms: u32,
+    },
+    /// A trigger a newer server sends that this version doesn't know.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+/// Which change of a channel fires a trigger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ChannelEdge {
+    /// Its value crosses the level upward.
+    Rises,
+    /// Its value crosses the level downward.
+    Falls,
+    /// It switches on.
+    On,
+    /// It switches off.
+    Off,
+}
+
+/// Which change of a scene fires a trigger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SceneEdge {
+    /// It goes on program.
+    Shown,
+    /// Another scene replaces it on program.
+    Hidden,
+}
+
+/// Which change of a keyframe fires a trigger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyframeEdge {
+    /// The scene starts drawing through it.
+    Loads,
+    /// The scene stops drawing through it.
+    Leaves,
+}
+
+/// Which change of another timeline fires a trigger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TimelineEdge {
+    /// It starts, or starts again, from 0 or by a seek.
+    Starts,
+    /// A `once` timeline reaches its end.
+    Ends,
+    /// It starts another pass.
+    Loops,
+}
+
+impl TimelineTrigger {
+    /// Its wait, in milliseconds; 0 for an unknown trigger.
+    pub fn delay_ms(&self) -> u32 {
+        match self {
+            TimelineTrigger::Channel { delay_ms, .. }
+            | TimelineTrigger::Scene { delay_ms, .. }
+            | TimelineTrigger::Keyframe { delay_ms, .. }
+            | TimelineTrigger::Timeline { delay_ms, .. } => *delay_ms,
+            TimelineTrigger::Unknown => 0,
+        }
+    }
+
+    /// The first problem with it, as the field within it and why.
+    pub fn problem(&self) -> Option<(&'static str, &'static str)> {
+        if self.delay_ms() > MAX_TRIGGER_DELAY_MS {
+            return Some(("delay_ms", "must be at most 60000 (one minute)"));
+        }
+        match self {
+            TimelineTrigger::Channel {
+                channel_id, level, ..
+            } => {
+                if let Err(reason) = check_channel_id(channel_id) {
+                    return Some(("channel_id", reason));
+                }
+                if level.is_some_and(|l| !(0.0..=1.0).contains(&l.get())) {
+                    return Some(("level", "must be 0 to 1"));
+                }
+                None
+            }
+            TimelineTrigger::Timeline { timeline_id, .. } => {
+                check_timeline_id(timeline_id.as_str())
+                    .err()
+                    .map(|reason| ("timeline_id", reason))
+            }
+            TimelineTrigger::Scene { .. } | TimelineTrigger::Keyframe { .. } => None,
+            TimelineTrigger::Unknown => Some(("type", "is not a trigger this version knows")),
+        }
+    }
 }
 
 /// How a timeline repeats.
@@ -115,6 +399,18 @@ pub struct PlayingTimeline {
     pub position_ms: u32,
     /// Which pass it is on: 0 the first. A `once` timeline has only pass 0.
     pub pass: u64,
+}
+
+/// A timeline waiting to play, as `studio.get` reports it (ADR-0184): a `timeline.play`
+/// with a `delay_ms`, or a trigger with one, not yet due.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WaitingTimeline {
+    /// The timeline.
+    pub timeline_id: TimelineId,
+    /// The scene that holds it.
+    pub scene_id: SceneId,
+    /// How long until it plays, in milliseconds.
+    pub due_in_ms: u32,
 }
 
 /// Why a timeline's playing changed, in `timeline.changed`.
@@ -232,6 +528,68 @@ impl TimelineInfo {
                 return Some((format!("cues.{at}.action.{field}"), reason.to_owned()));
             }
         }
+        if self.lanes.len() > MAX_LANES {
+            return problem("lanes", "a timeline holds at most 32 lanes");
+        }
+        for (n, lane) in self.lanes.iter().enumerate() {
+            if let Err(reason) = check_channel_id(&lane.target.channel) {
+                return problem(&format!("lanes.{n}.target.channel"), reason);
+            }
+            if lane.points.len() > MAX_LANE_POINTS {
+                return problem(
+                    &format!("lanes.{n}.points"),
+                    "a lane holds at most 256 points",
+                );
+            }
+            for (at, point) in lane.points.iter().enumerate() {
+                let field = |name: &str| format!("lanes.{n}.points.{at}.{name}");
+                if at > 0 && point.at_ms < lane.points[at - 1].at_ms {
+                    return problem(
+                        &field("at_ms"),
+                        "points must be in time order: earlier than the point before it",
+                    );
+                }
+                if point.at_ms > self.duration_ms {
+                    return problem(&field("at_ms"), "is past the timeline's duration_ms");
+                }
+                if !(0.0..=1.0).contains(&point.value.get()) {
+                    return problem(&field("value"), "must be 0 to 1");
+                }
+                if point.curve == LaneCurve::Unknown {
+                    return problem(&field("curve"), "is not a curve this version knows");
+                }
+            }
+        }
+        for (list, triggers) in [("starts", &self.starts), ("stops", &self.stops)] {
+            if triggers.len() > MAX_TRIGGERS {
+                return problem(list, "at most 16 triggers");
+            }
+            for (n, trigger) in triggers.iter().enumerate() {
+                if let Some((field, reason)) = trigger.problem() {
+                    return problem(&format!("{list}.{n}.{field}"), reason);
+                }
+                if let TimelineTrigger::Timeline { timeline_id, .. } = trigger
+                    && *timeline_id == self.timeline_id
+                {
+                    return problem(
+                        &format!("{list}.{n}.timeline_id"),
+                        "a timeline can't start or stop itself: use its loop",
+                    );
+                }
+                if let TimelineTrigger::Channel { channel_id, .. } = trigger
+                    && list == "starts"
+                    && self
+                        .lanes
+                        .iter()
+                        .any(|lane| lane.target.channel == *channel_id)
+                {
+                    return problem(
+                        &format!("{list}.{n}.channel_id"),
+                        "a timeline can't be started by a channel one of its own lanes drives",
+                    );
+                }
+            }
+        }
         None
     }
 }
@@ -253,6 +611,9 @@ mod tests {
 
     fn timeline(duration_ms: u32, looping: TimelineLoop, at: &[u32]) -> TimelineInfo {
         TimelineInfo {
+            lanes: Vec::new(),
+            starts: Vec::new(),
+            stops: Vec::new(),
             labels: Vec::new(),
             timeline_id: TimelineId::new("t"),
             name: String::new(),
@@ -359,5 +720,108 @@ mod tests {
                 .unwrap();
         assert_eq!(once.looping, TimelineLoop::Once);
         assert!(once.cues.is_empty());
+    }
+
+    fn point(at_ms: u32, value: f32, curve: LaneCurve) -> LanePoint {
+        LanePoint {
+            at_ms,
+            value: Finite32::new(value).expect("finite"),
+            curve,
+        }
+    }
+
+    fn lane(points: Vec<LanePoint>) -> TimelineLane {
+        TimelineLane {
+            target: LaneTarget {
+                channel: "lights".into(),
+            },
+            points,
+            on: true,
+        }
+    }
+
+    /// ADR-0184 rule 2: a lane with no point at 0 starts from where the channel was.
+    #[test]
+    fn a_lane_starts_from_the_value_given_and_holds_its_last_point() {
+        let down = lane(vec![point(3000, 0.0, LaneCurve::Linear)]);
+        assert_eq!(down.value_at(0.0, 0.6), 0.6);
+        assert!((down.value_at(1500.0, 0.6) - 0.3).abs() < 1e-6);
+        assert_eq!(down.value_at(5000.0, 0.6), 0.0);
+        let switch = lane(vec![
+            point(0, 0.0, LaneCurve::Linear),
+            point(1000, 1.0, LaneCurve::Hold),
+        ]);
+        assert_eq!(
+            switch.value_at(0.0, 0.9),
+            0.0,
+            "a point at 0 sets where it starts"
+        );
+        assert_eq!(switch.value_at(999.0, 0.9), 0.0, "hold waits");
+        assert_eq!(switch.value_at(1000.0, 0.9), 1.0, "then jumps");
+        let eased = lane(vec![point(1000, 1.0, LaneCurve::EaseIn)]);
+        assert!((eased.value_at(500.0, 0.0) - 0.25).abs() < 1e-6);
+        assert_eq!(lane(Vec::new()).value_at(10.0, 0.4), 0.4);
+    }
+
+    #[test]
+    fn lanes_and_triggers_are_checked() {
+        let mut t = timeline(2000, TimelineLoop::Once, &[]);
+        t.lanes = vec![lane(vec![point(500, 0.5, LaneCurve::Linear)])];
+        assert_eq!(field(&t), None);
+        t.lanes[0].points.push(point(400, 0.5, LaneCurve::Linear));
+        assert_eq!(field(&t).as_deref(), Some("lanes.0.points.1.at_ms"));
+        t.lanes[0].points = vec![point(2500, 0.5, LaneCurve::Linear)];
+        assert_eq!(field(&t).as_deref(), Some("lanes.0.points.0.at_ms"));
+        t.lanes[0].points = vec![point(500, 1.5, LaneCurve::Linear)];
+        assert_eq!(field(&t).as_deref(), Some("lanes.0.points.0.value"));
+        t.lanes[0].points = Vec::new();
+        t.starts = vec![TimelineTrigger::Channel {
+            channel_id: "lights".into(),
+            edge: ChannelEdge::Rises,
+            level: None,
+            delay_ms: 0,
+        }];
+        assert_eq!(
+            field(&t).as_deref(),
+            Some("starts.0.channel_id"),
+            "its own lane"
+        );
+        t.starts = vec![TimelineTrigger::Timeline {
+            timeline_id: TimelineId::new("t"),
+            edge: TimelineEdge::Ends,
+            delay_ms: 0,
+        }];
+        assert_eq!(field(&t).as_deref(), Some("starts.0.timeline_id"), "itself");
+        t.starts = vec![TimelineTrigger::Scene {
+            scene_id: SceneId::new("s"),
+            edge: SceneEdge::Shown,
+            delay_ms: 60_001,
+        }];
+        assert_eq!(field(&t).as_deref(), Some("starts.0.delay_ms"));
+        t.starts.clear();
+        t.stops = vec![TimelineTrigger::Channel {
+            channel_id: "lights".into(),
+            edge: ChannelEdge::Falls,
+            level: Some(Finite32::new(2.0).expect("finite")),
+            delay_ms: 0,
+        }];
+        assert_eq!(field(&t).as_deref(), Some("stops.0.level"));
+    }
+
+    #[test]
+    fn a_play_waits_at_most_a_minute() {
+        let play = |delay_ms| Action::TimelinePlay {
+            timeline_id: TimelineId::new("t"),
+            delay_ms,
+        };
+        assert_eq!(play(Some(60_000)).play_problem(), None);
+        assert_eq!(
+            play(Some(60_001)).play_problem().map(|p| p.0),
+            Some("delay_ms")
+        );
+        assert_eq!(
+            play(Some(60_001)).cue_problem().map(|p| p.0),
+            Some("delay_ms")
+        );
     }
 }

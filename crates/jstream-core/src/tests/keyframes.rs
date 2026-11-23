@@ -1242,6 +1242,7 @@ fn drift_x(
             },
             clock,
             enabled: true,
+            amount: None,
         }],
     }
 }
@@ -1438,6 +1439,7 @@ fn pulse(item: &str, scene: Option<&str>) -> Edit {
             },
             clock: jstream_protocol::MotionClock::Engine,
             enabled: true,
+            amount: None,
         }],
     }
 }
@@ -1540,6 +1542,7 @@ fn a_data_modifier_poses_an_item_from_live_data() {
                 },
                 clock: jstream_protocol::MotionClock::Engine,
                 enabled: true,
+                amount: None,
             }],
         }],
     );
@@ -1597,6 +1600,7 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
                 },
                 clock: jstream_protocol::MotionClock::Engine,
                 enabled: true,
+                amount: None,
             }],
         }],
     );
@@ -1675,6 +1679,7 @@ fn a_preview_with_no_output_smooths_a_midi_modifier_on_the_clock() {
                 },
                 clock: jstream_protocol::MotionClock::Engine,
                 enabled: true,
+                amount: None,
             }],
         }],
     );
@@ -1803,6 +1808,7 @@ fn jolt_and_drift() -> Edit {
                 },
                 clock: MotionClock::Triggered,
                 enabled: true,
+                amount: None,
             },
             MotionModifier {
                 modifier_id: "drift".into(),
@@ -1815,6 +1821,7 @@ fn jolt_and_drift() -> Edit {
                 },
                 clock: MotionClock::Triggered,
                 enabled: true,
+                amount: None,
             },
         ],
     }
@@ -2263,6 +2270,7 @@ fn pulse_halo(param: &str, amplitude: f32) -> Edit {
             },
             clock: jstream_protocol::MotionClock::Engine,
             enabled: true,
+            amount: None,
         }],
     }
 }
@@ -2732,6 +2740,7 @@ fn a_data_modifier_sets_an_effect_colour_from_a_palette() {
             },
             clock: jstream_protocol::MotionClock::Engine,
             enabled: true,
+            amount: None,
         }],
     };
     apply(&control, vec![halo(), tint]);

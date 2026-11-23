@@ -253,7 +253,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `jtunnel/names.rs`): what the collection calls the sender's 32 modulation params, each
   the name of what reads its `params` key's `values.<n>` (an enabled `data` modifier on an
   item, named by its source and property, or on a scene's camera, by the scene and
-  property, or a value binding, by its target), a reader naming the sender winning a
+  property, a value binding, by its target, or a channel's input
+  ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), by the channel's name or
+  else its ID), a reader naming the sender winning a
   slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine
   works them out after every applied batch, undo, redo and load (`State::changed`) and
   when the receiver starts, and hands a change to `Receiver::set_names`. Only a sender
@@ -400,7 +402,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
+covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/channels.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -447,8 +449,10 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4): a
   `source` modifier adding to a live setting of its item's own source as that item draws
   it, each frame: a light's colour, intensity, range, cone and softness as it lights the
-  scene, and a model's colour, metallic and roughness, or by material its glow, as it
-  draws it. Nothing is stored. A painting `data` modifier sets a light's colour, a
+  scene, an environment light's intensity and its sky (colours, stars, nebula, galaxy
+  band and warp, `sourced::environment`) as it lights and draws it, and a model's
+  colour, metallic, roughness and glow strength, or by material its glow, as it draws
+  it. Nothing is stored. A painting `data` modifier sets a light's colour, a
   model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
   `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
 - **Value bindings** (`value_bindings.rs`,
@@ -460,7 +464,21 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   those edits change the engine redraws and re-routes audio through the shown graph, on
   top of the open gestures' values ([Live values](#live-values)). A binding whose input
   or range is unchanged across a batch keeps its follower; a missing target drives
-  nothing.
+  nothing. A binding's `amount` scales its value toward `from` by a channel's level.
+- **Channels** (`channels.rs`,
+  [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
+  each channel's inputs with the same readers and smoothing, in an order where a
+  channel's `channel` inputs come first, combines, switches, averages, fades and curves
+  them, and stores each level in its `ChannelCell` in `LiveData::channels`, which the
+  `channel` kind and `amount` read on any thread. The `jstream-values` thread ticks it
+  before the value bindings while the collection holds a channel, and puts a scene's
+  channels back to their defaults when that scene goes on program. `channel.set_value`,
+  `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
+  reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
+  more input (ADR-0184): it starts from the channel's value (a seek keeps that start, unless under `latest` a control or action took the channel since), the last timeline started
+  wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
+  modifier's or camera modifier's `amount` scales its value as it applies
+  (`jstream_anim::evaluate_scaled`).
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot; camera motion reads its
@@ -723,7 +741,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
   `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
-  `src/tests/value_bindings.rs`, `tests/mcp.rs`,
+  `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -987,7 +1005,12 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   (`src/tests/value_bindings.rs`, ADR-0178): a MIDI fader bound to the master drives the
   gain the mixer is given, smoothed, only once it moves, while `state.get` keeps the
   stored 0 dB and lists the binding, and clearing it gives the stored gain back; the
-  driver's own test (`value_bindings.rs`) waits for a control to move and follows it. A
+  driver's own test (`value_bindings.rs`) waits for a control to move and follows it.
+  Channels (`src/tests/channels.rs`, ADR-0183): a held note drives a channel to 1 and
+  its release to 0, `channel.set_value` takes over, `channel.switch` holds the off value,
+  a missing channel's action fails, and a binding's `amount` gives half the throw at
+  0.5; `channels.rs`'s own tests cover combining, fades, averaging, the order of
+  channels reading channels and a scene's reset. A
   `width` and `height` modifier stretching one side is `motion.rs`'s. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
   source built and rebuilt, drawn sharper when enlarged and left at its own size when a
@@ -1223,7 +1246,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   and `studio.set_preview` (see *Program scene* below), `studio.set_warm` and
   `studio.set_rendering`, answered before the collection lock (see *Program scene*), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
   or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
-  `values.set` (see [Shared values](#shared-values)), `scene.zoom_camera`
+  `values.set` (see [Shared values](#shared-values)), `channel.set_value`,
+  `channel.nudge` and `channel.switch` (ADR-0183: no `rev` and no undo step; checked
+  with `Action::channel_problem`, `not_found` for a channel the collection lacks, then
+  handed to the channel driver), `scene.zoom_camera`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md) §4: no `rev` and
   no undo step; it adds its steps to the family's zoom count and publishes the live
   values, and is `not_found`, `invalid_argument` or `action_failed` as the mock answers),
@@ -1620,7 +1646,7 @@ switch a Fade (`transition::shared_camera`).
 <a id="timelines"></a>
 ## Timelines
 <!-- @section
-covers = ["crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/tests/timelines.rs"]
+covers = ["crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/tests/timelines.rs", "crates/jstream-core/src/sequences.rs", "crates/jstream-core/src/tests/sequences.rs"]
 depends_on = ["crates/jstream-protocol/README.md#timelines", "docs/adr/0115-timelines-on-the-wire.md"]
 -->
 
@@ -1671,6 +1697,32 @@ preset changed in one batch that one undo takes back.
   before `at_ms` that `Timeline::seek` keeps.
 - **Removal:** after every batch, undo or redo, `changed` stops each timeline the
   collection no longer holds (`reconcile_timelines`), with `timeline.changed` `removed`.
+- **Lanes** ([ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)): when a
+  timeline plays or is sought, `ChannelDriver::lanes_start` gives each of its lanes that
+  is on its channel, from the channel's value then (a seek keeps the value this
+  timeline's lane already started from, so scrubbing never jumps); each `jstream-values` tick moves
+  every playing timeline's lanes to its position on the animation clock (`lanes_at`)
+  before the channels tick, and an end sets each lane's last point. The values thread
+  ticks every 16.7 ms while a lane drives a channel. See *Channels* in
+  [Contents: motion](#contents-motion).
+- **Triggers and waits** (`sequences.rs`): `Sequences` keeps the timelines waiting on a
+  `delay_ms`, which the values tick plays when due, credited to the engine, and the
+  state of each `starts` and `stops` trigger. After the channels and value bindings each
+  tick, `check` compares the program scene, the keyframe each scene is drawn through (a
+  placement's, or a keyframe scene on program), each channel's value and switch, and the
+  timeline events `timeline_play` and `send_timeline_step` noted (`starts`, `ends`,
+  `loops`), and plays (at once, or after the trigger's delay) or stops each timeline
+  whose trigger fired. The first check after the engine starts or a collection opens
+  (`restart`) only looks, and a channel trigger's first check notes which side of its
+  level the channel is on, so a rise fires only from a side a check saw. A channel trigger crosses back only past a 0.02 dead band and
+  fires at most once every 50 ms; an edge that limit holds back fires once it is over,
+  if the channel is still on that side. The values thread runs while any timeline has a
+  trigger or a wait. `src/tests/sequences.rs` checks a lane gliding down from where its
+  channel was, never rising and passing through several values, and holding its end,
+  driven by the sequence; a channel rising (from a value a tick saw) playing a timeline
+  after its delay, listed in `waiting` meanwhile, falling
+  stopping it, and a stop cancelling a delayed play; and a seek to 0 returning a lane to
+  the value it started from.
 - **`source.restart`** calls `LiveSources::restart` at `action_now` (the cue's time
   while a cue runs, otherwise the clock's now), which restarts the source's running
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
@@ -1816,11 +1868,14 @@ The compositor leaves the layer as it is when it still holds the sky asked for (
 values, a camera looking the same way), so a scene whose camera and sky hold still pays
 for its sky once, not once a frame.
 `Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
-streams at now, which moves toward the setting at its ramp's pace (dropping while it
+streams at now, which moves toward the setting, as its item's motion modifiers drive
+it (`sourced::environment`), at its ramp's pace (dropping while it
 is above it, which zooms the deep sky back in), and how far its
 stars have travelled, advanced once a frame by the warp's mean rate times the media
 time since the last (a step back or of over a second jumps to the setting and moves
 nothing; a step of no time, a held clock, keeps the warp as it is).
+Its stars, star brightness, nebula, galaxy band and colours are drawn as those
+modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
 `draw_transition_skies` draws each end's sky through that end's camera, the shown
 scene's fading in, and `fill_tracks` puts them under the tracks.
@@ -2097,7 +2152,9 @@ the same way, through the same sync (*Audio-reactive motion* in [Purpose](#purpo
 Items' `data` motion modifiers read the engine's `LiveData`, which the live sources'
 `FilterAssets` carry to every plan (`FilterAssets::data`, handed over once as the
 engine starts), so a snapshot records a watch on the field each one names
-(*Data-driven motion* in [Contents: motion](#contents-motion)).
+(*Data-driven motion* in [Contents: motion](#contents-motion)). A `channel` modifier
+and an `amount` read a channel's `ChannelCell` from the same `LiveData`, so the snapshot
+draws the levels the channels hold as it starts.
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -2248,7 +2305,8 @@ position and is left out. In a 2D scene a `scene`-lit model is studio-lit
 An environment light ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 9) isn't one of those lights: `scene_environment` takes the scene's first one,
 in stacking order, as the model's sky (`ModelDraw::environment`), at its intensity
-times its item's opacity and spun by its item's turn, and a second one is logged once
+times its item's opacity and oriented by its item's turn, tilt and rotation
+([ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), and a second one is logged once
 (`Chains::environments_warned`). Planning puts the frame of the source its `image`
 names in the shot when it places the light (`look_sky`), so it is uploaded though no
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
@@ -4191,7 +4249,12 @@ would under that lock, [Timelines](#timelines)), and sleeps without it. The
 `jstream-values` thread does the same: it takes the collection lock for each tick, reads
 the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
-takes the live data's lock briefly, last, to find or make its watch, as a plan does. The WASM plugins' registry lock
+takes the live data's lock briefly, last, to find or make its watch, as a plan does. A
+`jstream-values` tick also plays the timelines whose wait is over and those a trigger
+fired, and moves the lanes, all under the same collection lock. A
+channel's level is one atomic (`ChannelCell`); the cell map's lock is a leaf, taken
+briefly to find or make a cell, by a plan, a binding or the channel driver. A channel
+action takes the collection lock, then the channel driver's state under it. The WASM plugins' registry lock
 and the host's lock are taken with no other engine lock held, and released before a
 plugin loads, before an event is emitted and before a subscription closes; under the
 registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
@@ -4255,7 +4318,8 @@ the host's error) and an `info` with how many effects it found. A `tempo.*` valu
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
 `warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
 answers; only its event is missing). A `jstream-values` thread that can't start is a
-`warn`; the value bindings then wait for the next batch to start it.
+`warn`; the value bindings and channels then wait for the next batch or channel action
+to start it.
 
 <a id="audit-log"></a>
 ## Audit log
@@ -4294,7 +4358,8 @@ entries with their sentences in memory (`activity_log.rs`), whether or not the h
 a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
 or action the sentence table doesn't name reads as its command name. A controller
 binding reads by its trigger ("Bound MIDI note 36 on channel 10 from Pads to scene
-switch"). A timeline's cues
+switch"), and a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
+"Switched channel “Power” off"). A timeline's cues
 get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
 one, and `timeline.cue_fired` reports each cue
 ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)).
@@ -4307,6 +4372,10 @@ request's `request_id`, or `live.ended` with no `request_id` when it expired wit
 session, plus `gesture_id`, `outcome` (`cancelled` or `expired`) and, in `edits`, the
 setters it held a value for, one per parameter, without the values. Its `rev` before
 and after are the same.
+
+A timeline that a `starts` or `stops` trigger or the end of a `delay_ms` plays or stops
+(ADR-0184) gets no entry of its own either: the call or edit that set it up has one, and
+`timeline.changed` reports the play.
 
 `values.set` gets no entry either, nor an `activity.list` line: a shared value is data
 for pages, not a change to the studio, and may be set many times a second (ADR-0102

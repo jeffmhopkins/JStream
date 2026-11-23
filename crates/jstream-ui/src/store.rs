@@ -60,6 +60,9 @@ pub struct Collection {
     pub transitions: TransitionsInfo,
     /// The value bindings, ordered by ID (ADR-0178): which settings a controller drives.
     pub value_bindings: Vec<jstream_control::protocol::ValueBinding>,
+    /// The channels, ordered by ID (ADR-0183): named live values that controls set and
+    /// settings follow.
+    pub channels: Vec<jstream_control::protocol::ChannelInfo>,
 }
 
 impl Collection {
@@ -81,6 +84,7 @@ impl Collection {
                 folders,
                 transitions,
                 value_bindings,
+                channels,
                 ..
             } => {
                 let mut scenes = scenes;
@@ -124,10 +128,38 @@ impl Collection {
                     folders,
                     transitions: *transitions,
                     value_bindings,
+                    channels: *channels,
                 })
             }
             _ => None,
         }
+    }
+
+    /// The channel with this ID.
+    pub fn channel(&self, channel_id: &str) -> Option<&jstream_control::protocol::ChannelInfo> {
+        self.channels.iter().find(|c| c.channel_id == channel_id)
+    }
+
+    /// A channel's name as the UI shows it: its name, or its ID when it has none.
+    pub fn channel_name(&self, channel_id: &str) -> String {
+        self.channel(channel_id)
+            .map(|c| c.name.clone())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| channel_id.to_owned())
+    }
+
+    /// The timeline with this ID and the scene that holds it.
+    pub fn timeline(
+        &self,
+        timeline_id: &jstream_control::protocol::TimelineId,
+    ) -> Option<(&SceneInfo, &jstream_control::protocol::TimelineInfo)> {
+        self.scenes.iter().find_map(|scene| {
+            scene
+                .timelines
+                .iter()
+                .find(|t| &t.timeline_id == timeline_id)
+                .map(|t| (scene, t))
+        })
     }
 
     /// The scene with this ID.
@@ -734,6 +766,13 @@ pub struct Studio {
     /// Bumped by each `jtunnel.senders_changed` (0.114), so the JTunnel setting re-reads
     /// the senders heard on the LAN.
     pub jtunnel_changed: RwSignal<u64>,
+    /// The channel the Channels panel shows (ADR-0183), by ID.
+    pub channel: RwSignal<Option<String>>,
+    /// The sequence the Sequence panel edits (ADR-0184): a timeline, by ID.
+    pub sequence: RwSignal<Option<jstream_control::protocol::TimelineId>>,
+    /// Each playing timeline, as the engine last reported it: where it was, and when
+    /// (`performance.now()`, in ms), so a play head can run on between reports.
+    pub playing: RwSignal<HashMap<jstream_control::protocol::TimelineId, Playing>>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
@@ -744,6 +783,30 @@ pub struct Studio {
     /// The number the next toast takes. It only grows, so a timer left from an earlier
     /// toast never matches a later one.
     next_toast: StoredValue<u64>,
+}
+
+/// A playing timeline as the engine last reported it (ADR-0115).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Playing {
+    /// Where it was, in ms from its start.
+    pub position_ms: u32,
+    /// When the UI heard it, as `performance.now()` in ms.
+    pub at: f64,
+}
+
+impl Playing {
+    /// Where it is at `now` (`performance.now()` in ms), at most `duration_ms`.
+    pub fn position_at(&self, now: f64, duration_ms: u32) -> u32 {
+        let run = (now - self.at).max(0.0) as u64;
+        (u64::from(self.position_ms) + run).min(u64::from(duration_ms)) as u32
+    }
+}
+
+/// `performance.now()`, or 0 outside a browser.
+pub fn now_ms() -> f64 {
+    web_sys::window()
+        .and_then(|w| w.performance())
+        .map_or(0.0, |p| p.now())
 }
 
 /// A confirmation in the toast (spec-workspace.md 6.7).
@@ -794,6 +857,9 @@ impl Studio {
             toast: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
             jtunnel_changed: RwSignal::new(0),
+            channel: RwSignal::new(None),
+            sequence: RwSignal::new(None),
+            playing: RwSignal::new(HashMap::new()),
             refresh: StoredValue::new((false, false)),
             studio_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
@@ -814,6 +880,7 @@ impl Studio {
         self.descriptors.set(HashMap::new());
         self.problem.set(None);
         self.toast.set(None);
+        self.playing.set(HashMap::new());
         self.refresh.set_value((false, false));
     }
 
@@ -841,9 +908,25 @@ impl Studio {
         if let Ok(QueryResult::StudioGet {
             program_scene,
             preview_scene,
+            timelines,
             ..
         }) = query(session, Query::StudioGet).await
         {
+            let at = now_ms();
+            self.playing.set(
+                timelines
+                    .into_iter()
+                    .map(|t| {
+                        (
+                            t.timeline_id,
+                            Playing {
+                                position_ms: t.position_ms,
+                                at,
+                            },
+                        )
+                    })
+                    .collect(),
+            );
             self.take_studio(asked, program_scene, preview_scene);
         }
     }
@@ -970,6 +1053,29 @@ impl Studio {
             // another client.
             // The JTunnel senders heard on the LAN changed (0.114).
             Event::JtunnelSendersChanged {} => self.jtunnel_changed.update(|n| *n += 1),
+            // A timeline played, looped, was sought or stopped (ADR-0115): the Sequence
+            // panel's play head follows it.
+            Event::TimelineChanged {
+                timeline_id,
+                playing,
+                position_ms,
+                ..
+            } => {
+                let at = now_ms();
+                self.playing.update(|map| {
+                    if *playing {
+                        map.insert(
+                            timeline_id.clone(),
+                            Playing {
+                                position_ms: *position_ms,
+                                at,
+                            },
+                        );
+                    } else {
+                        map.remove(timeline_id);
+                    }
+                });
+            }
             Event::KindsChanged { .. } => {
                 let studio = *self;
                 let session = session.clone();
@@ -1425,6 +1531,7 @@ mod tests {
         }
         assert!(!c.id_taken("z"));
         let other = QueryResult::StudioGet {
+            waiting: Vec::new(),
             program_scene: None,
             preview_scene: None,
             timelines: Vec::new(),

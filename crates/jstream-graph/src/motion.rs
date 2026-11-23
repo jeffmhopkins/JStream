@@ -47,6 +47,7 @@ pub fn camera_anim_modifiers(motion: &[CameraMotionModifier]) -> Vec<(CameraProp
                 kind: m.kind.clone(),
                 clock: m.clock,
                 enabled: m.enabled,
+                amount: None,
             };
             Some((m.property, modifier(&as_item)?))
         })
@@ -206,6 +207,14 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             ..
         }
         | MotionKind::Data {
+            smoothing_ms,
+            curve,
+            from,
+            to,
+            ..
+        }
+        // So does a channel one (ADR-0183 decision 5).
+        | MotionKind::Channel {
             smoothing_ms,
             curve,
             from,
@@ -373,6 +382,7 @@ mod tests {
                     kind: kind.clone(),
                     clock: [MotionClock::Shown, MotionClock::Triggered][(half + n) % 2],
                     enabled: n % 3 == 0,
+                    amount: None,
                 })
                 .collect();
             assert_eq!(check_motion(&motion), Ok(()));

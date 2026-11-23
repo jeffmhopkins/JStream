@@ -170,7 +170,7 @@ impl LightKind {
                      from infinitely far; ambient lights everything evenly; environment is \
                      the sky all around the scene, which scene-lit models take their \
                      ambient light and reflections from (only the first in a scene \
-                     counts), its item's turn spinning it.",
+                     counts), oriented by its item's turn, tilt and rotation.",
                 ),
                 p(
                     "color",
@@ -335,8 +335,8 @@ impl LightKind {
                     number(0.0, 1.0, 0.01, None),
                     json!(0.0),
                     "How fast the backdrop streams past, as if travelling toward the \
-                     sky's centre ahead (the item's turn sets where that is): the stars \
-                     move away from it and stretch into streaks, at any angle the camera \
+                     sky's centre ahead (the item's turn, tilt and rotation set where \
+                     that is): the stars move away from it and stretch into streaks, at any angle the camera \
                      looks, crowding ahead in bluer, brighter light and thinning behind \
                      in redder, dimmer light over a blue glow ahead, while the nebulae \
                      and band fade out; 0 is still. A change ramps over the warp ramp, so setting \

@@ -485,6 +485,9 @@ fn cues_switch_tracks_and_a_seek_keeps_the_last_for_each_scene() {
     block_on(control.call(Call::Batch(edits(vec![Edit::TimelineSet {
         scene_id: SceneId::new("p"),
         timeline: TimelineInfo {
+            lanes: Vec::new(),
+            starts: Vec::new(),
+            stops: Vec::new(),
             labels: Vec::new(),
             timeline_id: TimelineId::new("t"),
             name: String::new(),
@@ -497,6 +500,7 @@ fn cues_switch_tracks_and_a_seek_keeps_the_last_for_each_scene() {
     let timeline_id = TimelineId::new("t");
     block_on(control.call(Call::Action {
         action: Action::TimelinePlay {
+            delay_ms: None,
             timeline_id: timeline_id.clone(),
         },
     }))
