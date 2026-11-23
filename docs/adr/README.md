@@ -195,5 +195,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0180](0180-a-move-within-a-3d-family-glides-through-its-chain.md) | A Move within a 3D scene's family glides item by item, its chain paused | accepted | agent |  |
 | [ADR-0181](0181-jstream-names-a-jtunnel-senders-params.md) | JStream names a JTunnel sender's modulation params | accepted | maintainer |  |
 | [ADR-0185](0185-how-reflections-landed-off-by-default.md) | How reflection probes and screen-space reflections landed, off by default | accepted | agent |  |
-| [ADR-0186](0186-screen-space-reflections-march-at-half-size.md) | Screen-space reflections march at half the picture's size | accepted | agent |  |
+| [ADR-0189](0189-screen-space-reflections-march-at-half-size.md) | Screen-space reflections march at half the picture's size | accepted | agent |  |
 <!-- @generated end adr-index -->

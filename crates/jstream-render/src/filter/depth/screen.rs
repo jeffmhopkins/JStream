@@ -5,7 +5,7 @@
 //! that may have its environment's reflection replaced, one pixel of each block of two
 //! by two follows its reflected ray through the view depth in `steps` steps to what the
 //! picture shows where it hits (`screen/trace.wgsl`, at half the picture's size:
-//! ADR-0186). Each of the surface's pixels then takes what the marched pixels near it on
+//! ADR-0189). Each of the surface's pixels then takes what the marched pixels near it on
 //! the same surface found in place of that reflection, under its own BRDF
 //! (`screen/resolve.wgsl`). Everywhere else, and without a view depth, its camera or a
 //! surface buffer, it passes its input through.

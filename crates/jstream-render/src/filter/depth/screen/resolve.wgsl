@@ -1,4 +1,4 @@
-// Screen-space reflections, the resolve (ADR-0170 decision 4, ADR-0186), drawn at the
+// Screen-space reflections, the resolve (ADR-0170 decision 4, ADR-0189), drawn at the
 // picture's size with the shader-source prelude for its six textures: the five
 // trace.wgsl reads, and what it wrote at half the size: for one pixel of each block of
 // two by two, what that pixel's reflected ray found on screen times how sure the hit

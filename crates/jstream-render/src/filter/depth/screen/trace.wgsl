@@ -1,4 +1,4 @@
-// Screen-space reflections, the march (ADR-0170 decision 4, ADR-0186), drawn at half
+// Screen-space reflections, the march (ADR-0170 decision 4, ADR-0189), drawn at half
 // the picture's size with the shader-source prelude for its five textures: the scene's
 // picture; its view depth (red: 1 / w = f / D, 0 where nothing was drawn); and its
 // surface buffer, which the engine draws of the scene's models with the view depth: the

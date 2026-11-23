@@ -1551,7 +1551,7 @@ it out; `filter::testing` reads both lists.
   below). It reads `ViewDepth::surface` too (`DepthSurface`, which
   `video_filter_reads_surface(kind)` asks the engine for), the scene's surface buffer
   (see Design). It is two draws, each through `Ctx::draw_program`
-  ([ADR-0186](../../docs/adr/0186-screen-space-reflections-march-at-half-size.md)).
+  ([ADR-0189](../../docs/adr/0189-screen-space-reflections-march-at-half-size.md)).
   **The march** (`screen/trace.wgsl`, five textures) is drawn into a scratch layer half
   the picture's width and height, rounded up. Each texel stands for a block of two by
   two pixels and marches one of them (`chosen`): one corner of the block, the other

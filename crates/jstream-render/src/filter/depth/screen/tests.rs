@@ -1,6 +1,6 @@
 //! `screen_space_reflections` (ADR-0170 decision 4): its steps, what a floor seen
 //! through the framing camera reflects of a wall behind it, against hand-made depth and
-//! surface images, and its march at half the picture's size (ADR-0186).
+//! surface images, and its march at half the picture's size (ADR-0189).
 
 use std::sync::Arc;
 
@@ -177,7 +177,7 @@ fn a_hit_replaces_the_environments_reflection() {
     assert!(edge[0] > floor[0], "{edge:?} against {floor:?}");
 }
 
-/// ADR-0186: the march is drawn at half the picture's size, and a pixel takes only
+/// ADR-0189: the march is drawn at half the picture's size, and a pixel takes only
 /// what marched pixels of its own surface found. The kerb's rays find nothing, so its
 /// row beside the floor keeps its environment's reflection, and the floor's row beside
 /// the kerb still shows the wall.
