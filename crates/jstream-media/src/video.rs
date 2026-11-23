@@ -100,7 +100,10 @@ impl Plane {
         match Arc::try_unwrap(self.data) {
             Ok(data) if whole => data,
             Ok(data) => data.get(self.range).map(<[u8]>::to_vec).unwrap_or_default(),
-            Err(shared) => shared.get(self.range).map(<[u8]>::to_vec).unwrap_or_default(),
+            Err(shared) => shared
+                .get(self.range)
+                .map(<[u8]>::to_vec)
+                .unwrap_or_default(),
         }
     }
 }
