@@ -11,6 +11,7 @@
 
 pub mod add_source;
 pub mod agent;
+pub mod audio_read;
 pub mod camera_moves;
 pub mod channels;
 pub mod codec_downloads;

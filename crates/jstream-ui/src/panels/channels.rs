@@ -133,6 +133,7 @@ pub fn input_name(collection: &Collection, input: &MotionKind) -> String {
             format!("MIDI {what} · {on}")
         }
         MotionKind::Data { .. } => crate::panels::data_read::data_name(input),
+        MotionKind::Audio { .. } => crate::panels::audio_read::audio_name(collection, input),
         MotionKind::Channel { channel_id, .. } => collection.channel_name(channel_id),
         _ => "Input".into(),
     }
@@ -508,8 +509,12 @@ fn ChannelCard(
     // Inputs.
     let learning = RwSignal::new(false);
     let reading = RwSignal::new(false);
-    // The data input being set up, shown until it is added or dropped.
+    // The data or audio input being set up, shown until it is added or dropped.
     let data = RwSignal::new(None::<MotionKind>);
+    // Which popover shows: `Some(true)` for an audio input, `Some(false)` for data.
+    let adding = Memo::new(move |_| {
+        data.with(|d| d.as_ref().map(|k| matches!(k, MotionKind::Audio { .. })))
+    });
     let add_data = move |_| {
         let Some(input) = data.get_untracked() else {
             return;
@@ -834,8 +839,8 @@ fn ChannelCard(
                         title="Read live data from a DAW: one of a JTunnel sender's Mod params, or another field"
                         on:click=move |_| data.update(|d| {
                             *d = match d {
-                                Some(_) => None,
-                                None => Some(studio.collection.with_untracked(|c| {
+                                Some(MotionKind::Data { .. }) => None,
+                                _ => Some(studio.collection.with_untracked(|c| {
                                     next_mod(c.as_ref().map_or(&[][..], |c| &c.channels[..]))
                                 })),
                             }
@@ -843,14 +848,40 @@ fn ChannelCard(
                     >
                         "+ Data"
                     </button>
+                    <button
+                        type="button"
+                        class="chan-add"
+                        title="Follow an audio level: the program mix, a bus or a source, with its attack and release"
+                        on:click=move |_| data.update(|d| {
+                            *d = match d {
+                                Some(MotionKind::Audio { .. }) => None,
+                                _ => Some(crate::panels::audio_read::audio_reader()),
+                            }
+                        })
+                    >
+                        "+ Audio"
+                    </button>
                 </span>
             </div>
-            {move || data.with(Option::is_some).then(|| view! {
+            {move || adding.get().map(|audio| view! {
                 <div class="chan-popover chan-data">
-                    <crate::panels::data_read::DataReads
-                        kind=data
-                        send=move |k| data.set(Some(k))
-                    />
+                    {if audio {
+                        view! {
+                            <crate::panels::audio_read::AudioReads
+                                kind=data
+                                send=move |k| data.set(Some(k))
+                            />
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <crate::panels::data_read::DataReads
+                                kind=data
+                                send=move |k| data.set(Some(k))
+                            />
+                        }
+                        .into_any()
+                    }}
                     <div class="chan-data-actions">
                         <button type="button" class="motion-button" on:click=move |_| data.set(None)>"Cancel"</button>
                         <button type="button" class="motion-button primary" on:click=add_data>"Add input"</button>

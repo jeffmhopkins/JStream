@@ -223,7 +223,8 @@ Contents ([Design](#design) explains the choices):
   modifier and the MIDI, DAW data and Channel kinds it offers tested natively), the
   fields that say which live data a reader reads (`data_read.rs`: `DataReads`, shared by
   the channel card and Camera motion, with a JTunnel sender's Mod slots and their names
-  tested natively), the Filters
+  tested natively), the audio fields beside them (`audio_read.rs`: `AudioReads`, what an
+  `audio` input hears and follows, with its names and fields tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
   Properties dialogs' list and pane, and `FilterUndo`, what the Properties dialogs
   opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
@@ -818,7 +819,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
   0 to 1; "+ Channel" adds a `channel` input; "+ Data" opens `DataReads` on a `data`
-  input of the first Mod no channel reads yet (`next_mod`), added on Add input; each input that reads something shows its
+  input of the first Mod no channel reads yet (`next_mod`), and "+ Audio" `AudioReads` on
+  an `audio` input of the program mix's level (ADR-0206), each added on Add input; each input that reads something shows its
   `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
