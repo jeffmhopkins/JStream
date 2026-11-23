@@ -1,11 +1,11 @@
 // A 3D scene's sky backdrop (ADR-0167): the sky of its environment light seen through
 // the camera, infinitely far away. Each pixel looks along its ray from the camera, so the
 // sky turns with where the camera looks and never moves with where it is. The sky is the
-// environment's gradient, or its picture as an equirectangular panorama, with procedural
-// nebulae, a galaxy band and stars over it. Stars are laid out around the direction of
-// travel, the sky's -z, so at warp each one streaks away from it along its own line, the
-// same from any angle the camera looks. Out: premultiplied linear light, at the
-// backdrop's opacity.
+// environment's gradient, or its picture as an equirectangular panorama, with nebulae
+// and a galaxy band read from their bake (ADR-0174) and procedural stars over it. Stars
+// are laid out around the direction of travel, the sky's -z, so at warp each one streaks
+// away from it along its own line, the same from any angle the camera looks. Out:
+// premultiplied linear light, at the backdrop's opacity.
 
 struct Sky {
     // xyz: the camera's right axis in the scene's space; w: the principal point's x.
@@ -39,6 +39,11 @@ struct Sky {
 @group(0) @binding(0) var<uniform> u: Sky;
 @group(0) @binding(1) var sky_tex: texture_2d<f32>;
 @group(0) @binding(2) var sky_sampler: sampler;
+// The seed's baked nebulae and galaxy band (`sky_deep.wgsl`), each a cube map read along
+// a direction of the sky.
+@group(0) @binding(3) var nebula_tex: texture_cube<f32>;
+@group(0) @binding(4) var galaxy_tex: texture_cube<f32>;
+@group(0) @binding(5) var deep_sampler: sampler;
 
 const PI: f32 = 3.14159265;
 const TAU: f32 = 6.28318531;
@@ -84,115 +89,28 @@ fn panorama(d: vec3<f32>) -> vec3<f32> {
     return c.rgb * u.stars.z;
 }
 
-fn hash(x: u32) -> u32 {
-    var h = x * 747796405u + 2891336453u;
-    h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
-    return (h >> 22u) ^ h;
-}
-
-fn unit(x: u32) -> f32 {
-    return f32(hash(x) & 0xffffffu) / 16777216.0;
-}
-
 fn seed() -> u32 {
     return bitcast<u32>(u.seed.x);
 }
 
-// ---- Nebulae and the galaxy band: smooth 3D value noise on the direction. ----
+// ---- Nebulae and the galaxy band, read from their bake. ----
 
-fn lattice(i: vec3<i32>) -> f32 {
-    let h = hash(bitcast<u32>(i.x) ^ hash(bitcast<u32>(i.y) ^ hash(bitcast<u32>(i.z) ^ seed())));
-    return f32(h & 0xffffffu) / 16777216.0;
-}
-
-fn noise(p: vec3<f32>) -> f32 {
-    let i = vec3<i32>(floor(p));
-    let f = fract(p);
-    let w = f * f * (3.0 - 2.0 * f);
-    let a = mix(lattice(i), lattice(i + vec3<i32>(1, 0, 0)), w.x);
-    let b = mix(lattice(i + vec3<i32>(0, 1, 0)), lattice(i + vec3<i32>(1, 1, 0)), w.x);
-    let c = mix(lattice(i + vec3<i32>(0, 0, 1)), lattice(i + vec3<i32>(1, 0, 1)), w.x);
-    let e = mix(lattice(i + vec3<i32>(0, 1, 1)), lattice(i + vec3<i32>(1, 1, 1)), w.x);
-    return mix(mix(a, b, w.y), mix(c, e, w.y), w.z);
-}
-
-fn fbm(p: vec3<f32>, octaves: i32) -> f32 {
-    var sum = 0.0;
-    var amp = 0.5;
-    var q = p;
-    for (var k = 0; k < octaves; k++) {
-        sum += amp * noise(q);
-        q = q * 2.03 + vec3<f32>(17.1, 5.3, 11.7);
-        amp *= 0.5;
-    }
-    return sum;
-}
-
-// The seed's style for its nebulae, each 0 to 1: how large, how much of the sky, how
-// turbulent, how filamentary, how dusty and how gathered into a few regions they are.
-struct Style {
-    scale: f32,
-    cover: f32,
-    churn: f32,
-    wisps: f32,
-    dust: f32,
-    gather: f32,
-}
-
-fn style() -> Style {
-    let k = hash(seed() ^ 0x5bd1e995u);
-    return Style(unit(k ^ 0x1u), unit(k ^ 0x2u), unit(k ^ 0x3u), unit(k ^ 0x4u), unit(k ^ 0x5u), unit(k ^ 0x6u));
-}
-
-// The nebulae and the galaxy band along `d`: light added to the sky.
+// The nebulae and the galaxy band along `d`: light added to the sky. Their shapes are
+// read from the seed's bake (`sky_deep.wgsl`, ADR-0174), and the settings applied here:
+// the nebulae's two colours and their amount, and how bright the band is.
 fn deep_sky(d: vec3<f32>) -> vec3<f32> {
     var c = vec3<f32>(0.0);
     let nebula = u.nebula.w;
     if nebula > 0.0 {
-        let look = style();
-        // From a few great clouds across the sky to many small knots.
-        let p = d * mix(1.3, 4.2, look.scale * look.scale);
-        // Warped once, so the clouds billow and stream rather than blot; more for a
-        // churning, torn-up sky.
-        let q = vec3<f32>(fbm(p + vec3<f32>(1.7, 9.2, 3.1), 4), fbm(p + vec3<f32>(8.3, 2.8, 5.9), 4), fbm(p + vec3<f32>(4.1, 6.6, 0.4), 4));
-        let n = fbm(p + mix(0.9, 3.6, look.churn) * q, 5);
-        // How much of the sky the gas fills: thin wisps to a full cloudscape.
-        let edge = mix(0.56, 0.36, look.cover);
-        var density = smoothstep(edge, edge + 0.34, n);
-        // Gathered into a few regions, with open sky between, or spread everywhere.
-        let region = smoothstep(0.38, 0.62, fbm(d * 1.1 + vec3<f32>(5.5, 2.2, 8.8), 3));
-        density *= mix(1.0, region * 1.6, look.gather);
-        // Bright filaments where the cloud folds, from soft edges to a veil of threads.
-        let fold = pow(1.0 - abs(2.0 * fbm(p * 2.1 + 3.0 * q, 4) - 1.0), mix(10.0, 5.0, look.wisps));
-        let threads = fold * mix(0.35, 1.4, look.wisps) * max(density, look.wisps * 0.35);
-        let tint = mix(u.nebula.rgb, u.nebula_2.rgb, smoothstep(0.3, 0.7, q.x));
-        // A hot, paler heart where the gas is thickest.
-        let heart = mix(tint, vec3<f32>(dot(tint, vec3<f32>(0.4))) + tint * 0.6, 0.45 * smoothstep(0.75, 1.0, density));
-        // Dark dust that eats the glow in lanes and blots.
-        let dark = smoothstep(0.5, 0.7, fbm(p * 1.7 + vec3<f32>(9.1, 4.4, 2.6) + q, 4)) * look.dust;
-        c += heart * (0.6 * density * density + 0.5 * threads + 0.05 * n) * nebula * (1.0 - 0.9 * dark);
+        let w = textureSampleLevel(nebula_tex, deep_sampler, d, 0.0);
+        let grey = dot(u.nebula.rgb, vec3<f32>(1.0)) * w.z + dot(u.nebula_2.rgb, vec3<f32>(1.0)) * w.w;
+        c += (u.nebula.rgb * w.x + u.nebula_2.rgb * w.y + vec3<f32>(grey)) * nebula;
     }
     let galaxy = u.nebula_2.w;
     if galaxy > 0.0 {
-        let b = dot(d, galaxy_axis());
-        let band = exp(-b * b / 0.018);
-        let core = pow(max(dot(normalize(d - galaxy_axis() * b), galaxy_core()), 0.0), 3.0);
-        let glow = band * (0.35 + 0.65 * fbm(d * 7.0, 4)) * (0.35 + 1.4 * core);
-        let lane = smoothstep(0.48, 0.68, fbm(d * 11.0 + vec3<f32>(3.3, 1.1, 7.7), 4)) * exp(-b * b / 0.0035);
-        c += vec3<f32>(1.0, 0.9, 0.78) * 0.16 * galaxy * glow * (1.0 - 0.85 * lane);
+        c += vec3<f32>(1.0, 0.9, 0.78) * 0.16 * galaxy * textureSampleLevel(galaxy_tex, deep_sampler, d, 0.0).r;
     }
     return c * u.stars.z;
-}
-
-// The band's pole: the seed tilts it, so each sky's band crosses it somewhere else.
-fn galaxy_axis() -> vec3<f32> {
-    let k = hash(seed() ^ 0x27d4eb2du);
-    let tilt = vec3<f32>(unit(k) - 0.5, unit(k ^ 0x9u) - 0.5, unit(k ^ 0x7u) - 0.5) * 1.2;
-    return normalize(vec3<f32>(0.32, -0.86, 0.4) + tilt);
-}
-
-fn galaxy_core() -> vec3<f32> {
-    return normalize(cross(galaxy_axis(), vec3<f32>(0.0, 0.0, 1.0)));
 }
 
 // How bright the galaxy band is along `d`, 0 to 1, for the stars it crowds.
