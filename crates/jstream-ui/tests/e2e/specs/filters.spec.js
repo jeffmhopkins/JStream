@@ -302,7 +302,8 @@ test('with described kinds, rows summarise, the window keeps a change on Escape,
   await types.getByRole('option', { name: 'Sharpen' }).click();
   await expect(add.locator('.add-filter-kind')).toHaveText('Video · Detail');
   await expect(add.locator('.add-filter-hint')).toHaveText('Crisper detail');
-  await expect(add.locator('.add-filter-settings')).toContainText('Amount');
+  // Its settings are chips under a Settings eyebrow (C15).
+  await expect(add.getByRole('list', { name: 'Settings' }).getByRole('listitem')).toHaveText(['Amount']);
   const start = await rev(page);
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(add).toBeHidden();

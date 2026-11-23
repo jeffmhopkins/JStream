@@ -185,5 +185,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0170](0170-generic-reflections-and-3d-rendering-switches.md) | Generic reflections between scene surfaces, and app-wide 3D rendering switches | accepted | agent |  |
 | [ADR-0171](0171-live-data-from-a-daw-drives-scenes.md) | Live data from a DAW drives scenes: JTunnel state, data bindings, source settings and grids | accepted | agent |  |
 | [ADR-0172](0172-a-media-clock-a-client-can-hold-and-step.md) | A media clock a client can hold and step | accepted | agent |  |
+| [ADR-0174](0174-a-sky-backdrops-nebulae-and-galaxy-band-are-baked-once-per-seed.md) | A sky backdrop's nebulae and galaxy band are baked once per seed | accepted | agent |  |
 | [ADR-0175](0175-ship-the-directx-shader-compiler.md) | Ship Microsoft's DirectX Shader Compiler in the Windows zip | accepted | maintainer |  |
 <!-- @generated end adr-index -->
