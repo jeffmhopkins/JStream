@@ -1454,7 +1454,8 @@ on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
 a layer the caller keeps, so a frame allocates no texture for it, and leaves it as it is
 when it still holds the same draw of unchanged images, so a scene in which nothing moved
-costs no GPU time ([ADR-0194](adr/0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md)). A layer drawn over a
+costs no GPU time ([ADR-0194](adr/0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md)), and one in which a few items changed is drawn again only over their
+boxes ([ADR-0201](adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)). A layer drawn over a
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
 group of a few small items doesn't shade the whole canvas twice. A model's layer is

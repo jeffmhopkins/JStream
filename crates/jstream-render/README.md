@@ -600,6 +600,18 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    (`Image::mark_changed`), as mip chains already needed
    (`a_layer_is_drawn_again_only_when_what_it_draws_has_changed`,
    `a_parent_is_kept_while_the_layers_it_places_are`).
+   When the scene does not match but the layer still holds its last draw, over a
+   transparent background in the same space with as many draws, only what changed is
+   drawn (`Compositor::changed`,
+   [ADR-0201](../../docs/adr/0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md)): each draw that differs
+   from the one last drawn in its place (its vertices' bytes, its image and that
+   image's count of writes, its mode or mip chain) gives the box it could touch then
+   and the one it can touch now, boxes that share a texel are joined, and
+   `record_patches` makes each box transparent, draws every draw that reaches it
+   clipped to it, and decodes it in `srgb`. More than 8 boxes, boxes over more than
+   half the layer, a draw that reads its backdrop, a model's depth, a draw added or
+   removed or a background draw the layer whole. The pixels are a whole redraw's bit
+   for bit (`a_layer_is_redrawn_only_where_its_items_changed`).
    A layer drawn over a transparent background also keeps what its scene could have
    drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current

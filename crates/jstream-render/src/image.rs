@@ -915,6 +915,8 @@ pub(crate) fn rewrite_unit_f16(gpu: &Gpu, image: &Image, bytes: &[u8]) {
         },
         extent(width, height),
     );
+    // As every write of an image's texels is (ADR-0194 decision 5).
+    image.mark_changed();
 }
 
 /// Writes `value`, clamped to 0 to 1 (a NaN as 0), as the little-endian `f16` of a data
