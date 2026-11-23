@@ -4996,7 +4996,16 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
         if let Work::Prime { shot, at } = &work {
             let primed = panic::catch_unwind(AssertUnwindSafe(|| {
                 let (compositor, ..) = open(&mut gpu, &mut backoff, shared)?;
+                let (started, before) = (Instant::now(), compositor.pipelines_made());
                 prime(shot, *at, compositor);
+                let made = compositor.pipelines_made().saturating_sub(before);
+                if made > 0 {
+                    tracing::info!(
+                        made,
+                        took_ms = started.elapsed().as_millis(),
+                        "a scene's pipelines were made ahead of its first frame"
+                    );
+                }
                 Ok::<(), ProtocolError>(())
             }));
             match primed {
