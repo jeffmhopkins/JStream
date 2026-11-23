@@ -2383,7 +2383,10 @@ with the `additive` or `screen` blend, which only adds light (`casts_shadow`,
 light looks from where it is along its aim, through its cone and a tenth more; a
 directional light from far back along its aim, at the sphere around what the pass places
 (`caster_bounds`), through a 30° view that holds it, which stands in for an orthographic
-view. More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
+view. Before drawing them it makes every model the pass shows ready to cast
+(`ready_casting_models`: its upload and its layer), so a model drawn after the first, or
+not yet drawn by this compositor, casts in that frame too
+(`the_first_frame_shadows_with_every_model`). More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
 the maps for that run (`shadows_of`), and every receiving model of the scene draws with
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).

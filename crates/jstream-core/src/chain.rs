@@ -6133,6 +6133,76 @@ mod tests {
         assert_ne!(moved, first, "and its shadow with it");
     }
 
+    /// ADR-0151 decision 3: the shadow maps a frame draws hold every model that casts,
+    /// whichever model is drawn first. Here the card is a model too, a cube that casts
+    /// onto the wall, in one stacking order and then the other: the first frame a
+    /// compositor draws shows the cube's shadow on the wall, as every frame after it
+    /// does. Before the models the scene shows were made ready for the maps, the wall
+    /// drawn first drew them without the cube, which had no upload or layer yet, so the
+    /// first frame showed the wall unshadowed.
+    #[test]
+    fn the_first_frame_shadows_with_every_model() {
+        use jstream_sources::SourceKind as _;
+        let sides = [(22, 18), (42, 18)];
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("cube"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        let cube = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model")
+            .model();
+        let block = Frame::new(1, 1, &[255; 4], 4)
+            .expect("invariant: 1x1 RGBA8")
+            .with_model(cube);
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        for on_top in [true, false] {
+            let mut graph = shadow_wall(0.0);
+            if !on_top {
+                apply(
+                    &mut graph,
+                    vec![Edit::ItemReorder {
+                        item_id: ItemId::new("card"),
+                        index: 0,
+                    }],
+                );
+            }
+            let shot = shadow_wall_shot(
+                &graph,
+                shadow_wall_model(true),
+                shadow_wall_light(true),
+                &block,
+            );
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let Some(mut compositor) = gpu() else { return };
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            let mut frame = || {
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &LiveParams::default()),
+                    &sides,
+                )
+            };
+            let first = frame();
+            let second = frame();
+            assert_eq!(
+                first, second,
+                "the first frame shows what the next does (cube on top: {on_top})"
+            );
+            assert!(
+                luma(first[0]).abs_diff(luma(first[1])) > 100,
+                "the cube shadows one side of the wall (cube on top: {on_top}): {first:?}"
+            );
+        }
+    }
+
     /// A scene primed on the snapshot thread leaves the program stage nothing to compile
     /// (`SnapshotWorker::prime`): a compositor opened on the same context afterwards, as
     /// an output start opens one, draws the scene, its model, shadow map and filter,
