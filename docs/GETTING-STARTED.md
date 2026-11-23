@@ -108,7 +108,8 @@ adds, which makes soft glows and veils brighter.
    webcam, an audio input (your microphone), a media file, an image, a 3D model (a glTF
    or GLB file, or a built-in shape such as a cube), a browser page,
    text (it starts bold with a soft shadow), a colour, a backdrop (a painted studio
-   backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
+   backdrop, generated), a fog card (a wisp of fog to place in a 3D scene), a shape
+   (a plate, pill or circle, with an optional gradient),
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or choose **Existing** and pick a source to reuse it); its properties open, so you can choose the

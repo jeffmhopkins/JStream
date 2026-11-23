@@ -214,6 +214,13 @@ fn known(kind: &str) -> Option<Known> {
             Generated,
             Some((1920.0, 1080.0)),
         ),
+        "fog_card" => (
+            "Fog card",
+            "A wisp of fog that fades out at its edges, to place in a 3D scene.",
+            "palette",
+            Generated,
+            Some((1024.0, 576.0)),
+        ),
         "shape" => (
             "Shape",
             "A plate, pill, circle or bar, solid or with a gradient.",
@@ -263,6 +270,7 @@ const ORDER: [&str; 19] = [
     "text",
     "color",
     "backdrop",
+    "fog_card",
     "shape",
     "timer",
     "waveform",

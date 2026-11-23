@@ -1925,6 +1925,104 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "fog_card",
+    "category": "source",
+    "name": "Fog card",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#c8ccd2",
+        "label": "Color",
+        "description": "The fog's color. Place the card in a 3D scene in front of what it should veil: a few cards at different depths read as fog with volume.",
+        "live": true
+      },
+      {
+        "id": "density",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.5,
+        "label": "Density",
+        "description": "How opaque the thickest fog is.",
+        "live": true
+      },
+      {
+        "id": "coverage",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.8,
+        "label": "Coverage",
+        "description": "How much of the card is fog: 0 is clear, 1 fog nearly everywhere.",
+        "live": true
+      },
+      {
+        "id": "scale",
+        "type": "float",
+        "min": 0.25,
+        "max": 4.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Scale",
+        "description": "The size of the clouds: above 1 is larger.",
+        "live": true
+      },
+      {
+        "id": "edge",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.7,
+        "label": "Edge fade",
+        "description": "How far in from the edges the fog thins out, breaking up into wisps so the card has no outline. 0 keeps fog up to the edges.",
+        "live": true
+      },
+      {
+        "id": "seed",
+        "type": "int",
+        "min": 0,
+        "max": 999999,
+        "step": 1,
+        "default": 1,
+        "label": "Seed",
+        "description": "Another number draws other clouds with the same look.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 4096,
+        "step": 1,
+        "unit": "px",
+        "default": 1024,
+        "label": "Width",
+        "description": "At most 4096. A card is soft and scales up smoothly.",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 4096,
+        "step": 1,
+        "unit": "px",
+        "default": 576,
+        "label": "Height",
+        "description": "At most 4096. A card is soft and scales up smoothly.",
+        "live": false
+      }
+    ]
+  },
+  {
     "kind_id": "follow_pointer",
     "category": "video_filter",
     "name": "Follow pointer",

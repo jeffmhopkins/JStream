@@ -39,6 +39,7 @@ mod color;
 pub mod data;
 mod describe;
 mod error;
+mod fog_card;
 mod fonts;
 mod grid;
 mod image;
