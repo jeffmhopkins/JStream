@@ -1554,9 +1554,9 @@ impl Drop for Release {
     }
 }
 
-/// An [`OpenDraw`] whose compositor on the platform's context draws one frame (the CPU
-/// stand-in's) and then fails every frame, and whose open on a device of its own hangs
-/// until `release` is set.
+/// An [`OpenDraw`] whose compositor on the platform's context draws the mix's first draw
+/// and one frame (the CPU stand-in's) and then fails every frame, and whose open on a
+/// device of its own hangs until `release` is set.
 fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
         if context.is_none() {
@@ -1568,13 +1568,14 @@ fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
             return Err("released after the test".to_owned());
         }
         let mut inner = (cpu_draw())(context)?;
-        let mut drawn = false;
+        let mut drawn = 0;
         let draw: DrawFn = Box::new(
             move |shot, scenes, live, captures, frames, at, meter, warm| {
-                if drawn {
+                // The first draw is pushed to no one; the second is the frame.
+                if drawn == 2 {
                     return Err(DrawError::Failed("device removed".to_owned()));
                 }
-                drawn = true;
+                drawn += 1;
                 inner(shot, scenes, live, captures, frames, at, meter, warm)
             },
         );

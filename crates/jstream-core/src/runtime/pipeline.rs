@@ -221,6 +221,12 @@ pub(crate) struct MixFrame {
     /// The output whose own video chain it runs through, or `None` when it is shared.
     /// It is drawn on its own even when another frame shows the same mix.
     pub(crate) owner: Option<OutputId>,
+    /// Whether it has been drawn once. Its first draw makes what every later one uses
+    /// (pipelines, layers, uploads, encode targets), so it can take many ticks.
+    pub(crate) primed: bool,
+    /// This tick draws it for the first time: it is drawn, and nothing of it is read
+    /// back or pushed, so its sessions' first frame is one the next follows on time.
+    pub(crate) priming: bool,
     /// A monitored scene it shows instead of a mix, for a preview stream (ADR-0117 §6):
     /// drawn from the scene's own snapshot, before any output stage, after every mix,
     /// and skipped (and counted) on a tick that has already used its period.
@@ -402,6 +408,8 @@ impl MixFrame {
             size,
             divisor,
             owner,
+            primed: false,
+            priming: false,
             scene: None,
             deadline: None,
             due: false,
@@ -3849,6 +3857,7 @@ impl Frames {
         let mut due = 0;
         for frame in &mut self.mixes {
             frame.due = index >= frame.next;
+            frame.priming = false;
             if frame.due {
                 frame.next = index.saturating_add(u64::from(frame.divisor.max(1)));
             }
@@ -3909,6 +3918,14 @@ impl Frames {
                 && frame.size.width() % 2 == 0
                 && frame.size.height() % 2 == 0;
             frame.local = only_local(frame.scene.is_some(), held, taps);
+            // A first draw is not read back: its frame would reach the sessions a long
+            // tick before the next. Its encode target is still set out, so the ring
+            // and the converter are made on this tick too.
+            frame.priming = frame.due && !frame.primed;
+            if frame.priming {
+                frame.readback = false;
+                frame.probe_only = false;
+            }
             encode.starved = false;
             frame.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
@@ -3964,6 +3981,14 @@ impl Frames {
             meter,
             warm,
         );
+        self.settle(drawn.is_ok());
+        drawn
+    }
+
+    /// What follows a tick's draw, which succeeded or not (`drawn`): each mix's frame
+    /// read back and its encode target become its shown ones, and a mix drawn for the
+    /// first time is primed.
+    fn settle(&mut self, drawn: bool) {
         for (((frame, shown), encode), taps) in self
             .mixes
             .iter_mut()
@@ -3987,13 +4012,23 @@ impl Frames {
                 frame.fresh = Some(pts);
             }
             if frame.due
-                && drawn.is_ok()
+                && drawn
                 && let Some(target) = target
             {
                 encode.shown = Some(target);
             }
+            if frame.priming && drawn {
+                frame.primed = true;
+            }
         }
-        drawn
+    }
+
+    /// Whether this tick drew something, and only mixes drawn for the first time: no
+    /// session was owed the ticks it ran over, so the next is due at once and none
+    /// counts as skipped.
+    fn only_primed(&self) -> bool {
+        let mut due = self.mixes.iter().filter(|frame| frame.due).peekable();
+        due.peek().is_some() && due.all(|frame| frame.priming && frame.primed)
     }
 }
 
@@ -4409,7 +4444,13 @@ fn render_loop(job: RenderJob) {
         );
         gpu_captures.store(captures.gpu_captures(), Ordering::Relaxed);
         for frame in &mut frames.mixes {
-            frame.push_at = frame.push_time(due, broken);
+            // A first draw pushes nothing, so it leaves no time behind it either: the
+            // next frame may carry the same one.
+            frame.push_at = if frame.priming {
+                None
+            } else {
+                frame.push_time(due, broken)
+            };
         }
         for (((frame, shown), targets), encode) in frames
             .mixes
@@ -4420,7 +4461,8 @@ fn render_loop(job: RenderJob) {
         {
             // A missed frame is this tick's alone: a broken stage repeats the last one.
             let starved = std::mem::take(&mut encode.starved);
-            if frame.due {
+            // A first draw's frame is pushed to no one ([`MixFrame::priming`]).
+            if frame.due && !frame.priming {
                 push_each(
                     targets,
                     |tap| {
@@ -4498,6 +4540,9 @@ fn render_loop(job: RenderJob) {
             .ok()
             .and_then(|after| on_frame_grid(after, period));
         next = match after {
+            // After a first draw alone the next tick is drawn at the clock, as the
+            // first is, so the sessions' first frame is followed on time.
+            Some(_) if frames.only_primed() => None,
             Some(next) => Some(next),
             None => {
                 report(&fail, "frame time overflow: the next tick".to_string());
@@ -6217,6 +6262,59 @@ mod tests {
             0,
             "a refused claim is let go"
         );
+    }
+
+    /// A mix's first draw is not read back and counts as its priming; the tick after
+    /// is read back as any other. A first draw that failed is tried again. While
+    /// another mix is due too, the tick is not one of first draws alone.
+    #[test]
+    fn a_mixes_first_draw_is_not_read_back() {
+        let size = FrameSize::new(2, 2).expect("size");
+        let feed = |divisor| Feed {
+            mix: None,
+            size,
+            divisor,
+            owner: None,
+            scene: None,
+        };
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            None,
+            &feed(1),
+            &EncoderProfile::DEFAULT,
+            FRAME_DEN,
+        )
+        .expect("fake session");
+        let gpu = jstream_platform::fake::FakeGpuInterop;
+        let mut frames = no_frames();
+        frames.add(feed(1), cpu_tap(session.input()));
+
+        assert_eq!(frames.schedule(0), 1);
+        assert_eq!(frames.prepare(&gpu, None, size), Ok(0));
+        assert!(frames.mixes[0].priming && !frames.mixes[0].readback);
+        frames.settle(false);
+        assert!(!frames.only_primed(), "a failed first draw primes nothing");
+
+        assert_eq!(frames.schedule(1), 1);
+        assert_eq!(frames.prepare(&gpu, None, size), Ok(0));
+        assert!(frames.mixes[0].priming && !frames.mixes[0].readback);
+        frames.settle(true);
+        assert!(frames.only_primed());
+
+        // A second mix arrives while the first is running.
+        frames.add(feed(2), cpu_tap(session.input()));
+        assert_eq!(frames.schedule(2), 2);
+        assert_eq!(frames.prepare(&gpu, None, size), Ok(0));
+        assert!(!frames.mixes[0].priming && frames.mixes[0].readback);
+        assert!(frames.mixes[1].priming && !frames.mixes[1].readback);
+        frames.settle(true);
+        assert!(!frames.only_primed(), "the first mix was owed this tick");
+
+        assert_eq!(frames.schedule(4), 2);
+        assert_eq!(frames.prepare(&gpu, None, size), Ok(0));
+        assert!(frames.mixes.iter().all(|mix| !mix.priming && mix.readback));
+        frames.settle(true);
+        assert!(!frames.only_primed());
     }
 
     /// A lost device shuts the gate even while a session holds a claim.

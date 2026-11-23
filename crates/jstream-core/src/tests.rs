@@ -4482,9 +4482,10 @@ mod cpu_pipeline {
             .next_back();
         let (render_ticks, load) = tick.expect("a stats.tick");
         assert_eq!(render_ticks, 9);
-        // Two ticks drawn, and the nine skipped ones not counted as frames.
+        // Three ticks drawn (the mix's first draw, which is pushed to no one, and the
+        // two frames), and the nine skipped ones not counted as frames.
         let frames = load.expect("the engine's load").program_frames;
-        assert_eq!(frames, 2, "the nine skipped ticks are not frames");
+        assert_eq!(frames, 3, "the nine skipped ticks are not frames");
         block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 

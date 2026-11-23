@@ -3440,7 +3440,10 @@ the loop skips to the current tick, stamps the frame with it and counts the skip
 ticks in `render_ticks`, so video stays on the clock that stamps audio
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). Both render-thread counters count base
 ticks (1/30 s by default, 1/60 s when the collection opts into it), whatever the video mixes' rates: `render_ticks` counts every skipped
-base tick, including ones on which no mix was due. The capture mailbox is read only on
+base tick, including ones on which no mix was due. The ticks a mix's first draw runs
+over are the exception when nothing else was drawn on that tick: no session had been
+pushed a frame yet, so none was dropped, and the next tick is drawn at the clock
+([Runtime](#runtime), `Frames::only_primed`). The capture mailbox is read only on
 ticks that draw, and a frame a capture replaced between two reads counts in
 `capture_frames` only when a read beside it took no new frame, so the canvas repeated a
 frame it could have shown. A capture faster than the canvas (a 60 fps webcam on a 30 fps
@@ -4723,7 +4726,13 @@ stream's frame and the preview's rate falls instead. After `LOCAL_YIELD_TICKS` (
 ticks in a row a local picture is drawn anyway, so a preview under a GPU that never
 catches up still shows about two pictures a second at 30
 (`a_local_picture_gives_way_while_the_gpu_is_behind`,
-`only_preview_streams_make_a_picture_local`). The first tick is drawn at once; later ones fall
+`only_preview_streams_make_a_picture_local`). A mix's first draw makes what every later
+one uses (pipelines, layers, uploads, its encode targets), so it can run over many
+ticks: it is drawn with no readback, and nothing of it is pushed
+(`MixFrame::priming`), so a session's first frame is one the next follows on time.
+When a tick drew first draws alone, the next is drawn at the clock and the ticks it
+ran over are not counted as skipped, since no session was owed them
+(`Frames::only_primed`, `a_mixes_first_draw_is_not_read_back`). The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
 (`on_frame_grid`), where the live sources' thread plans for them (*Live sources*). Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
