@@ -75,7 +75,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
-  `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`),
+  `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
+  cap since 0.165, with `PROBE_RESOLUTIONS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -367,7 +368,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.163 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.165 because a scene's surfaces can reflect each other through
+reflection probes: `SceneOptions`' `reflections`, and `RenderFeatures`'
+`reflection_probes` and `max_probe_resolution` (with `PROBE_RESOLUTIONS`)
+([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decisions 2 and 3);
+0.163 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
 0.160 because a motion modifier can follow a DAW's live data:
 `MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
@@ -1505,9 +1511,14 @@ program, ranked after the Preview scene within the warm budget
 `share_space` (default `false`), which on a group placed in a 3D scene draws its children
 in that scene's space through the group item's pose instead of as one card
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), kept and ignored
-on any other scene. `scene.set_options` replaces them all the
+on any other scene, and since 0.165 `reflections` (default `false`), which lets the
+scene's `scene`-lit models and lit cards reflect each other through its
+`reflection_probe` items, each by its own roughness and metalness
+([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decision 2). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
-parent and is refused, and `keep_warm`, which its parent decides and is refused, and `state.get` reports them flattened beside the scene's other
+parent and is refused, and `keep_warm` and `reflections`, which its parent decides and
+are refused, and `state.get` reports them flattened beside the scene's other
 fields, each omitted while it has its default. A scene's **camera**
 (`scene.set_camera {scene_id, camera?}`, since 0.70,
 [ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
@@ -1658,17 +1669,22 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   order and the first that would pass the limit is left cold with every one after it;
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
-  floor_reflections?}` (0.147,
+  floor_reflections?, reflection_probes?, max_probe_resolution?}` (0.147, the last two
+  since 0.165,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
   draws its effect in no scene, whatever a light (`shadows`) or a scene filter
   (`ambient_occlusion`, `volumetric_fog`, `floor_reflection`) asks for; on again, each
-  scene gets what it asks for. All are on until set. An application setting, like
+  scene gets what it asks for. `reflection_probes` off, no `reflection_probe` captures
+  and every surface reflects its environment as without one. `max_probe_resolution`
+  caps the face size a probe captures at: 128, 256 or 512 (`PROBE_RESOLUTIONS`, the
+  default 512), and any other size is `invalid_argument` on `max_probe_resolution`. All
+  are on until set. An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
-  reads as on.
+  reads as on, and a cap it leaves out as 512.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1783,7 +1799,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
-  sets.
+  sets, and since 0.165 the probe switch and face-size cap.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,

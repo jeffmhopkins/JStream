@@ -13,7 +13,7 @@ use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
-use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime};
+use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime, Panoramas};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
 use crate::wipe::Wipe;
@@ -165,6 +165,9 @@ pub struct Compositor {
     model_focus: ModelFocusRun,
     /// The sky backdrop's pipeline (ADR-0167), built the first time one draws.
     sky: Option<crate::sky::SkyRuntime>,
+    /// The reflection probes' resampling pipeline (ADR-0170 decision 3), built the first
+    /// time a probe resamples.
+    probe: Option<crate::probe::ProbeRuntime>,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
     /// Times effect-pack passes once [`Self::time_passes`] asked, on a device that can
@@ -772,43 +775,74 @@ impl Compositor {
     /// A live `texture` (ADR-0107 decision 5) is sampled through a mip chain of its
     /// whole picture, kept on its image and rebuilt here only when the image changed
     /// since, as a 3D item's is; a `reflection` is read as a scene's sky picture is.
+    /// The sky picture and the probe's capture it reflects are read through mip chains
+    /// of their own, made the same way, so a rough surface blurs them smoothly
+    /// (ADR-0170 decision 3).
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
         let errors = self.errors();
         let chain = draw
             .texture
             .and_then(|texture| texture.image)
             .filter(|image| image.owner().is(&self.owner))
-            .map(|image| {
-                let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
-                if chain.claim(image) {
-                    let lock = self.gpu.submit.clone();
-                    let submitting = lock.lock();
-                    let mut encoder =
-                        self.gpu
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("jstream-render-model-texture"),
-                            });
-                    chain.record(&mut encoder, &self.mip_pipelines, image);
-                    self.gpu.submit_work(encoder.finish());
-                    drop(submitting);
-                }
-                chain
-            });
+            .map(|image| self.built_chain(image, "jstream-render-model-texture"));
         let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
-        let drawn = self.draw_model_focused(draw, target, live);
+        // As the model reads them: nothing unlit, and a probe only lit by its scene.
+        let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
+        let sky = draw
+            .reflection
+            .or(draw.environment.and_then(|environment| environment.image))
+            .filter(|_| lit);
+        let probe = draw
+            .probe
+            .map(|probe| probe.image)
+            .filter(|_| draw.lighting == jstream_media::model::Lighting::Scene);
+        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
+        let panoramas = Panoramas {
+            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+        };
+        let drawn = self.draw_model_focused(draw, target, (live, panoramas));
         errors.close(drawn)
+    }
+
+    /// `image`'s mip chain of its whole picture, rebuilt first when the image changed
+    /// since its last build.
+    fn built_chain(&self, image: &Image, label: &'static str) -> Arc<Mips> {
+        let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
+        if chain.claim(image) {
+            let lock = self.gpu.submit.clone();
+            let submitting = lock.lock();
+            let mut encoder = self
+                .gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
+            chain.record(&mut encoder, &self.mip_pipelines, image);
+            self.gpu.submit_work(encoder.finish());
+            drop(submitting);
+        }
+        chain
+    }
+
+    /// The mip chain a blurred reflection reads of `image`, a sky picture or a probe's
+    /// capture this compositor made, with the image.
+    fn panorama_chain<'a>(&self, image: Option<&'a Image>) -> Option<(&'a Image, Arc<Mips>)> {
+        let image = image.filter(|image| image.owner().is(&self.owner))?;
+        Some((
+            image,
+            self.built_chain(image, "jstream-render-panorama-mips"),
+        ))
     }
 
     /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
     /// depth of field (ADR-0165), the model and its view depth are drawn into layers of
     /// their own first, and the model's focus passes blur them into `target`. `live` is
-    /// the live texture's mip chain, as [`Self::draw_model`] made it.
+    /// the live texture's mip chain and the panoramas' chains, as [`Self::draw_model`]
+    /// made them.
     fn draw_model_focused(
         &mut self,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+        live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
     ) -> Result<(), RenderError> {
         let canvas = jstream_protocol::Canvas {
             width: target.width(),
@@ -899,6 +933,27 @@ impl Compositor {
         errors.close(runtime.draw(&self.gpu, &self.owner, sky, target))
     }
 
+    /// Resamples a reflection probe's six `faces` into `target`, the panorama a surface
+    /// inside its box reads (ADR-0170 decision 3), replacing every texel: an
+    /// equirectangular panorama in the scene's axes, its centre along -z and up at its
+    /// top, premultiplied linear light with alpha where a face saw something. `target`
+    /// is a [`Self::layer`] four faces wide and two high.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when a face or `target` is not a layer this compositor
+    /// made, the faces aren't squares of one size, or `target` isn't four by two of them.
+    pub fn resample_probe(
+        &mut self,
+        faces: &[crate::ProbeFace<'_>; 6],
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let runtime = self
+            .probe
+            .get_or_insert_with(|| crate::probe::ProbeRuntime::new(&self.gpu));
+        errors.close(runtime.resample(&self.gpu, &self.owner, faces, target))
+    }
+
     /// How many deep skies [`Self::draw_sky`] has baked (ADR-0174).
     #[cfg(test)]
     pub(crate) fn sky_bakes(&self) -> u64 {
@@ -922,7 +977,17 @@ impl Compositor {
                 detail: "a lit card's picture and its target differ in size".into(),
             }));
         }
-        errors.close(self.models.light_card(&self.gpu, &self.owner, card, target))
+        let sky = card.environment.and_then(|environment| environment.image);
+        let probe = card.probe.map(|probe| probe.image);
+        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
+        let panoramas = Panoramas {
+            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+        };
+        errors.close(
+            self.models
+                .light_card(&self.gpu, &self.owner, card, target, panoramas),
+        )
     }
 
     /// Refills `image`, an upload this compositor made, with new tightly packed
@@ -1406,6 +1471,7 @@ impl Compositor {
             models,
             model_focus: ModelFocusRun::default(),
             sky: None,
+            probe: None,
             readback_wait: std::time::Duration::ZERO,
             timer: None,
             ingest: Mutex::new(None),

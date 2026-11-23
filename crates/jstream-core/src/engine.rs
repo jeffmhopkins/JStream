@@ -383,6 +383,17 @@ impl Engine {
         else {
             return None;
         };
+        if let Some(size) = change.max_probe_resolution
+            && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "max_probe_resolution",
+                format!(
+                    "a probe's faces are {:?} pixels a side, not {size}",
+                    jstream_protocol::PROBE_RESOLUTIONS
+                ),
+            )));
+        }
         let file = lock(&self.shared.rendering_file);
         let saved = {
             let mut state = lock(&self.shared.state);
@@ -4521,6 +4532,36 @@ fn frame_bytes([width, height]: [u32; 2]) -> u64 {
     u64::from(width) * u64::from(height) * 4
 }
 
+/// The bytes a reflection probe source's capture holds (ADR-0170 decision 3) in a scene
+/// that captures it, or `None` for any other source: its panorama, four faces by two,
+/// and its six faces, each a half-float RGBA layer, at the face size its `resolution`
+/// sets as `features` caps it.
+fn probe_bytes(
+    graph: &Graph,
+    features: jstream_protocol::RenderFeatures,
+    id: &SourceId,
+) -> Option<u64> {
+    if !features.reflection_probes {
+        return None;
+    }
+    let source = graph.state().source(id)?;
+    let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
+        return None;
+    };
+    if kind != "reflection_probe" {
+        return None;
+    }
+    let face = source
+        .settings()
+        .get("resolution")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|size| size.parse::<u32>().ok())
+        .unwrap_or(256);
+    let face = u64::from(features.probe_face(face));
+    // 8 + 6 faces' worth of texels, 8 bytes each.
+    Some(face * face * 14 * 8)
+}
+
 impl WarmCaptures {
     /// The captures of `scenes` in `graph`, as the running sources of `live` capture
     /// them, and the sources they draw, planned again when what they depend on changed,
@@ -4625,7 +4666,18 @@ impl WarmCaptures {
         let mut full = false;
         let mut kept = Vec::with_capacity(self.planned.len());
         let mut report = Vec::with_capacity(self.planned.len());
+        let features = live.filter_assets().features();
         for scene in &self.planned {
+            // Only a scene whose surfaces reflect captures its probes (a keyframe scene
+            // goes by its parent).
+            let reflective = graph.state().scene(&scene.id).is_some_and(|shown| {
+                shown
+                    .variant_of()
+                    .and_then(|parent| graph.state().scene(parent))
+                    .unwrap_or(shown)
+                    .options()
+                    .reflections
+            });
             let mut bytes = 0u64;
             let mut new = Vec::new();
             for id in &scene.sources {
@@ -4652,6 +4704,10 @@ impl WarmCaptures {
                         .unwrap_or([canvas.width, canvas.height]),
                 };
                 bytes = bytes.saturating_add(frame_bytes(size));
+                // A probe also holds its capture.
+                if let Some(capture) = probe_bytes(graph, features, id).filter(|_| reflective) {
+                    bytes = bytes.saturating_add(capture);
+                }
             }
             let preview = limit.preview == Some(&scene.id);
             if !preview

@@ -788,6 +788,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   focused and lit as an item of the scene, so the group item's live values, motion and
   keyframes move them all. `scene.set_camera_anchor` names such a group item for the
   family's camera to ride with: its position and target are then in the group's space.
+- **Reflections** ([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md),
+  protocol 0.165): a scene with `reflections` in its `scene.set_options` has its lit
+  models and cards reflect the scene around them, through the `reflection_probe` source
+  kind's boxes; `studio.set_rendering` turns probes off app-wide and caps their face size.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1335,7 +1339,15 @@ own filters, replaces its base colour, sampled through a mip chain of the whole 
 kept on that image and rebuilt only when it changes; its `reflection` names a source read
 as a panorama in place of the studio gradient or the scene's sky. Each is planned like a
 placed source though no item shows it, and the model's layer is drawn after the chains
-and scenes they read. The layer is then placed flat
+and scenes they read. In a scene with `reflections` on
+([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md)), a lit model or
+card inside a reflection probe's box reads the probe's panorama, box-projected, in place
+of the environment where the probe saw something: six 90° faces of the scene drawn
+from the box's centre after the chains, one face a frame of one probe at a time, so a
+refresh never spikes a frame, resampled into an
+equirectangular panorama that the next frame reads. A rough surface reads the sky's
+panorama and a probe's through mip chains of them, at the level its blur spans, so a
+bright point blurs into a soft glow. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
@@ -1664,7 +1676,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   with a migration that refuses them in an older file. Version 16 (ADR-0164) adds a
   group's `share_space` and a scene's `camera_anchor`, refused the same way. Version 17
   (ADR-0171) adds motion modifiers that drive a setting of their item's source
-  (`property` `source` with its `source` target), refused the same way. `jstream-core`
+  (`property` `source` with its `source` target), refused the same way. Version 18
+  (ADR-0170) adds a scene's `reflections`, refused the same way. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to
@@ -1718,10 +1731,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   one past the most, is logged and read as the default.
 - **3D rendering switches:** `rendering.json` (version 1) in the data directory, which
   costly 3D effects the engine draws (`studio.set_rendering`,
-  [ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md) decision 1), one
-  boolean each. The desktop app and the daemon name it (`Engine::with_rendering_file`);
+  [ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md) decisions 1 and
+  3), one boolean each and the probes' face-size cap. The desktop app and the daemon name it (`Engine::with_rendering_file`);
   `jstream-core` reads it at startup and replaces it atomically after every change. A
-  file it can't read is logged and read as all on, and a switch it leaves out is on.
+  file it can't read is logged and read as all on, a switch it leaves out is on, and a
+  cap it leaves out is the largest face size.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

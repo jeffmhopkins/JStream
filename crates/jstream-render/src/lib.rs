@@ -21,6 +21,7 @@ mod ingest;
 mod mips;
 mod model;
 mod place;
+mod probe;
 mod readback;
 mod scene;
 mod sky;
@@ -48,9 +49,10 @@ pub use image::Image;
 pub use jstream_protocol::BlendMode;
 pub use model::{
     CardDraw, Environment, GpuModel, LightKind, Lighting, LiveTexture, MAX_EMISSIVE_STRENGTH,
-    MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, SHADOW_MAP_PX, SceneLight,
-    ShadowMap,
+    MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, ProbeLookup, SHADOW_MAP_PX,
+    SceneLight, ShadowMap,
 };
+pub use probe::ProbeFace;
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 pub use sky::{DeepSky, MAX_STAR_BRIGHTNESS, SkyDraw};

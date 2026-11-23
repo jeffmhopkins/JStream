@@ -409,8 +409,9 @@ that does not want to change the graph it has.
   which the engine reads when it follows nesting for audio, and `background`, checked as
   a colour (`SceneOptions::problem`) and refused on a keyframe scene, which shows its
   parent's, and `keep_warm` (ADR-0149), refused on a keyframe scene too, since its
-  parent is the scene kept warm, and `share_space` (ADR-0164), which the engine reads on
-  a group placed in a 3D scene. A deleted scene's inverse restores them.
+  parent is the scene kept warm, `share_space` (ADR-0164), which the engine reads on
+  a group placed in a 3D scene, and `reflections` (ADR-0170 decision 2), refused on a
+  keyframe scene, whose parent decides it. A deleted scene's inverse restores them.
   `scene.set_camera` (`camera.rs`) sets or removes a scene's camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), checked by `SceneCamera::validate`
   (field `camera.fov_deg`, `camera.target` when it is on the position, else `camera`). On a keyframe scene it writes
@@ -549,7 +550,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 16), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 18), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -599,7 +600,8 @@ while `false`, is `schema_version` 15. A group's `share_space` and a scene's
 `camera_anchor` (ADR-0164), each omitted while absent, are `schema_version` 16, the
 anchor set after the scene's items exist. Version 17 (ADR-0171) adds motion modifiers
 with `property` `source` and their `source` target, which drive a setting of the item's
-own source. Loading creates the folders top level first, then
+own source. A scene's `reflections` (ADR-0170), omitted while `false`, is
+`schema_version` 18. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -626,8 +628,9 @@ the engine's; this crate does no I/O.
   default `normal` included, so only a file of `_srgb` items, or of none, loads as
   `srgb`, and 12 to 13 refuses a version 12 modifier that drives an effect setting,
   and 13 to 14 refuses a scene's `ptz_shots` in a version 13 file, 14 to 15 its
-  `keep_warm`, 15 to 16 a group's `share_space` and a scene's `camera_anchor`, and 16 to
-  17 a version 16 modifier that drives a source setting),
+  `keep_warm`, 15 to 16 a group's `share_space` and a scene's `camera_anchor`, 16 to
+  17 a version 16 modifier that drives a source setting, and 17 to 18 a scene's
+  `reflections` in a version 17 file),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.

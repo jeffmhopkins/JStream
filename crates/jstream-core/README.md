@@ -192,7 +192,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 - **The media clock** (`clock.rs`): `HeldClock` wraps the injected media clock so that
@@ -329,7 +329,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   one that isn't JSON counted, a new stream ID forgetting the old keys and a stopped
   receiver forgetting them all; and through the engine `data.list` empty before the
   receiver starts, then the sender's key listed and `data.get` reading it.
-- **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
+- **Snapshot** (`snapshot.rs`, its reflection probes' capture and lookup in
+  `snapshot/probes.rs`, see *Snapshots*): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -1440,7 +1441,9 @@ its start with its first frame decoded.
 The **3D rendering switches** (`studio.set_rendering`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decision 1) are an application setting too, answered before the collection lock
-(`Engine::rendering_call`): each switch the call names takes its value
+(`Engine::rendering_call`): a `max_probe_resolution` that isn't one of
+`PROBE_RESOLUTIONS` is `invalid_argument` and changes nothing; otherwise each switch the
+call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
 collection lock released, saves them in the file the host named with
@@ -1658,7 +1661,7 @@ The engine keeps the keyframe each placed scene is switched to
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 
@@ -2183,6 +2186,42 @@ view. More than 2 such lights are logged once (`Chains::shadows_warned`). `Chain
 the maps for that run (`shadows_of`), and every receiving model of the scene draws with
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).
+Reflection probes ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decisions 2 and 3, `snapshot/probes.rs`): planning notes each item that places a
+`reflection_probe` source as it notes a light (`Shot::probes`), and the scenes whose
+`reflections` option is on (`Shot::reflective`, a keyframe scene's its parent's). Once
+the chains have run, so every item's layer holds this frame's picture, `draw_probes`
+captures one due probe of those scenes at a time while the `reflection_probes` switch is
+on, the one that has waited longest since it last tried (`Chains::probe_tries`: one
+never tried first, and a try counts whether or not it drew), so a probe due every frame
+starves no other (`a_probe_due_every_frame_starves_no_other`). A capture draws one face a
+frame (`Chains::probe_run`, which goes on while its probe is due with the same box, face
+size and refresh, and starts again otherwise), so a refresh costs a sixth of a capture
+each frame for six frames rather than all of it in one; each face is the scene's pass drawn from the probe's box's centre (its item's centre in the
+scene's space, `centre_of`) through six 90° cameras along ±x, ±y and ±z
+(`face_cameras`), into square `GpuKey::ProbeFace` layers at the probe's `resolution`
+capped by `max_probe_resolution` (`RenderFeatures::probe_face`). Each model it shows is
+drawn again through each face camera into its `GpuKey::ProbeModel`, lit by the scene's
+lights as that face sees them and its environment, unshadowed and with no probe, so a
+capture never reads itself, and with no depth layer, since a model's `Item::depth` is
+seen from the scene's camera rather than a face's; cards keep their lit layers, and the compositor sorts them
+again for each face. The faces are kept between the frames of a capture, and in the frame
+that draws the sixth `Compositor::resample_probe` turns the six into the probe's
+`GpuKey::ProbeMap`, which every frame keeps while the scene is drawn; until then surfaces
+read its previous capture. A probe is due
+when it has no capture, its box or face size changed, `refresh_frames` have passed
+since its last, or, set to capture once, `SETTLE_FRAMES` (60) after its first, when
+what it sees has loaded; `Chains::probes` keeps what each was captured with. A
+`scene`-lit model whose source has `reflections` on, and a lit card, then reads the
+smallest box holding its centre among the captured probes of its scene (`lookup`, as
+`ModelDraw::probe` and `CardDraw::probe`, projected through the box it was captured
+from), so a probe shows from the frame after its
+first capture finishes (`a_mirror_inside_a_probe_reflects_what_is_behind_the_camera`). With the
+switch or the scene's option off nothing captures or reads a probe, and a capture the
+cache let go captures again. The warm scenes' estimate counts a probe's capture in a
+warm scene whose `reflections` is on while the switch is (`probe_bytes`, its panorama and
+faces in half-float RGBA at its capped face size,
+`a_reflection_probe_counts_its_capture`).
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 7) is posed before it is drawn: `pose` writes its source's `ShownModel::pose`

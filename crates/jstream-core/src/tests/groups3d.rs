@@ -85,6 +85,7 @@ fn share(on: bool) -> Edit {
         scene_id: SceneId::new("rig"),
         options: SceneOptions {
             share_space: on,
+            reflections: false,
             ..SceneOptions::default()
         },
     }

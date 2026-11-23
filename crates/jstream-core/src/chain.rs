@@ -744,6 +744,17 @@ pub(crate) struct Chains {
     pub(crate) shadowed: Vec<(usize, f32)>,
     /// The scenes whose shadowed lights past the limit have been logged.
     pub(crate) shadows_warned: BTreeSet<jstream_protocol::SceneId>,
+    /// Each reflection probe this compositor has captured (ADR-0170 decision 3), by
+    /// scene and item: what it was captured with and when, to tell when it is due.
+    pub(crate) probes: BTreeMap<
+        (jstream_protocol::SceneId, jstream_protocol::ItemId),
+        crate::snapshot::ProbeState,
+    >,
+    /// The frame each reflection probe last tried to capture in, whether or not it drew,
+    /// so the one capture a frame goes to the probe that has waited longest.
+    pub(crate) probe_tries: BTreeMap<(jstream_protocol::SceneId, jstream_protocol::ItemId), u64>,
+    /// The reflection probe capture under way, which draws one face a frame.
+    pub(crate) probe_run: Option<crate::snapshot::ProbeRun>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -3408,6 +3419,254 @@ mod tests {
             &[(32, 18)],
         );
         Some(pixels[0])
+    }
+
+    /// ADR-0170 decisions 2 and 3: a mirror plane in a scene whose `reflections` is on,
+    /// inside a reflection probe's box, reflects a red card behind the camera, which the
+    /// camera can't see but the probe does, from the frame after the probe first
+    /// captures. With the scene's reflections off, or the switch off, it doesn't.
+    #[test]
+    fn a_mirror_inside_a_probe_reflects_what_is_behind_the_camera() {
+        use jstream_sources::SourceKind as _;
+        let mut graph = placed(&[
+            ("cam", (32.0, 18.0), (32.0, 36.0), 0.0),
+            ("logo", (32.0, 18.0), (4.0, 4.0), 0.0),
+        ]);
+        let mut behind = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(400.0, 400.0).expect("positive"),
+        )
+        .expect("valid");
+        behind.fit_mode = jstream_protocol::FitMode::Stretch;
+        behind.depth_px = jstream_protocol::Finite32::new(200.0).expect("finite");
+        let camera = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        });
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(camera),
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("back"),
+                    name: "back".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("back"),
+                    source_id: SourceId::new("back"),
+                    transform: None,
+                    geometry: Some(behind),
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let reflective = |on: bool| Edit::SceneSetOptions {
+            scene_id: SceneId::new("main"),
+            options: jstream_protocol::SceneOptions {
+                reflections: on,
+                ..jstream_protocol::SceneOptions::default()
+            },
+        };
+        apply(&mut graph, vec![reflective(true)]);
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        settings.insert(String::from("metallic"), serde_json::json!(1.0));
+        settings.insert(String::from("roughness"), serde_json::json!(0.0));
+        let model = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(model.model());
+        let probe = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_probe(Some(jstream_sources::ShownProbe {
+                size_px: [10_000.0; 3],
+                fade_px: 0.0,
+                resolution: 128,
+                refresh_frames: 0,
+            }));
+        let red = Frame::new(4, 4, &[255, 0, 0, 255].repeat(16), 4).expect("invariant: 4x4 RGBA8");
+        let centre = |graph: &Graph, features: jstream_protocol::RenderFeatures| {
+            let assets = FilterAssets::default().with_features(features);
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::frame(
+                        match id.as_str() {
+                            "cam" => stand_in.clone(),
+                            "back" => red.clone(),
+                            _ => probe.clone(),
+                        },
+                        None,
+                    ))
+                },
+                &assets,
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            let live = LiveParams::default();
+            // The first six frames each draw a face and the sixth resamples them; the
+            // seventh reads the capture.
+            let mut frames = (0..7).map(|_| {
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &live),
+                    &[(32, 18)],
+                )[0]
+            });
+            let first = frames.next()?;
+            Some((first, frames.last()?))
+        };
+        let all = jstream_protocol::RenderFeatures::ALL;
+        let Some((before, mirrored)) = centre(&graph, all) else {
+            return;
+        };
+        assert!(
+            mirrored[0] > mirrored[1] + 60 && mirrored[0] > mirrored[2] + 60,
+            "the mirror shows the red card: {mirrored:?} (before the capture {before:?})"
+        );
+        assert!(
+            before[0] < mirrored[0],
+            "nothing before the first capture: {before:?}"
+        );
+        let off = jstream_protocol::RenderFeatures {
+            reflection_probes: false,
+            ..all
+        };
+        let (_, switched) = centre(&graph, off).expect("an adapter");
+        assert_eq!(switched, before, "the switch off reflects the environment");
+        apply(&mut graph, vec![reflective(false)]);
+        let (_, plain) = centre(&graph, all).expect("an adapter");
+        assert_eq!(
+            plain, before,
+            "a scene without reflections reflects the environment"
+        );
+    }
+
+    /// ADR-0170 decision 3: the one capture under way goes to the due probe that has
+    /// waited longest, so a probe due every frame, first in its scene, can't keep the
+    /// probe after it from ever capturing.
+    #[test]
+    fn a_probe_due_every_frame_starves_no_other() {
+        let mut graph = placed(&[
+            ("logo", (32.0, 18.0), (4.0, 4.0), 0.0),
+            ("cam", (20.0, 18.0), (4.0, 4.0), 0.0),
+        ]);
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+                Edit::SceneSetOptions {
+                    scene_id: SceneId::new("main"),
+                    options: jstream_protocol::SceneOptions {
+                        reflections: true,
+                        ..jstream_protocol::SceneOptions::default()
+                    },
+                },
+            ],
+        );
+        let probe = |refresh_frames: u32| {
+            Frame::new(1, 1, &[0; 4], 3)
+                .expect("invariant: 1x1 RGBA8")
+                .with_probe(Some(jstream_sources::ShownProbe {
+                    size_px: [1_000.0; 3],
+                    fade_px: 0.0,
+                    resolution: 128,
+                    refresh_frames,
+                }))
+        };
+        // `logo` is first in stacking order and due every frame.
+        let (every, once) = (probe(1), probe(0));
+        let assets = FilterAssets::default();
+        let shot = snapshot::plan_with(
+            &graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    if id.as_str() == "logo" {
+                        every.clone()
+                    } else {
+                        once.clone()
+                    },
+                    None,
+                ))
+            },
+            &assets,
+        )
+        .shot;
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else {
+            return;
+        };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let live = LiveParams::default();
+        let mut captured = Vec::new();
+        for _ in 0..18 {
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &live),
+                &[(32, 18)],
+            );
+            captured.push(
+                chains
+                    .probes
+                    .keys()
+                    .map(|(_, item)| item.as_str().to_owned())
+                    .collect::<Vec<_>>(),
+            );
+        }
+        // A capture draws a face a frame, so the first takes frames 0 to 5.
+        assert!(
+            captured[..5].iter().all(Vec::is_empty),
+            "nothing is captured before the sixth face: {captured:?}"
+        );
+        assert_eq!(
+            captured[5],
+            ["logo"],
+            "the first capture is of the first probe"
+        );
+        assert_eq!(
+            captured[11],
+            ["cam", "logo"],
+            "the second goes to the one that hasn't tried"
+        );
+        assert_eq!(captured[17], ["cam", "logo"], "both stay captured");
     }
 
     /// ADR-0151 decision 9: an environment light lights a `scene`-lit model with its sky

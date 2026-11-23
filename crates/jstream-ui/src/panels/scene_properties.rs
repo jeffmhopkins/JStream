@@ -81,6 +81,9 @@ pub struct SceneDraft {
     pub camera_motion: Vec<CameraMotionModifier>,
     /// For a group, whether it shares a 3D scene's space (ADR-0164 §1).
     pub share_space: bool,
+    /// Whether its surfaces reflect each other through its reflection probes (ADR-0170
+    /// decision 2); a keyframe scene's is its parent's.
+    pub reflections: bool,
     /// The group item its camera rides with (ADR-0164 §5); a keyframe scene's is its
     /// parent's.
     pub camera_anchor: Option<ItemId>,
@@ -102,6 +105,7 @@ impl SceneDraft {
             camera: scene.camera,
             camera_motion: scene.camera_motion.clone(),
             share_space: scene.options.share_space,
+            reflections: scene.options.reflections,
             camera_anchor: scene.camera_anchor.clone(),
         })
     }
@@ -200,11 +204,13 @@ pub fn scene_edits(
         background,
         draft.keep_warm,
         draft.share_space,
+        draft.reflections,
     ) != (
         before.include_audio,
         before.background.as_deref(),
         before.keep_warm,
         before.share_space,
+        before.reflections,
     ) {
         let mut options = collection
             .scene(scene_id)
@@ -214,6 +220,7 @@ pub fn scene_edits(
         options.background = background.map(str::to_owned);
         options.keep_warm = draft.keep_warm;
         options.share_space = draft.share_space;
+        options.reflections = draft.reflections;
         edits.push(Edit::SceneSetOptions {
             scene_id: scene_id.clone(),
             options,
@@ -933,6 +940,25 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                                 </div>
                             </div>
                         </Show>
+                        <Show when=move || !keyframe && !is_group>
+                            <div class="prop-row">
+                                <span class="prop-label check"></span>
+                                <div class="prop-control">
+                                    <label class="inline-check">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=move || draft.with(|d| d.reflections)
+                                            on:change=move |event| {
+                                                let on = event_target_checked(&event);
+                                                draft.update(|d| d.reflections = on);
+                                            }
+                                        />
+                                        <span>"Reflections"</span>
+                                    </label>
+                                    <Info text="In a 3D scene, models lit by the scene and lit cards inside a reflection probe's box reflect what the probe sees, each by its own roughness and metalness. Settings › 3D rendering can turn probes off everywhere." />
+                                </div>
+                            </div>
+                        </Show>
                         <Show when=move || is_group>
                             <div class="prop-row">
                                 <span class="prop-label check"></span>
@@ -1269,6 +1295,42 @@ mod tests {
                     background: None,
                     keep_warm: true,
                     share_space: false,
+                    reflections: false,
+                },
+            }])
+        );
+    }
+
+    /// "Reflections" sends `scene.set_options` with the other options kept (ADR-0170
+    /// decision 2).
+    #[test]
+    fn reflections_send_the_scene_s_options() {
+        let scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+            "keep_warm": true,
+        }))
+        .expect("a scene");
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        assert!(!before.reflections);
+        let on = SceneDraft {
+            reflections: true,
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &a, &before, &on),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: a,
+                options: SceneOptions {
+                    keep_warm: true,
+                    reflections: true,
+                    ..SceneOptions::default()
                 },
             }])
         );
@@ -1329,6 +1391,7 @@ mod tests {
                 scene_id: rig,
                 options: SceneOptions {
                     share_space: true,
+                    reflections: false,
                     ..SceneOptions::default()
                 },
             }])
@@ -1386,6 +1449,7 @@ mod tests {
                     background: None,
                     keep_warm: false,
                     share_space: false,
+                    reflections: false,
                 },
             }])
         );
@@ -1422,6 +1486,7 @@ mod tests {
                     background: Some("#0F111580".into()),
                     keep_warm: false,
                     share_space: false,
+                    reflections: false,
                 },
             }])
         );
@@ -1434,6 +1499,7 @@ mod tests {
                     background: None,
                     keep_warm: false,
                     share_space: false,
+                    reflections: false,
                 },
             }])
         );

@@ -692,6 +692,30 @@ fn a_scene_is_kept_warm_but_not_a_keyframe() {
     assert!(reason.contains("parent"), "{reason}");
 }
 
+/// A scene's surfaces reflect each other through its options (ADR-0170 decision 2); a
+/// keyframe scene is drawn as its parent, so it can't turn reflections on itself.
+#[test]
+fn a_scene_reflects_but_not_a_keyframe() {
+    let mut graph = family();
+    let reflective = |scene: &str| Edit::SceneSetOptions {
+        scene_id: SceneId::new(scene),
+        options: jstream_protocol::SceneOptions {
+            reflections: true,
+            ..jstream_protocol::SceneOptions::default()
+        },
+    };
+    apply_ok(&mut graph, vec![reflective("a")]);
+    assert!(
+        graph
+            .state()
+            .scene(&SceneId::new("a"))
+            .is_some_and(|s| s.options().reflections)
+    );
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![reflective("k")]));
+    assert!(field.ends_with("reflections"), "{field}");
+    assert!(reason.contains("parent"), "{reason}");
+}
+
 /// A keyframe's override of an item's effects (ADR-0088): one `tint` per entry, with
 /// `amount` set and `mask` naming a scene, or the defaults.
 fn effects(entries: &[(&str, Option<f64>, Option<&str>)]) -> Vec<FilterInfo> {

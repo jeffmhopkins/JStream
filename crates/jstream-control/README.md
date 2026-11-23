@@ -200,7 +200,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `scene.set_camera` and `source.set_meta`, in `mock/organise.rs`)
   make the graph's checks with the protocol's own `check_color`, `check_icon`,
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
-  background): a missing parent, folder or label, a folder inside itself, a
+  background or reflections): a missing parent, folder or label, a folder inside itself, a
   label listed twice, and no deleting a folder that holds a scene or folder or a label a
   source, scene or hotkey binding carries (with the graph's `blockers`; scenes carry labels since
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md), bindings since
@@ -373,8 +373,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.set_warm`
   (`invalid_argument` past `MAX_WARM_SCENES` or past `MAX_WARM_GPU_MIB` on `gpu_mib`; it
   only keeps the numbers for `studio.get`, since the mock runs no sources),
-  `studio.set_rendering` (it only keeps the switches for `studio.get`, since the mock
-  draws nothing), `item.show`,
+  `studio.set_rendering` (`invalid_argument` for a `max_probe_resolution` that isn't
+  one of `PROBE_RESOLUTIONS`; it only keeps the switches for `studio.get`, since the
+  mock draws nothing), `item.show`,
   `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
   `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
   to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `item.trigger_motion`

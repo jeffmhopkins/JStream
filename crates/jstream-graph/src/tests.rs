@@ -1780,6 +1780,7 @@ mod property {
                     },
                     keep_warm: false,
                     share_space: rng.below(2) == 0,
+                    reflections: rng.below(2) == 0,
                 },
             },
             65 => Edit::SourceSetMeta {

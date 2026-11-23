@@ -538,6 +538,13 @@ fn set_scene_options(
             "a keyframe scene is shown through its parent, which is the one kept warm",
         ));
     }
+    if options.reflections && state.scenes[si].variant_of().is_some() {
+        return Err(invalid(
+            at,
+            "reflections",
+            "a keyframe scene is drawn as its parent, whose reflections it shows",
+        ));
+    }
     let old = std::mem::replace(&mut state.scenes[si].options, options.clone());
     Ok(vec![Edit::SceneSetOptions {
         scene_id: scene_id.clone(),

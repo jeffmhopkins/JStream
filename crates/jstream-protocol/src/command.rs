@@ -833,10 +833,12 @@ pub enum Edit {
     },
     /// Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the
     /// Mixer when it is nested, its background colour, and since 0.116 whether the
-    /// studio keeps it warm (ADR-0117 §7). Every field left out takes its default. A
+    /// studio keeps it warm (ADR-0117 §7), and since 0.165 whether its surfaces reflect
+    /// each other (ADR-0170 decision 2). Every field left out takes its default. A
     /// keyframe scene has options of its own, except a background, which it shows from
-    /// its parent, and `keep_warm`, which its parent decides. `invalid` for a background
-    /// that isn't a colour, or a background or `keep_warm` on a keyframe scene. Inverse: `scene.set_options` with the previous options.
+    /// its parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`
+    /// for a background that isn't a colour, or a background, `keep_warm` or
+    /// `reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.
     #[serde(rename = "scene.set_options")]
     SceneSetOptions {
         /// The scene to change.

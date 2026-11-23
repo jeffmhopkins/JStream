@@ -490,6 +490,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 background: Some("#0f1115".into()),
                 keep_warm: true,
                 share_space: true,
+                reflections: false,
             },
         },
         Edit::SceneSetCamera {
@@ -2924,6 +2925,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         background: Some("#0f1115".into()),
                         keep_warm: true,
                         share_space: false,
+                        reflections: false,
                     },
                     camera: None,
                 },

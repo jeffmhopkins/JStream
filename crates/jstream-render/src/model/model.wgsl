@@ -21,6 +21,13 @@
 // lights, in place of either. A rough
 // reflection, and the diffuse light, read the panorama over a ring of taps around the
 // direction, wider the rougher. With no ambient light the sky lights a model on its own.
+//
+// Inside a reflection probe's box (ADR-0170 decision 3) a scene-lit surface reflects the
+// probe's capture of the scene around it in place of the environment: its reflected
+// direction is corrected to where it meets the box, so nearby walls line up, and the
+// capture's panorama is read with the same blur as the sky. Where the capture saw
+// nothing, the environment shows through. Near the box's faces the probe fades into the
+// environment. Diffuse light still comes from the environment.
 
 const MAX_LIGHTS: u32 = 8u;
 const MAX_SHADOWS: u32 = 2u;
@@ -51,6 +58,20 @@ struct Frame {
     // A floor the model is cut at (ADR-0151 decision 4): a fragment whose dot(xyz, seen)
     // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
     cut: vec4<f32>,
+    probe: Probe,
+}
+
+// The reflection probe a surface reads (ADR-0170 decision 3), in the viewing frame.
+struct Probe {
+    // xyz: the box's centre; w: 1 when there is one.
+    centre: vec4<f32>,
+    // xyz: the scene's x, y and z axes; w: the box's half size along each.
+    x: vec4<f32>,
+    y: vec4<f32>,
+    z: vec4<f32>,
+    // x: how far inside its faces it fades to the environment; y: how its picture stores
+    // alpha.
+    fade: vec4<f32>,
 }
 
 fn below_floor(seen: vec3<f32>) -> bool {
@@ -105,6 +126,7 @@ struct Material {
 @group(0) @binding(2) var shadow1: texture_2d<f32>;
 @group(0) @binding(3) var sky_tex: texture_2d<f32>;
 @group(0) @binding(4) var sky_sampler: sampler;
+@group(0) @binding(5) var probe_tex: texture_2d<f32>;
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var tex_sampler: sampler;
 @group(1) @binding(2) var base_tex: texture_2d<f32>;
@@ -187,12 +209,33 @@ fn sky_dir(dir: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
 }
 
-// The panorama's light along `d`, a scene direction: its centre ahead along -z.
-fn panorama(d: vec3<f32>) -> vec3<f32> {
+// The mip level a ring blur over `spread` (as `sky` takes it) reads of a panorama
+// `width` texels around with `levels` levels (ADR-0170 decision 3): the one whose texels
+// are about as wide as the ring's 8 taps are apart, `atan(spread)` out, so the taps
+// together cover the ring rather than land as 9 sharp points. 0 for a single sample.
+fn blur_level(spread: f32, width: f32, levels: u32) -> f32 {
+    if spread <= 0.01 {
+        return 0.0;
+    }
+    let gap = width * sin(atan(spread)) / 8.0;
+    return clamp(log2(max(gap, 1.0)), 0.0, f32(levels - 1u));
+}
+
+// A panorama's texture coordinates along `d`, a scene direction, its centre ahead along
+// -z, kept half a texel of a `height`-texel level inside its top and bottom rows, so a
+// filtered read never wraps to the other pole.
+fn panorama_uv(d: vec3<f32>, height: f32) -> vec2<f32> {
     let u = 0.5 + atan2(d.x, -d.z) / (2.0 * PI);
-    let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.001, 0.999);
+    let edge = max(0.001, 0.5 / max(height, 1.0));
+    let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, edge, 1.0 - edge);
+    return vec2<f32>(u, v);
+}
+
+// The panorama's light along `d`, a scene direction, at mip level `level`.
+fn panorama(d: vec3<f32>, level: f32) -> vec3<f32> {
+    let height = f32(textureDimensions(sky_tex, u32(ceil(level))).y);
     let c = to_premul_linear(
-        textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0),
+        textureSampleLevel(sky_tex, sky_sampler, panorama_uv(d, height), level),
         frame.environment.ground.w,
     );
     return c.rgb * frame.environment.down.w;
@@ -210,8 +253,13 @@ fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
         }
         return mix(e.horizon.rgb, e.ground.rgb, min(-up * 4.0, 1.0));
     }
+    let level = blur_level(
+        spread,
+        f32(textureDimensions(sky_tex).x),
+        textureNumLevels(sky_tex),
+    );
     if spread <= 0.01 {
-        return panorama(d);
+        return panorama(d, level);
     }
     var side = vec3<f32>(0.0, 1.0, 0.0);
     if abs(d.y) > 0.99 {
@@ -219,12 +267,89 @@ fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
     }
     let t = normalize(cross(d, side));
     let b = cross(d, t);
-    var sum = panorama(d);
+    var sum = panorama(d, level);
     for (var k = 0u; k < 8u; k++) {
         let a = f32(k) * PI * 0.25;
-        sum += panorama(normalize(d + spread * (t * cos(a) + b * sin(a))));
+        sum += panorama(normalize(d + spread * (t * cos(a) + b * sin(a))), level);
     }
     return sum / 9.0;
+}
+
+// The probe's capture along `d`, a direction in the scene's axes, at mip level
+// `level`: premultiplied, its alpha where the capture saw something.
+fn probe_panorama(d: vec3<f32>, level: f32) -> vec4<f32> {
+    let height = f32(textureDimensions(probe_tex, u32(ceil(level))).y);
+    return to_premul_linear(
+        textureSampleLevel(probe_tex, sky_sampler, panorama_uv(d, height), level),
+        frame.probe.fade.y,
+    );
+}
+
+// The probe's capture along `d`, blurred over `spread` as `sky` blurs the sky.
+fn probe_light(d: vec3<f32>, spread: f32) -> vec4<f32> {
+    let level = blur_level(
+        spread,
+        f32(textureDimensions(probe_tex).x),
+        textureNumLevels(probe_tex),
+    );
+    if spread <= 0.01 {
+        return probe_panorama(d, level);
+    }
+    var side = vec3<f32>(0.0, 1.0, 0.0);
+    if abs(d.y) > 0.99 {
+        side = vec3<f32>(1.0, 0.0, 0.0);
+    }
+    let t = normalize(cross(d, side));
+    let b = cross(d, t);
+    var sum = probe_panorama(d, level);
+    for (var k = 0u; k < 8u; k++) {
+        let a = f32(k) * PI * 0.25;
+        sum += probe_panorama(normalize(d + spread * (t * cos(a) + b * sin(a))), level);
+    }
+    return sum / 9.0;
+}
+
+// How much of the probe a fragment at `seen` takes, 0 outside its box, rising to 1
+// `fade` inside its faces.
+fn probe_weight(local: vec3<f32>) -> f32 {
+    let p = frame.probe;
+    let half = vec3<f32>(p.x.w, p.y.w, p.z.w);
+    let inside = half - abs(local);
+    let nearest = min(inside.x, min(inside.y, inside.z));
+    if nearest <= 0.0 {
+        return 0.0;
+    }
+    return clamp(nearest / max(p.fade.x, 1e-3), 0.0, 1.0);
+}
+
+// `dir` (in the viewing frame) from `local` (in the box's frame), as the direction in the
+// scene's axes from the box's centre to where it meets the box.
+fn probe_dir(local: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
+    let p = frame.probe;
+    let d = vec3<f32>(dot(dir, p.x.xyz), dot(dir, p.y.xyz), dot(dir, p.z.xyz));
+    let half = vec3<f32>(p.x.w, p.y.w, p.z.w);
+    let safe = select(d, vec3<f32>(1e-6), abs(d) < vec3<f32>(1e-6));
+    let far = max((half - local) / safe, (-half - local) / safe);
+    let t = max(min(far.x, min(far.y, far.z)), 0.0);
+    return normalize(local + d * t);
+}
+
+// The light a surface at `seen` reflects along `dir`: the probe's capture where it has
+// one (ADR-0170 decision 5), over `env`, the environment's, scaled by the ambient light,
+// where it saw nothing, and `env` alone outside every box.
+fn probed(seen: vec3<f32>, dir: vec3<f32>, roughness: f32, env: vec3<f32>) -> vec3<f32> {
+    let p = frame.probe;
+    if p.centre.w < 0.5 {
+        return env;
+    }
+    let off = seen - p.centre.xyz;
+    let local = vec3<f32>(dot(off, p.x.xyz), dot(off, p.y.xyz), dot(off, p.z.xyz));
+    let weight = probe_weight(local);
+    if weight <= 0.0 {
+        return env;
+    }
+    let found = probe_light(probe_dir(local, dir), roughness * roughness);
+    return mix(env, found.rgb + (1.0 - found.a) * env, weight);
 }
 
 fn ggx(n_dot_h: f32, alpha: f32) -> f32 {
@@ -459,9 +584,11 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
                 ambient = vec3<f32>(1.0);
             }
             let reflected = sky(blurred, roughness * roughness);
-            lit += ambient * (diffuse * sky(n, 1.0) + reflected * env_brdf(f0, roughness, n_dot_v));
+            lit += ambient * diffuse * sky(n, 1.0);
+            lit += probed(in.seen, blurred, roughness, ambient * reflected) * env_brdf(f0, roughness, n_dot_v);
         } else {
-            lit += ambient * (diffuse * environment(n) + environment(blurred) * env_brdf(f0, roughness, n_dot_v));
+            lit += ambient * diffuse * environment(n);
+            lit += probed(in.seen, blurred, roughness, ambient * environment(blurred)) * env_brdf(f0, roughness, n_dot_v);
         }
         let occlusion = mix(1.0, textureSample(occlusion_tex, tex_sampler, in.uv).r, material.surface.w);
         color = lit * occlusion + emitted;

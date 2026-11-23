@@ -173,7 +173,7 @@ pub use query::{
     DeviceInfo, FontInfo, ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo,
     SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
-pub use rendering::{RenderFeatures, RenderFeaturesChange};
+pub use rendering::{PROBE_RESOLUTIONS, RenderFeatures, RenderFeaturesChange};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use timeline::{
