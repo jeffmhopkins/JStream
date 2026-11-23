@@ -1375,6 +1375,9 @@ it out; `filter::testing` reads both lists.
   depth, so an edge doesn't bend it), and counts the hemisphere samples about the
   normal, rotated per pixel by a 4 × 4 ordered pattern, that land behind a nearer
   depth by more than a small bias, faded where that occluder is far past the radius.
+  The samples' points and the pattern's 16 rotations are made once on the CPU and
+  handed in the uniform (`kernel`, `sample_uniforms`), so no pixel works out a sine and
+  a cosine per sample.
   It writes the share and the pixel's `1 / w` into a scratch layer. The second
   (`occlusion/apply.wgsl`) averages the share over the 4 × 4 tile, keeping to pixels
   within 1% of the distance (or a quarter of the radius), and lays
@@ -1387,11 +1390,15 @@ it out; `filter::testing` reads both lists.
   `depth_px` (default 200) and `far_px` (default 0, never). A bright pass
   (`bloom/bright.wgsl`) keeps each 2 × 2 block's light above the threshold, over a knee
   of 0.1, into a half-size scratch layer, faded linearly to nothing at `far_px` by the
-  view depth's distance there. Two separable passes (`bloom/blur.wgsl`) blur it there:
+  view depth's distance there, and puts that texel's `1 / w` in its alpha, which nothing
+  reads as coverage. Two separable passes (`bloom/blur.wgsl`) blur it there:
   a Gaussian of half the radius at that size over at most 16 taps a side, normalised by
   its full weight, each tap's weight falling to nothing as the pixel it glows onto is
   nearer than the tap by `depth_px` to twice that, so a glow stops at something in front
-  of it; where either has nothing drawn it spreads as plain bloom's does. The glow is
+  of it; where either has nothing drawn it spreads as plain bloom's does. A tap is one
+  load: its colour and, in its alpha, its distance, which each pass hands on, so the
+  blur never reads the full-size view depth; its weights and whole-texel offsets are
+  made once on the CPU (`kernel`). The glow is
   added over the picture, read bilinear, its coverage its brightest channel, as
   `bloom`'s is (`bloom/add.wgsl`). Without a view depth it blooms with no depth test and
   no fade (`a_glow_stops_at_something_in_front_of_it`).
@@ -1440,7 +1447,12 @@ it out; `filter::testing` reads both lists.
   steps' jitter softening the edge, so what stands in a beam cuts a shaft through it,
   `a_shadow_map_cuts_the_light_through_the_fog`; nothing in the march's loops may make FXC, the
   Direct3D 12 compiler, unroll them, or it refuses the shader: the maps' sizes are read
-  once before the march, and the two maps are tried one by one, not in a loop), with a Henyey-Greenstein phase of `g = 0.4` against an even one. It lays the light scattered
+  once before the march, and the two maps are tried one by one, not in a loop), with a Henyey-Greenstein phase of `g = 0.4` against an even one. A ray skips, at every step, a light whose range it never
+  comes within (`in_range`, kept as one bit a light, not an array, for FXC again,
+  `a_light_with_a_range_lights_only_the_rays_that_come_near_it`), takes a directional
+  light with no shadow map once, since every step gets the same from it
+  (`a_directional_light_lights_every_step_alike`), and reads a shadow map only for
+  light that would arrive. It lays the light scattered
   toward the camera over the picture times what the fog lets through, scaled by the
   colour's alpha, source-over as `depth_fog` is.
 
@@ -1780,7 +1792,15 @@ plane-1 render into plane 0's memory (the Y plane's first rows came back holding
 CbCr values), so the native path is checked on WARP if WARP has the feature, and on
 real hardware.
 
-**Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
+**Benchmarks** (`benches/composite.rs` and `benches/filters.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
+`filters.rs` prices each filter kind alone: one `apply_filter_into` at 1080p and a wait
+for the queue, for every built-in kind at its defaults over an opaque picture and over
+a mostly transparent frame of a few shapes (`filter_1080p/<kind>/opaque` and `/shape`),
+for the settings that cost more than a default (`<kind>:<setting>`: the widest blur,
+shadow, glow and outline, the largest sharpen, a Lanczos stretch), and for each
+depth-aware kind over a scene of 16 cards whose view depth is already drawn
+(`scene_filter_1080p/<kind>`, with `volumetric_fog:8_lights` giving the fog eight scene
+lights). `composite.rs`:
 A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
 (`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
 4 of the items drawn `normal`, `multiply` and `overlay` (`composite_1080p_blend`, which
@@ -1801,8 +1821,12 @@ items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms (the shado
 sphere 24 ms, its map and lit draw without the placing), and depth with
 fog 31 and 48 ms for 4 and 16 cards, depth with ambient occlusion 47 and 67 ms, and
 with volumetric fog 541 and 545 ms, its 48 steps a pixel dominating on a CPU
-rasterizer, and with depth bloom 95 and 111 ms (criterion's `--quick`). Run them with
-`cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
+rasterizer (criterion's `--quick`). The filters alone, on lavapipe on Linux (llvmpipe,
+LLVM 20.1.2, 4 cores of a 2.1 GHz Xeon), where a copy of a 1080p frame takes 7 ms:
+`ambient_occlusion` 49 ms, `depth_bloom` 73 ms, `depth_fog` 16 ms, `volumetric_fog`
+0.60 s, and 1.1 s with eight lights, six of them with a range
+(`scene_filter_1080p`). Run them with
+`cargo bench -p jstream-render --bench composite` and `--bench filters`, which take the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the
 compositor submits, and say nothing about GPU frame time. **Not measured:** the NV12
