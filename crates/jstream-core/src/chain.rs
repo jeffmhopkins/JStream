@@ -4724,11 +4724,25 @@ mod tests {
             &FilterAssets::default(),
         )
         .shot;
-        assert_eq!(
-            shot.sky_pictures.get(&SourceId::new("logo")),
-            Some(&vec![SourceId::new("planet")]),
-            "the light's arrival pictures are planned"
+        let planned = shot
+            .sky_pictures
+            .get(&SourceId::new("logo"))
+            .expect("the light's arrival pictures are planned");
+        assert_eq!(planned.len(), 1);
+        assert_eq!(planned[0].0, SourceId::new("planet"));
+        assert!(
+            (planned[0].1 - 1.0).abs() < 1e-6,
+            "a full-canvas item: its setting"
         );
+        // A picture's item scales its width: a box half the canvas wide, half.
+        let canvas = jstream_protocol::Canvas::DEFAULT;
+        let half = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(0.0, 0.0).expect("finite"),
+            jstream_protocol::Size::try_new(canvas.width as f32 / 2.0, 10.0).expect("positive"),
+        )
+        .expect("valid");
+        let scale = snapshot::picture_scale(&jstream_graph::Placement::Geometry(half), canvas);
+        assert!((scale - 0.5).abs() < 1e-6, "{scale}");
         let mut cache = ResourceCache::new();
         let mut chains = Chains::default();
         let centre = draw_points(

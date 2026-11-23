@@ -1890,7 +1890,8 @@ one (`a_warp_aimed_ahead_cross_fades_the_backdrop_to_straight_ahead`).
 With arrival pictures
 ([ADR-0188](../../docs/adr/0188-a-backdrop-arrives-at-pictures-pinned-in-its-sky.md)),
 planning puts the frames of the visible items of the light's `sky_pictures` scene in the
-shot (`Shot::sky_pictures`, by the light's source), and the state keeps the picture shown
+shot (`Shot::sky_pictures`, by the light's source, each with how much its item's width
+scales `sky_picture_deg`, `picture_scale`), and the state keeps the picture shown
 and where it is pinned (`Arrival`): none while the deep sky is gone at warp
 (`deep_shown`), and another, at random, picked once as it starts to show again with the
 warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);

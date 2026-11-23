@@ -3138,7 +3138,7 @@ source: crates/jstream-core/src/kinds.rs
         "unit": "deg",
         "default": 30.0,
         "label": "Arrival picture size",
-        "description": "How wide an arrival picture is across the sky.",
+        "description": "How wide an arrival picture whose item spans the canvas is across the sky; size an item at half the canvas's width to show its picture half as wide.",
         "visible_if": {
           "param": "type",
           "equals": "environment"
