@@ -491,8 +491,27 @@ fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
     return f0 * ab.x + ab.y;
 }
 
-@fragment
-fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+// What `fs` draws at a fragment, and what a screen-space reflection (ADR-0170 decision
+// 4) reads of it: the shading normal in the viewing frame, the roughness, the split-sum
+// BRDF the environment's reflection was weighed by, and that reflection as it was added,
+// both times the occlusion. `reflects` is 1 where a scene-lit surface reflected its
+// environment, which a reflection found on screen may replace.
+struct Shaded {
+    color: vec4<f32>,
+    n: vec3<f32>,
+    roughness: f32,
+    brdf: vec3<f32>,
+    reflected: vec3<f32>,
+    reflects: f32,
+}
+
+fn shade(in: VsOut, front_facing: bool) -> Shaded {
+    var out: Shaded;
+    out.n = vec3<f32>(0.0);
+    out.roughness = 1.0;
+    out.brdf = vec3<f32>(0.0);
+    out.reflected = vec3<f32>(0.0);
+    out.reflects = 0.0;
     if below_floor(in.seen) {
         discard;
     }
@@ -576,6 +595,8 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
             lit += light(n, v, normalize(vec3<f32>(0.75, -0.1, 0.65)), 0.7, diffuse, f0, roughness);
         }
         let n_dot_v = max(dot(n, v), 1e-4);
+        let brdf = env_brdf(f0, roughness, n_dot_v);
+        var reflected: vec3<f32>;
         let r = reflect(-v, n);
         // The gradient is smooth, so a rough reflection samples it nearer the normal.
         let blurred = normalize(mix(r, n, roughness * roughness));
@@ -585,17 +606,28 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
             if frame.environment.right.w < 0.5 {
                 ambient = vec3<f32>(1.0);
             }
-            let reflected = sky(blurred, roughness * roughness);
             lit += ambient * diffuse * sky(n, 1.0);
-            lit += probed(in.seen, blurred, roughness, ambient * reflected) * env_brdf(f0, roughness, n_dot_v);
+            reflected = probed(in.seen, blurred, roughness, ambient * sky(blurred, roughness * roughness)) * brdf;
         } else {
             lit += ambient * diffuse * environment(n);
-            lit += probed(in.seen, blurred, roughness, ambient * environment(blurred)) * env_brdf(f0, roughness, n_dot_v);
+            reflected = probed(in.seen, blurred, roughness, ambient * environment(blurred)) * brdf;
         }
+        lit += reflected;
         let occlusion = mix(1.0, textureSample(occlusion_tex, tex_sampler, in.uv).r, material.surface.w);
         color = lit * occlusion + emitted;
+        out.n = n;
+        out.roughness = roughness;
+        out.brdf = brdf * occlusion;
+        out.reflected = reflected * occlusion;
+        out.reflects = select(0.0, 1.0, frame.params.w > 0.5 && mode < 1.5);
     }
-    return vec4<f32>(color * base.a, base.a);
+    out.color = vec4<f32>(color * base.a, base.a);
+    return out;
+}
+
+@fragment
+fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    return shade(in, front_facing).color;
 }
 
 // The opaque primitives' depth prepass: what `fs` keeps, without its shading, so the
@@ -643,4 +675,30 @@ fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
         discard;
     }
     return vec4<f32>(1.0 / w, 0.0, 0.0, 1.0);
+}
+
+// What a screen-space reflection reads of the nearest opaque surface (ADR-0170 decision
+// 4), where `fs_depth` would write its view depth: the shading normal in the viewing
+// frame and 1 / w; the BRDF and the roughness; the environment's reflection as `fs`
+// added it and whether one found on screen may replace it. The pipeline tests and
+// writes depth, so the nearest surface of every model drawn into the targets wins.
+struct SurfaceOut {
+    @location(0) normal: vec4<f32>,
+    @location(1) brdf: vec4<f32>,
+    @location(2) reflected: vec4<f32>,
+}
+
+@fragment
+fn fs_surface(in: VsOut, @builtin(front_facing) front_facing: bool) -> SurfaceOut {
+    let shaded = shade(in, front_facing);
+    let p = frame.params.x;
+    let w = (p - in.seen.z) / max(p, 1e-6);
+    if shaded.color.a < 0.5 || p <= 0.0 || w <= 0.0 {
+        discard;
+    }
+    var out: SurfaceOut;
+    out.normal = vec4<f32>(shaded.n, 1.0 / w);
+    out.brdf = vec4<f32>(shaded.brdf, shaded.roughness);
+    out.reflected = vec4<f32>(shaded.reflected, shaded.reflects);
+    return out;
 }

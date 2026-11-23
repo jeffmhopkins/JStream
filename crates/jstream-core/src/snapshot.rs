@@ -2990,12 +2990,24 @@ impl<'a> Planner<'a, '_> {
     /// keyframe scene's is its parent's (ADR-0024). `None` when no filter of it runs.
     fn scene_chain(&self, id: &SceneId) -> Option<Chain> {
         let (scene, _) = self.drawn(id)?;
-        Chain::of_filters(
+        let input = GpuKey::Composite(id.clone());
+        let chain = Chain::of_filters(
             &ChainOwner::Scene(id.clone()),
             scene_filters(self.state, scene),
-            GpuKey::Composite(id.clone()),
+            input.clone(),
             self.assets,
-        )
+        );
+        // A 3D scene whose surfaces reflect each other starts its chain with what they
+        // reflect of the screen (ADR-0170 decision 4), while the switch for it is on.
+        let features = self.assets.features();
+        if features.screen_space_reflections && self.reflective(id) && self.camera(id).is_some() {
+            return Some(Chain::with_screen_reflections(
+                chain,
+                input,
+                features.screen_space_steps,
+            ));
+        }
+        chain
     }
 
     /// Puts `chain`, `owner`'s, in `out`, with the scenes its filters read planned like
@@ -3734,6 +3746,10 @@ pub(crate) enum GpuKey {
     /// (ADR-0151 decision 4), and that picture's view depth.
     Reflection(SceneId),
     ReflectionDepth(SceneId),
+    /// One of the three layers of a 3D scene's surface buffer, for its chain's
+    /// screen-space reflections (ADR-0170 decision 4): its models' normals, their BRDF
+    /// and their environment's reflection, drawn with its view depth at the canvas size.
+    Surface(SceneId, u8),
     /// A model item drawn through its scene's mirrored camera, for that reflection.
     ReflectedModel(SceneId, ItemId),
     /// A lit card's picture flat in its box, before it is lit into its
@@ -3829,11 +3845,11 @@ fn casters_of(
         true,
     )
     .into_iter()
-    .map(|(model, shown, geometry, _)| Caster::Model {
-        model: model.seen(),
-        geometry,
-        lighting: shown.lighting,
-        pose: shown.pose.clone(),
+    .map(|drawn| Caster::Model {
+        model: drawn.model.seen(),
+        geometry: drawn.geometry,
+        lighting: drawn.shown.lighting,
+        pose: drawn.shown.pose.clone(),
     });
     cards.chain(models).collect()
 }
@@ -3956,6 +3972,9 @@ struct Pass {
     /// The floor its chain mirrors the scene in (ADR-0151 decision 4), so the pass draws
     /// the scene mirrored there; `None` without such a filter, or a view depth.
     reflection: Option<f32>,
+    /// Whether its chain reads the scene's surface buffer (ADR-0170 decision 4), so the
+    /// pass draws it of the scene's models with the view depth.
+    surface: bool,
 }
 
 /// The committed cameras a pass resolves its camera from (ADR-0094 §6), so that live
@@ -4257,6 +4276,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             view_depth: None,
             reads_shadows: false,
             reflection: None,
+            surface: false,
         }];
     }
     let mut passes = Vec::new();
@@ -4582,6 +4602,7 @@ fn visit_into(
         .as_ref()
         .and(chain)
         .and_then(Chain::reflection_floor);
+    let surface = view_depth.is_some() && chain.is_some_and(Chain::reads_surface);
     passes.pass(Pass {
         scene: id.clone(),
         depth,
@@ -4592,6 +4613,7 @@ fn visit_into(
         view_depth,
         reads_shadows,
         reflection,
+        surface,
     });
 }
 
@@ -6456,6 +6478,11 @@ fn run_chains(
                 if let Some(depth) = &pass.view_depth {
                     cache.layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
+                if pass.surface {
+                    for key in surface_keys(&pass.scene) {
+                        cache.layer(compositor, &key, canvas.width(), canvas.height())?;
+                    }
+                }
                 draw_sky(
                     compositor,
                     (&mut *cache, &*chains),
@@ -6541,15 +6568,34 @@ fn run_chains(
                         }),
                         _ => None,
                     };
+                    // What its models show a screen-space reflection, for a filter that
+                    // reads it (ADR-0170 decision 4).
+                    let surface = match (pass.surface, camera) {
+                        (true, Some(camera)) => draw_surface(
+                            compositor,
+                            (&*cache, &*chains),
+                            (shot, pass),
+                            (at, canvas, camera),
+                            (&lights, live),
+                        )
+                        .unwrap_or_else(|error| {
+                            tracing::debug!(scene = %pass.scene, %error, "surface buffer not drawn this frame");
+                            None
+                        }),
+                        _ => None,
+                    };
                     chains.drew_depth(
                         cache,
                         &pass.scene,
                         depth,
                         (view, &lights),
                         reads_shadows,
-                        reflection
-                            .as_ref()
-                            .map(|(image, depth, floor)| (image, depth, *floor)),
+                        (
+                            reflection
+                                .as_ref()
+                                .map(|(image, depth, floor)| (image, depth, *floor)),
+                            surface.as_ref(),
+                        ),
                     );
                     chains.lights = lights;
                     chains.shadowed = shadowed;
@@ -8179,7 +8225,13 @@ fn draw_view_depth(
     };
     compositor.render_view_depth(drawn, target)?;
     let casters = from.is_some_and(|(_, casters, _)| casters);
-    for (model, shown, geometry, in_layer) in depth_models(
+    for DepthModel {
+        model,
+        shown,
+        geometry,
+        in_layer,
+        ..
+    } in depth_models(
         (cache, chains),
         (shot, pass),
         (at, canvas, camera),
@@ -8213,6 +8265,81 @@ fn draw_view_depth(
     Ok(Some(view))
 }
 
+/// The layers of scene `id`'s surface buffer (ADR-0170 decision 4), in the order
+/// [`jstream_render::Compositor::draw_model_surface`] takes them.
+fn surface_keys(id: &SceneId) -> [GpuKey; 3] {
+    [0, 1, 2].map(|n| GpuKey::Surface(id.clone(), n))
+}
+
+/// Draws `pass`'s surface buffer (ADR-0170 decision 4), a 3D scene's whose chain
+/// reflects what is on screen: cleared, then each model its view depth holds, through
+/// `camera`, the nearest kept. A model lit by the scene that doesn't opt out of
+/// reflections is shaded with the scene's `lights`, sky and probe, as its layer was, so
+/// the pass knows the environment's reflection it may replace; any other only covers
+/// what is behind it. Returns its keys, or `None` when its layers aren't there.
+///
+/// # Errors
+/// What the compositor reports for drawing into the layers.
+fn draw_surface(
+    compositor: &mut Compositor,
+    (cache, chains): (&ResourceCache<GpuKey>, &Chains),
+    (shot, pass): (&Shot, &Pass),
+    (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
+    (lights, live): (&[jstream_render::SceneLight], &LiveParams),
+) -> Result<Option<[GpuKey; 3]>, RenderError> {
+    let keys = surface_keys(&pass.scene);
+    let [Some(normal), Some(brdf), Some(reflected)] = keys.each_ref().map(|key| cache.get(key))
+    else {
+        return Ok(None);
+    };
+    let targets = [normal, brdf, reflected];
+    compositor.clear_surface(targets)?;
+    for drawn in depth_models(
+        (cache, chains),
+        (shot, pass),
+        (at, canvas, camera),
+        live,
+        false,
+    ) {
+        let shown = drawn.shown;
+        pose(compositor, drawn.model, shown);
+        let reflects = shown.lighting == Lighting::Scene && shown.reflections;
+        let environment = reflects
+            .then(|| scene_environment((shot, cache), &pass.scene, at, live).0)
+            .flatten();
+        let probe = reflects
+            .then(|| {
+                probes::lookup(
+                    (cache, chains),
+                    shot,
+                    &pass.scene,
+                    probes::centre_of(drawn.geometry),
+                    (at, live),
+                )
+            })
+            .flatten();
+        let (_, reflection) = model_maps(shot, cache, drawn.source, shown);
+        compositor.draw_model_surface(
+            &jstream_render::ModelDraw {
+                model: drawn.model,
+                geometry: drawn.geometry,
+                camera: Some(camera),
+                lighting: shown.lighting,
+                lights: reflects.then_some(lights),
+                shadows: &[],
+                environment,
+                floor: None,
+                materials: &[],
+                texture: None,
+                reflection: reflection.filter(|_| reflects),
+                probe,
+            },
+            targets,
+        )?;
+    }
+    Ok(Some(keys))
+}
+
 /// The models `pass` shows that write a view depth at `at`, each with what it shows and
 /// where its item places it through `camera`: every model whose layer is drawn this
 /// frame at least half opaque, as a card writes depth, and with `casters` only those
@@ -8220,16 +8347,11 @@ fn draw_view_depth(
 /// model's depth layer ([`Item::depth`]), drawn with it through `camera`.
 fn depth_models<'a>(
     (cache, chains): (&ResourceCache<GpuKey>, &'a Chains),
-    (shot, pass): (&'a Shot, &Pass),
+    (shot, pass): (&'a Shot, &'a Pass),
     (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
     live: &LiveParams,
     casters: bool,
-) -> Vec<(
-    &'a jstream_render::GpuModel,
-    &'a jstream_sources::ShownModel,
-    ItemGeometry,
-    bool,
-)> {
+) -> Vec<DepthModel<'a>> {
     let size = [canvas.width() as f32, canvas.height() as f32];
     let mut models = Vec::new();
     for layer in &pass.layers {
@@ -8277,9 +8399,25 @@ fn depth_models<'a>(
         if casters && !shown.casts_shadows {
             continue;
         }
-        models.push((model, shown, geometry, item.depth.is_some()));
+        models.push(DepthModel {
+            model,
+            shown,
+            geometry,
+            in_layer: item.depth.is_some(),
+            source,
+        });
     }
     models
+}
+
+/// A model [`depth_models`] lists: its upload and what it shows, where its item places
+/// it, whether its item carries its depth layer, and its source.
+struct DepthModel<'a> {
+    model: &'a jstream_render::GpuModel,
+    shown: &'a jstream_sources::ShownModel,
+    geometry: ItemGeometry,
+    in_layer: bool,
+    source: &'a SourceId,
 }
 
 /// `base`, a pass's camera with its live camera applied, moved by its family's camera

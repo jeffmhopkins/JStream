@@ -37,13 +37,15 @@ pub use compositor::{Compositor, ModelUploader};
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
 pub use error::{NO_ADAPTER_HINT, RenderError};
 pub use filter::{
-    DepthReflection, DepthShadow, ExternalFilter, ExternalProgram, FIRST_INPUT_BINDING,
-    FilterClock, Lut, LutError, MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE, PROGRAM_AUDIO_BANDS,
-    PROGRAM_MAX_INPUTS, PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio,
-    ProgramImage, ProgramInput, ProgramPass, VideoFilter, ViewDepth,
-    depth_descriptors as depth_filter_descriptors, descriptors as video_filter_descriptors,
-    lut_image, outset as video_filter_outset, reads_depth as video_filter_reads_depth,
-    reads_shadows as video_filter_reads_shadows, reflection_floor as video_filter_reflection_floor,
+    DepthReflection, DepthShadow, DepthSurface, ExternalFilter, ExternalProgram,
+    FIRST_INPUT_BINDING, FilterClock, Lut, LutError, MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE,
+    PROGRAM_AUDIO_BANDS, PROGRAM_MAX_INPUTS, PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING,
+    PROGRAM_PRELUDE, ProgramAudio, ProgramImage, ProgramInput, ProgramPass,
+    SCREEN_REFLECTIONS_KIND, VideoFilter, ViewDepth, depth_descriptors as depth_filter_descriptors,
+    descriptors as video_filter_descriptors, lut_image, outset as video_filter_outset,
+    reads_depth as video_filter_reads_depth, reads_shadows as video_filter_reads_shadows,
+    reads_surface as video_filter_reads_surface, reflection_floor as video_filter_reflection_floor,
+    screen_reflections_descriptor,
 };
 pub use gpu::{OpenOptions, adapter_available, context_lost};
 pub use image::{Image, Seen};

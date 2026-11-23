@@ -377,8 +377,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.set_warm`
   (`invalid_argument` past `MAX_WARM_SCENES` or past `MAX_WARM_GPU_MIB` on `gpu_mib`; it
   only keeps the numbers for `studio.get`, since the mock runs no sources),
-  `studio.set_rendering` (`invalid_argument` for a `max_probe_resolution` that isn't
-  one of `PROBE_RESOLUTIONS`; it only keeps the switches for `studio.get`, since the
+  `studio.set_rendering` (`invalid_argument` for a `screen_space_steps` that isn't one
+  of `SCREEN_SPACE_STEPS`, or a `max_probe_resolution` that isn't one of
+  `PROBE_RESOLUTIONS`; it only keeps the switches for `studio.get`, since the
   mock draws nothing), `item.show`,
   `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
   `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect

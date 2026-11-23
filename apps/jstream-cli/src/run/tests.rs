@@ -887,7 +887,8 @@ fn program_scene_golden() {
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
             r#""program_scene":"brb","preview_scene":"main","warm_scenes":3,"warm_gpu_mib":0,"#,
             r#""rendering":{"shadows":true,"ambient_occlusion":true,"volumetric_fog":true,"#,
-            r#""floor_reflections":true,"reflection_probes":true,"max_probe_resolution":512}}}}"#,
+            r#""floor_reflections":true,"reflection_probes":true,"max_probe_resolution":512,"#,
+            r#""screen_space_reflections":true,"screen_space_steps":32}}}}"#,
             "\n"
         ))
     );

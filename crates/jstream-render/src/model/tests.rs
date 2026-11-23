@@ -2524,3 +2524,101 @@ fn a_second_compositor_on_the_device_makes_no_pipeline_again() {
     assert_eq!(first.1.rgba(), second.1.rgba(), "the same cube");
     assert!(count(&first.1, FRONT) > 100, "the cube shows");
 }
+
+/// `layer` placed 1:1 over nothing, read back: its alpha as it holds it.
+fn read_layer(compositor: &mut Compositor, layer: &crate::Image) -> Snapshot {
+    let items = [crate::tests::item(
+        layer,
+        Placement::Legacy(crate::LegacyTransform::IDENTITY),
+        Crop::NONE,
+        1.0,
+    )];
+    let scene = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &items,
+    };
+    compositor
+        .render(&scene, true)
+        .expect("the scene renders")
+        .pixels()
+        .expect("readback was requested")
+        .clone()
+}
+
+/// ADR-0170 decision 4: a scene-lit model's surface buffer holds where it is, facing
+/// the viewer at its centre, and marks its reflection replaceable; a studio-lit one
+/// still covers the targets, so nothing behind it shows through, but marks nothing; the
+/// nearer of two models wins wherever both are.
+#[test]
+fn a_models_surface_marks_where_a_reflection_may_be_replaced() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = Some(SceneCamera::framing(canvas()));
+    let sphere = compositor
+        .upload_model(&grey_sphere())
+        .expect("the model uploads");
+    let lights = [ambient(1.0)];
+    // As the engine draws it: only a scene-lit model has the scene's lights.
+    let at = |geometry, lighting| ModelDraw {
+        model: &sphere,
+        geometry,
+        camera,
+        lighting,
+        lights: (lighting == Lighting::Scene).then_some(&lights[..]),
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let targets = [(); 3].map(|()| compositor.layer(WIDTH, HEIGHT).expect("a layer"));
+    let surface = [&targets[0], &targets[1], &targets[2]];
+    compositor.clear_surface(surface).expect("it clears");
+    compositor
+        .draw_model_surface(&at(boxed(80.0, 50.0, 60.0), Lighting::Scene), surface)
+        .expect("the surface draws");
+    let reflected = read_layer(compositor, &targets[2]);
+    assert_eq!(
+        reflected.pixel(80, 50).expect("inside")[3],
+        255,
+        "replaceable"
+    );
+    assert_eq!(
+        reflected.pixel(2, 2).expect("inside")[3],
+        0,
+        "no model there"
+    );
+    let normal = read_layer(compositor, &targets[0]);
+    let centre = normal.pixel(80, 50).expect("inside");
+    assert!(
+        centre[3] > 0 && centre[2] > 200,
+        "faces the viewer: {centre:?}"
+    );
+
+    // A studio-lit sphere in front of it covers it, and marks nothing.
+    let mut front = boxed(80.0, 50.0, 30.0);
+    front.depth_px = finite(40.0);
+    compositor
+        .draw_model_surface(&at(front, Lighting::Studio), surface)
+        .expect("the surface draws");
+    let reflected = read_layer(compositor, &targets[2]);
+    assert_eq!(
+        reflected.pixel(80, 50).expect("inside")[3],
+        0,
+        "the nearer wins"
+    );
+    assert_eq!(
+        reflected.pixel(56, 50).expect("inside")[3],
+        255,
+        "the farther around it"
+    );
+    // Cleared, nothing is marked.
+    compositor.clear_surface(surface).expect("it clears");
+    let reflected = read_layer(compositor, &targets[2]);
+    assert_eq!(reflected.pixel(80, 50).expect("inside")[3], 0, "cleared");
+}

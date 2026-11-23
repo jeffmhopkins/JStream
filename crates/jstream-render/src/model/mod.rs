@@ -568,6 +568,10 @@ pub(crate) struct ModelRuntime {
     blended: wgpu::RenderPipeline,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
     depth_only: wgpu::RenderPipeline,
+    /// What a screen-space reflection reads of each model (ADR-0170 decision 4).
+    surface: wgpu::RenderPipeline,
+    /// Its depth, kept across the models drawn into one set of targets.
+    surface_depth: Option<(u32, u32, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
     frame: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
@@ -819,6 +823,58 @@ impl ModelRuntime {
             cache: None,
         };
         let depth_only = gpu.built.render(device, SOURCE, &(), &depth_only);
+        // What a screen-space reflection reads (ADR-0170 decision 4): three targets, and
+        // a depth test of its own so the nearest surface of every model drawn wins.
+        let plain = Some(wgpu::ColorTargetState {
+            format: LAYER_FORMAT,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        });
+        let surface = wgpu::RenderPipelineDescriptor {
+            label: Some("jstream-render-model-surface"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: VERTEX_STRIDE,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x3,
+                        1 => Float32x3,
+                        2 => Float32x4,
+                        3 => Float32x2,
+                        4 => Float32x4,
+                        5 => Uint16x4,
+                        6 => Float32x4,
+                    ],
+                })],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Greater),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_surface"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[plain.clone(), plain.clone(), plain],
+            }),
+            multiview_mask: None,
+            cache: None,
+        };
+        let surface = gpu.built.render(device, SOURCE, &(), &surface);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-model-sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -880,6 +936,8 @@ impl ModelRuntime {
             opaque,
             blended,
             depth_only,
+            surface,
+            surface_depth: None,
             sampler,
             frame,
             frame_bind,
@@ -1187,7 +1245,7 @@ impl ModelRuntime {
         target: &Image,
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
     ) -> Result<(), RenderError> {
-        self.draw_as(gpu, owner, draw, target, (live, panoramas), false)
+        self.draw_as(gpu, owner, draw, target, (live, panoramas), DrawAs::Layer)
     }
 
     /// The material bind groups `draw` binds with its live texture `live` (the clear
@@ -1398,7 +1456,14 @@ impl ModelRuntime {
             reflection: None,
             probe: card.probe,
         };
-        self.draw_as(gpu, owner, &draw, target, (None, panoramas), true)
+        self.draw_as(
+            gpu,
+            owner,
+            &draw,
+            target,
+            (None, panoramas),
+            DrawAs::InTexture,
+        )
     }
 
     /// The quad a card is lit on: a unit square in its own plane, facing the viewer,
@@ -1456,9 +1521,10 @@ impl ModelRuntime {
         (vertices, indices)
     }
 
-    /// Draws `draw` into `target`: through its camera, or, `in_texture`, laid flat over
-    /// the target in its own texture coordinates while shaded where it sits in the
-    /// scene, its camera's side of it facing.
+    /// Draws `draw` into `target`: through its camera, or, [`DrawAs::InTexture`], laid
+    /// flat over the target in its own texture coordinates while shaded where it sits in
+    /// the scene, its camera's side of it facing. [`DrawAs::Surface`] draws what a
+    /// screen-space reflection reads instead, into its targets, `target` the first.
     fn draw_as(
         &mut self,
         gpu: &Gpu,
@@ -1466,8 +1532,9 @@ impl ModelRuntime {
         draw: &ModelDraw<'_>,
         target: &Image,
         (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
-        in_texture: bool,
+        how: DrawAs<'_>,
     ) -> Result<(), RenderError> {
+        let in_texture = matches!(how, DrawAs::InTexture);
         let model = &draw.model.inner;
         if !model.owner.is(owner) {
             return Err(RenderError::Invalid {
@@ -1604,6 +1671,9 @@ impl ModelRuntime {
         let live_binds = draw
             .texture
             .map(|texture| self.live_binds(gpu, model, texture.material, live));
+        if let DrawAs::Surface(targets) = how {
+            return self.draw_surface(gpu, owner, (model, &frame, &frame_bind), targets);
+        }
         let depth = self.depth_view(gpu, width, height);
         // Blended primitives far to near by their centres.
         self.order.clear();
@@ -1836,6 +1906,183 @@ impl ModelRuntime {
         Ok(())
     }
 
+    /// Clears `targets`, a screen-space reflection's surface buffer (ADR-0170 decision
+    /// 4), and the depth its models test against, before [`Self::draw_surface_of`] draws
+    /// each model into them.
+    pub(crate) fn clear_surface(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        targets: [&Image; 3],
+    ) -> Result<(), RenderError> {
+        let views = surface_views(owner, targets)?;
+        let (width, height) = (targets[0].width(), targets[0].height());
+        let depth = self.surface_depth_view(gpu, width, height);
+        let lock = gpu.submit.clone();
+        let submitting = lock.lock();
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-model-surface-clear"),
+            });
+        {
+            let clear = |view| {
+                Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })
+            };
+            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-model-surface-clear"),
+                color_attachments: &[clear(views[0]), clear(views[1]), clear(views[2])],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+        }
+        gpu.submit_work(encoder.finish());
+        for target in targets {
+            target.mark_changed();
+            target.set_content(None);
+        }
+        drop(submitting);
+        Ok(())
+    }
+
+    /// Draws `draw`'s surface into `targets` (ADR-0170 decision 4), shaded as
+    /// [`Self::draw`] shades it, where it is nearer than what the targets hold since
+    /// [`Self::clear_surface`]. Nothing without a camera.
+    pub(crate) fn draw_surface_of(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        draw: &ModelDraw<'_>,
+        (targets, panoramas): ([&Image; 3], Panoramas<'_>),
+    ) -> Result<(), RenderError> {
+        if draw.camera.is_none() {
+            return Ok(());
+        }
+        self.draw_as(
+            gpu,
+            owner,
+            draw,
+            targets[0],
+            (None, panoramas),
+            DrawAs::Surface(targets),
+        )
+    }
+
+    /// The surface pass of [`Self::draw_as`]: every primitive, the nearest kept.
+    fn draw_surface(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        (model, frame, frame_bind): (&Uploaded, &[u8], &wgpu::BindGroup),
+        targets: [&Image; 3],
+    ) -> Result<(), RenderError> {
+        let views = surface_views(owner, targets)?;
+        let (width, height) = (targets[0].width(), targets[0].height());
+        let depth = self.surface_depth_view(gpu, width, height);
+        let lock = gpu.submit.clone();
+        let submitting = lock.lock();
+        gpu.queue.write_buffer(&self.frame, 0, frame);
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-model-surface"),
+            });
+        {
+            let keep = |view| {
+                Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })
+            };
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-model-surface"),
+                color_attachments: &[keep(views[0]), keep(views[1]), keep(views[2])],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.surface);
+            pass.set_bind_group(0, frame_bind, &[]);
+            pass.set_bind_group(
+                2,
+                model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1),
+                &[],
+            );
+            for p in &model.primitives {
+                let Some(material) = model.materials.get(p.material) else {
+                    continue;
+                };
+                pass.set_bind_group(1, &material.bind, &[]);
+                pass.set_vertex_buffer(0, p.vertices.slice(..));
+                pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..p.index_count, 0, 0..1);
+            }
+        }
+        gpu.submit_work(encoder.finish());
+        for target in targets {
+            target.mark_changed();
+        }
+        drop(submitting);
+        Ok(())
+    }
+
+    /// The depth a surface buffer's models test against, kept between
+    /// [`Self::clear_surface`] and the draws after it; made again for another size.
+    fn surface_depth_view(&mut self, gpu: &Gpu, width: u32, height: u32) -> wgpu::TextureView {
+        if let Some((w, h, view)) = &self.surface_depth
+            && (*w, *h) == (width, height)
+        {
+            return view.clone();
+        }
+        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-render-model-surface-depth"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.surface_depth = Some((width, height, view.clone()));
+        view
+    }
+
     fn depth_view(&mut self, gpu: &Gpu, width: u32, height: u32) -> wgpu::TextureView {
         if let Some((w, h, view)) = &self.depth
             && (*w, *h) == (width, height)
@@ -1863,6 +2110,43 @@ impl ModelRuntime {
         self.depth = Some((w, h, view.clone()));
         view
     }
+}
+
+/// What [`ModelRuntime::draw_as`] draws.
+#[derive(Clone, Copy)]
+enum DrawAs<'a> {
+    /// The model through its camera, into a layer.
+    Layer,
+    /// A lit card's quad, laid flat over the layer in its texture coordinates.
+    InTexture,
+    /// What a screen-space reflection reads of it, into these three targets
+    /// (ADR-0170 decision 4).
+    Surface([&'a Image; 3]),
+}
+
+/// The views of a surface buffer's three `targets`: layers `owner`'s compositor made, all
+/// one size.
+fn surface_views<'t>(
+    owner: &Owner,
+    targets: [&'t Image; 3],
+) -> Result<[&'t wgpu::TextureView; 3], RenderError> {
+    let size = (targets[0].width(), targets[0].height());
+    let mut views = Vec::with_capacity(3);
+    for target in targets {
+        match target.target() {
+            Some(view) if target.owner().is(owner) && (target.width(), target.height()) == size => {
+                views.push(view);
+            }
+            _ => {
+                return Err(RenderError::Invalid {
+                    what: "layer",
+                    detail: "a surface target is not a layer this compositor made, of one size"
+                        .into(),
+                });
+            }
+        }
+    }
+    Ok([views[0], views[1], views[2]])
 }
 
 fn placement(err: jstream_protocol::GeometryError) -> RenderError {

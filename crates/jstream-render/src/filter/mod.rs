@@ -23,8 +23,9 @@ pub(crate) mod testing;
 
 pub use assets::{Lut, LutError, lut_image};
 pub use depth::{
-    DepthReflection, DepthShadow, ViewDepth, descriptors as depth_descriptors, reads_depth,
-    reads_shadows, reflection_floor,
+    DepthReflection, DepthShadow, DepthSurface, SCREEN_REFLECTIONS_KIND, ViewDepth,
+    descriptors as depth_descriptors, reads_depth, reads_shadows, reads_surface, reflection_floor,
+    screen_reflections_descriptor,
 };
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;

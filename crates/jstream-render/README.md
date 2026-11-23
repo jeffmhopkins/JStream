@@ -649,6 +649,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Sky pipelines (the frame's and the bright stars' table's), sampler, 1x1 stand-in picture, and the star table (281 by 64 `R32Uint`) with its 1x1 stand-in | Compositor, made on its first `draw_sky` or by `warm_3d`; a uniform and one or two bind groups per sky drawn (none for a call whose layer already holds the sky); the table rewritten by each draw of a sky with stars |
 | Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Sky bake pipeline, and each seed's two cube maps (1024² faces, `Rgba16Float` and `R16Float`, about 63 MB) | Compositor: the pipeline made on the first sky with nebulae or a band, or by `warm_3d`; a seed's maps on its first such sky, kept for the 4 seeds drawn last and dropped when no sky has read them for 900 draws of any sky; a compositor that draws no sky at all keeps what it has |
+| Surface pipeline and its depth (`Depth32Float`) | Compositor; the depth kept at the size of the last surface buffer cleared, made again for another |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
@@ -967,6 +968,17 @@ shows through. The box's weight rises from 0 at a face to 1 `fade` inside
 (`probe_weight`) and mixes with the environment, which alone lights anything outside;
 the diffuse light still comes from the environment, and the capture is not scaled by
 the ambient light (`golden_model_a_probe_replaces_the_environment_inside_its_box`).
+A scene's **surface buffer**, for its screen-space reflections (ADR-0170 decision 4):
+`Compositor::clear_surface(targets)` clears three canvas-sized layers and a depth of
+their size, and `Compositor::draw_model_surface(draw, targets)` draws a model into them
+where it is nearer than what they hold (`fs_surface`, its own pipeline, testing and
+writing that depth). `fs` and `fs_surface` share `shade`, so the buffer holds what the
+model's layer was shaded with: the shading normal in the viewing frame and `1 / w`;
+the split-sum BRDF its environment's reflection was weighed by, times the occlusion,
+and the roughness; and that reflection as `fs` added it (its probe's where it has one),
+with 1 where a `scene`-lit, not blended surface may have it replaced. Where the
+material's alpha is under one half nothing is drawn, as for its view depth
+(`a_models_surface_marks_where_a_reflection_may_be_replaced`).
 
 **Lit cards** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 10). `Compositor::light_card` shades a flat picture by a scene's lights
@@ -1509,6 +1521,32 @@ it out; `filter::testing` reads both lists.
   `strength`, faded linearly to nothing at `fade_px` above the floor, and over a disc of
   12 taps of radius `blur_px` when that is above 0. Without the view or a reflection it
   copies its input (`the_floor_takes_the_reflection_of_what_is_above_it`).
+- `screen_space_reflections`
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 4, `depth/screen.rs`), which no chain lists: the engine puts it first in a
+  reflective scene's chain (`SCREEN_REFLECTIONS_KIND`), so neither list has it
+  (`screen_reflections_descriptor`). Its one setting is `steps` (16, 32 or 64,
+  `jstream_protocol::SCREEN_SPACE_STEPS`, default 32; another count takes the one
+  below). It reads `ViewDepth::surface` too (`DepthSurface`, which
+  `video_filter_reads_surface(kind)` asks the engine for), drawn by
+  `Compositor::draw_model_surface`. One draw (`screen/screen.wgsl`, through
+  `Ctx::draw_program` for its five textures) leaves a pixel as it is unless its surface
+  is marked replaceable, rougher than 0.6 is not, and nothing nearer covers it (the view
+  depth there more than 0.2% nearer than the surface's own `1 / w`: a card in front).
+  It rebuilds the pixel's point and view direction in the viewing frame from the
+  surface's `1 / w`, reflects the view about the normal, and follows the ray across the
+  screen from its point to as far again as the point is, cut at the frame's edges and
+  short of the viewer's plane, in `steps` steps from a per-pixel offset, `1 / w`
+  running linearly along its image. The first step that is behind the view depth there
+  by less than one and a half steps' depth is a hit, and five halvings refine it. What
+  the picture shows there, over a disc of 12 taps as wide as the ray travelled times
+  the roughness squared (at most 32 px), its luma capped at 8, replaces the
+  environment's reflection the surface added: `c + k (hit · brdf − hit.a · reflected)`,
+  `k` falling to 0 within 8% of the frame's shorter side of an edge, by half toward the
+  hit's thickness, for rays turned toward the viewer, and from roughness 0.4 to 0.6.
+  Without a view, a surface buffer or images of the input's size it copies its input
+  (`a_floor_reflects_the_wall_behind_it`,
+  `a_hit_replaces_the_environments_reflection`).
 - `volumetric_fog` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 6, `depth/volumetric.rs`): `color` (with alpha, default `#c8ccd2ff`),
   `density` (0 to 20 per 1000 px, default 0.5), `base_y_px` (default 1080) and

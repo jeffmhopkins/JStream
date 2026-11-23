@@ -1495,8 +1495,9 @@ its start with its first frame decoded.
 The **3D rendering switches** (`studio.set_rendering`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decision 1) are an application setting too, answered before the collection lock
-(`Engine::rendering_call`): a `max_probe_resolution` that isn't one of
-`PROBE_RESOLUTIONS` is `invalid_argument` and changes nothing; otherwise each switch the
+(`Engine::rendering_call`): a `screen_space_steps` that isn't one of
+`SCREEN_SPACE_STEPS`, or a `max_probe_resolution` that isn't one of
+`PROBE_RESOLUTIONS`, is `invalid_argument` and changes nothing; otherwise each switch the
 call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
@@ -2101,7 +2102,8 @@ leaves the scene composited as before.
 
 A 3D scene whose chain holds a filter that reads depth (`Chain::reads_depth`, the render
 crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetric_fog`,
-`floor_reflection` and `depth_bloom`) also gets its view depth
+`floor_reflection`, `depth_bloom` and the screen-space reflections the engine adds, below)
+also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
 planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
@@ -2320,6 +2322,18 @@ cache let go captures again. The warm scenes' estimate counts a probe's capture 
 warm scene whose `reflections` is on while the switch is (`probe_bytes`, its panorama and
 faces in half-float RGBA at its capped face size,
 `a_reflection_probe_counts_its_capture`).
+Screen-space reflections (ADR-0170 decision 4): while the `screen_space_reflections`
+switch is on, a 3D scene whose `reflections` is on starts its video chain with the
+`screen_space_reflections` pass at `screen_space_steps` (`Chain::with_screen_reflections`,
+before the scene's own filters, and the whole chain when it has none), so its composite
+draws a view depth. Such a chain reads the scene's surface buffer too
+(`Chain::reads_surface`, `Pass::surface`): after the view depth, `draw_surface` clears
+its three `GpuKey::Surface` layers and draws each model the view depth holds into them
+through the scene's camera, a `scene`-lit model whose source has `reflections` on with
+the scene's lights, sky and probe as its layer was lit, any other with none, so it only
+covers what is behind it. `Chains::drew_depth` hands them to the pass as
+`ViewDepth::surface` (`a_metal_floor_reflects_a_card_on_screen`). Since the scene then
+has a chain, a transition shows it as one picture.
 
 A shadow map is drawn again only when it would show something else. `Chains::shadow_maps` keeps,
 for each scene, what its maps were last drawn of (`KeptShadows`): every card a view depth

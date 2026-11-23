@@ -387,6 +387,17 @@ impl Engine {
         else {
             return None;
         };
+        if let Some(steps) = change.screen_space_steps
+            && !jstream_protocol::SCREEN_SPACE_STEPS.contains(&steps)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "screen_space_steps",
+                format!(
+                    "a screen-space reflection takes {:?} steps, not {steps}",
+                    jstream_protocol::SCREEN_SPACE_STEPS
+                ),
+            )));
+        }
         if let Some(size) = change.max_probe_resolution
             && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
         {

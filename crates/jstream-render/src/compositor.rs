@@ -739,6 +739,56 @@ impl Compositor {
         errors.close(self.models.draw_depth(&self.gpu, &self.owner, draw, target))
     }
 
+    /// Clears `targets`, a scene's surface buffer for its screen-space reflections
+    /// (ADR-0170 decision 4), three layers of the canvas size, before
+    /// [`Self::draw_model_surface`] draws its models into them. Cleared, they reflect
+    /// nothing on screen anywhere.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when a target isn't a layer this compositor made, or the
+    /// three aren't one size.
+    pub fn clear_surface(&mut self, targets: [&Image; 3]) -> Result<(), RenderError> {
+        let errors = self.errors();
+        errors.close(self.models.clear_surface(&self.gpu, &self.owner, targets))
+    }
+
+    /// Draws what a screen-space reflection reads of `draw`'s model (ADR-0170 decision
+    /// 4) into `targets` where it is nearer than what they hold since
+    /// [`Self::clear_surface`], shaded as [`Self::draw_model`] shades it: its shading
+    /// normal in its camera's viewing frame with `1 / w`, the split-sum BRDF its
+    /// environment's reflection was weighed by with its roughness, and that reflection
+    /// as it was added with 1 where a scene-lit, not blended surface may have it replaced.
+    /// Where the material's alpha is under one half nothing is drawn, as for its view
+    /// depth. Without a camera nothing is drawn.
+    ///
+    /// # Errors
+    /// As for [`Self::draw_model`], and [`Self::clear_surface`]'s.
+    pub fn draw_model_surface(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        targets: [&Image; 3],
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
+        let sky = draw
+            .reflection
+            .or(draw.environment.and_then(|environment| environment.image))
+            .filter(|_| lit);
+        let probe = draw
+            .probe
+            .map(|probe| probe.image)
+            .filter(|_| draw.lighting == jstream_media::model::Lighting::Scene);
+        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
+        let panoramas = Panoramas {
+            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+        };
+        let drawn = self
+            .models
+            .draw_surface_of(&self.gpu, &self.owner, draw, (targets, panoramas));
+        errors.close(drawn)
+    }
+
     /// The view of `target` when it is a layer of this compositor, of `scene`'s canvas
     /// size, that `scene` doesn't place.
     fn scene_target<'t>(

@@ -3,9 +3,11 @@
 //! from `studio.get` each time the page opens and sets each one with
 //! `studio.set_rendering`; the engine keeps them on its machine, whatever collection is
 //! open. Since 0.165 it also has the reflection probes' switch and the face size they
-//! capture at, at most (ADR-0170 decision 3). An engine from 0.147 to 0.164 reports
-//! neither, so they read as on and 512 and changing them does nothing there. An engine
-//! older than 0.147 reports no switches, and the page says it has none.
+//! capture at, at most (ADR-0170 decision 3), and since 0.172 the screen-space
+//! reflections' switch and the steps their rays take (decision 4). An engine older than
+//! the version that added one reports it as on, at the largest size or the medium steps,
+//! and changing it does nothing there. An engine older than 0.147 reports no switches,
+//! and the page says it has none.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
@@ -14,7 +16,7 @@ use crate::dialog::Info;
 use jstream_control::Control;
 use jstream_protocol::{
     Action, Call, CallResult, PROBE_RESOLUTIONS, Query, QueryResult, RenderFeatures,
-    RenderFeaturesChange,
+    RenderFeaturesChange, SCREEN_SPACE_STEPS,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -32,16 +34,19 @@ pub enum Switch {
     FloorReflections,
     /// Reflection probes.
     ReflectionProbes,
+    /// Screen-space reflections.
+    ScreenSpaceReflections,
 }
 
 impl Switch {
     /// Every switch, in the order the page lists them.
-    pub const ALL: [Switch; 5] = [
+    pub const ALL: [Switch; 6] = [
         Switch::Shadows,
         Switch::AmbientOcclusion,
         Switch::VolumetricFog,
         Switch::FloorReflections,
         Switch::ReflectionProbes,
+        Switch::ScreenSpaceReflections,
     ];
 
     /// What the switch reads.
@@ -52,6 +57,7 @@ impl Switch {
             Switch::VolumetricFog => "Volumetric fog",
             Switch::FloorReflections => "Floor reflections",
             Switch::ReflectionProbes => "Reflection probes",
+            Switch::ScreenSpaceReflections => "Screen-space reflections",
         }
     }
 
@@ -64,6 +70,9 @@ impl Switch {
             Switch::FloorReflections => "The Floor reflection filter mirrors its scene.",
             Switch::ReflectionProbes => {
                 "Surfaces in a reflection probe's box reflect what it sees."
+            }
+            Switch::ScreenSpaceReflections => {
+                "Surfaces in a scene with reflections reflect what is on screen."
             }
         }
     }
@@ -82,6 +91,9 @@ impl Switch {
             Switch::ReflectionProbes => {
                 "Each capture draws its scene six times, as often as the probe refreshes. Off, no probe captures, and surfaces reflect only the environment."
             }
+            Switch::ScreenSpaceReflections => {
+                "Each frame draws its scene's models once more and traces a ray per pixel. Off, surfaces reflect only their probes and the environment."
+            }
         }
     }
 
@@ -93,6 +105,7 @@ impl Switch {
             Switch::VolumetricFog => "setting-rendering-volumetric-fog",
             Switch::FloorReflections => "setting-rendering-floor-reflections",
             Switch::ReflectionProbes => "setting-rendering-reflection-probes",
+            Switch::ScreenSpaceReflections => "setting-rendering-screen-space-reflections",
         }
     }
 
@@ -104,6 +117,7 @@ impl Switch {
             Switch::VolumetricFog => features.volumetric_fog,
             Switch::FloorReflections => features.floor_reflections,
             Switch::ReflectionProbes => features.reflection_probes,
+            Switch::ScreenSpaceReflections => features.screen_space_reflections,
         }
     }
 
@@ -116,6 +130,7 @@ impl Switch {
             Switch::VolumetricFog => change.volumetric_fog = Some(on),
             Switch::FloorReflections => change.floor_reflections = Some(on),
             Switch::ReflectionProbes => change.reflection_probes = Some(on),
+            Switch::ScreenSpaceReflections => change.screen_space_reflections = Some(on),
         }
         change
     }
@@ -126,6 +141,24 @@ pub fn probe_cap(size: u32) -> RenderFeaturesChange {
     RenderFeaturesChange {
         max_probe_resolution: Some(size),
         ..RenderFeaturesChange::default()
+    }
+}
+
+/// The change that sets the steps a screen-space reflection's ray takes and leaves the
+/// switches.
+pub fn reflection_steps(steps: u32) -> RenderFeaturesChange {
+    RenderFeaturesChange {
+        screen_space_steps: Some(steps),
+        ..RenderFeaturesChange::default()
+    }
+}
+
+/// What the steps option reads.
+fn steps_label(steps: u32) -> &'static str {
+    match SCREEN_SPACE_STEPS.iter().position(|&n| n == steps) {
+        Some(0) => "Low",
+        Some(1) => "Medium",
+        _ => "High",
     }
 }
 
@@ -224,6 +257,24 @@ pub fn RenderingSettings() -> impl IntoView {
             }
         });
     };
+    let steps = move |chosen: u32| {
+        let Some(was) = features.get_untracked().map(|now| now.screen_space_steps) else {
+            return;
+        };
+        let change = reflection_steps(chosen);
+        features.update(|now| *now = now.map(|now| now.with(&change)));
+        error.set(None);
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(message) = set(&*control, change).await {
+                let back = reflection_steps(was);
+                features.try_update(|now| *now = now.map(|now| now.with(&back)));
+                error.try_set(Some(message));
+            }
+        });
+    };
     view! {
         <Show when=move || features.get().is_some()>
             <section class="prop-section">
@@ -267,6 +318,29 @@ pub fn RenderingSettings() -> impl IntoView {
                                 }).collect_view()}
                             </select>
                             <p class="help">"The sharpest a reflection probe captures."</p>
+                        </div>
+                    </div>
+                    <div class="prop-row rendering-reflection-steps">
+                        <label class="prop-label" for="setting-rendering-reflection-steps">
+                            "Reflection quality"
+                            <Info text="How many steps a screen-space reflection's ray takes across the screen. More finds thinner things and fewer gaps; fewer draws faster." />
+                        </label>
+                        <div class="prop-control">
+                            <select
+                                id="setting-rendering-reflection-steps"
+                                aria-label="Reflection quality"
+                                prop:value=move || features.get().map(|now| now.screen_space_steps.to_string()).unwrap_or_default()
+                                on:change=move |event| {
+                                    if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
+                                        steps(chosen);
+                                    }
+                                }
+                            >
+                                {SCREEN_SPACE_STEPS.into_iter().map(|count| view! {
+                                    <option value=count.to_string()>{format!("{} ({count} steps)", steps_label(count))}</option>
+                                }).collect_view()}
+                            </select>
+                            <p class="help">"How closely a screen-space reflection looks."</p>
                         </div>
                     </div>
                 </div>
@@ -337,5 +411,22 @@ mod tests {
         assert_eq!(read.max_probe_resolution, 128);
         assert!(read.reflection_probes, "the switches are kept");
         assert!(now(set(&control, super::probe_cap(300))).is_err());
+    }
+
+    #[test]
+    fn the_reflection_steps_are_one_of_the_counts() {
+        let control = MockEngine::new().connect();
+        now(control.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("hello");
+        now(set(&control, super::reflection_steps(64))).expect("set");
+        let read = now(read(&control)).expect("read").expect("reported");
+        assert_eq!(read.screen_space_steps, 64);
+        assert!(read.screen_space_reflections, "the switches are kept");
+        assert!(now(set(&control, super::reflection_steps(20))).is_err());
+        assert_eq!(super::steps_label(16), "Low");
+        assert_eq!(super::steps_label(64), "High");
     }
 }

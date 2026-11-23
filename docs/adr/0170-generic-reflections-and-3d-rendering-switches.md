@@ -124,3 +124,38 @@ Each lands usable on its own.
   that sees live video needs a refresh rate.
 - Reflections don't show the scene's own filters (fog, a floor reflection), since
   decision 4 runs before them and decision 3's captures draw none.
+
+<a id="amendment"></a>
+## Amendment: how decisions 3 and 4 landed
+The decisions stand. Where the delivery departs from their text:
+
+- **Probes (decision 3).**
+  - A capture is spread over six frames, one face a frame. The faces are resampled into
+    the panorama in the frame that draws the last, and surfaces read it from the next
+    frame. Until then they read the probe's previous capture. A refresh therefore costs
+    a sixth of a capture a frame, not a spike.
+  - One probe captures at a time, scene-wide. The slot goes to the due probe that has
+    waited longest.
+  - The panorama's mip chain is read by a ring of taps at the level the roughness
+    spans, as the sky's is.
+  - The probe has a binding of its own, beside the sky's.
+  - A box's faces fade into the environment over its `fade_px`.
+  - Each compositor captures its own probes.
+- **Screen-space reflections (decision 4).**
+  - The pass is a built-in filter kind that no chain lists. The engine puts it first in
+    the chain of a 3D scene whose `reflections` is on, while the switch is on, so it
+    runs after the scene is composited and before the scene's own filters.
+  - The surface buffer is drawn of the scene's models only, each drawn a second time
+    with a depth test of its own. It is three layers:
+    - the shading normal with `1 / w`;
+    - the split-sum BRDF with the roughness;
+    - the environment's reflection as the shader added it, which already includes a
+      probe's, with a flag for where it may be replaced.
+  - A lit card is not drawn into the surface buffer. It reflects its probe and the
+    environment only, though it shows in what models reflect.
+  - The "quality switch" is a step count of 16, 32 or 64 (`screen_space_steps`).
+  - Roughness blurs the hit over a disc of 12 taps of the picture, as wide as the ray
+    has spread by the time it gets there, instead of reading a blurred mip. The scene's
+    composite has no mip chain at that point.
+  - A scene with this pass has a chain, so a transition shows it as one picture, as it
+    shows any scene with filters (ADR-0065 §6).

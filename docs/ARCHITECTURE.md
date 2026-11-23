@@ -806,7 +806,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Reflections** ([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md),
   protocol 0.165): a scene with `reflections` in its `scene.set_options` has its lit
   models and cards reflect the scene around them, through the `reflection_probe` source
-  kind's boxes; `studio.set_rendering` turns probes off app-wide and caps their face size.
+  kind's boxes, and since 0.172 its lit models also reflect what is on screen;
+  `studio.set_rendering` turns probes or screen-space reflections off app-wide, caps the
+  probes' face size and sets the screen-space steps.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1366,7 +1368,11 @@ from the box's centre after the chains, one face a frame of one probe at a time,
 refresh never spikes a frame, resampled into an
 equirectangular panorama that the next frame reads. A rough surface reads the sky's
 panorama and a probe's through mip chains of them, at the level its blur spans, so a
-bright point blurs into a soft glow. The layer is then placed flat
+bright point blurs into a soft glow. The same scenes start their video chain with a screen-space
+reflection pass, before their own filters: each model is drawn once more into a surface
+buffer (its normal, BRDF and the environment's reflection it added), and each pixel of
+a scene-lit model follows its reflected ray through the view depth, putting what the
+picture shows where it hits in place of that reflection. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
