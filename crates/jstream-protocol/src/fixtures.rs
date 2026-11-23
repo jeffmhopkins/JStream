@@ -858,6 +858,67 @@ fn keyframe_edits() -> Vec<Edit> {
             enabled: true,
         }],
     });
+    // A light coloured by a track's colour and by its clip's state (ADR-0171
+    // decision 5).
+    edits.push(Edit::ItemSetMotion {
+        item_id: ItemId::new("itm_3"),
+        scene_id: None,
+        motion: vec![
+            MotionModifier {
+                modifier_id: "track-color".into(),
+                property: MotionProperty::Source,
+                effect: None,
+                source: Some(crate::MotionSetting {
+                    param: "color".into(),
+                    material: None,
+                }),
+                kind: MotionKind::Data {
+                    input: None,
+                    key: "track/1".into(),
+                    field: "color".into(),
+                    range: [Finite32::ZERO, Finite32::ONE],
+                    states: std::collections::BTreeMap::new(),
+                    smoothing_ms: 100,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::ZERO,
+                    to: Finite32::ONE,
+                    color_from: Some(crate::MotionColorFrom::Field),
+                    palette: std::collections::BTreeMap::new(),
+                },
+                clock: MotionClock::Engine,
+                enabled: true,
+            },
+            MotionModifier {
+                modifier_id: "clip-color".into(),
+                property: MotionProperty::Source,
+                effect: None,
+                source: Some(crate::MotionSetting {
+                    param: "color".into(),
+                    material: None,
+                }),
+                kind: MotionKind::Data {
+                    input: None,
+                    key: "track/1".into(),
+                    field: "slots.0.state".into(),
+                    range: [Finite32::ZERO, Finite32::ONE],
+                    states: std::collections::BTreeMap::new(),
+                    smoothing_ms: 100,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::ZERO,
+                    to: Finite32::ONE,
+                    color_from: Some(crate::MotionColorFrom::Palette),
+                    palette: [
+                        ("recording".to_owned(), "#ff2020".to_owned()),
+                        ("playing".to_owned(), "#20ff40".to_owned()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                },
+                clock: MotionClock::Engine,
+                enabled: true,
+            },
+        ],
+    });
     // Every audio measure and curve (ADR-0100), hearing the program mix, a bus and a
     // source.
     edits.push(Edit::ItemSetMotion {
@@ -1118,6 +1179,8 @@ fn reactive() -> Vec<MotionModifier> {
                 curve: MotionCurve::Linear,
                 from: f(-1.0),
                 to: Finite32::ZERO,
+                color_from: None,
+                palette: std::collections::BTreeMap::new(),
             },
         ),
     ]

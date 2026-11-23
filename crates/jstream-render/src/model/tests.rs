@@ -1589,6 +1589,27 @@ fn a_material_drive_adds_within_ranges_and_nothing_when_it_adds_nothing() {
         ..none
     };
     assert_eq!(super::driven_values(&values, "a", &[other]), None);
+    // A set colour replaces the base colour in linear, before a drive adds to it, and a
+    // set glow keeps the glow's brightness (ADR-0171 decision 5).
+    let red = drive(super::MaterialDrive {
+        set_color: Some([1.0, 0.0, 0.0]),
+        ..none
+    });
+    assert_eq!(&red[0..4], &[1.0, 0.0, 0.0, 1.0]);
+    let pink = drive(super::MaterialDrive {
+        set_color: Some([1.0, 0.0, 0.0]),
+        color: 0.5,
+        ..none
+    });
+    assert!(pink[1] > 0.0 && pink[0] == 1.0, "{pink:?}");
+    let green = drive(super::MaterialDrive {
+        set_emissive: Some([0.0, 1.0, 0.0]),
+        ..none
+    });
+    assert!(
+        (green[5] - 2.0).abs() < 1e-3 && green[4] == 0.0 && green[6] == 0.0,
+        "{green:?}"
+    );
 }
 
 /// A framing camera (ADR-0094 decision 3) with depth of field focused `focus_px` along

@@ -125,9 +125,10 @@ pub use mix::{
 };
 pub use motion::{
     MAX_DATA_FIELD_LEN, MAX_DATA_KEY_LEN, MAX_DATA_STATE_LEN, MAX_DATA_STATES, MAX_MOTION_ID_LEN,
-    MAX_MOTION_MATERIAL_LEN, MAX_MOTION_MODIFIERS, MAX_MOTION_PARAM_LEN, MotionClock, MotionCurve,
-    MotionEffect, MotionKind, MotionMeasure, MotionMidiControl, MotionModifier, MotionProblem,
-    MotionProperty, MotionSetting, MotionShape, check_motion, check_motion_id,
+    MAX_MOTION_MATERIAL_LEN, MAX_MOTION_MODIFIERS, MAX_MOTION_PARAM_LEN, MotionClock,
+    MotionColorFrom, MotionCurve, MotionEffect, MotionKind, MotionMeasure, MotionMidiControl,
+    MotionModifier, MotionProblem, MotionProperty, MotionSetting, MotionShape, check_motion,
+    check_motion_id,
 };
 pub use organise::{
     FolderInfo, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline, MAX_ICON_LEN, SceneMeta,

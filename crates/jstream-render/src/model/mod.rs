@@ -175,6 +175,12 @@ pub struct MaterialDrive<'a> {
     /// Added to the glow's strength, a multiplier that is 1 at rest, kept within 0 and
     /// [`MAX_EMISSIVE_STRENGTH`].
     pub emissive_strength: f32,
+    /// Replaces the base colour, straight sRGB 0 to 1, before `color` adds to it (its
+    /// alpha stays). The last drive that sets one wins.
+    pub set_color: Option<[f32; 3]>,
+    /// Replaces the glow's colour, straight sRGB 0 to 1, at its own brightness, before
+    /// `emissive` adds to it.
+    pub set_emissive: Option<[f32; 3]>,
 }
 
 /// The most a [`MaterialDrive`] multiplies a material's glow by.
@@ -201,17 +207,29 @@ fn driven_values(
         add.roughness += d.roughness;
         add.emissive += d.emissive;
         add.emissive_strength += d.emissive_strength;
+        add.set_color = d.set_color.or(add.set_color);
+        add.set_emissive = d.set_emissive.or(add.set_emissive);
     }
     if add == MaterialDrive::default() {
         return None;
     }
     let mut out = *values;
-    // Base colour, linear: lightened in sRGB, as a colour setting is.
+    // Base colour, linear: set, then lightened in sRGB, as a colour setting is.
+    if let Some(color) = add.set_color {
+        for (v, c) in out[0..3].iter_mut().zip(color) {
+            *v = srgb_to_linear(c.clamp(0.0, 1.0));
+        }
+    }
     for v in &mut out[0..3] {
         *v = srgb_to_linear((linear_to_srgb(*v) + add.color).clamp(0.0, 1.0));
     }
-    // Emission may exceed 1: lightened at its own brightness, then scaled.
+    // Emission may exceed 1: set and lightened at its own brightness, then scaled.
     let peak = out[4..7].iter().copied().fold(0.0f32, f32::max).max(1.0);
+    if let Some(color) = add.set_emissive {
+        for (v, c) in out[4..7].iter_mut().zip(color) {
+            *v = srgb_to_linear(c.clamp(0.0, 1.0)) * peak;
+        }
+    }
     for v in &mut out[4..7] {
         let lifted = srgb_to_linear((linear_to_srgb(*v / peak) + add.emissive).clamp(0.0, 1.0));
         *v = lifted * peak * (1.0 + add.emissive_strength).clamp(0.0, MAX_EMISSIVE_STRENGTH);

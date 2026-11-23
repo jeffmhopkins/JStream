@@ -1347,6 +1347,12 @@ impl Shot {
         f64::from(self.motion_at(item, std::slice::from_ref(modifier), at).x)
     }
 
+    /// Whether `item`'s modifier `modifier` paints a colour setting, with the colour it
+    /// sets now (ADR-0171 decision 5).
+    fn tint(&self, item: &ItemId, modifier: &jstream_anim::Modifier) -> crate::sourced::Tint {
+        self.audio.tint(item, &modifier.id)
+    }
+
     /// The modifiers `item` drives its source's settings with (ADR-0171 decision 4);
     /// empty for none.
     fn source_drives(
@@ -1375,15 +1381,18 @@ impl Shot {
                         .x,
                 )
             };
+            let tint = |modifier: &jstream_anim::Modifier| self.tint(&driven.item, modifier);
             match blended.iter_mut().find(|(o, _)| *o == owner) {
                 Some((_, settings)) => {
-                    if let Some(moved) = driven.settings(settings, |s| s, value) {
+                    if let Some(moved) = driven.settings(settings, |s| s, value, tint) {
                         *settings = moved;
                     }
                 }
                 // Read in place: settings are cloned only on a frame that moves one.
                 None => {
-                    if let Some(moved) = driven.settings(&chain.filters, |f| &f.settings, value) {
+                    if let Some(moved) =
+                        driven.settings(&chain.filters, |f| &f.settings, value, tint)
+                    {
                         blended.push((owner, moved));
                     }
                 }
@@ -6620,9 +6629,11 @@ fn draw_model(
         None
     };
     // Its materials as its item's modifiers drive them (ADR-0171 decision 4).
-    let (drives, driving) = crate::sourced::materials(shot.source_drives(&boxed.item), |m| {
-        shot.source_value(&boxed.item, m, at)
-    });
+    let (drives, driving) = crate::sourced::materials(
+        shot.source_drives(&boxed.item),
+        |m| shot.source_value(&boxed.item, m, at),
+        |m| shot.tint(&boxed.item, m),
+    );
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
     // What the scene's probes saw, inside one (ADR-0170 decision 3), unless it opts out.
     let probe = (lit && shown.reflections)
@@ -7066,9 +7077,11 @@ fn draw_reflection(
     let mut models: Vec<(&GpuKey, GpuKey)> = Vec::new();
     for shown in pass_models((&*cache, chains), shot, pass, (at, size), live, camera) {
         pose(compositor, shown.model, shown.shown);
-        let (drives, driving) = crate::sourced::materials(shot.source_drives(shown.item), |m| {
-            shot.source_value(shown.item, m, at)
-        });
+        let (drives, driving) = crate::sourced::materials(
+            shot.source_drives(shown.item),
+            |m| shot.source_value(shown.item, m, at),
+            |m| shot.tint(shown.item, m),
+        );
         let reflected = GpuKey::ReflectedModel(shown.scene.clone(), shown.item.clone());
         cache.layer(compositor, &reflected, width, height)?;
         let (texture, reflection) = model_maps(shot, &*cache, shown.source, shown.shown);
@@ -7327,9 +7340,12 @@ fn scene_lights(
         };
         let (position, aim) = geometry.light_pose_seen(view);
         // Its settings as its item's modifiers drive them (ADR-0171 decision 4).
-        let look = crate::sourced::light(light, shot.source_drives(&placed.item), |m| {
-            shot.source_value(&placed.item, m, at)
-        });
+        let look = crate::sourced::light(
+            light,
+            shot.source_drives(&placed.item),
+            |m| shot.source_value(&placed.item, m, at),
+            |m| shot.tint(&placed.item, m),
+        );
         let [r, g, b] = look.color;
         lights.push(jstream_render::SceneLight {
             kind: match light.kind {
@@ -7445,6 +7461,7 @@ fn environment_at<'c>(
             light.intensity,
             shot.source_drives(&placed.item),
             |m| shot.source_value(&placed.item, m, at),
+            |m| shot.tint(&placed.item, m),
         ),
         turn_deg,
         image: sky
