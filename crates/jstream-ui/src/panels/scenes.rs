@@ -1402,7 +1402,7 @@ pub fn Scenes() -> impl IntoView {
         let shown_name = name.clone();
         view! {
             <li
-                class="row tree-row seq-row"
+                class="row tree-row seq-tree-row"
                 class:selected=selected
                 style:padding-left=indent(depth)
                 title="Sequence: click to open it, right-click for its menu"

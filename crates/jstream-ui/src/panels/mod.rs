@@ -19,6 +19,7 @@ pub mod curve;
 pub mod custom_shader;
 pub mod device_preview;
 pub mod encoders;
+pub mod events;
 pub mod filter_presets;
 pub mod filters;
 pub mod inspector;

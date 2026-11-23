@@ -205,7 +205,9 @@ Contents ([Design](#design) explains the choices):
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
-  point order, the lane's drawn path and each trigger's sentence tested natively), the Add source dialog (`add_source.rs`:
+  point order, the lane's drawn path and each trigger's sentence tested natively), its
+  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text
+  tested natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -779,12 +781,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   click, or once its form closes (its signals are read with `try_`, so a closed form ends
   the loop). An engine that reads no MIDI controls says so in the problem bar.
   Since ADR-0183 the button is the control button: a click opens one menu (Learn MIDI
-  control, Make channel or Open channel, Follow channel…, Remove control). Make channel
+  control, Make channel or Open channel, Follow channel…, Add to sequence ›, Set key…,
+  Remove control). Make channel
   makes a channel named after the setting (`label`), in the selected scene, whose
   `default` is where the setting is in its range (`current`, `fraction`), binds the
   setting to it over the range (`follows`, the same `learn_` ID) in one batch, and opens
-  it in the Channels panel. Follow channel… opens `ChannelSearch`. A setting that follows
-  a channel shows the channel's name as a chip.
+  it in the Channels panel. Follow channel… opens `ChannelSearch`. Add to sequence › lists
+  the selected scene's sequences (the open one first) and New sequence: it makes the
+  channel if the setting follows none, adds its lane holding where the setting is
+  (`sequence::with_lane`), all in one batch, and opens the sequence. Set key… takes the
+  next key pressed (`KeyCapture`, a focused button whose keys never reach the hotkeys;
+  Escape or leaving it cancels) and binds it to `channel.switch` `toggle` on the channel,
+  made if need be, in the same batch. A setting that follows a channel shows the
+  channel's name as a chip.
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in
@@ -793,7 +802,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
   0 to 1; "+ Channel" adds a `channel` input), its shaping, the value bindings that follow
-  it with their range, and the sequences with a lane on it. Each change is one
+  it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
+  `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one
   `channel.set` of the whole channel. `live_values` reads `channel.values` every 100 ms
   while a panel that shows values lives.
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).
@@ -808,7 +818,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   properties. A double-click adds a point, a drag moves one, kept between its neighbours,
   and a right-click sets its curve or deletes it; each gesture sends one `timeline.set`.
   The play head runs from `Studio::playing`, kept from `studio.get`'s `timelines` and each
-  `timeline.changed`, and a click on the ruler sends `timeline.seek`.
+  `timeline.changed`, and a click on the ruler sends `timeline.seek`. Above the lanes, the
+  Events lane (`panels/events.rs`) draws the timeline's `cues` as chips on the same
+  ruler: a double-click opens an editor there (what happens, which item, keyframe, scene,
+  channel, sequence or source, from `objects`), a click on a chip edits it, a drag moves
+  it with the pointer captured, and the editor deletes it; each is one `timeline.set`,
+  with the cues kept in time order. The Scenes panel lists each scene's sequences after
+  its keyframes (`Row::Sequence`, the teal sequence icon): a click opens one in the
+  Sequence panel (`sequence::open_sequence`), its hover button plays or stops it, it shows
+  its elapsed time while it plays and the keys bound to play it, and its menu plays or
+  stops, renames (F2), sets or removes a key and deletes it (Del).
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
   its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
   (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source
