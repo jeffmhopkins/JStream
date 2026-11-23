@@ -121,6 +121,8 @@ pub struct Compositor {
     sampler: wgpu::Sampler,
     image_layout: wgpu::BindGroupLayout,
     blends: BlendPipelines,
+    /// Adds a model's view depth layer to a scene's view depth ([`Item::depth`]).
+    depth_copier: wgpu::RenderPipeline,
     /// The same, drawing into an sRGB-encoded target (ADR-0126 §3).
     encoded_blends: BlendPipelines,
     /// The composite shader, which [`DepthPipelines`] are built from when first needed.
@@ -629,7 +631,10 @@ impl Compositor {
     /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
     /// its alpha, with its opacity and its sharp edge, is at least one half; the larger
     /// value wins, so draw order doesn't matter. A [`Placement::Layer`] (a model's
-    /// layer) writes nothing here: [`Self::draw_model_depth`] adds a model's own depth.
+    /// layer) that carries the model's depth ([`Item::depth`]) writes that depth where
+    /// the model covers, as a scene's pass tests against it, so the model isn't drawn
+    /// again; one without writes nothing here, and [`Self::draw_model_depth`] adds its
+    /// model's depth.
     /// A scene with no camera has no depth, and leaves `target` all 0.
     ///
     /// It prepares the scene again (placement, vertices, mips) rather than reusing the
@@ -675,15 +680,31 @@ impl Compositor {
                 multiview_mask: None,
             });
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.set_pipeline(self.blends.depth());
             for draw in &self.draws {
                 let item = &scene.items[draw.index];
-                if item.camera.is_none() || matches!(item.placement, Placement::Layer(_)) {
+                if item.camera.is_none() {
                     continue;
                 }
-                let bind_group = match &draw.mips {
-                    Some(mips) => &mips.bind_group,
-                    None => item.image.bind_group(),
+                let bind_group = match (item.placement, item.depth) {
+                    // A model's layer with its depth: the depth it was drawn with, over
+                    // the layer's own triangles, as a scene's pass writes it.
+                    // Only at half opacity or more, as a card and a model drawn here
+                    // count (ADR-0143 decision 4): a model its group has faded further
+                    // adds no depth.
+                    (Placement::Layer(_), Some(depth))
+                        if depth.owner().is(&self.owner) && item.opacity >= 0.5 =>
+                    {
+                        pass.set_pipeline(&self.depth_copier);
+                        depth.bind_group()
+                    }
+                    (Placement::Layer(_), _) => continue,
+                    _ => {
+                        pass.set_pipeline(self.blends.depth());
+                        match &draw.mips {
+                            Some(mips) => &mips.bind_group,
+                            None => item.image.bind_group(),
+                        }
+                    }
                 };
                 pass.set_bind_group(0, bind_group, &[]);
                 pass.draw(
@@ -1399,6 +1420,17 @@ impl Compositor {
         self.gpu.description()
     }
 
+    /// How many render pipelines were made on this compositor's device, by any
+    /// compositor on it, not counting the ones a compositor found made already
+    /// (`pipelines.rs`). Each one made compiled its shaders; a draw that leaves the
+    /// count as it was waited for none.
+    pub fn pipelines_made(&self) -> u64 {
+        self.gpu
+            .built
+            .makes
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// A second compositor on this one's device and queue, as two `on_context` calls on
     /// one `GpuContext` would make. Tests use it to check that images do not cross over.
     #[cfg(test)]
@@ -1415,6 +1447,7 @@ impl Compositor {
             faults: Arc::clone(&self.gpu.faults),
             submit: self.gpu.submit.clone(),
             spans: Arc::clone(&self.gpu.spans),
+            built: Arc::clone(&self.gpu.built),
         });
         sibling.blending = self.blending;
         sibling
@@ -1442,11 +1475,7 @@ impl Compositor {
             ..Default::default()
         });
         let image_layout = image_layout(&gpu.device);
-        let composite_shader = shader(
-            &gpu.device,
-            "jstream-render-composite",
-            include_str!("composite.wgsl"),
-        );
+        let composite_shader = shader(&gpu.device, "jstream-render-composite", COMPOSITE_SOURCE);
         let resolve_layout = resolve_layout(&gpu.device);
         // The backdrop is bound as the resolve's input is: one unfiltered FP16 texture.
         let blends_for = |encoded| {
@@ -1457,12 +1486,23 @@ impl Compositor {
                     backdrop: &resolve_layout,
                     shader: &composite_shader,
                     encoded,
+                    built: &gpu.built,
                 },
                 None,
             )
         };
         let blends = blends_for(false);
         let encoded_blends = blends_for(true);
+        let depth_copier = blend::depth_copier(
+            &gpu.device,
+            &Layouts {
+                image: &image_layout,
+                backdrop: &resolve_layout,
+                shader: &composite_shader,
+                encoded: false,
+                built: &gpu.built,
+            },
+        );
         let composite_shader_kept = composite_shader.clone();
         let resolve_shader = shader(
             &gpu.device,
@@ -1504,6 +1544,7 @@ impl Compositor {
             sampler,
             image_layout,
             blends,
+            depth_copier,
             encoded_blends,
             composite_shader: composite_shader_kept,
             depth_pipelines: None,
@@ -1909,8 +1950,33 @@ impl Compositor {
         }
     }
 
+    /// Makes what a 3D scene draws with and a 2D one never needs, which is otherwise made
+    /// at the first draw that needs it: the sky's pipeline, its bake's, and the scene
+    /// passes' depth pipelines. The models' are made with the compositor. Each is found if a
+    /// compositor on the device made it already (`pipelines.rs`), so a caller on a
+    /// thread of its own makes them for every compositor on its device ahead of the
+    /// first 3D frame, which would otherwise wait for their shaders to compile.
+    pub fn warm_3d(&mut self) {
+        self.sky
+            .get_or_insert_with(|| crate::sky::SkyRuntime::new(&self.gpu))
+            .warm(&self.gpu);
+        self.ensure_depth_pipelines();
+    }
+
     /// Makes the depth pipelines once, and a depth target of `width` by `height`.
     fn ensure_scene_depth(&mut self, width: u32, height: u32) {
+        self.ensure_depth_pipelines();
+        if self
+            .scene_depth
+            .as_ref()
+            .is_some_and(|depth| depth.size == (width, height))
+        {
+            return;
+        }
+        self.make_scene_depth(width, height);
+    }
+
+    fn ensure_depth_pipelines(&mut self) {
         if self.depth_pipelines.is_none() {
             let device = &self.gpu.device;
             let layouts = |encoded| Layouts {
@@ -1918,6 +1984,7 @@ impl Compositor {
                 backdrop: &self.resolve_layout,
                 shader: &self.composite_shader,
                 encoded,
+                built: &self.gpu.built,
             };
             let set = |compare| {
                 [false, true]
@@ -1929,13 +1996,9 @@ impl Compositor {
                 writer: blend::depth_writer(device, &layouts(false)),
             });
         }
-        if self
-            .scene_depth
-            .as_ref()
-            .is_some_and(|depth| depth.size == (width, height))
-        {
-            return;
-        }
+    }
+
+    fn make_scene_depth(&mut self, width: u32, height: u32) {
         let texture = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("jstream-render-scene-depth"),
             size: wgpu::Extent3d {
@@ -2490,6 +2553,9 @@ fn map_snapshot(
     buffer.unmap();
     snapshot
 }
+
+/// The composite shader's source, which the blend pipelines are made from.
+pub(crate) const COMPOSITE_SOURCE: &str = include_str!("composite.wgsl");
 
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {

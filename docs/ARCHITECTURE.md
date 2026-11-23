@@ -1377,9 +1377,11 @@ still camera pays for it once. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)
-gets the scene's view depth: one more draw of its cards, and of its models' own
-triangles, into a half-float canvas layer holding `1 / w` of the nearest thing, the
-larger value winning, drawn only for such a filter.
+gets the scene's view depth: one more draw of its cards, and each model's depth layer
+copied in (the one its layer carries, so a model's triangles aren't drawn again; none
+for a model under half opacity), into
+a half-float canvas layer holding `1 / w` of the nearest thing, the larger value
+winning, drawn only for such a filter.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
@@ -1400,7 +1402,8 @@ and is placed in its parent: `render_image` makes a new one, and `render_into` r
 a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
-group of a few small items doesn't shade the whole canvas twice. A blur, a mask, a shadow or a glow over
+group of a few small items doesn't shade the whole canvas twice. A model's layer is
+bounded the same way, by the box of its model's bounds on the canvas. A blur, a mask, a shadow or a glow over
 such a layer, as an item's effects, shades only that box grown by how far it reaches, and
 keeps the box for what reads it next. A layer or filter target drawn again is made
 transparent over that box rather than cleared whole (#1449). The caller walks the
@@ -1482,7 +1485,13 @@ first again. The platform's context is the engine's one context, lent to every
 compositor and to the browser engine
 ([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
 opens a new one for the next holder that asks and hands it to the browser engine, while
-the stage that saw the loss stays on its own device until it stops. The preview's and
+the stage that saw the loss stays on its own device until it stops. The compositors
+on one context share the render pipelines made on it, so a shader is compiled once per
+device, not at every output start, and the engine has every scene of a collection drawn
+once on the snapshot thread when the collection opens, so a scene's first frame on air
+waits for no compile
+([jstream-render › Scope](../crates/jstream-render/README.md#purpose),
+[jstream-core › Snapshots](../crates/jstream-core/README.md#snapshots)). The preview's and
 the snapshot thread's compositors on it collect their own errors in wgpu error scopes,
 so an error one of them raises fails only its own call, not the stage's next frame
 (#1268). Encoders on the CPU

@@ -13,7 +13,7 @@
 //! answers, so the GPU wait and the encode never block the caller's executor thread
 //! or other sessions. This is control-plane work, not the render thread (R-RT-002).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future::Future;
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
@@ -3829,7 +3829,7 @@ fn casters_of(
         true,
     )
     .into_iter()
-    .map(|(model, shown, geometry)| Caster::Model {
+    .map(|(model, shown, geometry, _)| Caster::Model {
         model: model.seen(),
         geometry,
         lighting: shown.lighting,
@@ -4989,6 +4989,8 @@ enum Work {
     },
     /// A frame sheet's pictures (#1061).
     Sheet(Box<Sheet>),
+    /// A scene planned alone, drawn once and thrown away ([`SnapshotWorker::prime`]).
+    Prime { shot: Box<Shot>, at: MediaTime },
 }
 
 /// The `jstream-snapshot` thread, started on the first `video.snapshot`. It owns the
@@ -5038,6 +5040,25 @@ impl SnapshotWorker {
             reply,
         );
         answer
+    }
+
+    /// Queues `shot`, a scene planned alone, to be drawn once as it is at `at` and thrown
+    /// away, so the pipelines it draws with are made before it goes on air. Making a
+    /// pipeline compiles its shaders, for seconds on Direct3D 12 for a 3D scene, and
+    /// every compositor on the engine's context shares the ones made
+    /// (`jstream-render`'s `pipelines.rs`): made here, on this thread, the program
+    /// stage finds them and its first frame of the scene doesn't wait for them. It is
+    /// drawn small, with no captures, so it opens no device and shows no source.
+    pub(crate) fn prime(&self, shot: Shot, at: MediaTime) {
+        // Nobody waits for it.
+        let (reply, _) = reply_pair();
+        self.enqueue(
+            Work::Prime {
+                shot: Box::new(shot),
+                at,
+            },
+            reply,
+        );
     }
 
     /// Queues a frame sheet's samples, answering through `reply` once they are drawn.
@@ -5097,21 +5118,38 @@ type Gpu = (Compositor, ResourceCache<GpuKey>, Chains);
 
 /// Serves snapshot jobs in order until the queue closes. A panic while drawing is
 /// caught per job: that job answers `internal` and the compositor is reopened next time.
+/// The job to do now, when one is queued: a snapshot or a frame sheet before any
+/// scene waiting to be primed, so nobody's picture waits for more than the prime
+/// under way. The primes taken off the queue on the way wait in `primes`, which a
+/// closed queue still empties.
+fn next_job(jobs: &Receiver<Job>, primes: &mut VecDeque<Job>) -> Option<Job> {
+    loop {
+        match jobs.try_recv() {
+            Ok(job) if matches!(job.work, Work::Prime { .. }) => primes.push_back(job),
+            Ok(job) => return Some(job),
+            Err(_) => return primes.pop_front(),
+        }
+    }
+}
+
 fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<PreviewCapture>>) {
     let mut gpu: Option<Gpu> = None;
     let mut backoff = OpenBackoff::default();
     let mut captures = SnapshotCaptures::default();
+    let mut primes: VecDeque<Job> = VecDeque::new();
     loop {
-        let Job { work, reply } = match jobs.recv_timeout(CAPTURE_IDLE) {
-            Ok(job) => job,
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // No snapshot for a while: the captures stop until the next one.
-                captures.stop();
-                continue;
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        let Job { work, reply } = match next_job(jobs, &mut primes) {
+            Some(job) => job,
+            None => match jobs.recv_timeout(CAPTURE_IDLE) {
+                Ok(job) => job,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // No snapshot for a while: the captures stop until the next one.
+                    captures.stop();
+                    continue;
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            },
         };
-        let shown = captures.prepare(&work, capture);
         // A compositor whose device is gone draws nothing again: it reopens, on the
         // engine's context as it is now.
         if let Some((compositor, ..)) = &gpu
@@ -5119,6 +5157,42 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
         {
             gpu = None;
         }
+        if let Work::Prime { shot, at } = &work {
+            // Only on the engine's context: a device of this thread's own shares no
+            // pipeline with the stage, and a software one would draw for nothing.
+            let shares = match &gpu {
+                Some((compositor, ..)) => compositor.context().is_some(),
+                None => shared.context().is_some(),
+            };
+            if !shares {
+                continue;
+            }
+            let primed = panic::catch_unwind(AssertUnwindSafe(|| {
+                let (compositor, ..) = open(&mut gpu, &mut backoff, shared)?;
+                let (started, before) = (Instant::now(), compositor.pipelines_made());
+                prime(shot, *at, compositor);
+                let made = compositor.pipelines_made().saturating_sub(before);
+                if made > 0 {
+                    tracing::info!(
+                        made,
+                        took_ms = started.elapsed().as_millis(),
+                        "a scene's pipelines were made ahead of its first frame"
+                    );
+                }
+                Ok::<(), ProtocolError>(())
+            }));
+            match primed {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => tracing::debug!(%error, "a scene was not primed"),
+                Err(_) => {
+                    tracing::error!("the snapshot compositor panicked priming a scene");
+                    gpu = None;
+                }
+            }
+            drop(reply);
+            continue;
+        }
+        let shown = captures.prepare(&work, capture);
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
             let (compositor, cache, chains) = open(&mut gpu, &mut backoff, shared)?;
             match &work {
@@ -5138,6 +5212,9 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
                 )
                 .map(|result| CallResult::Query { result }),
                 Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains), shown),
+                Work::Prime { .. } => Err(ProtocolError::Internal {
+                    reason: "a primed scene answers nothing".into(),
+                }),
             }
         }));
         let result = result.unwrap_or_else(|_| {
@@ -5187,6 +5264,8 @@ impl SnapshotCaptures {
                     .collect(),
                 sheet.start,
             ),
+            // Drawn with no captures.
+            Work::Prime { .. } => return &NoCaptures,
         };
         if wanted.is_empty() {
             return &NoCaptures;
@@ -5366,6 +5445,49 @@ fn draw(
         height,
         png: base64(&png),
     })
+}
+
+/// The longer side a primed scene is drawn at: its pipelines are the same at any size.
+const PRIME_SIDE: u32 = 256;
+
+/// Draws `shot` once as it is at `at`, small and without reading it back, with images
+/// and filters of its own that are dropped after it, so the snapshots' own stay as they
+/// were and a scene nobody looks at holds no GPU memory here. A 3D scene's own pipelines
+/// are made first, whether or not anything in it draws yet (a model still loading draws
+/// nothing). A scene that fails to draw is only logged: it fails the same way on air.
+fn prime(shot: &Shot, at: MediaTime, compositor: &mut Compositor) {
+    if !shot.cameras.is_empty() {
+        compositor.warm_3d();
+    }
+    let Ok(canvas) = shot.canvas() else { return };
+    let (width, height) = (canvas.width(), canvas.height());
+    let longer = width.max(height).max(1);
+    let scaled = |side: u32| {
+        let side = u64::from(side) * u64::from(PRIME_SIDE.min(longer)) / u64::from(longer);
+        u32::try_from(side).unwrap_or(PRIME_SIDE).max(1)
+    };
+    let Ok(size) = FrameSize::new(scaled(width), scaled(height)) else {
+        return;
+    };
+    let mut cache = ResourceCache::new();
+    let mut chains = Chains::default();
+    cache.begin_frame();
+    let drawn = compose(
+        compositor,
+        (&mut cache, &mut chains),
+        (shot, at),
+        View::default(),
+        &LiveParams::default(),
+        &NoCaptures,
+        DrawAt {
+            size,
+            readback: false,
+        },
+    );
+    drop(cache.end_frame(compositor));
+    if let Err(error) = drawn {
+        tracing::debug!(%error, "a primed scene did not draw");
+    }
 }
 
 /// Draws each of a frame sheet's samples at its own time, scales it to a tile and
@@ -8057,13 +8179,18 @@ fn draw_view_depth(
     };
     compositor.render_view_depth(drawn, target)?;
     let casters = from.is_some_and(|(_, casters, _)| casters);
-    for (model, shown, geometry) in depth_models(
+    for (model, shown, geometry, in_layer) in depth_models(
         (cache, chains),
         (shot, pass),
         (at, canvas, camera),
         live,
         casters,
     ) {
+        // Through the scene's own camera, a model whose depth layer its item carries is
+        // already there: `render_view_depth` wrote that layer, as the pass tests it.
+        if from.is_none() && in_layer {
+            continue;
+        }
         pose(compositor, model, shown);
         compositor.draw_model_depth(
             &jstream_render::ModelDraw {
@@ -8089,7 +8216,8 @@ fn draw_view_depth(
 /// The models `pass` shows that write a view depth at `at`, each with what it shows and
 /// where its item places it through `camera`: every model whose layer is drawn this
 /// frame at least half opaque, as a card writes depth, and with `casters` only those
-/// that cast shadows (ADR-0151 decision 3).
+/// that cast shadows (ADR-0151 decision 3). The flag is whether its item carries the
+/// model's depth layer ([`Item::depth`]), drawn with it through `camera`.
 fn depth_models<'a>(
     (cache, chains): (&ResourceCache<GpuKey>, &'a Chains),
     (shot, pass): (&'a Shot, &Pass),
@@ -8100,6 +8228,7 @@ fn depth_models<'a>(
     &'a jstream_render::GpuModel,
     &'a jstream_sources::ShownModel,
     ItemGeometry,
+    bool,
 )> {
     let size = [canvas.width() as f32, canvas.height() as f32];
     let mut models = Vec::new();
@@ -8148,7 +8277,7 @@ fn depth_models<'a>(
         if casters && !shown.casts_shadows {
             continue;
         }
-        models.push((model, shown, geometry));
+        models.push((model, shown, geometry, item.depth.is_some()));
     }
     models
 }
@@ -11094,5 +11223,52 @@ pub(crate) mod tests {
         );
         let frame = Frame::new(1, 1, &[9, 8, 7, 6], 3).expect("one pixel");
         assert_eq!(frame.rgba(), &[9, 8, 7, 6]);
+    }
+
+    /// A snapshot or a frame sheet queued behind scenes to prime is served before
+    /// them, and the primes still follow in their order.
+    #[test]
+    fn a_picture_queued_behind_primes_is_served_first() {
+        use super::{Job, ReplyTx, Shot, Work, next_job};
+        use std::collections::VecDeque;
+        let at = MediaTime::zero(Timebase::MILLIS);
+        let prime = |ms: i64| Job {
+            work: Work::Prime {
+                shot: Box::new(Shot::default()),
+                at: MediaTime::new(ms, Timebase::MILLIS),
+            },
+            reply: ReplyTx { slot: None },
+        };
+        let sheet = || Job {
+            work: Work::Sheet(Box::new(crate::frames::Sheet {
+                samples: Vec::new(),
+                start: at,
+                answer: crate::frames::query_answer,
+            })),
+            reply: ReplyTx { slot: None },
+        };
+        let (queue, jobs) = std::sync::mpsc::channel();
+        let mut primes = VecDeque::new();
+        for job in [prime(1), prime(2), sheet()] {
+            queue.send(job).expect("the queue is open");
+        }
+        let kind = |job: Option<Job>| match job.map(|job| job.work) {
+            Some(Work::Prime { at, .. }) if at == MediaTime::new(1, Timebase::MILLIS) => {
+                "prime 1".to_owned()
+            }
+            Some(Work::Prime { .. }) => "prime 2".into(),
+            Some(Work::Sheet(_)) => "sheet".into(),
+            Some(Work::Picture { .. }) => "picture".into(),
+            None => "none".into(),
+        };
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "sheet");
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "prime 1");
+        // One that arrives while a prime is drawn goes ahead of the primes left.
+        queue.send(sheet()).expect("the queue is open");
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "sheet");
+        // A closed queue still leaves its primes to draw.
+        drop(queue);
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "prime 2");
+        assert_eq!(kind(next_job(&jobs, &mut primes)), "none");
     }
 }

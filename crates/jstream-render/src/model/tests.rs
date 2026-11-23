@@ -258,6 +258,76 @@ fn golden_model_through_a_camera_the_near_faces_hide_the_far_ones() {
     assert_near(rgb(&shot, at.0, at.1), FRONT, at);
 }
 
+/// A model's layer knows the box its model can cover (#1070), and so does the depth
+/// layer drawn beside it, so a scene placing them draws only there: the box is well
+/// inside the layer for a small model, and the scene looks as it does when the layer
+/// is drawn whole. A model whose bounds reach behind the viewer has no box.
+#[test]
+fn a_models_layer_is_bounded_by_its_models_box() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = Some(SceneCamera::framing(canvas()));
+    let geometry = boxed(80.0, 50.0, 30.0);
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let model_draw = |geometry| ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera,
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(&model_draw(geometry), &layer)
+        .expect("the model draws");
+    let content = layer.content().expect("the model's box is known");
+    assert!(
+        content.width > 20 && content.width < WIDTH / 2 && content.height < HEIGHT,
+        "{content:?}"
+    );
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    let bounded = render(compositor, &items);
+    // Forgetting the box draws the whole layer.
+    layer.mark_changed();
+    assert_eq!(layer.content(), None);
+    let whole = render(compositor, &items);
+    assert_eq!(bounded.rgba(), whole.rgba());
+    assert!(count(&bounded, FRONT) > 300, "the cube shows");
+
+    // Its depth, over a cleared layer, has the same box.
+    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let empty = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    compositor.render_into(&empty, &depth).expect("it clears");
+    compositor
+        .draw_model_depth(&model_draw(geometry), &depth)
+        .expect("the depth draws");
+    assert_eq!(depth.content(), Some(content));
+
+    // Large enough to reach past the viewer, the model's bounds have no box.
+    compositor
+        .draw_model(&model_draw(boxed(80.0, 50.0, 5000.0)), &layer)
+        .expect("the model draws");
+    assert_eq!(layer.content(), None);
+}
+
 /// ADR-0107 decision 3: a flipped placement mirrors the model but still draws its front.
 #[test]
 fn golden_model_a_mirrored_cube_still_shows_its_front() {
@@ -1722,6 +1792,59 @@ fn two_boxes(boxes: [([f32; 3], [f32; 3], [u8; 3]); 2]) -> Model {
     Model::new(primitives, cube.materials().to_vec(), vec![]).expect("the model builds")
 }
 
+/// The opaque primitives draw their depth first and are shaded where it is equal, so
+/// the nearest shows whatever order they are in, and of two in one plane the first.
+#[test]
+fn golden_model_opaque_primitives_show_the_nearest_in_any_order_and_the_first_in_a_plane() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let geometry = boxed(80.0, 50.0, 60.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let near = ([0.0, 0.0, 0.3], [0.5, 0.5, 0.01], [0, 0, 255]);
+    let far = ([0.0, 0.0, -0.3], [1.0, 1.0, 0.01], [255, 0, 0]);
+    let a = draw(
+        compositor,
+        &two_boxes([near, far]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    let b = draw(
+        compositor,
+        &two_boxes([far, near]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_eq!(a.rgba(), b.rgba(), "the order of the primitives shows");
+    assert_near(rgb(&a, 80, 50), [0, 0, 255], (80, 50));
+    assert!(
+        count(&a, [255, 0, 0]) > 500,
+        "the far box shows around the near one"
+    );
+    // In one plane: the first primitive's colour, whole, not a mix of the two.
+    let red = ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]);
+    let blue = ([0.0, 0.0, 0.0], [0.5, 0.5, 0.01], [0, 0, 255]);
+    let first_red = draw(
+        compositor,
+        &two_boxes([red, blue]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_near(rgb(&first_red, 80, 50), [255, 0, 0], (80, 50));
+    let first_blue = draw(
+        compositor,
+        &two_boxes([blue, red]),
+        geometry,
+        camera,
+        Lighting::Unlit,
+    );
+    assert_near(rgb(&first_blue, 80, 50), [0, 0, 255], (80, 50));
+}
+
 /// ADR-0165 decision 2: a model whose surfaces sit at the focus draws as it does with no
 /// depth of field.
 #[test]
@@ -2337,4 +2460,67 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         assert_near(rgb(&shot, 80, 50), want, (80, 50));
         assert_near(rgb(&shot, 120, 50), [255, 255, 255], (120, 50));
     }
+}
+
+/// Every compositor on a device shares the pipelines made on it (`pipelines.rs`): a
+/// second one, as each output start opens, compiles nothing the first compiled, and
+/// draws a model and a sky as the first did, with its own layouts and bind groups.
+#[test]
+fn a_second_compositor_on_the_device_makes_no_pipeline_again() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let camera = SceneCamera::framing(canvas());
+    let shoot = |compositor: &mut Compositor| {
+        let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        let sky = crate::sky::SkyDraw {
+            environment: super::Environment {
+                sky: Color::rgb(0.0, 0.0, 1.0),
+                horizon: Color::rgb(1.0, 1.0, 1.0),
+                ground: Color::rgb(0.0, 1.0, 0.0),
+                intensity: 1.0,
+                turn_deg: 0.0,
+                image: None,
+            },
+            camera,
+            stars: 0.0,
+            star_brightness: 1.0,
+            opacity: 1.0,
+            deep: crate::sky::DeepSky::NONE,
+            warp: 0.0,
+            travel: 0.0,
+            dropping: 0.0,
+        };
+        compositor.draw_sky(&sky, &layer).expect("the sky draws");
+        let sky = render(
+            compositor,
+            &[crate::tests::item(
+                &layer,
+                Placement::Legacy(crate::LegacyTransform::IDENTITY),
+                Crop::NONE,
+                1.0,
+            )],
+        );
+        let cube = draw(
+            compositor,
+            &coloured_cube(),
+            boxed(80.0, 50.0, 40.0),
+            Some(camera),
+            Lighting::Studio,
+        );
+        (sky, cube)
+    };
+    let first = shoot(&mut opened.compositor);
+    let made = opened.compositor.pipelines_made();
+    assert!(made > 0, "the first compositor made its pipelines");
+    let mut other = opened.compositor.sibling();
+    let second = shoot(&mut other);
+    assert_eq!(
+        opened.compositor.pipelines_made(),
+        made,
+        "the second compositor found every pipeline made"
+    );
+    assert_eq!(first.0.rgba(), second.0.rgba(), "the same sky");
+    assert_eq!(first.1.rgba(), second.1.rgba(), "the same cube");
+    assert!(count(&first.1, FRONT) > 100, "the cube shows");
 }

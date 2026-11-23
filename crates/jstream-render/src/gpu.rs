@@ -8,6 +8,7 @@ use std::task::{Context, Poll, Waker};
 use jstream_platform::{ContextKey, GpuContext, SubmitLock};
 
 use crate::error::RenderError;
+use crate::pipelines::Built;
 
 /// How [`crate::Compositor::open`] chooses an adapter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,6 +64,9 @@ pub(crate) struct Gpu {
     pub submit: SubmitLock,
     /// The GPU time of the drawer's units of work (`spans.rs`).
     pub spans: Arc<crate::spans::Spans>,
+    /// The pipelines made on the device, by this compositor or another on the same
+    /// context (`pipelines.rs`).
+    pub built: Arc<Built>,
 }
 
 /// What wgpu reported about a device outside any call's result.
@@ -152,14 +156,30 @@ fn watch(device: &wgpu::Device) -> Arc<Faults> {
     faults
 }
 
-/// The watch every compositor on `ctx` shares, installed by the first
-/// ([`GpuContext::watch`]).
-fn context_faults(ctx: &GpuContext) -> Arc<Faults> {
-    match ctx.watch(|| watch(ctx.device())) {
-        Some(faults) => Arc::clone(&*faults),
+/// What every compositor on one context shares, kept in the context
+/// ([`GpuContext::watch`]). The pipelines hold the device, so they are kept beside the
+/// watch and not in it: the device holds the watch.
+struct Shared {
+    faults: Arc<Faults>,
+    built: Arc<Built>,
+}
+
+impl Shared {
+    fn of(ctx: &GpuContext) -> Option<Arc<Self>> {
+        ctx.watch(|| Self {
+            faults: watch(ctx.device()),
+            built: Arc::default(),
+        })
+    }
+}
+
+/// The watch and the pipelines every compositor on `ctx` shares, installed by the first.
+fn context_shared(ctx: &GpuContext) -> (Arc<Faults>, Arc<Built>) {
+    match Shared::of(ctx) {
+        Some(shared) => (Arc::clone(&shared.faults), Arc::clone(&shared.built)),
         // Only jstream-render installs a context's watch, so this doesn't happen; a
         // watch of its own still sees errors, if not every compositor's.
-        None => watch(ctx.device()),
+        None => (watch(ctx.device()), Arc::default()),
     }
 }
 
@@ -168,7 +188,7 @@ fn context_faults(ctx: &GpuContext) -> Arc<Faults> {
 /// here if no compositor has been opened on the context yet. The engine asks this before
 /// lending a context it opened earlier again (ADR-0117 §5).
 pub fn context_lost(ctx: &GpuContext) -> Option<String> {
-    let faults = ctx.watch(|| watch(ctx.device()))?;
+    let faults = Arc::clone(&Shared::of(ctx)?.faults);
     if faults.lost.get().is_none() {
         let _ = ctx.device().poll(wgpu::PollType::Poll);
     }
@@ -254,8 +274,9 @@ impl Gpu {
 
     pub(crate) fn from_context(ctx: &GpuContext) -> Self {
         let adapter = ctx.adapter().clone();
-        let faults = context_faults(ctx);
+        let (faults, built) = context_shared(ctx);
         let mut gpu = Self::with_faults(adapter, ctx.device().clone(), ctx.queue().clone(), faults);
+        gpu.built = built;
         gpu.context = Some(ctx.key());
         gpu.submit = ctx.submit_lock().clone();
         gpu.log_open("platform context");
@@ -305,6 +326,7 @@ impl Gpu {
             context: None,
             spans,
             faults,
+            built: Arc::default(),
             submit: SubmitLock::new(),
         }
     }

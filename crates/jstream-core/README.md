@@ -334,7 +334,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
-  compositor and draws the frame sheets too (`frames.rs`, see *Frame sheets*). A keyframe scene draws its parent's items at their effective values
+  compositor, draws the frame sheets too (`frames.rs`, see *Frame sheets*) and draws each scene of a collection once when it opens, to compile what it draws with (*Snapshots*, Priming). A keyframe scene draws its parent's items at their effective values
   (`State::shown_items`), effects included where it overrides them
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), so it
   follows every edit to the parent; so does what the
@@ -1738,6 +1738,28 @@ transition's track takes its endpoint's, and a pair whose ends differ switches h
 A nested scene's items blend with its own layer, so a transition flattens a nested
 scene into its items only when it and they are all `normal`.
 
+**Priming.** When a collection is opened, and when the engine gets its backends, every
+scene of it is planned alone, as a frame sheet of that scene plans it (reaching no
+source), and queued to the snapshot thread (`SnapshotWorker::prime`), which draws each
+once, at most 256 pixels on its longer side, with no captures and no readback, and
+throws the picture away. A snapshot or a frame sheet queued behind scenes to prime is
+drawn before them, so a preview waits for no more than the scene being primed. The draw makes the pipelines the scene draws with, and every
+compositor on the engine's context shares them
+([jstream-render › Scope](../jstream-render/README.md#purpose)), so the program stage
+compiles no shader on its first frame of a scene it never showed: on Direct3D 12 a 3D
+scene's shaders take seconds, which was a stall at the output's start or at the switch.
+A scene with a camera also has what a 3D scene alone draws with made
+(`Compositor::warm_3d`), whether or not anything in it draws yet. A primed draw has
+images and filters of its own, dropped after it, so it leaves the snapshots' cache and
+GPU memory as they were. It runs only with a GPU context to share (`SharedGpu::lends`,
+and the snapshot thread skips the job when the context won't open, so nothing is drawn
+on a software device of its own);
+a scene that fails to draw is logged at `debug`. Not primed: a scene made or changed
+after the collection opened, which is compiled where it is first drawn (its preview,
+while it is edited); a source's filters while the source has no frame; and each
+compositor's own uploads and bakes (a model's buffers, a still's texture, a sky seed's
+cube maps), which the stage still makes when it first draws the scene.
+
 **Nested scenes.** A `scene` source shows its scene composited at the canvas size,
 then placed like any image. The shot is scheduled inside out: each nested scene is
 one pass into its own layer (`Compositor::render_into`), which stays on the GPU as
@@ -2078,9 +2100,14 @@ crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetri
 `floor_reflection` and `depth_bloom`) also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
 planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
-composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, then
-each model it shows at least half opaque, posed as its layer is, whether the pass places
-the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). `Chains::drew_depth`
+composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, with
+each model it shows at least half opaque, whether the pass places
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). A
+model's item carries its `GpuKey::ModelDepth` layer there (`Item::depth`), and
+`Compositor::render_view_depth` writes that layer into the view depth, so the model's
+geometry, drawn once into that layer with its colour, isn't drawn a second time for the
+scene's filters; a shadow map and a floor reflection, which see it through another
+camera, draw it posed as its layer is (`depth_models`). `Chains::drew_depth`
 keeps it with the camera's view and the scene's lights, as `scene_lights` gives them
 ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 1: the lights
 copied only when they change), and `run_one` hands it to the chain's
@@ -2823,8 +2850,9 @@ to start, which is logged) deleted sources keep their grants. Width or height of
 or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
-snapshot. It owns the compositor, serves requests in order, and stops when the
-engine goes away. The compositor opens on the first snapshot, on the engine's GPU
+snapshot, or before it to prime a collection's scenes (*Priming* above). It owns the
+compositor, serves requests in order (a scene to prime after any request waiting), and stops when the
+engine goes away. The compositor opens on its first job, on the engine's GPU
 context when it has one, so it draws the browser pages painted there
 ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), and otherwise on a
 device of its own, hardware adapter first, with lavapipe or WARP as the fallback
@@ -4103,7 +4131,7 @@ a plan reaches after the thread skipped it (*Live sources*). A painter's frame s
 a leaf mutex its writers take, the plan under the collection lock and that thread alone;
 no draw takes it, and the render thread reads the slot with no lock at all. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
-collection lock is released. The engine's GPU context (`SharedGpu`, `runtime/gpu.rs`)
+collection lock is released, by priming too (*Snapshots*), which asks the GPU context whether it lends before it takes the collection lock to plan the scenes. The engine's GPU context (`SharedGpu`, `runtime/gpu.rs`)
 has locks of its own, never taken under the collection lock: it opens a device holding
 only its own, and tells the engine of a replaced context after releasing them, which
 then takes the collection lock to hand it to the browser engine. The preview thread takes its own state lock, and the

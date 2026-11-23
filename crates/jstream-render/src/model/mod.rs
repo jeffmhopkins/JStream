@@ -15,7 +15,7 @@ use wgpu::util::DeviceExt;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
 use crate::image::{Image, LAYER_FORMAT, Owner};
-use crate::mips::Mips;
+use crate::mips::{Mips, Region};
 use crate::scene::Color;
 
 /// The depth format: reversed, so `f32`'s precision near 0 is spent far away.
@@ -267,6 +267,62 @@ fn material_bytes(values: &[f32; MATERIAL_VALUES]) -> [u8; MATERIAL_VALUES * 4] 
     out
 }
 
+/// The texels of a `size` target that a model with `bounds` can cover when drawn through
+/// `clip` (a model-to-clip matrix, column-major), with a texel of margin, clipped: the
+/// box of its bounds' eight corners. `None` when a corner is at or behind the viewer,
+/// where the box has no end, or isn't finite. Empty for a model off the target.
+fn drawn_box(clip: &[[f32; 4]; 4], bounds: SolidBounds, size: (u32, u32)) -> Option<Region> {
+    let (width, height) = (f64::from(size.0), f64::from(size.1));
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for corner in 0..8 {
+        let pick = |bit: usize, axis: usize| {
+            f64::from(if corner & (1 << bit) == 0 {
+                bounds.min[axis]
+            } else {
+                bounds.max[axis]
+            })
+        };
+        let at = [pick(0, 0), pick(1, 1), pick(2, 2), 1.0];
+        let row = |r: usize| (0..4).map(|c| f64::from(clip[c][r]) * at[c]).sum::<f64>();
+        let (x, y, w) = (row(0), row(1), row(3));
+        if !(w > 1e-6 && x.is_finite() && y.is_finite()) {
+            return None;
+        }
+        let (px, py) = ((x / w * 0.5 + 0.5) * width, (0.5 - y / w * 0.5) * height);
+        x0 = x0.min(px);
+        y0 = y0.min(py);
+        x1 = x1.max(px);
+        y1 = y1.max(py);
+    }
+    let low = |v: f64, side: f64| (v.floor() - 1.0).clamp(0.0, side) as u32;
+    let high = |v: f64, side: f64| (v.ceil() + 1.0).clamp(0.0, side) as u32;
+    let (x0, y0) = (low(x0, width), low(y0, height));
+    let (x1, y1) = (high(x1, width), high(y1, height));
+    Some(Region {
+        x: x0,
+        y: y0,
+        width: x1.saturating_sub(x0),
+        height: y1.saturating_sub(y0),
+    })
+}
+
+/// The smallest region holding `a` and `b`; an empty one adds nothing.
+fn union(a: Region, b: Region) -> Region {
+    if a.width == 0 || a.height == 0 {
+        return b;
+    }
+    if b.width == 0 || b.height == 0 {
+        return a;
+    }
+    let (x, y) = (a.x.min(b.x), a.y.min(b.y));
+    Region {
+        x,
+        y,
+        width: (a.x + a.width).max(b.x + b.width) - x,
+        height: (a.y + a.height).max(b.y + b.height) - y,
+    }
+}
+
 /// Which uploaded model a [`GpuModel`] was ([`GpuModel::seen`]). It doesn't keep the
 /// model's buffers alive, and it never matches another upload, even one made where a
 /// dropped one was.
@@ -505,6 +561,9 @@ pub(crate) struct ModelRuntime {
     /// draw that had any, and their textures, so a steady frame makes no bind group
     /// (ADR-0151 decisions 3 and 9).
     shadow_bind: Option<([Option<wgpu::Texture>; FRAME_TEXTURES], wgpu::BindGroup)>,
+    /// The opaque primitives' depth, drawn before their shading.
+    prepass: wgpu::RenderPipeline,
+    /// Their shading, where the prepass left their depth.
     opaque: wgpu::RenderPipeline,
     blended: wgpu::RenderPipeline,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
@@ -606,16 +665,14 @@ impl ModelRuntime {
             }],
         });
         let rest_pose = pose_bind(&gpu.device, &pose_layout, &[IDENTITY_MAT4]).1;
+        // The filters' colour helpers, so a picture decodes as every pass decodes it.
+        const SOURCE: &str = concat!(
+            include_str!("../filter/colour.wgsl"),
+            include_str!("model.wgsl")
+        );
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
-            // The filters' colour helpers, so a picture decodes as every pass decodes it.
-            source: wgpu::ShaderSource::Wgsl(
-                concat!(
-                    include_str!("../filter/colour.wgsl"),
-                    include_str!("model.wgsl")
-                )
-                .into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream-render-model"),
@@ -626,12 +683,20 @@ impl ModelRuntime {
             ],
             immediate_size: 0,
         });
-        let pipeline = |blended: bool| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(if blended {
-                    "jstream-render-model-blended"
-                } else {
-                    "jstream-render-model-opaque"
+        // The opaque primitives draw twice: their depth first (`fs_prepass`), then their
+        // shading where it is equal, which writes no depth; blended ones test it.
+        #[derive(Clone, Copy, PartialEq)]
+        enum Kind {
+            Prepass,
+            Opaque,
+            Blended,
+        }
+        let pipeline = |kind: Kind| {
+            let desc = wgpu::RenderPipelineDescriptor {
+                label: Some(match kind {
+                    Kind::Prepass => "jstream-render-model-prepass",
+                    Kind::Opaque => "jstream-render-model-opaque",
+                    Kind::Blended => "jstream-render-model-blended",
                 }),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
@@ -663,34 +728,51 @@ impl ModelRuntime {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(!blended),
-                    depth_compare: Some(wgpu::CompareFunction::Greater),
+                    depth_write_enabled: Some(kind == Kind::Prepass),
+                    depth_compare: Some(if kind == Kind::Opaque {
+                        wgpu::CompareFunction::Equal
+                    } else {
+                        wgpu::CompareFunction::Greater
+                    }),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some("fs"),
+                    entry_point: Some(if kind == Kind::Prepass {
+                        "fs_prepass"
+                    } else {
+                        "fs"
+                    }),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    // The prepass draws in the colour pass, so it has its target, and
+                    // writes none of it.
                     targets: &[Some(wgpu::ColorTargetState {
                         format: LAYER_FORMAT,
-                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
+                        blend: (kind != Kind::Prepass)
+                            .then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                        write_mask: if kind == Kind::Prepass {
+                            wgpu::ColorWrites::empty()
+                        } else {
+                            wgpu::ColorWrites::ALL
+                        },
                     })],
                 }),
                 multiview_mask: None,
                 cache: None,
-            })
+            };
+            gpu.built.render(device, SOURCE, &(), &desc)
         };
-        let opaque = pipeline(false);
-        let blended = pipeline(true);
+        let prepass = pipeline(Kind::Prepass);
+        let opaque = pipeline(Kind::Opaque);
+        let blended = pipeline(Kind::Blended);
         let largest = wgpu::BlendComponent {
             src_factor: wgpu::BlendFactor::One,
             dst_factor: wgpu::BlendFactor::One,
             operation: wgpu::BlendOperation::Max,
         };
-        let depth_only = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let depth_only = wgpu::RenderPipelineDescriptor {
             label: Some("jstream-render-model-view-depth"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
@@ -735,7 +817,8 @@ impl ModelRuntime {
             }),
             multiview_mask: None,
             cache: None,
-        });
+        };
+        let depth_only = gpu.built.render(device, SOURCE, &(), &depth_only);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-model-sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -793,6 +876,7 @@ impl ModelRuntime {
             pose_layout,
             rest_pose,
             shadow_bind: None,
+            prepass,
             opaque,
             blended,
             depth_only,
@@ -1615,11 +1699,22 @@ impl ModelRuntime {
                 pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..p.index_count, 0, 0..1);
             };
+            // Depth first, then shading only where it is the nearest: a pixel several
+            // surfaces cover is shaded once, not once a surface.
+            let opaque =
+                |p: &&GpuPrimitive| !model.materials.get(p.material).is_some_and(|m| m.blended);
+            pass.set_pipeline(&self.prepass);
+            for p in model.primitives.iter().filter(opaque) {
+                draw_one(&mut pass, p);
+            }
+            // Last to first: where two primitives lie in one plane both pass the equal
+            // test and the later draw replaces the earlier, so this order shows the
+            // first of them, as one pass that kept the first nearest fragment did.
+            // Inside one primitive its triangles still draw in index order, so of two
+            // of its own triangles in one plane the later now shows.
             pass.set_pipeline(&self.opaque);
-            for p in &model.primitives {
-                if !model.materials.get(p.material).is_some_and(|m| m.blended) {
-                    draw_one(&mut pass, p);
-                }
+            for p in model.primitives.iter().rev().filter(opaque) {
+                draw_one(&mut pass, p);
             }
             if !self.order.is_empty() {
                 pass.set_pipeline(&self.blended);
@@ -1630,6 +1725,12 @@ impl ModelRuntime {
         }
         gpu.submit_work(encoder.finish());
         target.mark_changed();
+        // Outside the model's box on the target the layer is transparent: what places
+        // or filters it draws only over the rest (#1070).
+        let content = (!in_texture && model.pose.is_none())
+            .then(|| drawn_box(&clip, model.bounds, (width, height)))
+            .flatten();
+        target.set_content(content);
         drop(submitting);
         Ok(())
     }
@@ -1720,7 +1821,17 @@ impl ModelRuntime {
             }
         }
         gpu.submit_work(encoder.finish());
+        // The target holds what it held and the model's box more.
+        let prior = target.content();
         target.mark_changed();
+        let content = match (prior, model.pose.is_none()) {
+            (Some(prior), true) => {
+                drawn_box(&clip, model.bounds, (target.width(), target.height()))
+                    .map(|drawn| union(prior, drawn))
+            }
+            _ => None,
+        };
+        target.set_content(content);
         drop(submitting);
         Ok(())
     }

@@ -373,6 +373,70 @@ fn golden_view_depth_takes_a_models_own_depth() {
     near(&shot, 64, 50, WHITE, 1);
 }
 
+/// A model's layer that carries the model's depth layer writes that depth into the view
+/// depth, with no draw of the model there: the same fog as when the model is drawn.
+#[test]
+fn golden_view_depth_takes_the_depth_a_models_layer_carries() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let f = focal();
+    let cube = Shape::Cube
+        .model(Material::default())
+        .expect("the cube builds");
+    let uploaded = opened.compositor.upload_model(&cube).expect("it uploads");
+    let pose = card(80.0, 50.0, 40.0, -f);
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry: pose,
+        camera: Some(camera()),
+        lighting: Lighting::Unlit,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+        probe: None,
+    };
+    let layer = opened.compositor.layer(W, H).expect("a layer");
+    let own_depth = opened.compositor.layer(W, H).expect("a layer");
+    opened
+        .compositor
+        .draw_model_depth(&draw, &own_depth)
+        .expect("the model's depth draws");
+    let image = solid(&opened.compositor, 4, 4, WHITE);
+    let back = placed(&image, card(80.0, 50.0, 120.0, -2.0 * f), 1.0);
+    let model_item = Item {
+        camera: Some(camera()),
+        depth: Some(&own_depth),
+        ..crate::tests::item(&layer, Placement::Layer(pose), Crop::NONE, 1.0)
+    };
+    let shot = fogged(&mut opened, &[back, model_item], &[]);
+    let at_front = (f - 20.0) / (2.0 * f);
+    near(&shot, 80, 50, grey(at_front), 3);
+    near(&shot, 64, 50, WHITE, 1);
+    // Faded below half, as a group's fade leaves its model, the layer adds no depth:
+    // the card behind is fogged by its own.
+    let back = placed(&image, card(80.0, 50.0, 120.0, -2.0 * f), 1.0);
+    let faded = Item {
+        camera: Some(camera()),
+        depth: Some(&own_depth),
+        ..crate::tests::item(&layer, Placement::Layer(pose), Crop::NONE, 0.4)
+    };
+    let shot = fogged(&mut opened, &[back, faded], &[]);
+    near(&shot, 80, 50, WHITE, 1);
+    let back = placed(&image, card(80.0, 50.0, 120.0, -2.0 * f), 1.0);
+    let half = Item {
+        camera: Some(camera()),
+        depth: Some(&own_depth),
+        ..crate::tests::item(&layer, Placement::Layer(pose), Crop::NONE, 0.5)
+    };
+    let shot = fogged(&mut opened, &[back, half], &[]);
+    near(&shot, 80, 50, grey(at_front), 3);
+}
+
 /// ADR-0143 decision 6: a translucent fog colour is laid over the picture, source-over,
 /// so an opaque picture stays opaque. Half-alpha white fog at full amount over black
 /// gives linear 0.5 grey, not a half-transparent picture; fog at alpha 0 changes nothing.
