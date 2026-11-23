@@ -17,7 +17,8 @@
 //!
 //! # Tests
 //!
-//! The file-dialog filter (which extensions a row keeps, All files beside them, which
+//! The GPU scheduling class the `JSTREAM_GPU_PRIORITY` variable names (`high` unless it
+//! names another, and a value that names none), the file-dialog filter (which extensions a row keeps, All files beside them, which
 //! paths may start the dialog, and the suggested file name), the clock conversion, the
 //! stream helpers (format choice, sample copies, packet flags, positions across a
 //! device move), the capture helpers (target IDs, keyed and key-less, and how a
@@ -110,6 +111,9 @@ mod dialog;
 mod folders;
 #[cfg(windows)]
 mod gpu;
+// Its choice of class is tested on every platform; the call is Windows.
+#[cfg(any(windows, test))]
+mod gpu_priority;
 // Its key tables are tested on every platform; the listener is Windows.
 mod hotkeys;
 // Its decision logic is tested on every platform.

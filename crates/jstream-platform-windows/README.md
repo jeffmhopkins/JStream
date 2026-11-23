@@ -38,7 +38,7 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback, and the H.264 decoder MFT for the engine's own streams ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)) |
 | `MfVideoDevices`, `MfMjpegDecoder` | `VideoDevices`, `CaptureDecoder` | `video_device/` | webcams and capture cards, paired with their microphones, their camera controls (`IAMVideoProcAmp` and `IAMCameraControl` on the media source), and MJPEG decoding |
 | `MfMediaDecoders` | `MediaDecoders` | `decode/` | local media files through the Source Reader |
-| `WindowsGpu` | `GpuInterop` | `gpu/` | the DX12 wgpu device on the media adapter, a D3D11 device beside it, shared NV12 encode targets and fences ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)) |
+| `WindowsGpu` | `GpuInterop` | `gpu/` | the DX12 wgpu device on the media adapter, a D3D11 device beside it, shared NV12 encode targets and fences ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)). Opening the device also asks Windows to schedule the process's GPU work in the `high` class, ahead of other programs' on a busy GPU (`gpu_priority.rs`; `JSTREAM_GPU_PRIORITY=normal` leaves it alone, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §9) |
 | `WindowsVcam` | `VcamSink` | `vcam/` | the virtual camera's engine side, publishing to [`jstream-vcam-windows`](../jstream-vcam-windows/README.md) |
 | `register_vcam`, `unregister_vcam`, `vcam_registration` | | `vcam_register.rs` | the camera's opt-in registration from an administrators-only copy ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)) |
 | `WindowsCredentials` | `StreamKeyStore`, `OAuthTokenStore` | `credential.rs` | Windows Credential Manager ([R-SEC-001](../../docs/RULES.md#R-SEC-001)) |
@@ -55,7 +55,8 @@ media files decode through `MfMediaDecoders`), the virtual camera taking
 **Tests.** `lib.rs`'s rustdoc lists every test and what it checks. The helpers that don't call Windows (format choice, target IDs, AAC and video
 encoder configuration, the first-frame fallback, the H.264 decoder's configuration
 check and picture cropping, the GPU capture ring, credential names
-and limits, the virtual camera's format, the media-file conversions, the dialog filter)
+and limits, the virtual camera's format, the media-file conversions, the dialog filter, the GPU
+scheduling class a variable names)
 run on every platform. The clock, the credential round trip and the Media Foundation
 probe run in CI's Windows job. Tests against real devices, the OS encoders, the GPU and
 a display are behind the `hw-tests` feature and `#[ignore]`d, because CI machines may
