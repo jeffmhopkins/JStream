@@ -23,6 +23,9 @@ pub(crate) const DEAD_BAND: f32 = 0.02;
 /// The shortest time between two firings of one channel trigger.
 pub(crate) const MIN_REFIRE: Duration = Duration::from_millis(50);
 
+/// A trigger by its timeline, whether it is a stop, and its place in the list.
+type TriggerKey = (TimelineId, bool, usize);
+
 /// What a fired trigger asks for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Order {
@@ -60,9 +63,10 @@ pub(crate) struct Sequences {
     events: Vec<(TimelineId, TimelineEdge)>,
     /// `None` until the first check, which only looks.
     seen: Option<Seen>,
-    /// Each channel trigger's side of its level, and when it last fired, by its timeline,
-    /// whether it is a stop, and its place in the list.
-    above: BTreeMap<(TimelineId, bool, usize), (bool, Option<Instant>)>,
+    /// Each channel trigger's side of its level, whether an edge waits for `MIN_REFIRE`,
+    /// and when it last fired, by its timeline, whether it is a stop, and its place in
+    /// the list.
+    above: BTreeMap<TriggerKey, (bool, bool, Option<Instant>)>,
 }
 
 impl Sequences {
@@ -186,8 +190,11 @@ impl Sequences {
                                     continue;
                                 };
                                 let at = at.map_or(0.5, |l| l.get());
-                                let (was_above, last) =
-                                    self.above.get(&key).copied().unwrap_or((value >= at, None));
+                                let (was_above, pending, last) = self
+                                    .above
+                                    .get(&key)
+                                    .copied()
+                                    .unwrap_or((value >= at, false, None));
                                 let above = if was_above {
                                     value >= at - DEAD_BAND
                                 } else {
@@ -196,15 +203,25 @@ impl Sequences {
                                 let ready =
                                     last.is_none_or(|l| now.duration_since(l) >= MIN_REFIRE);
                                 let was_on = before.on.get(channel_id).copied();
-                                let fires = !first
-                                    && ready
-                                    && match edge {
-                                        ChannelEdge::Rises => !was_above && above,
-                                        ChannelEdge::Falls => was_above && !above,
-                                        ChannelEdge::On => was_on == Some(false) && switched,
-                                        ChannelEdge::Off => was_on == Some(true) && !switched,
-                                    };
-                                kept.insert(key, (above, if fires { Some(now) } else { last }));
+                                let (crossed, holds) = match edge {
+                                    ChannelEdge::Rises => (!was_above && above, above),
+                                    ChannelEdge::Falls => (was_above && !above, !above),
+                                    ChannelEdge::On => {
+                                        (was_on == Some(false) && switched, switched)
+                                    }
+                                    ChannelEdge::Off => {
+                                        (was_on == Some(true) && !switched, !switched)
+                                    }
+                                };
+                                // An edge MIN_REFIRE holds back is deferred, not lost: it
+                                // fires once the trigger is ready, if the channel is still
+                                // on that side.
+                                let wants = !first && (crossed || pending) && holds;
+                                let fires = wants && ready;
+                                kept.insert(
+                                    key,
+                                    (above, wants && !ready, if fires { Some(now) } else { last }),
+                                );
                                 fires
                             }
                             TimelineTrigger::Scene { scene_id, edge, .. } => {
@@ -357,6 +374,49 @@ mod tests {
         );
         value.set(0.51);
         assert!(seq.check(&g, None, level, at(400)).is_empty());
+    }
+
+    /// Review N1 on #1640: rise, fall and rise again inside `MIN_REFIRE` plays, stops,
+    /// and plays again once the trigger is ready, rather than losing the second rise.
+    #[test]
+    fn an_edge_held_back_by_min_refire_fires_later() {
+        let g = graph(
+            vec![TimelineTrigger::Channel {
+                channel_id: "power".into(),
+                edge: ChannelEdge::Rises,
+                level: None,
+                delay_ms: 0,
+            }],
+            vec![TimelineTrigger::Channel {
+                channel_id: "power".into(),
+                edge: ChannelEdge::Falls,
+                level: None,
+                delay_ms: 0,
+            }],
+        );
+        let value = Cell::new(0.0_f32);
+        let mut seq = Sequences::default();
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
+        let level = |_: &str| Some((value.get(), true));
+        assert!(seq.check(&g, None, level, at(0)).is_empty());
+        value.set(1.0);
+        assert_eq!(seq.check(&g, None, level, at(100)), [play()]);
+        value.set(0.0);
+        assert_eq!(
+            seq.check(&g, None, level, at(110)),
+            [Order::Stop {
+                timeline_id: TimelineId::new("up")
+            }]
+        );
+        value.set(1.0);
+        assert!(seq.check(&g, None, level, at(120)).is_empty(), "held back");
+        assert_eq!(
+            seq.check(&g, None, level, at(150)),
+            [play()],
+            "deferred, not lost"
+        );
+        assert!(seq.check(&g, None, level, at(200)).is_empty(), "once");
     }
 
     #[test]

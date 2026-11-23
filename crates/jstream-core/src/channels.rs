@@ -27,7 +27,8 @@
 //! the time the timeline starts (or is sought) until something else changes the
 //! channel: under `latest` a control moved, an action or a later timeline's lane takes
 //! it over. A lane with no point at 0 starts from the channel's value at that moment
-//! (before its curve), so nothing jumps; each pass of a loop after the first starts
+//! (before its curve), so nothing jumps; a seek keeps the value the timeline's lane
+//! started from, so scrubbing doesn't jump either; each pass of a loop after the first starts
 //! from the lane's last point. When the timeline ends or stops, the lane holds its last
 //! value. The channel's own switch, averaging, fade and curve apply after the lane.
 //!
@@ -400,21 +401,29 @@ impl ChannelDriver {
         self.set_value(channel_id, (base + by).clamp(0.0, 1.0), fade_ms, now)
     }
 
-    /// Timeline `timeline_id` started (or was sought) at `at_ms`: each of its lanes that
-    /// is on takes its channel, from the channel's value now, replacing another
-    /// timeline's lane there (ADR-0184: the last started wins).
+    /// Timeline `timeline_id` started (or, with `seek`, was sought) at `at_ms`: each of
+    /// its lanes that is on takes its channel, replacing another timeline's lane there
+    /// (ADR-0184: the last started wins). A lane starts from the channel's value now,
+    /// except that a seek keeps the value this timeline's lane already started from.
     pub(crate) fn lanes_start(
         &mut self,
         timeline_id: &TimelineId,
         info: &TimelineInfo,
         at_ms: u32,
+        seek: bool,
     ) {
         for lane in info.lanes.iter().filter(|lane| lane.on) {
             let Some(followed) = self.followed.get_mut(&lane.target.channel) else {
                 continue;
             };
             self.changes += 1;
-            let from = followed.faded.unwrap_or(followed.value);
+            // A seek keeps where this timeline's lane started from, so scrubbing a
+            // playing sequence never jumps (ADR-0184 decision 3). A play, or a seek
+            // that takes the channel from something else, starts from the value now.
+            let from = match &followed.lane {
+                Some(held) if seek && held.timeline_id == *timeline_id => held.from,
+                _ => followed.faded.unwrap_or(followed.value),
+            };
             followed.lane = Some(Lane {
                 timeline_id: timeline_id.clone(),
                 lane: lane.clone(),
@@ -1056,7 +1065,7 @@ mod tests {
         rig.tick(10);
         let up = lane_timeline("up", 1.0);
         let down = lane_timeline("down", 0.0);
-        rig.driver.lanes_start(&up.timeline_id, &up, 0);
+        rig.driver.lanes_start(&up.timeline_id, &up, 0, false);
         rig.driver.lanes_at(&up.timeline_id, 500.0, 0);
         rig.tick(20);
         assert!(
@@ -1070,7 +1079,7 @@ mod tests {
             Some(1.0),
             "pass 1 starts from the lane's end"
         );
-        rig.driver.lanes_start(&down.timeline_id, &down, 0);
+        rig.driver.lanes_start(&down.timeline_id, &down, 0, false);
         rig.driver.lanes_at(&up.timeline_id, 0.0, 0);
         rig.driver.lanes_at(&down.timeline_id, 500.0, 0);
         rig.tick(40);
@@ -1081,5 +1090,42 @@ mod tests {
         rig.driver.set_value("c", 0.9, None, rig.at(40)).ok();
         rig.tick(50);
         assert_eq!(rig.value("c"), Some(0.9), "an action takes it back");
+    }
+
+    /// ADR-0184 decision 3: a seek keeps where the lane started from, so seeking to
+    /// where it already is changes nothing, and seeking to 0 goes back to the start.
+    #[test]
+    fn a_seek_keeps_where_the_lane_started() {
+        let mut rig = Rig::new();
+        set(&mut rig.graph, ChannelInfo::new("c"));
+        rig.tick(0);
+        rig.driver.set_value("c", 1.0, None, rig.at(0)).ok();
+        rig.tick(10);
+        let down = lane_timeline("down", 0.0);
+        rig.driver.lanes_start(&down.timeline_id, &down, 0, false);
+        rig.driver.lanes_at(&down.timeline_id, 500.0, 0);
+        rig.tick(20);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.5).abs() < 1e-5,
+            "halfway down"
+        );
+        rig.driver.lanes_start(&down.timeline_id, &down, 500, true);
+        rig.tick(30);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 0.5).abs() < 1e-5,
+            "seeking to where it is doesn't jump"
+        );
+        rig.driver.lanes_start(&down.timeline_id, &down, 0, true);
+        rig.tick(40);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 1.0).abs() < 1e-5,
+            "seeking to 0 goes back to the start value"
+        );
+        rig.driver.lanes_start(&down.timeline_id, &down, 0, false);
+        rig.tick(50);
+        assert!(
+            (rig.value("c").unwrap_or(0.0) - 1.0).abs() < 1e-5,
+            "a play starts from the value now"
+        );
     }
 }

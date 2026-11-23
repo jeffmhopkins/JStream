@@ -67,7 +67,7 @@ from there to its first point along that point's curve. "Lights down" is then on
 (0 at 3 s), and it works from any level. A position or a camera move driven through a
 channel glides from where it is, with no jump. Each pass of a loop after the first starts
 from the lane's last point. A seek moves each lane to its value at that time, from the
-value it started from.
+value it started from, which a seek keeps.
 
 **4. At the end, channels hold.** When a `once` timeline ends, each lane sets its last
 point's value and holds it. A stopped timeline's lanes hold where they are.
@@ -103,7 +103,11 @@ Two things are refused by `TimelineInfo::problem`:
 - a `starts` on a channel one of its own lanes drives.
 
 Timelines that start each other in a ring are capped as cues are
-([ADR-0115](0115-timelines-on-the-wire.md)).
+([ADR-0115](0115-timelines-on-the-wire.md)): each values tick runs a bounded number of
+rounds, and the ring keeps restarting at that rate until one of its timelines is stopped.
+
+A channel edge that `MIN_REFIRE` holds back is deferred, not lost. It fires once the
+trigger is ready, if the channel is still on that side.
 
 **8. Keys and MIDI stay in the binding system.** A hotkey or a controller binding to
 `timeline.play` or `timeline.stop` is how a key, a note or a CC starts a sequence. One

@@ -460,7 +460,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   channels back to their defaults when that scene goes on program. `channel.set_value`,
   `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
   reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
-  more input (ADR-0184): it starts from the channel's value, the last timeline started
+  more input (ADR-0184): it starts from the channel's value (a seek keeps that start), the last timeline started
   wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
   modifier's or camera modifier's `amount` scales its value as it applies
   (`jstream_anim::evaluate_scaled`).
@@ -1679,7 +1679,8 @@ preset changed in one batch that one undo takes back.
   collection no longer holds (`reconcile_timelines`), with `timeline.changed` `removed`.
 - **Lanes** ([ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)): when a
   timeline plays or is sought, `ChannelDriver::lanes_start` gives each of its lanes that
-  is on its channel, from the channel's value then; each `jstream-values` tick moves
+  is on its channel, from the channel's value then (a seek keeps the value this
+  timeline's lane already started from, so scrubbing never jumps); each `jstream-values` tick moves
   every playing timeline's lanes to its position on the animation clock (`lanes_at`)
   before the channels tick, and an end sets each lane's last point. The values thread
   ticks every 16.7 ms while a lane drives a channel. See *Channels* in
@@ -1693,11 +1694,13 @@ preset changed in one batch that one undo takes back.
   `loops`), and plays (at once, or after the trigger's delay) or stops each timeline
   whose trigger fired. The first check after the engine starts or a collection opens
   (`restart`) only looks. A channel trigger crosses back only past a 0.02 dead band and
-  fires at most once every 50 ms. The values thread runs while any timeline has a
+  fires at most once every 50 ms; an edge that limit holds back fires once it is over,
+  if the channel is still on that side. The values thread runs while any timeline has a
   trigger or a wait. `src/tests/sequences.rs` checks a lane gliding down from where its
   channel was, in small steps, and holding its end, driven by the sequence; a channel
   rising playing a timeline after its delay, listed in `waiting` meanwhile, falling
-  stopping it, and a stop cancelling a delayed play.
+  stopping it, and a stop cancelling a delayed play; and a seek to 0 returning a lane to
+  the value it started from.
 - **`source.restart`** calls `LiveSources::restart` at `action_now` (the cue's time
   while a cue runs, otherwise the clock's now), which restarts the source's running
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and

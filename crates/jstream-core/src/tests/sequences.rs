@@ -225,3 +225,63 @@ fn a_channel_rising_plays_a_timeline_after_its_delay() {
         "the stop cancels the wait"
     );
 }
+
+/// Rule 3: a seek keeps where the lane started from. Seeking a playing "lights down"
+/// back to 0 returns the channel to its start value, not to where it had got to.
+#[test]
+fn a_seek_returns_a_lane_to_where_it_started() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut down = timeline("down", 3000);
+    down.lanes = vec![TimelineLane {
+        target: LaneTarget {
+            channel: "lights".into(),
+        },
+        points: vec![LanePoint {
+            at_ms: 3000,
+            value: Finite32::ZERO,
+            curve: LaneCurve::Linear,
+        }],
+        on: true,
+    }];
+    batch(
+        &control,
+        edits(vec![
+            create("s"),
+            Edit::ChannelSet {
+                channel: ChannelInfo::new("lights"),
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("s"),
+                timeline: down,
+            },
+        ]),
+    )
+    .expect("sets");
+    act(&control, set_value("lights", 0.8));
+    assert!(until(|| level(&control, "lights").map(|l| l.0) == Some(0.8)));
+    act(
+        &control,
+        Action::TimelinePlay {
+            timeline_id: TimelineId::new("down"),
+            delay_ms: None,
+        },
+    );
+    assert!(
+        until(|| level(&control, "lights").is_some_and(|l| l.0 < 0.6)),
+        "the lane moves down"
+    );
+    act(
+        &control,
+        Action::TimelineSeek {
+            timeline_id: TimelineId::new("down"),
+            at_ms: 0,
+        },
+    );
+    std::thread::sleep(Duration::from_millis(50));
+    let after = level(&control, "lights").map_or(0.0, |l| l.0);
+    assert!(
+        after > 0.7,
+        "back near the 0.8 it started from, not where it had got to: {after}"
+    );
+}

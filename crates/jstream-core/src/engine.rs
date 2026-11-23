@@ -5489,7 +5489,8 @@ impl State {
             self.channels
                 .keep(&self.graph, midi.as_deref(), &engine.data);
         }
-        self.channels.lanes_start(timeline_id, &info, start);
+        self.channels
+            .lanes_start(timeline_id, &info, start, from_ms.is_some());
         self.sequences
             .timeline_event(timeline_id, jstream_protocol::TimelineEdge::Starts);
         self.wake_values();
