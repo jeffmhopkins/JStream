@@ -697,3 +697,66 @@ fn a_browser_style_layer_is_decoded_only_where_it_drew() {
     let shot = shown(&mut compositor);
     super::near(&shot, 12, 12, [0, 0, 0, 255], 0);
 }
+
+/// In browser-style blending a frame is resolved from its encoded target as it is, to
+/// the pixels the same scene gives when it is drawn into a layer, decoded there and
+/// shown: over a background and over none, with half-opaque items and a backdrop mode.
+#[test]
+fn a_browser_style_frame_is_resolved_from_its_encoded_target() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    compositor.set_blending(Blending::Srgb);
+    let red = solid(compositor, 2, 2, [255, 0, 0, 255]);
+    let green = solid(compositor, 3, 1, [0, 255, 0, 128]);
+    let blue = solid(compositor, 2, 2, [40, 90, 255, 200]);
+    let mut over = item(&blue, at([10.0, 4.0], [8.0, 8.0], 0.0), Crop::NONE, 0.7);
+    over.blend = BlendMode::Overlay;
+    let items = [
+        item(&red, at([5.0, 6.0], [6.0, 6.0], 0.0), Crop::NONE, 1.0),
+        item(&green, at([8.0, 9.0], [6.0, 6.0], 0.0), Crop::NONE, 1.0),
+        over,
+    ];
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    for background in [
+        Color::TRANSPARENT,
+        Color::BLACK,
+        Color::rgb(0.2, 0.5, 0.9),
+        Color::from_rgba8([200, 40, 10, 128]),
+    ] {
+        let scene = Scene {
+            canvas,
+            background,
+            items: &items,
+        };
+        let output = compositor.render(&scene, true).expect("render");
+        let straight = output.pixels().expect("invariant: read back").clone();
+        assert!(!compositor.resolved_layer());
+        let layer = compositor.layer(32, 32).expect("layer");
+        compositor
+            .render_into(&scene, &layer)
+            .expect("into the layer");
+        let shown = [item(&layer, Placement::IDENTITY, Crop::NONE, 1.0)];
+        let output = compositor
+            .render(
+                &Scene {
+                    canvas,
+                    background: Color::TRANSPARENT,
+                    items: &shown,
+                },
+                true,
+            )
+            .expect("render the layer");
+        let decoded = output.pixels().expect("invariant: read back");
+        for y in 0..32 {
+            for x in 0..32 {
+                let expected = decoded.pixel(x, y).expect("invariant: inside");
+                near(&straight, x, y, expected, 1);
+            }
+        }
+        // The items are there: the red square, and the green bar mixed over it.
+        assert_eq!(straight.pixel(6, 7), Some([255, 0, 0, 255]));
+        assert_ne!(straight.pixel(9, 10), straight.pixel(6, 7));
+    }
+}

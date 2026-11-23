@@ -1439,10 +1439,11 @@ target under the item. The collection's blending space picks where they mix
 overlay, difference and exclusion mix sRGB-encoded values. In `srgb`, a new
 collection's, the target holds premultiplied sRGB-encoded colour while the items draw,
 so every mode mixes as a browser does with the same blend states, and one decode pass
-after the last item turns it back into linear light: over a transparent background only
+after a layer's last item turns it back into linear light: over a transparent background only
 over the box the items reached, and not at all when they reached nothing, since a zero
-texel decodes to itself. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
-resolve pass un-premultiplies into
+texel decodes to itself. A layer's composite leaves premultiplied linear light in `Rgba16Float`; a frame's
+resolve pass un-premultiplies its target (decoding it first in `srgb`, where the
+frame's own target is left encoded) into
 `Rgba8UnormSrgb`, which a snapshot can read back. A frame that is one finished layer over
 the whole canvas (a scene's or an output's filter chain's result) is resolved straight
 from that layer in one pass, with no composite of it first. The device is the platform `GpuContext`
