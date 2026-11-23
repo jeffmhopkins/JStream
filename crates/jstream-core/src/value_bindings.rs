@@ -5,7 +5,8 @@
 //! `data` or `channel` motion modifier reads it (the readers in `channels.rs`), follows it
 //! with the same one-pole [`Smoothing`] and maps it with the same [`Midi`] parameters.
 //! The engine's `jstream-values` thread ticks the [`ValueDriver`] about 30 times a
-//! second while the collection holds a binding. Each tick turns every moved binding's
+//! second while the collection holds a binding, and about 60 while a value is still
+//! moving (ADR-0188). Each tick turns every moved binding's
 //! value into its target's setter edit ([`jstream_graph::value_edit`]); when the set of
 //! edits changes, the engine draws and hears the collection with them on top of the open
 //! gestures' settings, through the shown graph a `live.set` of a source setting uses.

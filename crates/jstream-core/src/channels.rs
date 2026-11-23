@@ -4,8 +4,8 @@
 //! The collection holds each channel's definition; the [`ChannelDriver`] holds what is
 //! live: each input's smoothing and whether it has moved, the value actions set and its
 //! ramp, the switch, the averaging window and the fade. The engine's `jstream-values`
-//! thread ticks it about 30 times a second, under the engine's lock, while the collection
-//! holds a channel, before it ticks the value bindings, so a binding reads this tick's
+//! thread ticks it about 30 times a second (60 while a value is still moving, ADR-0188),
+//! under the engine's lock, while the collection holds a channel, before it ticks the value bindings, so a binding reads this tick's
 //! value. Each tick stores every channel's value in its cell in the engine's
 //! [`ChannelLevels`], where the render thread, value bindings and other channels load it
 //! without a lock.
@@ -304,25 +304,30 @@ impl ChannelDriver {
     }
 
     /// Follows `graph`'s channels for the time since the last tick, storing each one's
-    /// value in its cell in `data`'s channel levels.
+    /// value in its cell in `data`'s channel levels. Returns whether any value moved, so
+    /// the engine ticks at a frame's pace while one is still settling.
     pub(crate) fn tick(
         &mut self,
         graph: &Graph,
         midi: Option<&MidiInputs>,
         data: &LiveData,
         now: Instant,
-    ) {
+    ) -> bool {
         let dt_ms = self.last.map_or(0.0, |last| {
             now.saturating_duration_since(last).as_secs_f32() * 1000.0
         });
         self.last = Some(now);
         self.keep(graph, midi, data);
+        let mut moved = false;
         for id in &self.order {
             let Some(followed) = self.followed.get_mut(id) else {
                 continue;
             };
+            let was = followed.value;
             step(followed, &mut self.changes, midi, dt_ms, now);
+            moved |= followed.value != was;
         }
+        moved
     }
 
     /// Follows each of `graph`'s channels it doesn't yet, takes a changed definition,
@@ -821,10 +826,11 @@ mod tests {
             self.t0 + Duration::from_millis(ms)
         }
 
-        fn tick(&mut self, ms: u64) {
+        /// Ticks at `ms`; whether a value moved.
+        fn tick(&mut self, ms: u64) -> bool {
             let now = self.at(ms);
             self.driver
-                .tick(&self.graph, Some(&self.midi), &self.data, now);
+                .tick(&self.graph, Some(&self.midi), &self.data, now)
         }
 
         fn value(&self, id: &str) -> Option<f32> {
@@ -875,6 +881,31 @@ mod tests {
         rig.tick(133);
         assert_eq!(cell.read(), None);
         assert!(rig.driver.is_empty());
+    }
+
+    /// A tick says a value moved while a fade is under way and not once it has landed,
+    /// which is what keeps the values thread at a frame's pace (ADR-0188).
+    #[test]
+    fn a_tick_reports_moving_until_the_fade_lands() {
+        let mut rig = Rig::new();
+        set(
+            &mut rig.graph,
+            ChannelInfo {
+                default: f(1.0),
+                fall_ms: 100,
+                ..ChannelInfo::new("group")
+            },
+        );
+        assert!(!rig.tick(0), "starts at its default");
+        assert!(!rig.tick(17), "at rest");
+        rig.driver
+            .switch("group", ChannelSwitch::Off)
+            .expect("a channel");
+        assert!(rig.tick(34), "fading");
+        assert!(rig.tick(84), "still fading");
+        assert!(rig.tick(150), "lands");
+        assert_eq!(rig.value("group"), Some(0.0));
+        assert!(!rig.tick(167), "settled");
     }
 
     #[test]
