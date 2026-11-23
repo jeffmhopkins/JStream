@@ -1276,6 +1276,17 @@ impl State {
                 return Ok(CallResult::action());
             }
             Action::StudioSetRendering { change } => {
+                if let Some(steps) = change.screen_space_steps
+                    && !jstream_protocol::SCREEN_SPACE_STEPS.contains(&steps)
+                {
+                    return Err(ProtocolError::invalid_argument(
+                        "screen_space_steps",
+                        format!(
+                            "a screen-space reflection takes {:?} steps, not {steps}",
+                            jstream_protocol::SCREEN_SPACE_STEPS
+                        ),
+                    ));
+                }
                 if let Some(size) = change.max_probe_resolution
                     && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
                 {
@@ -6007,8 +6018,8 @@ mod tests {
     }
 
     /// A keyframe scene can't turn its own reflections on (ADR-0170 decision 2), and
-    /// `studio.set_rendering` takes only a probe size of `PROBE_RESOLUTIONS`, as the
-    /// engine does.
+    /// `studio.set_rendering` takes only a probe size of `PROBE_RESOLUTIONS` and steps of
+    /// `SCREEN_SPACE_STEPS`, as the engine does.
     #[test]
     fn reflections_and_the_probe_cap_are_refused_as_the_engine_does() {
         let engine = MockEngine::new();
@@ -6049,6 +6060,15 @@ mod tests {
         let refused = action(&*control, cap(300)).expect_err("not a face size");
         assert_eq!(code(&refused), Some("invalid_argument"));
         assert!(action(&*control, cap(256)).is_ok());
+        let steps = |count: u32| Action::StudioSetRendering {
+            change: jstream_protocol::RenderFeaturesChange {
+                screen_space_steps: Some(count),
+                ..jstream_protocol::RenderFeaturesChange::default()
+            },
+        };
+        let refused = action(&*control, steps(20)).expect_err("not a step count");
+        assert_eq!(code(&refused), Some("invalid_argument"));
+        assert!(action(&*control, steps(64)).is_ok());
     }
 
     #[test]

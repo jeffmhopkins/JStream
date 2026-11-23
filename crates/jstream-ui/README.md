@@ -287,15 +287,18 @@ Contents ([Design](#design) explains the choices):
   are tested natively.
 - **3D rendering** (`rendering.rs`,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
-  decisions 1 and 3): `RenderingSettings`, the 3D rendering page, one toggle per
+  decisions 1, 3 and 4): `RenderingSettings`, the 3D rendering page, one toggle per
   `Switch` (Shadows, Ambient occlusion, Volumetric fog, Floor reflections, Reflection
-  probes) in a property grid under Effects, each with one help line and an (i), then a
-  Probe resolution select (Up to 128, 256 or 512 px, `max_probe_resolution`, sent with
-  `probe_cap`). It reads the switches with
+  probes, Screen-space reflections) in a property grid under Effects, each with one help
+  line and an (i), then a Probe resolution select (Up to 128, 256 or 512 px,
+  `max_probe_resolution`, sent with `probe_cap`) and a Reflection quality select (Low,
+  Medium or High: 16, 32 or 64 steps, `screen_space_steps`, sent with
+  `reflection_steps`). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
-  `read`, `set`, each `Switch`'s change and the probe cap are tested natively.
+  `read`, `set`, each `Switch`'s change, the probe cap and the reflection steps are
+  tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Audio plugins section of
   the Settings dialog's Audio page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
@@ -906,9 +909,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
   A keyframe scene shows neither, since it draws its parent's. A scene's own dialog
   that isn't a group's has a Reflections check under Output, sent in `scene.set_options`,
-  whose info tip says what reflects what inside a reflection probe's box
+  whose info tip says what reflects what inside a reflection probe's box, and that with
+  Screen-space reflections turned on in Settings › 3D rendering models also reflect what
+  is on screen
   ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
-  decision 2). A group's dialog has a
+  decisions 2 and 4). A group's dialog has a
   Share the 3D space check, sent in `scene.set_options`, and a scene's own camera, when
   the scene places a group, a Moves with picker under Roll (`anchor_choices`: Nothing,
   or each item placing a group, "(flat)" while it doesn't share the space), sent after

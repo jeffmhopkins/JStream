@@ -555,6 +555,22 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "screen_space_reflections": {
+              "description": "Whether screen-space reflections draw, or left out to keep it (since 0.172).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "screen_space_steps": {
+              "description": "How many steps a screen-space reflection's ray takes, one of\n[`SCREEN_SPACE_STEPS`], or left out to keep it (since 0.172).\n`studio.set_rendering` refuses any other count.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "shadows": {
               "description": "Whether lights set to cast shadows draw them, or left out to keep it.",
               "type": [
@@ -6169,7 +6185,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "boolean"
             },
             "reflections": {
-              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
               "type": "boolean"
             },
             "scene_id": {
@@ -15874,7 +15890,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "RenderFeatures": {
-      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch is on until `studio.set_rendering` turns it off.",
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]).",
       "properties": {
         "ambient_occlusion": {
           "default": true,
@@ -15897,6 +15913,18 @@ source: crates/jstream-protocol/src/fixtures.rs
           "default": true,
           "description": "Reflection probes (ADR-0170 decision 3, since 0.165), which draw their scene six\ntimes a capture. Off, no probe captures and every surface reflects its\nenvironment as without one.",
           "type": "boolean"
+        },
+        "screen_space_reflections": {
+          "default": false,
+          "description": "Screen-space reflections (ADR-0170 decision 4, since 0.172), one extra pass over\neach scene whose `reflections` is on. Off, its surfaces reflect their probes and\nenvironment only. Off until turned on (ADR-0185), since it can cost a modest GPU\nits frame rate.",
+          "type": "boolean"
+        },
+        "screen_space_steps": {
+          "default": 16,
+          "description": "How many steps a screen-space reflection's ray takes through the view depth: one\nof [`SCREEN_SPACE_STEPS`] (since 0.172). More finds thinner things, at more cost.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "shadows": {
           "default": true,
@@ -16192,7 +16220,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "array"
         },
         "reflections": {
-          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.165): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment; since 0.172 a `scene`-lit model also reflects what is on screen\nwhile the `screen_space_reflections` switch, off by default, is on (decision 4). Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
           "type": "boolean"
         },
         "role": {
@@ -18971,5 +18999,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.170"
+  "title": "JStream protocol 0.172"
 }

@@ -197,6 +197,18 @@ impl std::fmt::Debug for Heard {
 /// no filter of the collection has, so it can't match a filter the collection holds.
 const PROGRAM_FILTER: &str = "program";
 
+/// What a scene's composite drew beside its view depth for its filters: the scene
+/// mirrored in its floor with that picture's depth and the floor's height (ADR-0151
+/// decision 4), and its surface buffer (ADR-0170 decision 4), each when drawn.
+pub(crate) type DrawnBeside<'k> = (
+    Option<(&'k GpuKey, &'k GpuKey, f32)>,
+    Option<&'k [GpuKey; 3]>,
+);
+
+/// The ID of the screen-space reflection pass a reflective scene's chain starts with
+/// (ADR-0170 decision 4). Its kind is no collection filter's, so it can't match one.
+const SCREEN_REFLECTIONS_FILTER: &str = "screen_space_reflections";
+
 impl ChainFilter {
     /// A render filter drawing it: its shader source's program, its pack's effect, or
     /// the built-in kind.
@@ -340,6 +352,40 @@ impl Chain {
             input,
             filters,
             pad: None,
+        })
+    }
+
+    /// `chain`, a scene's chain over `input`, started with the screen-space reflection
+    /// pass (ADR-0170 decision 4) at `steps`, so it runs before every filter of the
+    /// scene's own: the chain of a scene with none.
+    pub(crate) fn with_screen_reflections(chain: Option<Self>, input: GpuKey, steps: u32) -> Self {
+        let mut settings = Settings::default();
+        settings.0.insert("steps".into(), serde_json::json!(steps));
+        let first = ChainFilter {
+            id: FilterId::new(SCREEN_REFLECTIONS_FILTER),
+            kind: jstream_render::SCREEN_REFLECTIONS_KIND.to_owned(),
+            settings,
+            reference: None,
+            scene: None,
+            effect: None,
+            program: None,
+        };
+        let mut chain = chain.unwrap_or(Self {
+            input,
+            filters: Vec::new(),
+            pad: None,
+        });
+        chain.filters.insert(0, first);
+        chain
+    }
+
+    /// Whether one of its filters reads its scene's surface buffer (ADR-0170 decision
+    /// 4), so a 3D scene's composite draws one with its view depth.
+    pub(crate) fn reads_surface(&self) -> bool {
+        self.filters.iter().any(|filter| {
+            filter.effect.is_none()
+                && filter.program.is_none()
+                && jstream_render::video_filter_reads_surface(&filter.kind)
         })
     }
 
@@ -696,6 +742,9 @@ pub(crate) struct Chains {
     cameras: std::cell::RefCell<crate::follow::Cameras>,
     /// The owners whose chain failed to draw this frame, which draw nothing.
     failed: BTreeSet<ChainOwner>,
+    /// The model items whose surface was drawn with their layer since the chains last
+    /// began a frame (ADR-0170 decision 4): the surface buffer merges theirs.
+    pub(crate) surfaced: BTreeSet<(jstream_protocol::SceneId, jstream_protocol::ItemId)>,
     /// The items whose effects layer failed to be made or drawn and has been logged, so
     /// one that keeps failing logs once; a frame it draws clears it.
     box_warned: BTreeSet<ChainOwner>,
@@ -818,6 +867,7 @@ impl Chains {
             self.runs += 1;
         }
         self.failed.clear();
+        self.surfaced.clear();
         self.staged.clear();
         self.drawn.clear();
         let used = std::mem::take(&mut self.models_used);
@@ -1029,13 +1079,20 @@ impl Chains {
         key: &GpuKey,
         (view, lights): (jstream_protocol::CameraView, &[jstream_render::SceneLight]),
         shadows: bool,
-        reflection: Option<(&GpuKey, &GpuKey, f32)>,
+        (reflection, surface): DrawnBeside<'_>,
     ) {
         let reflection = reflection.and_then(|(image, depth, floor_y)| {
             Some(jstream_render::DepthReflection {
                 image: cache.get(image)?.clone(),
                 depth: cache.get(depth)?.clone(),
                 floor_y,
+            })
+        });
+        let surface = surface.and_then(|[normal, brdf, reflected]| {
+            Some(jstream_render::DepthSurface {
+                normal: cache.get(normal)?.clone(),
+                brdf: cache.get(brdf)?.clone(),
+                reflected: cache.get(reflected)?.clone(),
             })
         });
         let (Some(ran), Some(layer)) = (self.ran, cache.get(key)) else {
@@ -1083,6 +1140,7 @@ impl Chains {
                 depth.shadows = owned(cache);
             }
             depth.reflection = reflection;
+            depth.surface = surface;
             return;
         }
         let fresh = jstream_render::ViewDepth {
@@ -1090,6 +1148,7 @@ impl Chains {
             lights: Arc::from(lights),
             shadows: owned(cache),
             reflection,
+            surface,
             ..jstream_render::ViewDepth::new(Arc::new(layer.clone()), focal_px)
         };
         if let Some((_, old)) = self.depths.insert(scene.clone(), (ran, fresh)) {
@@ -4913,6 +4972,129 @@ mod tests {
             reflected[0] > reflected[1] + 40,
             "the red card is reflected in the floor under it: {reflected:?}"
         );
+    }
+
+    /// ADR-0170 decision 4, end to end: a mirror-smooth metal block, a model lit by its
+    /// scene, its top a floor under a red card standing on it, through the framing
+    /// camera. With the
+    /// scene's reflections on, the floor under the card shows it, which only the screen
+    /// shows: no probe sees it. With the switch off, or the scene's reflections off, the
+    /// floor reflects its environment only.
+    #[test]
+    fn a_metal_floor_reflects_a_card_on_screen() {
+        use jstream_sources::SourceKind as _;
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[
+            ("cam", (32.0, 50.0), (40.0, 40.0), 0.0),
+            ("logo", (32.0, 25.0), (24.0, 6.0), 0.0),
+        ]);
+        // The card stands on the block's top, a little nearer than its middle, so it
+        // is drawn over the block.
+        let mut card = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 25.0).expect("finite"),
+            jstream_protocol::Size::try_new(24.0, 6.0).expect("positive"),
+        )
+        .expect("valid");
+        card.fit_mode = jstream_protocol::FitMode::Stretch;
+        card.depth_px = jstream_protocol::Finite32::new(5.0).expect("finite");
+        let reflective = |on: bool| Edit::SceneSetOptions {
+            scene_id: SceneId::new("main"),
+            options: jstream_protocol::SceneOptions {
+                reflections: on,
+                ..jstream_protocol::SceneOptions::default()
+            },
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry: card,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+                },
+                reflective(true),
+            ],
+        );
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("cube"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        settings.insert(String::from("metallic"), serde_json::json!(1.0));
+        settings.insert(String::from("roughness"), serde_json::json!(0.0));
+        let model = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(model.model());
+        let red =
+            Frame::new(16, 9, &[255, 0, 0, 255].repeat(16 * 9), 3).expect("invariant: 16x9 RGBA8");
+        let under = |graph: &Graph, features: jstream_protocol::RenderFeatures| {
+            let assets = FilterAssets::default().with_features(features);
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::frame(
+                        if id.as_str() == "cam" {
+                            stand_in.clone()
+                        } else {
+                            red.clone()
+                        },
+                        None,
+                    ))
+                },
+                &assets,
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            let point = draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 35)],
+            )[0];
+            Some((point, !chains.surfaced.is_empty()))
+        };
+        let all = jstream_protocol::RenderFeatures::ALL;
+        let Some((reflected, surfaced)) = under(&graph, all) else {
+            return;
+        };
+        assert!(
+            surfaced,
+            "the floor's surface is drawn with its layer, not again"
+        );
+        let off = jstream_protocol::RenderFeatures {
+            screen_space_reflections: false,
+            ..all
+        };
+        let (plain, surfaced) = under(&graph, off).expect("an adapter");
+        assert!(!surfaced, "no surface without the pass");
+        assert!(
+            u16::from(reflected[0]) > u16::from(plain[0]) + 40
+                && u16::from(reflected[0]) > u16::from(reflected[1]) + 40,
+            "the red card is reflected in the floor under it: {reflected:?} (without: {plain:?})"
+        );
+        apply(&mut graph, vec![reflective(false)]);
+        let (unreflective, _) = under(&graph, all).expect("an adapter");
+        assert_eq!(unreflective, plain, "a scene without reflections");
     }
 
     /// ADR-0151 decision 6: a scene whose chain holds volumetric fog hands it the shadow

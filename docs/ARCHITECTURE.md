@@ -816,7 +816,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Reflections** ([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md),
   protocol 0.165): a scene with `reflections` in its `scene.set_options` has its lit
   models and cards reflect the scene around them, through the `reflection_probe` source
-  kind's boxes; `studio.set_rendering` turns probes off app-wide and caps their face size.
+  kind's boxes, and since 0.172 its lit models also reflect what is on screen;
+  `studio.set_rendering` turns probes off and screen-space reflections (off by default)
+  on app-wide, caps the
+  probes' face size and sets the screen-space steps.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1384,7 +1387,14 @@ from the box's centre after the chains, one face a frame of one probe at a time,
 refresh never spikes a frame, resampled into an
 equirectangular panorama that the next frame reads. A rough surface reads the sky's
 panorama and a probe's through mip chains of them, at the level its blur spans, so a
-bright point blurs into a soft glow. The layer is then placed flat
+bright point blurs into a soft glow. While the `screen_space_reflections` switch is on
+(off by default, [ADR-0185](adr/0185-how-reflections-landed-off-by-default.md)), the same
+scenes start their video chain with a screen-space reflection pass, before their own
+filters: each model writes a surface (its normal,
+BRDF and the environment's reflection it added) in the same draw as its layer, the
+scene's surface buffer merges the nearest of them, and each pixel of
+a scene-lit model follows its reflected ray through the view depth, putting what the
+picture shows where it hits in place of that reflection. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
@@ -1786,11 +1796,12 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   one past the most, is logged and read as the default.
 - **3D rendering switches:** `rendering.json` (version 1) in the data directory, which
   costly 3D effects the engine draws (`studio.set_rendering`,
-  [ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md) decisions 1 and
-  3), one boolean each and the probes' face-size cap. The desktop app and the daemon name it (`Engine::with_rendering_file`);
+  [ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md) decisions 1,
+  3 and 4), one boolean each, the probes' face-size cap and the screen-space steps. The desktop app and the daemon name it (`Engine::with_rendering_file`);
   `jstream-core` reads it at startup and replaces it atomically after every change. A
-  file it can't read is logged and read as all on, a switch it leaves out is on, and a
-  cap it leaves out is the largest face size.
+  file it can't read is logged and read as the defaults (every switch on but
+  screen-space reflections), a switch it leaves out takes its default, a cap it leaves
+  out is the largest face size, and steps it leaves out are 16.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

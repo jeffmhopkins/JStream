@@ -76,7 +76,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
   `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
-  cap since 0.165, with `PROBE_RESOLUTIONS`),
+  cap since 0.165, with `PROBE_RESOLUTIONS`, and its screen-space reflection switch and
+  steps since 0.172, with `SCREEN_SPACE_STEPS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -383,7 +384,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.170 because a timeline gains `lanes`, each moving a channel
+`PROTOCOL_VERSION` is 0.172 because a scene whose `reflections` is on also reflects
+what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
+(with `SCREEN_SPACE_STEPS`)
+([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decision 4); 0.170 because a timeline gains `lanes`, each moving a channel
 through points as it plays, starting from the channel's value where it has no point at
 0, and `starts` and `stops`, triggers that play or stop it when a channel crosses a level
 or switches, a scene goes on or off program, a keyframe loads or is left, or another
@@ -1615,7 +1620,8 @@ on any other scene, and since 0.165 `reflections` (default `false`), which lets 
 scene's `scene`-lit models and lit cards reflect each other through its
 `reflection_probe` items, each by its own roughness and metalness
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
-decision 2). `scene.set_options` replaces them all the
+decision 2), and since 0.172 lets its `scene`-lit models reflect what is on screen
+while the `screen_space_reflections` switch, off by default, is on (decision 4). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
 parent and is refused, and `keep_warm` and `reflections`, which its parent decides and
 are refused, and `state.get` reports them flattened beside the scene's other
@@ -1775,8 +1781,9 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   order and the first that would pass the limit is left cold with every one after it;
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
-  floor_reflections?, reflection_probes?, max_probe_resolution?}` (0.147, the last two
-  since 0.165,
+  floor_reflections?, reflection_probes?, max_probe_resolution?,
+  screen_space_reflections?, screen_space_steps?}` (0.147, `reflection_probes` and
+  `max_probe_resolution` since 0.165, the last two since 0.172,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -1785,12 +1792,17 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   scene gets what it asks for. `reflection_probes` off, no `reflection_probe` captures
   and every surface reflects its environment as without one. `max_probe_resolution`
   caps the face size a probe captures at: 128, 256 or 512 (`PROBE_RESOLUTIONS`, the
-  default 512), and any other size is `invalid_argument` on `max_probe_resolution`. All
-  are on until set. An application setting, like
+  default 512), and any other size is `invalid_argument` on `max_probe_resolution`.
+  `screen_space_reflections` off, no scene reflects what is on screen and its surfaces
+  reflect their probes and environment only. `screen_space_steps` is how many steps a
+  screen-space reflection's ray takes: 16, 32 or 64 (`SCREEN_SPACE_STEPS`, the default
+  16, ADR-0185), and any other count is `invalid_argument` on `screen_space_steps`. All are on
+  until set but `screen_space_reflections`, which is off (`RenderFeatures::DEFAULT`,
+  [ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)). An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
-  reads as on, and a cap it leaves out as 512.
+  reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, and steps it leaves out as 16.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1910,7 +1922,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
-  sets, and since 0.165 the probe switch and face-size cap.
+  sets, since 0.165 the probe switch and face-size cap, and since 0.172 the screen-space
+  reflection switch and steps.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
