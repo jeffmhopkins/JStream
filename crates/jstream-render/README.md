@@ -901,9 +901,9 @@ are ignored and the frame is the one ADR-0107 draws.
 **Driven materials** ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
 decision 4). `ModelDraw::materials` holds `MaterialDrive`s, each adding to every
 material or to the file's materials of one name: to the base colour, lightened in sRGB;
-to metallic and roughness, each within 0 and 1; and by name to the glow's colour, scaled
-by its own brightness, and its strength, a multiplier 1 at rest within 0 and
-`MAX_EMISSIVE_STRENGTH` (64). A drive can also set the base colour (`set_color`) or the
+to metallic and roughness, each within 0 and 1; to the glow's strength, a multiplier 1
+at rest within 0 and `MAX_EMISSIVE_STRENGTH` (64); and by name to the glow's colour,
+scaled by its own brightness. A drive can also set the base colour (`set_color`) or the
 glow's colour at its own brightness (`set_emissive`) before the others add, the last
 one that sets winning (ADR-0171 decision 5). The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of

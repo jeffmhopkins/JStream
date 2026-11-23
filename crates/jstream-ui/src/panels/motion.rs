@@ -735,9 +735,51 @@ pub fn palette_text(kind: &MotionKind) -> String {
         .join(", ")
 }
 
+/// One pair of the Palette field's text as an entry: its text trimmed, 1 to 100 bytes
+/// with no control character, and its colour `#rrggbb` lower case; or why it isn't one.
+fn palette_pair(pair: &str) -> Result<(String, String), String> {
+    let pair = pair.trim();
+    let Some((name, color)) = pair.split_once('=') else {
+        return Err(format!(
+            "\u{201c}{pair}\u{201d} needs a text, = and a colour"
+        ));
+    };
+    let (name, color) = (name.trim(), color.trim().to_ascii_lowercase());
+    if name.is_empty()
+        || name.len() > jstream_protocol::MAX_DATA_STATE_LEN
+        || name.chars().any(char::is_control)
+    {
+        return Err(format!(
+            "\u{201c}{pair}\u{201d}: a text is 1 to {} characters",
+            jstream_protocol::MAX_DATA_STATE_LEN
+        ));
+    }
+    let hex = color.strip_prefix('#').unwrap_or_default();
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("\u{201c}{pair}\u{201d}: a colour is #rrggbb"));
+    }
+    Ok((name.to_owned(), color))
+}
+
+/// What the Palette field leaves out of `text`, if anything: the first pair that isn't
+/// a `text=#rrggbb` the protocol takes, or the pairs past the most a palette holds.
+pub fn palette_problem(text: &str) -> Option<String> {
+    let pairs: Vec<&str> = text.split(',').filter(|p| !p.trim().is_empty()).collect();
+    if let Some(why) = pairs.iter().find_map(|p| palette_pair(p).err()) {
+        return Some(format!("Left out {why}"));
+    }
+    (pairs.len() > jstream_protocol::MAX_DATA_STATES).then(|| {
+        format!(
+            "Left out the pairs past the first {}",
+            jstream_protocol::MAX_DATA_STATES
+        )
+    })
+}
+
 /// A data `kind` with the Palette field's `text` as its palette: each `text=#rrggbb`
-/// pair, its colour lower case; a pair that isn't one is left out. `None` when it isn't
-/// a palette, nothing is left, or it is the same.
+/// pair, its colour lower case; a pair that isn't one the protocol takes is left out
+/// ([`palette_problem`] says which). `None` when it isn't a palette, nothing is left,
+/// or it is the same.
 pub fn with_palette(kind: &MotionKind, text: &str) -> Option<MotionKind> {
     let mut kind = kind.clone();
     let MotionKind::Data {
@@ -750,13 +792,8 @@ pub fn with_palette(kind: &MotionKind, text: &str) -> Option<MotionKind> {
     };
     let next: std::collections::BTreeMap<String, String> = text
         .split(',')
-        .filter_map(|pair| {
-            let (name, color) = pair.split_once('=')?;
-            let (name, color) = (name.trim(), color.trim().to_ascii_lowercase());
-            let hex = color.strip_prefix('#')?;
-            (!name.is_empty() && hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
-                .then(|| (name.to_owned(), color.clone()))
-        })
+        .filter(|pair| !pair.trim().is_empty())
+        .filter_map(|pair| palette_pair(pair).ok())
         .take(jstream_protocol::MAX_DATA_STATES)
         .collect();
     if next.is_empty() || *palette == next {
@@ -869,6 +906,8 @@ pub fn MotionSection(
 
     let row = move |n: usize| {
         let at = move || list.with(|l| l.get(n).cloned());
+        // What the Palette field last left out of what was typed in it.
+        let palette_left_out = RwSignal::new(None::<String>);
         let fields = move || {
             let kind = at()?.kind;
             Some(
@@ -1321,6 +1360,7 @@ pub fn MotionSection(
                                 prop:value=move || at().map(|m| palette_text(&m.kind)).unwrap_or_default()
                                 on:change=move |event| {
                                     let text = event_target_value(&event);
+                                    palette_left_out.set(palette_problem(&text));
                                     change(n, &|m| match with_palette(&m.kind, &text) {
                                         Some(kind) => {
                                             m.kind = kind;
@@ -1331,6 +1371,7 @@ pub fn MotionSection(
                                 }
                             />
                         </label>
+                        {move || palette_left_out.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
                     </Show>
                     <Show when=move || at().is_some_and(|m| curve_of(&m.kind).is_some())>
                         <label class="select-field">
@@ -1732,6 +1773,29 @@ mod tests {
         .expect("a palette");
         assert_eq!(palette_text(&custom), "queued=#ffaa00, stopped=#101010");
         assert_eq!(with_palette(&custom, "nothing usable"), None, "never empty");
+        // A pair the protocol would refuse is left out, and the field says which.
+        let long = "x".repeat(101);
+        let kept = with_palette(
+            &custom,
+            &format!("queued=#FFAA00, b=red, nope, {long}=#000000, ok=#123456"),
+        )
+        .expect("the usable pairs");
+        assert_eq!(palette_text(&kept), "ok=#123456, queued=#ffaa00");
+        assert_eq!(
+            palette_problem("queued=#ffaa00, b=red").as_deref(),
+            Some("Left out \u{201c}b=red\u{201d}: a colour is #rrggbb")
+        );
+        assert_eq!(
+            palette_problem("nope").as_deref(),
+            Some("Left out \u{201c}nope\u{201d} needs a text, = and a colour")
+        );
+        assert!(palette_problem(&format!("{long}=#000000")).is_some());
+        assert_eq!(palette_problem("a=#000000, b=#ffffff, "), None);
+        let many = (0..40)
+            .map(|i| format!("s{i}=#000000"))
+            .collect::<Vec<_>>()
+            .join(",");
+        assert!(palette_problem(&many).is_some_and(|p| p.contains("32")));
         assert_eq!(
             with_palette(&hex, "a=#000000"),
             None,

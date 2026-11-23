@@ -447,8 +447,10 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4): a
   `source` modifier adding to a live setting of its item's own source as that item draws
   it, each frame: a light's colour, intensity, range, cone and softness as it lights the
-  scene, and a model's colour, metallic and roughness, or by material its glow, as it
-  draws it. Nothing is stored. A painting `data` modifier sets a light's colour, a
+  scene, an environment light's intensity and its sky (colours, stars, nebula, galaxy
+  band and warp, `sourced::environment`) as it lights and draws it, and a model's
+  colour, metallic, roughness and glow strength, or by material its glow, as it draws
+  it. Nothing is stored. A painting `data` modifier sets a light's colour, a
   model's colour or a material's glow colour instead (`MaterialDrive::set_color` and
   `set_emissive`), and an effect's colour setting the same way (`driven.rs`).
 - **Value bindings** (`value_bindings.rs`,
@@ -1861,11 +1863,14 @@ The compositor leaves the layer as it is when it still holds the sky asked for (
 values, a camera looking the same way), so a scene whose camera and sky hold still pays
 for its sky once, not once a frame.
 `Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
-streams at now, which moves toward the setting at its ramp's pace (dropping while it
+streams at now, which moves toward the setting, as its item's motion modifiers drive
+it (`sourced::environment`), at its ramp's pace (dropping while it
 is above it, which zooms the deep sky back in), and how far its
 stars have travelled, advanced once a frame by the warp's mean rate times the media
 time since the last (a step back or of over a second jumps to the setting and moves
 nothing; a step of no time, a held clock, keeps the warp as it is).
+Its stars, star brightness, nebula, galaxy band and colours are drawn as those
+modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
 `draw_transition_skies` draws each end's sky through that end's camera, the shown
 scene's fading in, and `fill_tracks` puts them under the tracks.
