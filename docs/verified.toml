@@ -6678,7 +6678,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:e9fb385cc6c88d12", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
+stamp = { hash = "b3:e1c99cde59142347", by = "agent:release-alpha9", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css | merge: #1647 at dcbfecf: events.rs opens an event its editor can't represent read-only; the merged README's events-lane, Add to sequence and Set key bullets and #1643's Palette line hold" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:a5184aecff315beb", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
@@ -6921,10 +6921,10 @@ stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:1a79eae80d56c2e4", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css | merge: #1647 at dcbfecf: events.rs opens an event its editor can't represent read-only; the merged README's events-lane, Add to sequence and Set key bullets and #1643's Palette line hold" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:9f756bd2e65a2b0e", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
+stamp = { hash = "b3:a82706b0c5f06300", by = "agent:release-alpha9", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs | merge: #1647 at dcbfecf: events.rs's read-only event; the contents list holds beside #1643's motion.rs change" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -8529,19 +8529,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:0e2255ff983601b0", by = "agent:claude", note = "Added the dialog link button (button.link): link-coloured text beside a field, as the output dialog's Edit… and New…, shown only when it can act." }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:1fdba0e3b5a5b18c", by = "agent:claude", note = "added: a sequence's own mark is --code-type (Scenes row icon, event chip edge); the playing badge is teal, not the on-air red; checked style.css" }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the naming rule: everything in a chain is a filter, and an item's own are item filters, never effects, as the Filters panel, window and Add filter now say." }
@@ -8550,7 +8550,7 @@ stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: copy rules and the (i) side-with-room placement (dialog.rs tip_side, .info-tip.up/.end) still hold; the merge's toast text 'Saved to …' follows them." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the picker rule (C15): Add source and Add filter share one layout, a 320 px list with search and eyebrow groups and row icons, and the pick's 40 px tile, name and line, then what it needs and a callout for where it lands." }
@@ -8559,7 +8559,7 @@ stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the p
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: the dialog shell text still matches style.css (--dialog-s/m/l 440/600/860, 56px header with .modal-sub, sticky ::after fade, 56px footer with 32px buttons and .footer-left); the merge added only .toast-action." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
@@ -8568,7 +8568,7 @@ stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn butto
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8577,19 +8577,19 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note (body text colour in the read-only event editor); this section's rules are unchanged | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; re-read, the section holds" }
 
 ["UI-FEATURES#automation"."body"]
 stamp = { hash = "b3:e3685116f5c2367e", by = "agent:claude", note = "VC-01 has Add to sequence and Set key; VC-02 the Key row; SQ-02 drops the events lane from not built; SQ-03 points to SC-12 for a sequence's key; new SQ-04 Events lane, where a cue with another action opens read-only; matches events.rs, learn.rs, channels.rs" }
@@ -8811,7 +8811,7 @@ stamp = { hash = "b3:fc75ed935227848b", by = "agent:claude", note = "icons.rs ad
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:c0a06ad33b49e29c", by = "agent:claude", note = "style.css adds only .seq-event-note, scoped to the event editor" }
+stamp = { hash = "b3:10fc13e54896db4c", by = "agent:release-alpha9", note = "style.css adds only .seq-event-note, scoped to the event editor | merge: #1647's round-2 head dcbfecf adds .seq-event-note (--text, for a read-only event's note) to style.css beside alpha.8's key-mask and #1643-era rules; #1646 changes no UI file; theme tokens unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
