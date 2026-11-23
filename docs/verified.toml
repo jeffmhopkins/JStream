@@ -8100,7 +8100,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:0d7d6c8856965aff", by = "agent:claude", note = "Re-read against #1544: sameChange now compares an added file without a patch by its blob SHA (ADR-0162); the verdict and base marker formats, and how a pass carries, are unchanged, so the posting steps still hold" }
+stamp = { hash = "b3:2e32e7493775a239", by = "agent:issues-thread", note = "review-gate now also compares the PR's file modes before carrying a pass (ADR-0199); the marker lines and verdict table this section documents are unchanged" }
 
 ["ROADMAP#beta"."body"]
 stamp = { hash = "b3:9ac5e66a16ef76f7", by = "agent:claude", note = "beta.1 gates per platform; the macOS pass includes browser pages. Wanted, not waited for: the macOS virtual camera and video files in Linux's media-file sources. Audio files play (#1523), and H.264 in MP4, MOV and Matroska through VA-API is built (#1529, #1532) but hasn't decoded on a real GPU; the Linux pass (#1357) is its first run. macOS browser sources (#1522) and the Linux v4l2loopback camera (#1521) are built and in the packages." }
