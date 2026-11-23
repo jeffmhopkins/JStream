@@ -1,25 +1,25 @@
 //! Design guidance for agents that build what goes on screen, appended to the server
 //! instructions (`server.rs`), so every client reads it before its first edit.
 //!
-//! A live test (#1018-#1021's thread) found agents could build any graphic the tools
-//! allow and still make poor ones: flat full-saturation colours, thin type, boxes that
-//! didn't fit their text, nothing aligned. The tools can't fix taste, so this says what
-//! a broadcast designer would: where things go, which sizes, which faces and colours,
-//! and to look at the result before calling it done. It names the `backdrop` and `text`
-//! settings that make graphics look finished, the `shape` and `timer` kinds, how to
-//! group, scroll and animate, how to use 3D placement and blend modes, how to layer
-//! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
-//! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
-//! set with a scene camera (ADR-0094), its depth of field (ADR-0108), a sky backdrop
-//! (ADR-0167), 3D groups and a camera that rides with one (ADR-0164), how to use 3D
-//! models with live textures and reflections (ADR-0107 decision 9), and its paths
-//! through keyframes and orbits (ADR-0166), which
-//! transition to use (including a `stinger`), when to build a graphic as HTML in a
-//! `browser` source, animated on one clock, or an audio visualiser on
+//! A live test (#1018-#1021's thread) found agents could build any graphic the tools allow
+//! and still make poor ones: flat full-saturation colours, thin type, boxes that didn't fit
+//! their text, nothing aligned. The tools can't fix taste, so this says what a broadcast
+//! designer would: where things go, which sizes, which faces and colours, and to look at
+//! the result before calling it done. It names the `backdrop` and `text` settings that make
+//! graphics look finished, the `shape` and `timer` kinds, how to group, scroll and animate,
+//! how to use 3D placement and blend modes, how to layer light by role, use the light and
+//! framing filters (bloom, glow, vignette, scanlines), the hologram effect and borders,
+//! mask, and build reflections on glossy surfaces (#1062), how to build a 3D set with a
+//! scene camera (ADR-0094), its depth of field (ADR-0108), a sky backdrop (ADR-0167), 3D
+//! groups and a camera that rides with one (ADR-0164), how to use 3D models with live
+//! textures and reflections (ADR-0107 decision 9), and its paths through keyframes and
+//! orbits (ADR-0166), which transition to use (including a `stinger`), when to build a
+//! graphic as HTML in a `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
 //! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
 //! controller (ADR-0168), how a `data` one follows a sender's live data and colours a
-//! setting from it (ADR-0171), and how to write a custom shader the Filters window's
+//! setting from it (ADR-0171), how a value binding puts one on any other number
+//! (ADR-0178), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -144,6 +144,15 @@ adds `grain` and `flicker` that change every frame on the engine's clock. Its lo
 monitor (`strength` 0.25, `spacing` 3), CRT (0.45, 4, `speed` 12, `rgb_offset` 1.5, \
 `grain` 0.08, `flicker` 0.15) and film grain (`strength` 0, `grain` 0.3, `flicker` \
 0.1); use it on a monitor's screen item or a whole overlay instead of a page. \
+Holograms: a `hologram` effect turns any picture (a camera, a screen capture, a page) \
+into a projection: its light takes `color` by `tint`, its dark parts turn see-through \
+(`see_through`), with rolling `lines`, a `sweep` band, an `edge` glow, `flicker`, \
+`glitch`, `fringe` and `grain`, and `reveal` draws it in from `reveal_from` behind a \
+bright line. In a 3D scene, give the card the effect and blend mode `additive`, add a \
+faint card of soft light a few centimetres in front of it for depth, show and hide the \
+cards with `item.show` and `item.hide` (a timeline staggers them), and `item.set_source` \
+on the card changes what it shows. Cards behind a model's centre sort under it: draw \
+them after it with the camera's `depth_sort` off. \
 Borders: one `border` item effect frames an item: `radius` (or `corners` `each` with \
 `radius_top_left` and the rest) rounds it and, with `clip` on, the picture with it; \
 `width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \
@@ -223,12 +232,21 @@ field: `focus_px` is the distance along the view that stays sharp and `blur_px` 
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
+`blur_px` is the aperture: 0 keeps everything sharp. With `autofocus: true` the camera \
+focuses each frame on the nearest item at the centre of the frame, gliding there, and \
+`focus_px` is only where it starts; a camera motion modifier on `autofocus` (on at 0.5 \
+or more, added to 1 when the camera's switch is on) lets a CC button switch it. \
 Models blur too, each part by its own distance, so a near part of a model goes soft \
 while the focus sits on something past it. \
-A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
-kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
-`fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
-hand-held camera. To follow the pointer over a screen capture, add a `follow_pointer` \
+A camera can move on its own: `scene.set_camera_motion` gives it up to 32 modifiers, the \
+kinds and clocks of `item.set_motion` (all but `audio`), on `position_x`/`_y`/`_z`, \
+`target_x`/`_y`/`_z`, `pan`, `tilt` (degrees, turning the view about the camera), `fov`, \
+`roll`, `focus`, `blur` or `autofocus`; a slow `wiggle` of 4-8 px on the position is a hand-held \
+camera. A `midi` modifier there takes the same fields as an item's (`controller`, \
+`channel`, `input` such as a JTunnel sender's name, `from`, `to`, `smoothing_ms`), so a \
+fader or knob moves, turns or zooms the camera; a controller reads 0 until it is first \
+sent, so make `from` the value at rest (0 keeps the stored view). A `data` one follows a \
+DAW's live data the same way. To follow the pointer over a screen capture, add a `follow_pointer` \
 filter to the effects of an item showing a `display` or `window` source (`filter.add` \
 on the `item` owner); `scene.set_camera_follow` is a shortcut that does the \
 same. The scene's camera glides after the pointer at an angle (`yaw_deg`, \
@@ -327,7 +345,7 @@ graphic and leave `body` without a background. Fonts and images can come from ht
 URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
 `@keyframes` that run once on load, with `animation-fill-mode: both`. Continuous motion \
 (a sway, a drift, a pulse, a scan) belongs on items, not in pages: `item.set_motion` \
-gives an item up to 8 modifiers (`wiggle`, `oscillate` or `drift` on `x`, `y`, `scale`, \
+gives an item up to 32 modifiers (`wiggle`, `oscillate` or `drift` on `x`, `y`, `scale`, \
 `rotation`, `tilt`, `turn`, `depth`, `opacity` or a crop edge), which the engine draws \
 each frame from one clock, so every item, mask and nested scene showing the same \
 modifiers moves in step. Put a sway on a group's item to move the group and its masks as \
@@ -362,7 +380,7 @@ for the whole message) with `data.list` and `data.get`. A number maps from `rang
 level 0 to 1 from `states`, such as `{\"recording\": 1, \"playing\": 0.5}`, and any other \
 text 0. It glides over `smoothing_ms` (default 50; 0 jumps, which suits a switch), and \
 rests at `from` while the field is absent. On `opacity`, `from` -1 and `to` 0 shows an \
-item only while the field reads 1. A camera takes no `data` modifier. \
+item only while the field reads 1. A scene camera takes `data` modifiers too. \
 To colour something from the DAW (a light in a track's own colour, a clip lamp red while \
 recording), put a `data` modifier on a colour setting (`property` `source` with \
 `source: {param: \"color\"}`, a material's `emissive`, or an effect's colour) with \
@@ -377,6 +395,19 @@ setting of it: any kind and clock works, its value is added to a number and kept
 within the setting's range, or added to a colour's red, green and blue as a fraction \
 of full (0.3 lightens it), so an `audio` modifier with `from` 0 and `to` 6 on a border's `width` \
 thickens it by up to 6 px on each beat. \
+To put a controller or a sender's field on anything else that takes a number (a filter \
+on a source, a scene, the master or an output, video or audio; a live setting of any \
+source; a source's or a bus's fader; a send), use a value binding: `binding.set_value` \
+with a `binding_id`, the `midi` or `data` fields a modifier takes (`kind`, `controller`, \
+`channel`, `input`, `smoothing_ms`, `curve`, `from`, `to`), and a `target` \
+(`source_setting` or `filter_setting` with its `param`, `source_gain`, `bus_gain`, \
+`send_gain`). Its value replaces the setting, in the setting's unit and kept within its \
+range (a fader in dB, so `from` -60 and `to` 0 is a usable throw; a `bool` is on at one \
+half), once the control first moves, so the project opens as saved; nothing is stored, \
+and `binding.clear_value` hands the setting back. Only `live` settings take one \
+(`kind.describe` marks them). An item's placement, effects and source settings and a \
+camera take modifiers instead, which add to what is stored. `width` and `height` stretch \
+an item's box alone, as `scale` does both. \
 For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
 scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
 `browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \

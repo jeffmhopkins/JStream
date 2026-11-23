@@ -575,8 +575,8 @@ pub fn pose(
     Some(moved)
 }
 
-/// The camera's numbers rounded for a readout: its position, and its distance to the
-/// target.
+/// The camera's numbers rounded for a readout: its position, its distance to the
+/// target and its field of view.
 pub fn readout(camera: SceneCamera) -> String {
     let [x, y, z] = get(camera.position);
     let target = get(camera.target);

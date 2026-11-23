@@ -22,6 +22,7 @@ use crate::panels::add_source::type_label;
 use crate::panels::custom_shader::{self, ShaderEditor};
 use crate::panels::device_preview::SourcePreview;
 use crate::panels::filters::{FilterUndo, PropertiesAndFilters, chains_of};
+use crate::panels::learn::LearnOwner;
 use crate::panels::properties::{Form, draft_patch};
 use crate::store::{Studio, apply, query};
 use jstream_control::protocol::{
@@ -407,6 +408,7 @@ fn PropertiesBody(
             }
             Some(kind) => {
                 let source_id = source_id.clone();
+                let learn = LearnOwner::Source(source_id.clone());
                 view! {
                     <Form
                         kind=kind
@@ -414,6 +416,7 @@ fn PropertiesBody(
                         settings=draft
                         errors=errors
                         commit=commit
+                        learn=learn
                     />
                 }
                 .into_any()

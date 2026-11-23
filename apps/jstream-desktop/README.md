@@ -45,7 +45,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
 - **JTunnel** (`jtunnel.rs`): "Receive from JTunnel senders"
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
   its accepted senders in the data folder's `jtunnel.json`, starting the engine's
-  JTunnel receiver from it, and `set_jtunnel`, the command that saves it.
+  JTunnel receiver from it, and `set_jtunnel`, the command that saves it and applies
+  it at once.
 - **PTZ controllers** (`ptz.rs`): "Accept a PTZ controller"
   ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
   §3), the setting with its endpoints and allowed controllers in the data folder's
@@ -435,12 +436,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   missing, unreadable or malformed file is off. As with network access, only the person
   changes it: the page calls `setJtunnel`, which invokes the Tauri command
   `set_jtunnel`, granted to the main window by the `jtunnel` capability and to nothing
-  else, never a protocol call an engine client could make. It is read once at start,
-  after the engine's backends, whose media clock stamps the arrivals: on, the app calls
+  else, never a protocol call an engine client could make. It is read at start, after
+  the engine's backends, whose media clock stamps the arrivals, and applied again each
+  time `set_jtunnel` saves it, so no change needs a restart (`apply`): on, the app calls
   `Engine::start_jtunnel` with the accepted senders (none is fine: the receiver then
-  only finds senders, `jtunnel.senders`, protocol 0.114), and a refused setting or a
-  socket that can't be bound is logged and the app runs without the receiver. Off, no
-  JTunnel socket is open.
+  only finds senders, `jtunnel.senders`, protocol 0.114), which replaces a receiver
+  already running, so a sender accepted, removed, or with its state turned off takes
+  effect at once; off, `Engine::stop_jtunnel`. A refused setting or a socket that can't
+  be bound is logged and the app runs without the receiver. Off, no JTunnel socket is
+  open. The command holds only a weak handle on the engine, so the host still lets it
+  go last at exit.
 - **PTZ controllers** (`ptz.rs`,
   [ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md) §3,
   ADR-0123 §5). The setting is `{"on": true, "endpoints": [{"address":

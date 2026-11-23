@@ -1017,3 +1017,111 @@ fn a_scene_cameras_live_aim_turns_the_drawn_picture() {
     clock.advance(2_000_000);
     assert_eq!(centre(&control), Some(home), "back home");
 }
+
+/// An item shown with a transition on a keyframe scene of a 3D scene is seen, with the
+/// rest of the scene, through the keyframe's camera while it appears, as it is before
+/// and after: the switch keeps the one camera.
+#[test]
+fn an_item_shown_on_a_3d_keyframe_keeps_its_camera() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let (a, k) = (camera_at(900.0), camera_at(1100.0));
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(a)),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("a"),
+                name: "K".into(),
+            },
+            set_camera("k", Some(k)),
+            add("a", "a2", "green"),
+            Edit::ItemSetVisible {
+                item_id: jstream_protocol::ItemId::new("a2"),
+                scene_id: None,
+                visible: false,
+            },
+            Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("fade"),
+            },
+            // An effect: a2 is drawn in a box of its own.
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: jstream_protocol::ItemId::new("a2"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("fx"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("a keyframe with its own camera");
+    switch(&control, "k", Some("fade")).expect("to k");
+    clock.advance(1_000_000);
+    engine.replan();
+    let hub = engine.render_hub();
+    assert_eq!(
+        hub.load().shot().track_cameras(0.0),
+        None,
+        "k is on program"
+    );
+
+    let action = Action::ItemShow {
+        item_id: jstream_protocol::ItemId::new("a2"),
+        scene_id: None,
+    };
+    block_on(control.call(Call::Action { action })).expect("show a2");
+    clock.advance(200_000);
+    engine.replan();
+    assert_eq!(
+        hub.load().shot().track_cameras(200.0),
+        Some(vec![Some(k), Some(k)]),
+        "a1 stays and a2 appears through k's camera"
+    );
+}
+
+/// A scene with a video chain is one picture in a transition (ADR-0065 §6), drawn by its
+/// own camera: a Fade into or out of a 3D one draws that picture flat, through no camera,
+/// so it isn't seen through its camera a second time.
+#[test]
+fn a_3d_scene_with_a_chain_fades_as_a_flat_picture() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            set_camera("b", Some(camera_at(1000.0))),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("b"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("a 3D scene with a chain");
+    let hub = engine.render_hub();
+    switch(&control, "b", Some("fade")).expect("into it");
+    assert_eq!(
+        hub.load().shot().track_cameras(200.0),
+        Some(vec![None, None]),
+        "a1 leaves in 2D and b's picture comes in flat"
+    );
+    clock.advance(1_000_000);
+    engine.replan();
+    switch(&control, "a", Some("fade")).expect("out of it");
+    assert_eq!(
+        hub.load().shot().track_cameras(200.0),
+        Some(vec![None, None]),
+        "b's picture leaves flat"
+    );
+}

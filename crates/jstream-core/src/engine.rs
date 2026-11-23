@@ -111,6 +111,9 @@ struct Shared {
     gpu: Arc<SharedGpu>,
     /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
     sheets: AtomicUsize,
+    /// The program's motion controls as `video.snapshot` and the preview hub follow
+    /// them while no render thread does ([`Shared::hear_program`]).
+    hearing: Mutex<SceneHearing>,
     /// Whether the `jstream-tempo` thread has started: once per engine, however often
     /// JTunnel starts again (ADR-0147 §1).
     tempo: AtomicBool,
@@ -234,6 +237,7 @@ impl Default for Engine {
                     snapshots: SnapshotWorker::new(Arc::clone(&gpu)),
                     gpu,
                     sheets: AtomicUsize::new(0),
+                    hearing: Mutex::new(SceneHearing::default()),
                     tempo: AtomicBool::new(false),
                     data,
                     keys: Mutex::new(None),
@@ -383,6 +387,17 @@ impl Engine {
         else {
             return None;
         };
+        if let Some(size) = change.max_probe_resolution
+            && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "max_probe_resolution",
+                format!(
+                    "a probe's faces are {:?} pixels a side, not {size}",
+                    jstream_protocol::PROBE_RESOLUTIONS
+                ),
+            )));
+        }
         let file = lock(&self.shared.rendering_file);
         let saved = {
             let mut state = lock(&self.shared.state);
@@ -1077,6 +1092,9 @@ impl Engine {
             }
         };
         wake_all(wake);
+        if swapped.is_ok() {
+            self.prime_scenes();
+        }
         let (rev, json) = match swapped {
             Ok(saved) => saved,
             Err(err) => {
@@ -1459,6 +1477,8 @@ impl Engine {
         // and snapshots open on it, and the browser engine paints on it.
         self.shared.gpu.set_interop(backends.gpu);
         backends.gpu = Arc::clone(&self.shared.gpu) as Arc<dyn jstream_platform::GpuInterop>;
+        // The collection the engine was made with is compiled now, off this thread.
+        self.prime_scenes();
         // A context that replaces a lost one goes to the browser engine, whichever
         // holder saw the loss.
         {
@@ -1544,6 +1564,7 @@ impl Engine {
         spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
+        self.jtunnel_turned();
         if let Some(midi) = midi
             && !self.shared.tempo.swap(true, Ordering::Relaxed)
             && !spawn_tempo(Arc::downgrade(&self.shared), midi)
@@ -1552,6 +1573,30 @@ impl Engine {
             self.shared.tempo.store(false, Ordering::Relaxed);
         }
         Ok(local)
+    }
+
+    /// Turns receiving from JTunnel senders off: the receiver is let go, so its socket
+    /// closes and its thread stops once no `network_audio` source still holds it, and
+    /// `jtunnel.senders` reports it off. Succeeds when it is already off. With
+    /// [`start_jtunnel`](Self::start_jtunnel), a host applies a changed setting at once,
+    /// with no restart.
+    pub fn stop_jtunnel(&self) {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        if wanted.jtunnel_receiver().is_none() {
+            return;
+        }
+        wanted.set_jtunnel(None);
+        self.jtunnel_turned();
+    }
+
+    /// Tells clients `jtunnel.senders` changed because receiving turned on, off or
+    /// started again, so a settings page reads it again.
+    fn jtunnel_turned(&self) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state)
+            .subscribers
+            .emit(&Event::JtunnelSendersChanged {}, &mut wake);
+        wake_all(wake);
     }
 
     /// What the JTunnel receiver has dropped and played, while it is on.
@@ -1589,6 +1634,24 @@ impl Engine {
                     .map(|(input, remote_keys)| jstream_protocol::DataInputInfo {
                         input,
                         remote_keys,
+                    })
+                    .collect(),
+            }),
+            Query::MidiLastControls => Some(QueryResult::MidiLastControls {
+                controls: lock(&self.shared.state)
+                    .live
+                    .midi()
+                    .map(|midi| midi.last_controls())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(input, (count, channel, controller, value))| {
+                        jstream_protocol::MidiControlInfo {
+                            input,
+                            channel: channel + 1,
+                            controller,
+                            value,
+                            count,
+                        }
                     })
                     .collect(),
             }),
@@ -2067,6 +2130,18 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn has_settings_copy(&self) -> bool {
         lock(&self.shared.state).shown.is_some()
+    }
+
+    /// The master bus's fader as the engine hears it: the collection's, or a value
+    /// binding's (ADR-0178).
+    #[cfg(test)]
+    pub(crate) fn drawn_master_gain(&self) -> f32 {
+        let state = lock(&self.shared.state);
+        let graph = state.shown.as_ref().unwrap_or(&state.graph);
+        graph
+            .state()
+            .bus(&jstream_protocol::BusId::master())
+            .map_or(f32::NAN, |bus| bus.gain_db().get())
     }
 
     /// A source's setting as the engine draws it, with open gestures' live values
@@ -3576,6 +3651,25 @@ impl Engine {
         wake_all(wake);
     }
 
+    /// Has every scene of the collection drawn once on the snapshot thread, planned
+    /// alone, so what each draws with is compiled before it goes on air
+    /// ([`SnapshotWorker::prime`]): a switch to a scene the program never showed, a 3D
+    /// one above all, then waits for no shader. Called when a collection is opened and
+    /// when the engine gets its backends; a scene made or changed after that is
+    /// compiled where it is first drawn, which while it is edited is its preview.
+    /// Nothing without a GPU context: a device of the snapshot thread's own shares no
+    /// pipelines with the stage. The scenes are planned under the collection lock and
+    /// queued after it is released.
+    fn prime_scenes(&self) {
+        if !self.shared.gpu.lends() {
+            return;
+        }
+        let (shots, now) = lock(&self.shared.state).plan_every_scene();
+        for shot in shots {
+            self.shared.snapshots.prime(shot, now);
+        }
+    }
+
     /// `video.snapshot`. The `rev`, the render snapshot published for it and the live
     /// values on the parameter channel are read together under the collection lock; the
     /// snapshot thread renders them after that lock is released, so the image shows
@@ -3583,12 +3677,10 @@ impl Engine {
     fn video_snapshot(&self) -> SnapshotReply {
         let (snapshot, live, rev, at) = {
             let state = lock(&self.shared.state);
-            (
-                state.render.load(),
-                state.render.load_live(),
-                state.graph.rev(),
-                state.live.now(),
-            )
+            let snapshot = state.render.load();
+            let at = state.live.now();
+            self.shared.hear_program(&state, snapshot.shot(), at);
+            (snapshot, state.render.load_live(), state.graph.rev(), at)
         };
         self.shared.snapshots.request(snapshot, live, rev, at)
     }
@@ -3657,6 +3749,13 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
+    }
+
+    /// What the preview hub reads for its next picture, for tests: it follows the
+    /// program's motion controls as a picture drawn with no output running does.
+    #[cfg(test)]
+    pub(crate) fn preview_current(&self) -> crate::preview::Current {
+        self.shared.current()
     }
 
     /// The scenes planned for preview streams, for tests.
@@ -4460,6 +4559,9 @@ struct WarmCaptures {
     captures: Arc<BTreeSet<CaptureKey>>,
     /// Every source the warm scenes draw, which the live sources keep from resting.
     sources: BTreeSet<SourceId>,
+    /// The 3D models those sources show now, which the program stage keeps uploaded
+    /// (ADR-0177).
+    models: Arc<crate::runtime::WarmModels>,
     /// The size each source's frame last had, so a source that stopped or rests is
     /// still estimated at it.
     seen: BTreeMap<SourceId, [u32; 2]>,
@@ -4494,6 +4596,36 @@ type WarmKey = (Rev, Vec<SceneId>, u64, BTreeMap<SceneId, SceneId>);
 /// The bytes one RGBA8 frame of `size` holds (ADR-0150 decision 1).
 fn frame_bytes([width, height]: [u32; 2]) -> u64 {
     u64::from(width) * u64::from(height) * 4
+}
+
+/// The bytes a reflection probe source's capture holds (ADR-0170 decision 3) in a scene
+/// that captures it, or `None` for any other source: its panorama, four faces by two,
+/// and its six faces, each a half-float RGBA layer, at the face size its `resolution`
+/// sets as `features` caps it.
+fn probe_bytes(
+    graph: &Graph,
+    features: jstream_protocol::RenderFeatures,
+    id: &SourceId,
+) -> Option<u64> {
+    if !features.reflection_probes {
+        return None;
+    }
+    let source = graph.state().source(id)?;
+    let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
+        return None;
+    };
+    if kind != "reflection_probe" {
+        return None;
+    }
+    let face = source
+        .settings()
+        .get("resolution")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|size| size.parse::<u32>().ok())
+        .unwrap_or(256);
+    let face = u64::from(features.probe_face(face));
+    // 8 + 6 faces' worth of texels, 8 bytes each.
+    Some(face * face * 14 * 8)
 }
 
 impl WarmCaptures {
@@ -4536,7 +4668,29 @@ impl WarmCaptures {
             self.sources = sources;
             self.kept = kept;
         }
+        // A model changes with its source's settings, with no new plan of the warm
+        // scenes: looked at on every update, and replaced only when one changed.
+        let shown = || {
+            self.sources
+                .iter()
+                .filter_map(|id| Some((id, live.model(id)?)))
+        };
+        let same = shown().count() == self.models.len()
+            && shown().all(|(id, model)| {
+                self.models
+                    .get(id)
+                    .is_some_and(|held| held.version() == model.version())
+            });
+        if !same {
+            self.models = Arc::new(shown().map(|(id, model)| (id.clone(), model)).collect());
+        }
         &self.captures
+    }
+
+    /// The 3D models the warm scenes' sources show, as the last [`Self::update`] found
+    /// them.
+    fn models(&self) -> &Arc<crate::runtime::WarmModels> {
+        &self.models
     }
 
     /// Plans what each of `scenes` draws.
@@ -4600,7 +4754,18 @@ impl WarmCaptures {
         let mut full = false;
         let mut kept = Vec::with_capacity(self.planned.len());
         let mut report = Vec::with_capacity(self.planned.len());
+        let features = live.filter_assets().features();
         for scene in &self.planned {
+            // Only a scene whose surfaces reflect captures its probes (a keyframe scene
+            // goes by its parent).
+            let reflective = graph.state().scene(&scene.id).is_some_and(|shown| {
+                shown
+                    .variant_of()
+                    .and_then(|parent| graph.state().scene(parent))
+                    .unwrap_or(shown)
+                    .options()
+                    .reflections
+            });
             let mut bytes = 0u64;
             let mut new = Vec::new();
             for id in &scene.sources {
@@ -4627,6 +4792,10 @@ impl WarmCaptures {
                         .unwrap_or([canvas.width, canvas.height]),
                 };
                 bytes = bytes.saturating_add(frame_bytes(size));
+                // A probe also holds its capture.
+                if let Some(capture) = probe_bytes(graph, features, id).filter(|_| reflective) {
+                    bytes = bytes.saturating_add(capture);
+                }
             }
             let preview = limit.preview == Some(&scene.id);
             if !preview
@@ -4771,6 +4940,11 @@ struct State {
     /// Whether the live ticker thread is running: it sends coalesced `live.changed`
     /// events and releases committed live values ([`live_ticker`]).
     ticking: bool,
+    /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
+    driver: crate::value_bindings::ValueDriver,
+    /// Whether the `jstream-values` thread is running: it ticks [`State::driver`] while
+    /// the collection holds a value binding.
+    values_ticking: bool,
     /// The engine this state belongs to, for the live ticker.
     shared: Weak<Shared>,
     /// The program mixer's controls while it runs: it follows the collection's audio.
@@ -6528,6 +6702,24 @@ impl State {
         Some(planning.shot)
     }
 
+    /// Every scene of the collection planned alone now, as [`Self::plan_scene_alone`]
+    /// plans it, with the time they were planned at: what [`Engine::prime_scenes`] has
+    /// drawn.
+    fn plan_every_scene(&mut self) -> (Vec<snapshot::Shot>, MediaTime) {
+        let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
+        let scenes: Vec<SceneId> = graph
+            .state()
+            .scenes()
+            .iter()
+            .map(|scene| scene.id().clone())
+            .collect();
+        let shots = scenes
+            .iter()
+            .filter_map(|scene_id| self.plan_scene_alone(scene_id))
+            .collect();
+        (shots, self.live.now())
+    }
+
     /// Re-plans the program mix and the scene each video mix shows at the current time,
     /// and publishes them if they draw something new. A source's stored frame wins over
     /// its live one. The live sources are told when the plan's next frame change is due,
@@ -6569,6 +6761,7 @@ impl State {
             &limit,
         );
         self.render.publish_warm(warm);
+        self.render.publish_warm_models(self.warm.models());
         self.live.set_warm(self.warm.sources());
         // A source that left the warm scenes rests now if nothing drew it in the
         // latest plans, as it would after one.
@@ -6669,6 +6862,7 @@ impl State {
             frames,
         };
         render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));
+        render.publish_warm_models(warm.models());
         live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
@@ -6819,7 +7013,13 @@ impl State {
     /// keyframe does not build a copy: it lives on [`graph`](Self::graph), which a
     /// settings copy carries because it clones the graph (ADR-0118).
     fn refresh_shown(&mut self) -> bool {
-        let settings = self.gestures.settings();
+        let mut settings = self.gestures.settings();
+        // The value bindings' settings, after the gestures': a moved control wins
+        // (ADR-0178).
+        settings.extend(self.driver.edits().iter().cloned());
+        if !self.values_ticking && self.graph.value_bindings().len() > 0 {
+            self.values_ticking = spawn_values(self.shared.clone());
+        }
         let had = self.shown.is_some();
         self.shown = if settings.is_empty() {
             None
@@ -7046,6 +7246,18 @@ impl State {
         next
     }
 
+    /// Follows the value bindings for one tick (ADR-0178) and, when the settings they
+    /// give changed, draws and hears the collection with them. Returns whether to keep
+    /// ticking: while the collection holds a binding or a value it drove is shown.
+    fn values_tick(&mut self, now: Instant, data: &jstream_sources::LiveData) -> bool {
+        let midi = self.live.midi();
+        let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
+        if changed && self.refresh_shown() {
+            self.redraw();
+        }
+        self.graph.value_bindings().len() > 0 || !self.driver.edits().is_empty()
+    }
+
     /// Brings the program mixer in line with the collection's audio as drawn (the open
     /// gestures' settings and the placed scenes' switched keyframes, ADR-0116, so a child
     /// a switched keyframe hides is not heard), the audio sources' inputs included.
@@ -7111,8 +7323,10 @@ impl State {
 impl PreviewSource for Shared {
     fn current(&self) -> Current {
         let state = lock(&self.state);
+        let program = state.render.load();
+        self.hear_program(&state, program.shot(), state.live.now());
         Current {
-            program: state.render.load(),
+            program,
             scenes: Arc::clone(&state.scene_shots),
             sources: Arc::clone(&state.source_shots),
             live: state.render.load_live(),
@@ -7127,6 +7341,21 @@ impl PreviewSource for Shared {
 }
 
 impl Shared {
+    /// Follows `shot`'s motion controls to `at` for a picture drawn on the control side,
+    /// when no render thread follows them (no output runs): without it, a data, MIDI or
+    /// audio modifier would draw each control as it reads this instant, unsmoothed.
+    /// Called under the collection lock; its own lock is a leaf.
+    fn hear_program(
+        &self,
+        state: &State,
+        shot: &crate::snapshot::Shot,
+        at: jstream_media::MediaTime,
+    ) {
+        if !state.render.following() {
+            hear_scene(&mut lock(&self.hearing), shot.audio(), at);
+        }
+    }
+
     /// Changes the captures' sizes and announces the sources whose size that changes,
     /// waking the subscribers once the collection lock is released.
     fn capture_sizes(&self, change: impl FnOnce(&mut BTreeMap<CaptureKey, FrameSize>)) {
@@ -7468,6 +7697,32 @@ fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> 
         });
     if let Err(error) = &started {
         tracing::warn!(%error, "the tempo values could not start");
+    }
+    started.is_ok()
+}
+
+/// Starts the `jstream-values` thread: it ticks the value bindings (ADR-0178) every
+/// [`crate::value_bindings::EVERY`] until the collection holds none and nothing they
+/// drove is still shown, or the engine is gone. Returns whether it started; if it
+/// didn't, the next change of the collection tries again.
+fn spawn_values(shared: Weak<Shared>) -> bool {
+    let started = thread::Builder::new()
+        .name("jstream-values".into())
+        .spawn(move || {
+            loop {
+                thread::sleep(crate::value_bindings::EVERY);
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let mut state = lock(&engine.state);
+                if !state.values_tick(Instant::now(), &engine.data) {
+                    state.values_ticking = false;
+                    return;
+                }
+            }
+        });
+    if let Err(error) = &started {
+        tracing::warn!(%error, "the value bindings could not start");
     }
     started.is_ok()
 }

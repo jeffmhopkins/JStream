@@ -137,6 +137,31 @@ pub struct Image {
     content: Arc<Mutex<Option<(u64, Region)>>>,
 }
 
+/// What an image held when it was looked at ([`Image::seen`]): which image, and how many
+/// times its texels had changed. It doesn't keep the image's texture alive, and it never
+/// matches another image, even one made where a dropped one was. Two are equal when
+/// they are of one image with the same texels.
+#[derive(Clone, Debug)]
+pub struct Seen {
+    /// The counter the image and its clones share. `Weak`, so the allocation it compares
+    /// by can't be reused while this is held.
+    image: Weak<AtomicU64>,
+    generation: u64,
+}
+
+impl Seen {
+    /// Whether `image` is the one this was taken of, with nothing written to it since.
+    pub fn still(&self, image: &Image) -> bool {
+        *self == image.seen()
+    }
+}
+
+impl PartialEq for Seen {
+    fn eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.image, &other.image) && self.generation == other.generation
+    }
+}
+
 impl Image {
     /// Width in pixels.
     pub fn width(&self) -> u32 {
@@ -206,6 +231,20 @@ impl Image {
     /// How many times the texels have changed, as [`Self::mark_changed`] counts them.
     pub(crate) fn generation(&self) -> u64 {
         self.generation.load(Ordering::Relaxed)
+    }
+
+    /// What the image holds now, to ask later whether it still does ([`Seen::still`]).
+    pub fn seen(&self) -> Seen {
+        Seen {
+            image: Arc::downgrade(&self.generation),
+            generation: self.generation(),
+        }
+    }
+
+    /// What tells this image and its clones from every other: the counter they share.
+    /// A `Weak` to it remembers the image without keeping its texture.
+    pub(crate) fn identity(&self) -> &Arc<AtomicU64> {
+        &self.generation
     }
 
     /// The mip chain of `region` starting `skip` levels down, made by `make` the first

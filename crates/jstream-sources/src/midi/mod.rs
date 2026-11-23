@@ -116,6 +116,10 @@ pub struct MidiState {
     changes: AtomicU64,
     /// The tempo the input's clock gives, which its [`MidiFeed`] publishes.
     tempo: tempo::TempoCell,
+    /// The latest control change, for a client that learns a controller (ADR-0178):
+    /// how many there have been in its top 48 bits, then its channel (0 to 15) and
+    /// controller.
+    last_cc: AtomicU64,
 }
 
 impl std::fmt::Debug for MidiState {
@@ -154,6 +158,7 @@ impl MidiState {
             last_ms: AtomicU64::new(0),
             changes: AtomicU64::new(0),
             tempo: tempo::TempoCell::new(),
+            last_cc: AtomicU64::new(0),
         }
     }
 
@@ -178,6 +183,14 @@ impl MidiState {
                 self.controllers[index(channel, controller)].store(value, Ordering::Relaxed);
                 self.any_controllers[usize::from(controller & 0x7F)]
                     .store(value, Ordering::Relaxed);
+                // A named input's state has one writer, its input's thread, so a load
+                // and a store count it; the every-input state can lose a count when two
+                // inputs send at once, which only `last_control` there would see.
+                let count = (self.last_cc.load(Ordering::Relaxed) >> 16).wrapping_add(1);
+                self.last_cc.store(
+                    (count << 16) | (u64::from(channel & 0x0F) << 8) | u64::from(controller & 0x7F),
+                    Ordering::Release,
+                );
                 // All notes off (123), and all sound off (120), release every key.
                 if matches!(controller, 120 | 123) {
                     for key in 0..KEYS as u8 {
@@ -229,6 +242,23 @@ impl MidiState {
     /// The velocity `key` is held at on `channel` (0 to 15), or 0 when it is up.
     pub fn held(&self, channel: u8, key: u8) -> u8 {
         self.keys[index(channel, key)].load(Ordering::Relaxed)
+    }
+
+    /// The latest control change: how many have arrived, its channel (0 to 15), its
+    /// controller and its value now; `None` before the first.
+    pub fn last_control(&self) -> Option<(u64, u8, u8, u8)> {
+        let packed = self.last_cc.load(Ordering::Acquire);
+        let count = packed >> 16;
+        if count == 0 {
+            return None;
+        }
+        let (channel, controller) = (((packed >> 8) & 0x0F) as u8, (packed & 0x7F) as u8);
+        Some((
+            count,
+            channel,
+            controller,
+            self.controller(channel, controller),
+        ))
     }
 
     /// The value of `controller` on `channel`.
@@ -365,6 +395,14 @@ impl MidiInputs {
         let state = Arc::new(MidiState::new());
         named.insert(name.to_owned(), Arc::clone(&state));
         Some(state)
+    }
+
+    /// Each named input's latest control change ([`MidiState::last_control`]), by name.
+    pub fn last_controls(&self) -> Vec<(String, (u64, u8, u8, u8))> {
+        lock(&self.named)
+            .iter()
+            .filter_map(|(name, state)| Some((name.clone(), state.last_control()?)))
+            .collect()
     }
 
     /// The state a source whose `input` setting is `name` draws: every input's for an

@@ -126,6 +126,142 @@ fn camera_motion_redraws_every_frame() {
     assert!(!hub.load().shot().changes_with_time(), "a disabled sway");
 }
 
+/// ADR-0176: a camera's `midi` modifier is followed by the shot's follower, by scene
+/// family, from a named JTunnel sender on one channel.
+#[test]
+fn a_controller_drives_a_scene_camera() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    batch(&control, edits(scenes())).expect("scenes");
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let zoom = CameraMotionModifier {
+        modifier_id: "zoom".into(),
+        property: CameraProperty::Fov,
+        kind: MotionKind::Midi {
+            control: jstream_protocol::MotionMidiControl::Cc,
+            controller: Some(25),
+            channel: Some(16),
+            input: Some("Bitwig".into()),
+            smoothing_ms: 0,
+            curve: jstream_protocol::MotionCurve::Linear,
+            from: f(0.0),
+            to: f(-30.0),
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
+    };
+    batch(
+        &control,
+        Batch::single(Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("a"),
+            motion: vec![zoom],
+        }),
+    )
+    .expect("a MIDI camera move is taken");
+    let snapshot = hub.load();
+    let shot = snapshot.shot();
+    assert!(shot.changes_with_time(), "a camera on a fader redraws");
+    let family = SceneId::new("a");
+    assert_eq!(
+        shot.audio().camera_level(&family, "zoom"),
+        Some(0.0),
+        "nothing sent yet"
+    );
+    let midi = engine.midi_inputs();
+    let cc = |channel: u8, value| {
+        jstream_midi::Message::parse(&[0xB0 | channel, 25, value]).expect("a CC")
+    };
+    midi.push("Other", 0, &cc(15, 127));
+    midi.push("Bitwig", 1, &cc(0, 127));
+    let mut follower = crate::reactive::Follower::default();
+    follower.follow(
+        shot.audio(),
+        jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS),
+    );
+    assert_eq!(
+        shot.audio().camera_level(&family, "zoom"),
+        Some(0.0),
+        "another sender or channel moves nothing"
+    );
+    midi.push("Bitwig", 2, &cc(15, 127));
+    follower.follow(
+        shot.audio(),
+        jstream_media::MediaTime::new(16_000, jstream_media::Timebase::MICROS),
+    );
+    assert_eq!(shot.audio().camera_level(&family, "zoom"), Some(1.0));
+}
+
+/// ADR-0176 decision 5: autofocus measures the item at the frame's centre, through the
+/// camera as it is, and nothing when the camera looks away from it.
+#[test]
+fn autofocus_measures_the_item_at_the_centre() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut setup = scenes();
+    setup.push(Edit::SourceCreate {
+        source_id: SourceId::new("card"),
+        name: "Card".into(),
+        kind: SourceKind::Builtin {
+            kind: "color".into(),
+        },
+        settings: jstream_protocol::Settings(
+            [
+                ("color".to_owned(), serde_json::json!("#ff0000ff")),
+                ("width".to_owned(), serde_json::json!(400)),
+                ("height".to_owned(), serde_json::json!(300)),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        duplicated_from: None,
+    });
+    setup.push(Edit::ItemAdd {
+        scene_id: SceneId::new("a"),
+        item_id: ItemId::new("card"),
+        source_id: SourceId::new("card"),
+        transform: None,
+        geometry: Some(
+            ItemGeometry::try_new(
+                Vec2::new(960.0, 540.0).expect("finite"),
+                Size::try_new(400.0, 300.0).expect("size"),
+            )
+            .expect("geometry"),
+        ),
+        opacity: None,
+        blend: None,
+    });
+    batch(&control, edits(setup)).expect("scenes");
+    block_on(control.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    }))
+    .expect("on program");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let snapshot = hub.load();
+    let shot = snapshot.shot();
+    let family = SceneId::new("a");
+    let at = jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS);
+    let met = shot
+        .centre_distance(&family, framing, at)
+        .expect("the screen is at the centre");
+    assert!(
+        (met - f64::from(framing.target_distance())).abs() < 0.5,
+        "{met}"
+    );
+    let away = SceneCamera {
+        target: jstream_protocol::Vec3::new(5000.0, 540.0, 0.0).expect("finite"),
+        ..framing
+    };
+    assert_eq!(shot.centre_distance(&family, away, at), None);
+    assert_eq!(shot.centre_distance(&SceneId::new("b"), framing, at), None);
+}
+
 /// ADR-0120: a Follow pointer filter on a capture in a 2D scene supplies the scene's
 /// camera and moves it every frame; turned off, the scene is still and 2D again.
 #[test]

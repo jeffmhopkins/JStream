@@ -177,8 +177,10 @@ mod tests {
         near(&snapshot, 1, 1, [128, 0, 0, 128], 2);
     }
 
-    /// `apply_filter_into` redraws a caller's layer frame after frame, and refuses an
-    /// output of the wrong size, the input itself, or an image that isn't a layer.
+    /// `apply_filter_into` redraws a caller's layer frame after frame, marking it changed
+    /// each time, so a 3D placement's mips of it are made again (ADR-0050 decision 5),
+    /// and refuses an output of the wrong size, the input itself, or an image that isn't
+    /// a layer.
     #[test]
     fn a_filter_redraws_into_the_same_layer() {
         let Some(mut opened) = open() else {
@@ -190,10 +192,12 @@ mod tests {
         let output = opened.compositor.layer(2, 1).expect("layer");
         for colour in [R, G] {
             let input = image(&opened, 2, &[colour, colour]);
+            let before = output.generation();
             opened
                 .compositor
                 .apply_filter_into(&mut filter, &input, &output, FilterClock::default())
                 .expect("apply_filter_into");
+            assert!(output.generation() > before, "the output is marked changed");
             let snapshot = read(&mut opened, &output);
             near(&snapshot, 0, 0, colour, 1);
             near(&snapshot, 1, 0, colour, 1);

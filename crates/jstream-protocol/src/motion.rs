@@ -45,8 +45,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The most motion modifiers one item holds.
-pub const MAX_MOTION_MODIFIERS: usize = 8;
+/// The most motion modifiers one item, or one scene camera, holds: 32 since 0.167
+/// (ADR-0176 decision 6), 8 before, so a controller can be bound to every property.
+pub const MAX_MOTION_MODIFIERS: usize = 32;
 
 /// The longest motion modifier ID, in bytes.
 pub const MAX_MOTION_ID_LEN: usize = 64;
@@ -83,6 +84,11 @@ pub enum MotionProperty {
     CropRight,
     /// Source pixels cut from the bottom edge: added, never below 0.
     CropBottom,
+    /// The box's width alone about its centre, since 0.168 (ADR-0178): multiplied by
+    /// `1 + value`, after `scale`.
+    Width,
+    /// The box's height alone about its centre, since 0.168: as `width`.
+    Height,
     /// A number or colour setting of one of the item's own effects, which the
     /// modifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,
     /// kept within the range the effect's kind gives it and rounded for a whole-number
@@ -105,7 +111,7 @@ pub enum MotionProperty {
 
 impl MotionProperty {
     /// Every property, in the order above.
-    pub const ALL: [MotionProperty; 12] = [
+    pub const ALL: [MotionProperty; 14] = [
         MotionProperty::X,
         MotionProperty::Y,
         MotionProperty::Scale,
@@ -118,6 +124,8 @@ impl MotionProperty {
         MotionProperty::CropTop,
         MotionProperty::CropRight,
         MotionProperty::CropBottom,
+        MotionProperty::Width,
+        MotionProperty::Height,
     ];
 }
 
@@ -619,7 +627,7 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
     if motion.len() > MAX_MOTION_MODIFIERS {
         return Err(problem(
             "motion".into(),
-            "an item holds at most 8 motion modifiers; put the rest on a group around it, \
+            "an item holds at most 32 motion modifiers; put the rest on a group around it, \
              whose motion moves its children too",
         ));
     }
@@ -733,7 +741,7 @@ fn source_problem(
 
 impl MotionKind {
     /// The first parameter out of range, by wire name, with what it must be.
-    fn problem(&self) -> Option<(&'static str, &'static str)> {
+    pub(crate) fn problem(&self) -> Option<(&'static str, &'static str)> {
         let magnitude = |v: Finite32| (0.0..=MAX_MAGNITUDE).contains(&v.get());
         let frequency = |v: Finite32| v.get() > 0.0 && v.get() <= MAX_FREQUENCY_HZ;
         match *self {
@@ -1107,9 +1115,15 @@ mod tests {
     fn a_valid_list_passes_and_each_problem_names_its_field() {
         assert_eq!(field_of(&[wiggle("a", 3.0), wiggle("b", 0.0)]), None);
         assert_eq!(field_of(&[]), None);
-        let nine: Vec<_> = (0..9).map(|n| wiggle(&format!("m{n}"), 1.0)).collect();
-        assert_eq!(field_of(&nine).as_deref(), Some("motion"));
-        let full = check_motion(&nine).expect_err("nine is one too many");
+        let most: Vec<_> = (0..MAX_MOTION_MODIFIERS)
+            .map(|n| wiggle(&format!("m{n}"), 1.0))
+            .collect();
+        assert_eq!(field_of(&most), None, "32 since 0.167 (ADR-0176)");
+        let over: Vec<_> = (0..=MAX_MOTION_MODIFIERS)
+            .map(|n| wiggle(&format!("m{n}"), 1.0))
+            .collect();
+        assert_eq!(field_of(&over).as_deref(), Some("motion"));
+        let full = check_motion(&over).expect_err("one too many");
         assert!(
             full.reason.contains("on a group around it"),
             "the refusal says where the rest can go (#1189): {}",

@@ -334,21 +334,26 @@ impl Look {
     }
 }
 
-fn bad(param: &str, reason: &str) -> SourceError {
+pub(crate) fn bad(param: &str, reason: &str) -> SourceError {
     SourceError::Setting {
         param: param.to_owned(),
         reason: reason.to_owned(),
     }
 }
 
-fn colour(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
+pub(crate) fn colour(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
     setting(settings, id)?
         .as_str()
         .and_then(parse_color)
         .ok_or_else(|| bad(id, "must be a color as `#rrggbb` or `#rrggbbaa`"))
 }
 
-fn amount(settings: &Settings, id: &str, min: f64, max: f64) -> Result<f32, SourceError> {
+pub(crate) fn amount(
+    settings: &Settings,
+    id: &str,
+    min: f64,
+    max: f64,
+) -> Result<f32, SourceError> {
     setting(settings, id)?
         .as_f64()
         .filter(|v| (min..=max).contains(v))
@@ -449,7 +454,7 @@ pub(crate) fn byte(v: f32) -> u8 {
     v.round().clamp(0.0, 255.0) as u8
 }
 
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+pub(crate) fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -539,12 +544,12 @@ const GRADIENTS: [(f32, f32); 16] = [
 ];
 
 /// Seeded 2D gradient noise, and fractal sums of it.
-struct Noise {
+pub(crate) struct Noise {
     seed: u32,
 }
 
 impl Noise {
-    fn new(seed: u32) -> Self {
+    pub(crate) fn new(seed: u32) -> Self {
         Self { seed }
     }
 
@@ -579,7 +584,7 @@ impl Noise {
 
     /// `octaves` of gradient noise, each twice the frequency and `roughness` times the
     /// weight of the one before, normalised to about -1 to 1.
-    fn fbm(&self, x: f32, y: f32, octaves: u32, roughness: f32) -> f32 {
+    pub(crate) fn fbm(&self, x: f32, y: f32, octaves: u32, roughness: f32) -> f32 {
         let (mut sum, mut weight, mut total, mut f) = (0.0, 1.0, 0.0, 1.0);
         for octave in 0..octaves {
             // Each octave turned a little, so their grids don't line up.

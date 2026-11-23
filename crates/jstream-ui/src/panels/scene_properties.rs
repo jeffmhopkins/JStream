@@ -81,6 +81,9 @@ pub struct SceneDraft {
     pub camera_motion: Vec<CameraMotionModifier>,
     /// For a group, whether it shares a 3D scene's space (ADR-0164 §1).
     pub share_space: bool,
+    /// Whether its surfaces reflect each other through its reflection probes (ADR-0170
+    /// decision 2); a keyframe scene's is its parent's.
+    pub reflections: bool,
     /// The group item its camera rides with (ADR-0164 §5); a keyframe scene's is its
     /// parent's.
     pub camera_anchor: Option<ItemId>,
@@ -102,6 +105,7 @@ impl SceneDraft {
             camera: scene.camera,
             camera_motion: scene.camera_motion.clone(),
             share_space: scene.options.share_space,
+            reflections: scene.options.reflections,
             camera_anchor: scene.camera_anchor.clone(),
         })
     }
@@ -200,11 +204,13 @@ pub fn scene_edits(
         background,
         draft.keep_warm,
         draft.share_space,
+        draft.reflections,
     ) != (
         before.include_audio,
         before.background.as_deref(),
         before.keep_warm,
         before.share_space,
+        before.reflections,
     ) {
         let mut options = collection
             .scene(scene_id)
@@ -214,6 +220,7 @@ pub fn scene_edits(
         options.background = background.map(str::to_owned);
         options.keep_warm = draft.keep_warm;
         options.share_space = draft.share_space;
+        options.reflections = draft.reflections;
         edits.push(Edit::SceneSetOptions {
             scene_id: scene_id.clone(),
             options,
@@ -610,14 +617,31 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     </label>
                     {move || draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some())).then(|| view! {
                         <div class="camera-sub">
+                            <label class="camera-check">
+                                <input
+                                    type="checkbox"
+                                    aria-label="Autofocus"
+                                    title="Focus on whatever is at the centre of the frame"
+                                    prop:checked=move || draft.with(|d| d.camera.is_some_and(|c| c.autofocus))
+                                    on:change=move |event| {
+                                        let on = event_target_checked(&event);
+                                        draft.update(|d| {
+                                            if let Some(camera) = d.camera.as_mut() {
+                                                camera.autofocus = on;
+                                            }
+                                        });
+                                    }
+                                />
+                                <span>"Autofocus"</span>
+                            </label>
                             <div class="axis-row camera-row">
                                 <span class="label">"Focus distance"</span>
                                 {number("", "Focus distance", CameraField::Focus, "1")}
                             </div>
                             <div class="axis-row camera-row">
-                                <span class="label">"Blur"</span>
+                                <span class="label" title="How shallow the depth of field is: 0 keeps everything sharp">"Aperture (blur)"</span>
                                 <div class="camera-control">
-                                    {number("", "Blur", CameraField::Blur, "0.5")}
+                                    {number("", "Aperture (blur)", CameraField::Blur, "0.5")}
                                     <span class="unit">"px"</span>
                                 </div>
                             </div>
@@ -933,6 +957,25 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                                 </div>
                             </div>
                         </Show>
+                        <Show when=move || !keyframe && !is_group>
+                            <div class="prop-row">
+                                <span class="prop-label check"></span>
+                                <div class="prop-control">
+                                    <label class="inline-check">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=move || draft.with(|d| d.reflections)
+                                            on:change=move |event| {
+                                                let on = event_target_checked(&event);
+                                                draft.update(|d| d.reflections = on);
+                                            }
+                                        />
+                                        <span>"Reflections"</span>
+                                    </label>
+                                    <Info text="In a 3D scene, models lit by the scene and lit cards inside a reflection probe's box reflect what the probe sees, each by its own roughness and metalness. Settings › 3D rendering can turn probes off everywhere." />
+                                </div>
+                            </div>
+                        </Show>
                         <Show when=move || is_group>
                             <div class="prop-row">
                                 <span class="prop-label check"></span>
@@ -1016,8 +1059,10 @@ fn has_3d_items(collection: &Collection, scene_id: &SceneId) -> bool {
 }
 
 /// Turns `camera`'s depth of field on, focused on its target with a blur of
-/// [`DEFAULT_BLUR_PX`] unless it has one, or off (ADR-0108 decision 7).
+/// [`DEFAULT_BLUR_PX`] unless it has one and autofocus on (ADR-0176 decision 5), or off
+/// (ADR-0108 decision 7).
 fn depth_of_field(camera: &mut SceneCamera, on: bool) {
+    camera.autofocus = on;
     if on {
         camera.focus_px = Finite32::new(camera.target_distance());
         if camera.blur_px.get() == 0.0 {
@@ -1269,6 +1314,42 @@ mod tests {
                     background: None,
                     keep_warm: true,
                     share_space: false,
+                    reflections: false,
+                },
+            }])
+        );
+    }
+
+    /// "Reflections" sends `scene.set_options` with the other options kept (ADR-0170
+    /// decision 2).
+    #[test]
+    fn reflections_send_the_scene_s_options() {
+        let scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+            "keep_warm": true,
+        }))
+        .expect("a scene");
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        assert!(!before.reflections);
+        let on = SceneDraft {
+            reflections: true,
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &a, &before, &on),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: a,
+                options: SceneOptions {
+                    keep_warm: true,
+                    reflections: true,
+                    ..SceneOptions::default()
                 },
             }])
         );
@@ -1329,6 +1410,7 @@ mod tests {
                 scene_id: rig,
                 options: SceneOptions {
                     share_space: true,
+                    reflections: false,
                     ..SceneOptions::default()
                 },
             }])
@@ -1386,6 +1468,7 @@ mod tests {
                     background: None,
                     keep_warm: false,
                     share_space: false,
+                    reflections: false,
                 },
             }])
         );
@@ -1422,6 +1505,7 @@ mod tests {
                     background: Some("#0F111580".into()),
                     keep_warm: false,
                     share_space: false,
+                    reflections: false,
                 },
             }])
         );
@@ -1434,6 +1518,7 @@ mod tests {
                     background: None,
                     keep_warm: false,
                     share_space: false,
+                    reflections: false,
                 },
             }])
         );
@@ -1576,6 +1661,7 @@ mod tests {
         let target = camera.target_distance();
         assert_eq!(camera.focus_px.map(Finite32::get), Some(target));
         assert_eq!(camera.blur_px.get(), DEFAULT_BLUR_PX);
+        assert!(camera.autofocus, "autofocus starts on (ADR-0176)");
         assert!(camera.validate().is_ok());
         let mut softer = camera;
         CameraField::Blur.set(&mut softer, 12.0);
@@ -1606,6 +1692,7 @@ mod tests {
         );
         depth_of_field(&mut camera, false);
         assert_eq!((camera.focus_px, camera.blur_px.get()), (None, 0.0));
+        assert!(!camera.autofocus);
     }
 
     /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, or from the

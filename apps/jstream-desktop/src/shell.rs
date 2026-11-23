@@ -194,8 +194,9 @@ pub fn run(
     if let Some(file) = network_file {
         builder = builder.manage(crate::network::Setting(file));
     }
-    if let Some(file) = jtunnel_file {
-        builder = builder.manage(crate::jtunnel::File(file));
+    if let Some(path) = jtunnel_file {
+        let engine = host.as_ref().map(Host::engine).unwrap_or_default();
+        builder = builder.manage(crate::jtunnel::File { path, engine });
     }
     if let Some(file) = ptz_file {
         builder = builder.manage(crate::ptz::File(file));

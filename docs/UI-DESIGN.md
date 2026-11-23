@@ -197,6 +197,10 @@ The property grid, as OBS's Properties lay a source's settings out:
   slider fills the row with a 64 px number after it.
 - A setting's reset (↺) sits in a 20 px column of its own and shows only once the value
   differs from its default, so the right edges line up.
+- A setting a controller can drive (live, a number with both ends or a switch) has a
+  learn button (`button.learn`, the MIDI icon) after its reset, in a third column that
+  takes only its width: `--muted` and borderless at rest, `--accent` with a border when
+  bound (with its control's short name, `CC 7`) or while it is learning.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for

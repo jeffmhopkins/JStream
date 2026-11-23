@@ -692,6 +692,30 @@ fn a_scene_is_kept_warm_but_not_a_keyframe() {
     assert!(reason.contains("parent"), "{reason}");
 }
 
+/// A scene's surfaces reflect each other through its options (ADR-0170 decision 2); a
+/// keyframe scene is drawn as its parent, so it can't turn reflections on itself.
+#[test]
+fn a_scene_reflects_but_not_a_keyframe() {
+    let mut graph = family();
+    let reflective = |scene: &str| Edit::SceneSetOptions {
+        scene_id: SceneId::new(scene),
+        options: jstream_protocol::SceneOptions {
+            reflections: true,
+            ..jstream_protocol::SceneOptions::default()
+        },
+    };
+    apply_ok(&mut graph, vec![reflective("a")]);
+    assert!(
+        graph
+            .state()
+            .scene(&SceneId::new("a"))
+            .is_some_and(|s| s.options().reflections)
+    );
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![reflective("k")]));
+    assert!(field.ends_with("reflections"), "{field}");
+    assert!(reason.contains("parent"), "{reason}");
+}
+
 /// A keyframe's override of an item's effects (ADR-0088): one `tint` per entry, with
 /// `amount` set and `mask` naming a scene, or the defaults.
 fn effects(entries: &[(&str, Option<f64>, Option<&str>)]) -> Vec<FilterInfo> {
@@ -1331,9 +1355,11 @@ fn a_keyframe_overrides_an_items_motion_whole_and_undoes_exactly() {
 fn set_motion_refuses_a_list_the_wire_check_refuses() {
     let mut graph = family();
     let field = |graph: &mut Graph, edit: Edit| invalid_reason(apply_err(graph, vec![edit])).0;
-    let nine: Vec<_> = (0..9).map(|n| wiggle(&format!("m{n}"), 1.0)).collect();
+    let over: Vec<_> = (0..=jstream_protocol::MAX_MOTION_MODIFIERS)
+        .map(|n| wiggle(&format!("m{n}"), 1.0))
+        .collect();
     assert_eq!(
-        field(&mut graph, set_motion("i1", None, nine)),
+        field(&mut graph, set_motion("i1", None, over)),
         "edits.0.motion"
     );
     assert_eq!(
