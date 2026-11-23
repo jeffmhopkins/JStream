@@ -6771,7 +6771,7 @@ stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:05c09dc6c7514b3e", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:e826ff99763af839", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs." }
+stamp = { hash = "b3:4b89e550c8481fdd", by = "agent:claude", note = "Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:3a531d83c225a272", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs." }
@@ -6855,7 +6855,7 @@ stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 re
 stamp = { hash = "b3:63ac58d116477863", by = "agent:studio-two-up", note = "Studio mode rewritten for the two-up: canvas as preview, program monitor (tapped program-mix stream), StudioControls between them sharing one Panel state with the Transitions panel via provide_transitions; Selection notes the canvas follows the preview scene in studio mode; style.css adds the stage-row, stage-label, monitor and studio-controls rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "Re-read: camera mode is canvas-local state, not Studio's; panels::scenes is now pub(crate) only to share keyframe_name; nothing here changes" }
 
 ["CRATE-jstream-ui#purpose"."body"]
 stamp = { hash = "b3:90eed67a767383f1", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
@@ -7005,7 +7005,7 @@ stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:05c09dc6c7514b3e", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:e826ff99763af839", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection." }
+stamp = { hash = "b3:4b89e550c8481fdd", by = "agent:claude", note = "Re-read: the crate's purpose is unchanged by the canvas camera mode and 3D item tools" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/motion.rs"]
 stamp = { hash = "b3:3a531d83c225a272", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection." }
@@ -7794,7 +7794,7 @@ stamp = { hash = "b3:d2d6f108f744651a", by = "agent:claude", note = '''The deskt
 stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "Packaging now ships DXC in the zip; the requirements still hold: nothing else to install" }
 
 ["GETTING-STARTED#scene"."body"]
-stamp = { hash = "b3:34f223a6ba1c5153", by = "agent:effects-perf", note = "Added a fog card to step 2's list of source types, after a backdrop, as the Add source dialog (UI-FEATURES DL-06) now lists it. The steps themselves are unchanged." }
+stamp = { hash = "b3:68b9e51fbeb5df4e", by = "agent:claude", note = "Step 3 now tells a newcomer about the 3D Depth and Turn tools and camera mode (K, drags, wheel zoom, Save view, Esc), matching UI-FEATURES#canvas" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#canvas"]
 stamp = { hash = "b3:3546004f22bc2a80", by = "agent:claude", note = "Step 3 now tells a newcomer about the 3D Depth and Turn tools and camera mode (K, drags, wheel zoom, Save view, Esc), matching UI-FEATURES#canvas" }
@@ -8445,19 +8445,19 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:374275300293be0b", by = "agent:ui-design", note = "Added the small button (button.sm, 24 px, 12 px text) used by the Arrange panel rows and matched by Set key; checked against style.css and transform.rs." }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read against style.css: the learn button is a quiet icon button like the reset; the button rules hold. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:a1ffb6e5ce1aba11", by = "agent:ui-design", note = "Added the Button row (--button, --button-hover), the tokens that replace the hex fills in style.css (PR #1585 N5); every other token unchanged." }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: button.learn uses --muted, --text and --accent tokens only. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: style.css adds only the learn button and its column; controls hold. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the naming rule: everything in a chain is a filter, and an item's own are item filters, never effects, as the Filters panel, window and Add filter now say." }
@@ -8466,7 +8466,7 @@ stamp = { hash = "b3:9df01cfe8a7db9a3", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: copy rules and the (i) side-with-room placement (dialog.rs tip_side, .info-tip.up/.end) still hold; the merge's toast text 'Saved to …' follows them." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: the learn button's copy (Move…, Learn a MIDI controller: click, then move it.) follows the copy rules. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the picker rule (C15): Add source and Add filter share one layout, a 320 px list with search and eyebrow groups and row icons, and the pick's 40 px tile, name and line, then what it needs and a callout for where it lands." }
@@ -8475,7 +8475,7 @@ stamp = { hash = "b3:fe871cdb99bb4305", by = "agent:claude", note = "Added the p
 stamp = { hash = "b3:bfffe95b3c30c371", by = "agent:ui-design", note = "Re-read after merging #1580 and #1587: the dialog shell text still matches style.css (--dialog-s/m/l 440/600/860, 56px header with .modal-sub, sticky ::after fade, 56px footer with 32px buttons and .footer-left); the merge added only .toast-action." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: style.css changes don't touch dialogs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:f03c6985415ce395", by = "agent:claude", note = "Added the learn button's third column after the reset and its colours, against style.css and properties.rs." }
@@ -8484,7 +8484,7 @@ stamp = { hash = "b3:f03c6985415ce395", by = "agent:claude", note = "Added the l
 stamp = { hash = "b3:abf87e5531cd427b", by = "agent:claude", note = "Added the learn button's third column after the reset and its colours, against style.css and properties.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Added the learn button's third column after the reset and its colours, against style.css and properties.rs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#menus"."body"]
 stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
@@ -8493,19 +8493,19 @@ stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: style.css changes don't touch menus. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: style.css changes don't touch tabs. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: the learn button's 11 px text matches the small control text. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained .canvas-tool.canvas-tool-text (12 px text buttons in the canvas tool bar, no new colours); this section still holds" }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:6fd304344f110076", by = "agent:claude", note = "The 3D tools bullet now says Depth doubles or halves distance per 200 px with a 10 px floor and Turn leaves billboards alone; matches camera::pose" }
@@ -8718,7 +8718,7 @@ stamp = { hash = "b3:75cc985ea8357c6f", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:8d725c084d05fb72", by = "agent:claude", note = "Re-read: the midi icon and learn styles use the theme tokens. Re-read after renumbering the ADR to 0178 (0177 was taken)." }
+stamp = { hash = "b3:0b04ca468a12d2ee", by = "agent:claude", note = "style.css only gained the canvas tool bar's text-button width rule; theme tokens unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
