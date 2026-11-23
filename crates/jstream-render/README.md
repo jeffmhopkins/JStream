@@ -588,6 +588,18 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    compositor's, the canvas size, and not placed by the scene being drawn into it,
    or the call is `RenderError::Invalid` before any GPU work. Submits that placed the
    layer earlier are ordered before the redraw, so they keep the old contents.
+   A layer that still holds the very draw it is asked for is left as it is
+   ([ADR-0194](../../docs/adr/0194-a-layer-is-drawn-again-only-when-what-it-draws-has-changed.md)):
+   the layer keeps what its last `render_into` drew (`Drawn`: the vertices byte for
+   byte, each drawn image with its count of writes, its blend mode, mip chain and
+   backdrop box, the background and the blending space), and when the scene readied
+   for a redraw matches that, and nothing has written to the layer since
+   (`Compositor::holds`), nothing is recorded or submitted and the layer is not marked
+   as changed, so a scene that places it matches too. A scene with a model's depth is
+   always drawn. So every write into an image's texels has to mark it
+   (`Image::mark_changed`), as mip chains already needed
+   (`a_layer_is_drawn_again_only_when_what_it_draws_has_changed`,
+   `a_parent_is_kept_while_the_layers_it_places_are`).
    A layer drawn over a transparent background also keeps what its scene could have
    drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current

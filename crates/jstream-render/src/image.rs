@@ -140,6 +140,9 @@ pub struct Image {
     /// drawn at (#1070). Only that generation's: any other write moves the generation on
     /// ([`Self::mark_changed`]), and the bounds go with it. `None` when unknown.
     content: Arc<Mutex<Option<(u64, Region)>>>,
+    /// What a layer's last [`crate::Compositor::render_into`] drew into it
+    /// ([`Self::drawn_as`]).
+    drawn: Arc<Mutex<Option<crate::compositor::Drawn>>>,
 }
 
 /// What an image held when it was looked at ([`Image::seen`]): which image, and how many
@@ -231,6 +234,12 @@ impl Image {
             .unwrap_or_else(PoisonError::into_inner)
             .filter(|(drawn_at, _)| *drawn_at == generation)
             .map(|(_, region)| region)
+    }
+
+    /// What the last [`crate::Compositor::render_into`] into this layer drew, for it
+    /// to read and replace (ADR-0194).
+    pub(crate) fn drawn_as(&self) -> std::sync::MutexGuard<'_, Option<crate::compositor::Drawn>> {
+        self.drawn.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// How many times the texels have changed, as [`Self::mark_changed`] counts them.
@@ -795,6 +804,7 @@ fn finish(
         full: (width, height),
         need: Arc::new(AtomicU32::new(0)),
         content: Arc::new(Mutex::new(None)),
+        drawn: Arc::new(Mutex::new(None)),
     }
 }
 
