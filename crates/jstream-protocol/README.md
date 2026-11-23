@@ -384,7 +384,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.172 because a scene whose `reflections` is on also reflects
+`PROTOCOL_VERSION` is 0.176 because `profile.get`'s drawers report
+`preview_skipped`, the pictures only preview streams take that the program skipped,
+which `stats.tick`'s `render_ticks` no longer counts (#1690); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
 (with `SCREEN_SPACE_STEPS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -1996,8 +1998,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `seconds` (1 to 60, default 5), as a `ProfileInfo`
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)): each drawing
   thread's (`program`, `preview`) frames, their average, 95th percentile and longest
-  time, the frames over `frame_budget_ms`, the program's skipped ticks and the time per
-  phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  time, the frames over `frame_budget_ms`, the program's skipped ticks, since 0.176 the
+  pictures only preview streams take that the program skipped (`preview_skipped`, which
+  `stats.tick`'s `drops` leave out) and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the
@@ -2465,7 +2468,9 @@ After `welcome`, the server pushes every event to every client.
   capture faster than the canvas replaces frames it could never show, which don't count), `audio_frames` (input-ring overruns, audio that arrived
   after the mixer had passed it, and frames the mixer skipped because it fell behind
   the clock), `render_ticks` (ticks the render loop skipped to catch up with the media
-  clock), `encode_frames` and `encode_blocks` (video frames and audio blocks
+  clock, and frames an output or a virtual camera missed because their readback was
+  behind; since 0.176 not pictures only preview streams take, which `profile.get`
+  reports as `preview_skipped`), `encode_frames` and `encode_blocks` (video frames and audio blocks
   dropped before an encoder accepted them) and `output_packets` (encoded packets
   dropped handing a stream to an output). Silence inserted to cover a gap is not a
   drop. A counter missing from `drops` parses as 0 (`DropCounts` is
@@ -2514,7 +2519,8 @@ After `welcome`, the server pushes every event to every client.
   since the engine received its `output.start` (opening the destination and
   starting the pipeline included), `bytes` and `frames` (the encoded bytes and video
   frames it handed its muxer this run while its link was up), `kbps` over the
-  interval since the engine's previous sample, `dropped_frames` (video frames its
+  last four seconds (since 0.176; over the interval since the engine's previous
+  sample before, which a keyframe's burst swung, #1693), `dropped_frames` (video frames its
   encoder dropped since it started, plus encoded frames it fell behind on; a shared
   encoder session counts for each output on it), `dropped_packets` (audio packets it
   fell behind on, packets the muxer refused or a stop's drain gave up on, and what the

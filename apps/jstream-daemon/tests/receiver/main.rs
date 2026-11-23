@@ -637,14 +637,19 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         "uptime counts from output.start: {last:?} after {streamed} s"
     );
     // A flat colour codes far below the profile's rate, so the bitrate is checked
-    // against the bytes counted between ticks, and against the profile as a ceiling.
-    for pair in stats[1..].windows(2) {
-        let (a, b) = (&pair[0], &pair[1]);
+    // against the bytes counted over the engine's window (the newest tick at least four
+    // seconds back, else the first, #1693), and against the profile as a ceiling.
+    for (i, b) in stats.iter().enumerate().skip(2) {
+        let a = stats[..i]
+            .iter()
+            .rev()
+            .find(|a| b.uptime_ms - a.uptime_ms >= 4_000)
+            .unwrap_or(&stats[0]);
         let ms = (b.uptime_ms - a.uptime_ms) as f64;
         let measured = (b.bytes - a.bytes) as f64 * 8.0 / ms;
         assert!(
             close(f64::from(b.kbps), measured, measured * 0.25 + 8.0),
-            "kbps is the bytes sent over the interval: {measured:.0} vs {b:?}"
+            "kbps is the bytes sent over the window: {measured:.0} vs {b:?}"
         );
         assert!(
             b.kbps > 0 && b.kbps <= 1_000,
