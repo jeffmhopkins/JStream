@@ -905,14 +905,27 @@ pub fn Header(
             <Show when=move || update_open.get()>
                 <UpdateDialog close=move || update_open.set(false) />
             </Show>
-            {move || project_ask.get().map(|(ask, start, folder)| view! {
+            {move || project_ask.get().map(|(ask, start, folder)| {
+                // Open lists the recent projects other than the open one to pick from.
+                let recent: Vec<String> = if ask == ProjectAsk::Open {
+                    project.with_untracked(|p| {
+                        p.as_ref()
+                            .map(|p| p.recent.iter().filter(|r| **r != p.path).take(5).cloned().collect())
+                            .unwrap_or_default()
+                    })
+                } else {
+                    Vec::new()
+                };
+                view! {
                 <ProjectDialog
                     ask=ask
                     start=start
                     folder=folder
+                    recent=recent
                     running=running()
                     close=move || project_ask.set(None)
                 />
+                }
             })}
             <span class="spacer"></span>
             <span

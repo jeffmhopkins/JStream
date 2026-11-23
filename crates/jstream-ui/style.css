@@ -1471,6 +1471,9 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .plugin-meta { color: var(--muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-actions { display: flex; gap: 0.4rem; }
 .modal.plugin-dialog { width: var(--dialog-s); }
+/* Install plugin (C18): Folder and ID on the property grid, so it is a medium dialog. */
+.modal.plugin-dialog.install-dialog { width: var(--dialog-m); }
+.plugin-dialog-body > .callout { margin: 0; }
 
 /* The Settings dialog's Audio plugins page (clap_plugins.rs), and Add filter's Plugins note when
    an audio chain has no CLAP plugin to offer. */
@@ -1505,14 +1508,21 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .update-body, .settings-body { padding: 16px 18px; font-size: 13px; }
 .update-body p, .settings-check-note { margin: 0; }
 .update-detail, .settings-check-note { margin-top: 8px; color: var(--muted); font-size: 12px; }
-.modal.project-dialog { width: var(--dialog-s); }
-.project-body { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; font-size: 13px; }
-.project-path { display: flex; flex-direction: column; gap: 6px; }
-.project-path-row { display: flex; gap: 8px; }
-.project-path-row input { flex: 1; min-width: 0; }
-.project-note, .project-problem { margin: 0; font-size: 12px; color: var(--muted); }
-.project-warning { color: var(--text); }
-.project-problem { color: var(--danger); }
+/* New, Open and Save as (C18): Open's recent files, then Location on the property grid,
+   then a one-line callout. */
+.modal.project-dialog { width: var(--dialog-m); }
+.project-body { display: flex; flex-direction: column; gap: 16px; padding: 16px; font-size: 13px; }
+.project-recent { display: grid; gap: 6px; }
+.project-recent .eyebrow { margin: 0; }
+.project-recent ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.project-recent-item { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 5px; color: var(--text); cursor: default; }
+.project-recent-item:hover { background: var(--menu-hover); }
+.project-recent-item[aria-selected="true"] { background: var(--selected); }
+.project-recent-item .icon { flex: none; color: var(--muted); }
+.project-recent-name { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-recent-folder { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--muted); font-size: 11px; }
+.project-body .callout { margin: 0; }
+.project-problem { margin: 0; font-size: 12px; color: var(--danger); }
 .update-body a { color: var(--link); }
 .settings-check { display: flex; gap: 10px; align-items: flex-start; }
 .settings-check input { width: auto; margin: 3px 0 0; accent-color: var(--accent); }

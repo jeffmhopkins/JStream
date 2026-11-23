@@ -247,6 +247,9 @@ pub fn ProjectDialog(
     folder: String,
     /// How many outputs are running, which an open or a new stops.
     running: usize,
+    /// The projects opened recently, most recent first, which Open lists to pick from.
+    #[prop(optional)]
+    recent: Vec<String>,
     /// Closes the dialog.
     close: impl Fn() + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
@@ -316,22 +319,72 @@ pub fn ProjectDialog(
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
             </div>
             <div class="project-body">
-                <label class="project-path">
-                    <span>"Project file on the engine's computer"</span>
-                    <span class="project-path-row">
-                        <input
-                            type="text"
-                            aria-label="Project file"
-                            placeholder="/path/to/show.json"
-                            prop:value=move || path.get()
-                            on:input=move |event| path.set(event_target_value(&event))
-                        />
-                        {browse}
-                    </span>
-                </label>
-                {(ask != ProjectAsk::Open).then(|| view! {
-                    <p class="project-note">"A project is saved only to a new file, never over one."</p>
+                {(!recent.is_empty()).then(|| view! {
+                    <div class="project-recent">
+                        <p class="eyebrow">"Recent"</p>
+                        <ul role="listbox" aria-label="Recent projects">
+                            {recent.into_iter().map(|file| {
+                                let name = project_name(&file);
+                                let folder = folder_of(&file);
+                                let chosen = file.clone();
+                                let opened = file.clone();
+                                let picked = file.clone();
+                                view! {
+                                    <li
+                                        role="option"
+                                        class="project-recent-item"
+                                        tabindex="0"
+                                        title=file.clone()
+                                        aria-selected=move || (path.with(|p| *p == picked)).to_string()
+                                        on:click=move |_| path.set(chosen.clone())
+                                        on:dblclick=move |_| {
+                                            path.set(opened.clone());
+                                            submit();
+                                        }
+                                        on:keydown={
+                                            let file = file.clone();
+                                            move |event: leptos::ev::KeyboardEvent| {
+                                                if event.key() == "Enter" || event.key() == " " {
+                                                    event.prevent_default();
+                                                    path.set(file.clone());
+                                                }
+                                            }
+                                        }
+                                    >
+                                        <Icon name="file" size=16 />
+                                        <span class="project-recent-name">{name}</span>
+                                        <span class="project-recent-folder">{folder}</span>
+                                    </li>
+                                }
+                            }).collect_view()}
+                        </ul>
+                    </div>
                 })}
+                <div class="prop-grid">
+                    <div class="prop-row">
+                        <label class="prop-label" for="project-path">"Location"</label>
+                        <div class="prop-control wide">
+                            <span class="path-row grow">
+                                <input
+                                    id="project-path"
+                                    type="text"
+                                    spellcheck="false"
+                                    placeholder="/path/to/show.json"
+                                    prop:value=move || path.get()
+                                    on:input=move |event| path.set(event_target_value(&event))
+                                />
+                                {browse}
+                            </span>
+                            <p class="help">
+                                {if ask == ProjectAsk::Open {
+                                    "A project file on the engine's computer."
+                                } else {
+                                    "On the engine's computer. A project is saved only to a new file, never over one."
+                                }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
                 {warning.map(|text| view! {
                     <p class="callout" class:warn={running > 0}>
                         <Icon name="info" size=16 />
