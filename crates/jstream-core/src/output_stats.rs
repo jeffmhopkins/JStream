@@ -1,5 +1,5 @@
 //! Each running output's live stats for `stats.tick` (protocol 0.57): what it has sent
-//! and lost since its start, its bitrate over the last tick, and its health.
+//! and lost since its start, its bitrate over the last few seconds, and its health.
 //!
 //! The output thread counts what it hands its muxer into [`SentCounters`], and the
 //! pipeline registers one [`OutputMeter`] per running output, whose `read` gathers that
@@ -19,6 +19,10 @@ use crate::lock;
 
 /// How far back `health` looks.
 const WINDOW: Duration = Duration::from_secs(10);
+
+/// How far back `kbps` looks: two keyframe intervals at the usual 2 s, so a keyframe's
+/// burst doesn't swing a steady stream's rate from one tick to the next (#1693).
+const RATE_WINDOW: Duration = Duration::from_secs(4);
 
 /// The share of video frames lost over [`WINDOW`], in parts per ten thousand, at and
 /// above which an output is `poor`: 2%.
@@ -91,7 +95,15 @@ impl OutputMeter {
     /// Reads the counters at `now`, keeps the sample, and reports them.
     fn sample(&mut self, now: Instant) -> OutputStatsInfo {
         let sample = (self.read)();
-        let previous = self.history.back().copied();
+        // The rate's base: the newest sample at least `RATE_WINDOW` old, else the
+        // oldest kept, else the run's start, which counts from zero.
+        let since = self
+            .history
+            .iter()
+            .rev()
+            .find(|(at, _)| now.saturating_duration_since(*at) >= RATE_WINDOW)
+            .or_else(|| self.history.front())
+            .copied();
         self.history.push_back((now, sample));
         // Keep one sample at or before the window's start, so the window has a base.
         while self.history.len() > 2
@@ -102,7 +114,7 @@ impl OutputMeter {
         {
             self.history.pop_front();
         }
-        let (since, base) = previous.unwrap_or((self.started, OutputSample::default()));
+        let (since, base) = since.unwrap_or((self.started, OutputSample::default()));
         let kbps = kbps(sample.bytes.saturating_sub(base.bytes), now - since);
         // The window's base: the first sample of a run counts from zero.
         let oldest = match self.history.front() {
@@ -348,5 +360,36 @@ mod tests {
 
         meters.remove(id);
         assert!(meters.sample(at(14)).is_empty());
+    }
+
+    /// A steady 8 Mbps stream with a keyframe every 2 s sends unevenly from one second
+    /// to the next; its rate is taken over four seconds, so it reads 8 Mbps every tick
+    /// once four have passed (#1693).
+    #[test]
+    fn a_steady_streams_rate_doesnt_swing_with_its_keyframes() {
+        let sent = Arc::new(SentCounters::default());
+        let mut meters = OutputMeters::default();
+        let started = Instant::now();
+        let read = {
+            let sent = Arc::clone(&sent);
+            Box::new(move || {
+                let (bytes, frames, _) = sent.read();
+                OutputSample {
+                    bytes,
+                    frames,
+                    ..sample(0, 0, 0)
+                }
+            })
+        };
+        meters.add(OutputId::new("out_1"), started, read);
+        let mut rates = Vec::new();
+        for s in 1..=12_u64 {
+            // 2 Mbit in each 2 s: 1.25 Mbit in the keyframe's second, 0.75 in the other.
+            let bytes = if s % 2 == 1 { 1_250_000 } else { 750_000 };
+            sent.add(bytes, true);
+            rates.push(meters.sample(started + Duration::from_secs(s))[0].kbps);
+        }
+        // Over each tick alone it would swing between 10 and 6 Mbps.
+        assert!(rates[4..].iter().all(|&kbps| kbps == 8_000), "{rates:?}");
     }
 }
