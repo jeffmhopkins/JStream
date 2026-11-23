@@ -1150,43 +1150,56 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
   color: var(--text);
 }
 /* The Encoders & mixes dialog, and the delete confirmation. */
-.modal.libraries-dialog { width: var(--dialog-l); max-height: min(720px, 100%); }
-.libraries-body { display: grid; gap: 12px; padding: 16px; overflow: auto; }
+.modal.libraries-dialog { width: var(--dialog-l); height: min(660px, 100%); }
+.libraries-body { display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 0; padding: 16px; overflow: auto; }
 .libraries-body > .problem { margin: 0; }
+/* No fade here: the open form's own footer is the body's last, sticky box. */
 /* A list on the left and the editor of the one picked on the right (#1206). */
-.library { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; min-height: 320px; }
-.library-list { display: grid; align-content: start; gap: 16px; padding-right: 16px; border-right: 1px solid var(--line); }
+/* Encoders & mixes (C17): a 240 px list, each group under an eyebrow with its + in the
+   header row, and the picked one's form on a property grid, whose Delete, Cancel and
+   Save are the dialog's footer. The divider runs the body's full height. */
+.library { --library-rail: 240px; display: grid; grid-template-columns: var(--library-rail) minmax(0, 1fr); gap: 0; flex: 1 0 auto; }
+.library-list { display: grid; align-content: start; gap: 16px; padding: 0 12px 16px 0; border-right: 1px solid var(--line); }
 .library-group { display: grid; gap: 6px; }
+.library-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
 .library-group h3 { margin: 0; color: var(--dim); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.library-new { width: 24px; height: 24px; border-radius: 4px; }
+.library-none { margin: 0; padding: 0 8px; color: var(--dim); font-size: 12px; }
 .library-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.library-item { display: grid; gap: 2px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px; background: none; text-align: left; }
-.library-item.chosen { border-color: var(--accent); background: var(--selected); }
+.library-item { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 5px; background: none; text-align: left; }
+.library-item:hover:not(:disabled) { background: var(--menu-hover); }
+.library-item.chosen, .library-item.chosen:hover:not(:disabled) { background: var(--selected); }
+.library-item .library-name { flex: 0 1 auto; min-width: 3em; }
+.library-item .library-summary { flex: 1 1 auto; text-align: right; }
 .library-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-summary { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.library-new { justify-self: start; background: none; font-size: 12px; }
-.library-editor { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.library-editor { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding-left: 16px; }
 .library-editor > .hint { margin: 0; color: var(--dim); font-size: 11px; }
 .library-empty { color: var(--muted); }
-.profile-form .buttons .library-delete { margin-right: auto; background: none; border-color: var(--border); color: var(--problem); }
+.profile-form .buttons .library-delete { margin-right: auto; }
 .profile-form .buttons .saved { align-self: center; }
 @media (max-width: 640px) {
   .library { grid-template-columns: minmax(0, 1fr); }
   .library-list { padding: 0 0 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .library-editor { padding-left: 0; }
+  .profile-form .buttons { margin-left: -16px; }
 }
 .modal.confirm-dialog { width: var(--dialog-s); }
 .confirm-body { margin: 0; padding: 16px; color: var(--text-soft); }
 /* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0140). */
 .codec-downloads { display: grid; gap: 0.4rem; }
 .codec-downloads:empty { display: none; }
+/* A codec offer is a callout (C17): no accent border, so it doesn't read as a focused
+   field. The notice and the licence terms stay with it. */
 .codec-offer {
   display: grid;
-  gap: 0.35rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--accent);
+  gap: 6px;
+  padding: 10px 12px;
   border-radius: 6px;
-  background: var(--raised);
+  background: var(--menu);
+  color: var(--text-soft);
 }
-.codec-offer p { margin: 0; font-size: 0.85rem; }
+.codec-offer p { margin: 0; font-size: 12px; line-height: 16px; }
 .codec-offer button { justify-self: start; }
 .codec-notice { color: var(--muted); font-size: 0.8rem; }
 .codec-notice a { color: var(--link); }
@@ -1194,15 +1207,29 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .codec-terms pre { max-height: 14rem; overflow: auto; margin: 0.3rem 0 0; padding: 0.4rem; white-space: pre-wrap; font-size: 0.75rem; color: var(--text-soft); background: var(--zone); border-radius: 4px; }
 .codec-installed .codec-terms { flex-basis: 100%; }
 .codec-installed { margin: 0; font-size: 0.85rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; }
-.profile-summary { margin: 0; color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
-.profile-form { display: grid; gap: 0.5rem; }
-.profile-form .hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.profile-head { display: grid; gap: 2px; }
+.profile-head .profile-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.profile-summary { margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+/* The form fills the pane, so its footer sits at the dialog's bottom however short it is. */
+.profile-form { display: flex; flex-direction: column; flex: 1 0 auto; gap: 12px; }
+.profile-form .hint { margin: 0; color: var(--dim); font-size: 12px; }
 .profile-form .problem { margin: 0; }
-.profile-form .buttons { display: flex; justify-content: flex-end; gap: 0.4rem; }
-.profile-field, .profile-field.size-pair label { display: grid; gap: 0.25rem; }
-.profile-field .label { color: var(--muted); font-size: 0.85rem; }
+/* The form's buttons are the dialog's footer while it is open: pinned to the bottom of
+   the body, across its width, as `.modal-footer` is. */
+.profile-form .buttons {
+  position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  margin: auto -16px 0 calc(-16px - var(--library-rail) - 16px); padding: 12px 16px; min-height: 56px;
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+/* A field is a property-grid row: a 120 px label, then the control and its note. */
+.profile-field { display: grid; grid-template-columns: 120px minmax(0, 360px); column-gap: 12px; row-gap: 4px; align-items: center; }
+.profile-field > .label { color: var(--muted); font-size: 12px; }
+.profile-field > .field-note { grid-column: 2; color: var(--dim); font-size: 12px; }
 .profile-field input, .profile-field select { min-width: 0; }
-.profile-field.size-pair { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+.profile-field.size-pair { grid-template-columns: 120px minmax(0, 174px) minmax(0, 174px); }
+.profile-field.size-pair::before { content: ""; }
+.profile-field.size-pair label { display: grid; gap: 4px; }
+.profile-field.size-pair .label { color: var(--muted); font-size: 12px; }
 .badge {
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
@@ -2326,7 +2353,6 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
 .filters-window-pane { padding-bottom: 0; }
 .settings-dialog .settings-body::after,
 .output-dialog-body::after,
-.libraries-body::after,
 .plugin-dialog-body::after,
 .filter-dialog-body::after,
 .props-settings::after,

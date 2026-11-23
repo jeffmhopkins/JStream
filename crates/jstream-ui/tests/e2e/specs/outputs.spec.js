@@ -213,7 +213,7 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   const encoders = () => library.getByRole('region', { name: 'Encoders' });
   const mixes = () => library.getByRole('region', { name: 'Video mixes' });
   await expect(editor()).toContainText('Pick an encoder or a video mix');
-  await encoders().getByRole('button', { name: '+ New encoder' }).click();
+  await encoders().getByRole('button', { name: 'New encoder' }).click();
   const form = library.getByRole('form', { name: 'New encoder' });
   // A new profile is named for what it encodes, so a select reads it as a choice.
   await expect(form.getByLabel('Encoder name')).toHaveValue('Default H.264');
@@ -239,7 +239,7 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await expect(archive).toContainText('AV1 · 6000 kbps VBR · HW');
   await expect(archive).toHaveAttribute('aria-pressed', 'true');
 
-  await mixes().getByRole('button', { name: '+ New video mix' }).click();
+  await mixes().getByRole('button', { name: 'New video mix' }).click();
   const mixForm = library.getByRole('form', { name: 'New video mix' });
   await expect(mixForm.getByLabel('Size')).toHaveValue('3');
   await mixForm.getByRole('button', { name: 'Save' }).click();

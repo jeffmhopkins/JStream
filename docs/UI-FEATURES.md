@@ -436,11 +436,11 @@ Delete… ask first: "Delete output-1?", saying its settings (and saved stream k
 in one batch, then the key. If the key is refused after the output was created, the dialog stays open on that output, and Add again sets only its key rather than adding a second one; a virtual camera sends no encoder, mix or bus. While the
 dialog is open, another client's change to the output reaches each field still as the
 dialog started it, and a field the person changed keeps theirs. The Encoders & mixes
-dialog lists the encoder profiles and video mixes on the left, each with its name and a
-short summary ("H.264 · 8000 kbps · HW", "1080 × 1920 · Program"), and edits the one
-picked on the right, with the whole of what it encodes or shows, Save, Cancel and Delete
-(off, naming the outputs, while one uses it); "+ New encoder" and "+ New video mix" start
-one. Save and Delete wait for the engine: "Saving…" until it answers, then "Saved." (a
+dialog (C17) lists the encoder profiles and video mixes in a rail on the left, each row its name and a
+short summary ("H.264 · 8000 kbps · HW", "1080 × 1920 · Program"), and a group with none says what outputs use instead; a + beside
+each heading (New encoder, New video mix) starts one. The picked one is edited on the right under its name and whole summary, as
+property-grid rows, with Delete (bottom left; off, naming the outputs, while one uses it),
+Cancel and Save as the dialog's footer, which replaces Close while a form is open. Save and Delete wait for the engine: "Saving…" until it answers, then "Saved." (a
 new one is picked), or its refusal under the form with the draft kept. A new profile is named "Default H.264".
 
 | ID | Feature | Requirement | Status | Notes |

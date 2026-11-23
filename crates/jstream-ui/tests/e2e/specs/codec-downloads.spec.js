@@ -131,7 +131,7 @@ test('with hardware H.264 the offer waits for a software H.264 profile', async (
   await openEncoders(page);
   await expect(encoders(page).locator('.codec-offer')).toHaveCount(0);
 
-  await encoders(page).getByRole('button', { name: '+ New encoder' }).click();
+  await encoders(page).getByRole('button', { name: 'New encoder' }).click();
   const form = encoders(page).getByRole('form', { name: 'New encoder' });
   await expect(form.locator('.codec-offer')).toHaveCount(0);
   await form.getByLabel('Hardware encoder').selectOption('avoid');
