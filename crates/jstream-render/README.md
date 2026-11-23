@@ -931,15 +931,17 @@ more than 0.2%; outside the map is lit. A shadowed light's light is scaled by th
 
 **Environment** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 9). `ModelDraw::environment` is the scene's sky (`Environment`: sky, horizon
-and ground colours, an intensity, a turn about the vertical, and maybe a picture), used
+and ground colours, an intensity, its turn, tilt and roll, and maybe a picture), used
 only with `lights`. It is packed after the shadow maps (`environment_values`: the
-colours as linear light times the intensity, the turn in radians, how the picture
-stores alpha or -1 for none, whether the lights hold an ambient one at any intensity
-(`SceneLighting::has_ambient`), and the camera's axes, which take a viewing-frame
-direction back to the scene's space), and the picture is bound beside the maps (binding
+colours as linear light times the intensity, how the picture stores alpha or -1 for
+none, whether the lights hold an ambient one at any intensity
+(`SceneLighting::has_ambient`), and the camera's axes with the sky's turn, tilt and roll
+undone (`Environment::sky_axes`,
+[ADR-0182](../../docs/adr/0182-a-sky-follows-its-items-tilt-and-roll.md)), which take a
+viewing-frame direction to the sky's own axes), and the picture is bound beside the maps (binding
 3, with the model's repeating sampler at 4; white without). In `model.wgsl` it replaces
 the studio gradient for the ambient and reflected terms: `sky` turns the direction into
-the scene's space and spins it by the turn, then reads the gradient (horizon to sky by
+the sky's axes, then reads the gradient (horizon to sky by
 the square root of the height up, horizon to ground over a quarter of the way down) or
 the panorama (`panorama`: its centre ahead along -z, up at its top, decoded by the
 filters' `to_premul_linear` from `filter/colour.wgsl`, which the model shader is built
