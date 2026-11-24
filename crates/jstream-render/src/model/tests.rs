@@ -1146,6 +1146,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
         focus_px: None,
         blur_px: Finite32::ZERO,
         autofocus: false,
+        fixed_aperture: false,
     };
     let map = compositor.depth_layer(256, 256).expect("a map");
     let clear = Scene {

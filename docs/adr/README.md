@@ -231,4 +231,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0220](0220-every-midi-reader-goes-through-the-senders-switch.md) | Every MIDI reader goes through "Use this sender's MIDI" | accepted | agent |  |
 | [ADR-0221](0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md) | JTunnel senders are found on the mDNS group, and one accepted sender is live and needs no name | accepted | agent |  |
 | [ADR-0222](0222-a-scenes-own-folders.md) | A scene's own folders | accepted | agent |  |
+| [ADR-0223](0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md) | A camera with a fixed aperture blurs like a real lens as it zooms and focuses | accepted | agent |  |
 <!-- @generated end adr-index -->

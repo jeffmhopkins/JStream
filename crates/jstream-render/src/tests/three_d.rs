@@ -1008,6 +1008,7 @@ fn camera(position: (f32, f32, f32), target: (f32, f32, f32), fov: f32) -> Scene
         focus_px: None,
         blur_px: Finite32::ZERO,
         autofocus: false,
+        fixed_aperture: false,
     }
 }
 

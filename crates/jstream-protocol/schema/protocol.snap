@@ -17200,6 +17200,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
           "type": "boolean"
         },
+        "fixed_aperture": {
+          "description": "Whether the depth of field behaves like a real lens with a fixed aperture (since\n0.191, ADR-0223): `blur_px` is then the blur far behind the\nfocus of the framing camera (45°, focused at its framing distance), and the blur a\nview draws with grows with the square of its focal length and shrinks as its focus\nmoves away, [`lens_blur`]: zooming in or focusing closer softens the background, so\na dolly zoom changes it. Off, `blur_px` is the blur whatever the zoom and focus.\nDefault `false`, which isn't written.",
+          "type": "boolean"
+        },
         "focus_px": {
           "anyOf": [
             {
@@ -20686,5 +20690,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.190"
+  "title": "JStream protocol 0.191"
 }
