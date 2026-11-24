@@ -1735,6 +1735,33 @@ pub enum Action {
         /// The channel the stream was opened on.
         channel: u32,
     },
+    /// Changes what one of this session's open preview streams of the program or of a
+    /// scene shows (since 0.188): `scene_id`'s scene, or the program mix when it is
+    /// omitted. The stream keeps its channel, size, rate and codec, and where nothing
+    /// else shares its encoder, the encoder itself, so a client's decoder goes on and
+    /// a view switching scenes shows the last picture of the old one until the first of
+    /// the new one, which is a keyframe, with no new stream to open. Pictures of the old
+    /// scene may still arrive before it. Showing what it shows already succeeds and
+    /// changes nothing. Fails with `invalid_argument` on `channel` for a channel this
+    /// session doesn't have open or a stream of a source, and with `not_found` for a
+    /// `scene_id` the collection doesn't have.
+    #[serde(rename = "preview.show")]
+    PreviewShow {
+        /// The channel the stream was opened on.
+        channel: u32,
+        /// The scene to show. Omitted for the program mix.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Asks one of this session's open preview streams for a keyframe as its next
+    /// picture (since 0.188): a client whose decoder fell behind and dropped pictures
+    /// resumes from it rather than waiting for the stream's next regular keyframe, up to
+    /// two seconds later. Succeeds for a channel that is not open.
+    #[serde(rename = "preview.request_keyframe")]
+    PreviewRequestKeyframe {
+        /// The channel the stream was opened on.
+        channel: u32,
+    },
     /// Reports what one of this session's views of preview streams has done since it
     /// opened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a
     /// projector) sends it about once a second while its counts change, so
@@ -2627,6 +2654,8 @@ impl Action {
             Action::AudioResetLoudness {} => "audio.reset_loudness",
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
+            Action::PreviewShow { .. } => "preview.show",
+            Action::PreviewRequestKeyframe { .. } => "preview.request_keyframe",
             Action::PreviewReport { .. } => "preview.report",
             Action::SceneSwitch { .. } => "scene.switch",
             Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
@@ -2788,6 +2817,8 @@ impl Action {
             | Action::YoutubeTransitionBroadcast { .. }
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewShow { .. }
+            | Action::PreviewRequestKeyframe { .. }
             | Action::PreviewReport { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
@@ -2846,6 +2877,8 @@ impl Action {
             )),
             Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewShow { .. }
+            | Action::PreviewRequestKeyframe { .. }
             | Action::PreviewReport { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
@@ -3054,6 +3087,8 @@ impl Action {
             | Action::AudioResetLoudness {}
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewShow { .. }
+            | Action::PreviewRequestKeyframe { .. }
             | Action::SceneSwitch { .. }
             | Action::SceneSwitchAndWatch { .. }
             | Action::StudioSetPreview { .. }

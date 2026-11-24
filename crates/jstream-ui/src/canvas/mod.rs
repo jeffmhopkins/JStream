@@ -475,11 +475,38 @@ pub fn Canvas() -> impl IntoView {
             }
         });
     };
-    // Another scene shown: close the stream and open one of it (CV-03), once what the
-    // canvas wants has held for `preview::SETTLE`. Should the selection run ahead of the
-    // program in a switch, `wanted` goes program, the scene, program again: settling
-    // keeps the program stream through it, and its transition plays without a stall
-    // (#1205).
+    // Moves the open stream to `next`'s scene on its channel (`preview.show`), so the
+    // decoder and the last picture carry on and no new stream opens. Should the engine
+    // refuse (the stream ended, or a switch on its way hasn't opened it yet), the same
+    // picture opens on the next channel.
+    let reshow = move |next: preview::Stream| {
+        stream.set_value(Some(next.clone()));
+        let Some(open) = session.and_then(|s| s.get()) else {
+            return;
+        };
+        let control = Rc::clone(&open.control);
+        spawn_local(async move {
+            use jstream_control::protocol::Call;
+            if control
+                .call(Call::Action {
+                    action: next.show(),
+                })
+                .await
+                .is_ok()
+            {
+                return;
+            }
+            // A newer switch has taken over.
+            if stream.try_get_value().flatten().as_ref() != Some(&next) {
+                return;
+            }
+            switch(next.clone(), next.on_next_channel());
+        });
+    };
+    // Another scene shown: the stream shows it (CV-03), once what the canvas wants has
+    // held for `preview::SETTLE`. Should the selection run ahead of the program in a
+    // switch, `wanted` goes program, the scene, program again: settling keeps the
+    // program stream through it, and its transition plays without a stall (#1205).
     let resubscribe = move |want: Option<SceneId>| {
         let Some(current) = stream.try_get_value().flatten() else {
             return;
@@ -490,7 +517,7 @@ pub fn Canvas() -> impl IntoView {
         let Some(next) = preview::settled_switch(&current, &want, &now) else {
             return;
         };
-        switch(current, next);
+        reshow(next);
     };
     // A new base rate (or the first collection, read after the stream opened): the same
     // picture at the new rate.
@@ -2739,7 +2766,21 @@ async fn run_preview(
             state.try_set(PreviewState::Unavailable(reason));
             continue;
         }
-        if let Err(reason) = screen.show(&header, &frame.payload)
+        let shown = screen.show(&header, &frame.payload);
+        if screen.wants_keyframe() {
+            // The decoder fell behind and skips to the next keyframe: ask for it now
+            // rather than wait up to two seconds for the stream's next. Not awaited, so
+            // the frames keep being read meanwhile.
+            if let Some(control) = control.upgrade() {
+                let ask = now.keyframe();
+                spawn_local(async move {
+                    let _asked = control
+                        .call(jstream_control::protocol::Call::Action { action: ask })
+                        .await;
+                });
+            }
+        }
+        if let Err(reason) = shown
             && !screen.h264_failed()
         {
             state.try_set(PreviewState::Unavailable(reason));

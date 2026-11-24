@@ -1890,10 +1890,12 @@ studio mode's program monitor beside the canvas (`ProgramMonitor`,
 [Design › Studio mode](#design)) and the Show panel's Next monitor
 ([Design › Shows](#design)). It opens its own `preview.subscribe` stream, sized for its
 box, on a channel tapped from the canvas's binary channel, and reports itself as the
-view `monitor:<label>` (`monitor:program`, `monitor:show-next`). Given a new scene it opens a
-stream of it. A still monitor asks for 1 fps and closes its stream once the first frame
-is drawn, keeping that picture, so it costs the engine one frame each time its scene
-changes.
+view `monitor:<label>` (`monitor:program`, `monitor:show-next`). Given a new scene, a
+moving monitor moves its open stream there on the same channel (`preview.show`), keeping
+its last picture until the new scene's first with no "Starting" placeholder, and opens a
+stream of the scene only if the engine refuses. A still monitor asks for 1 fps and closes its stream once the first frame
+is drawn, keeping that picture, so it opens a new stream, and costs the engine one frame,
+each time its scene changes.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::sized` from the shared collection and the sources' sizes, so it follows every state change the app
@@ -1937,14 +1939,22 @@ changes.
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
   decoder's queue passes 12 chunks (about a fifth of a second at 60 fps, so a busy
   main thread's short stall, which also holds chunks in that queue, doesn't freeze the
-  picture until the next keyframe; #1556); JPEG frames go through `createImageBitmap` one at a
+  picture until the next keyframe; #1556). That skip asks the engine for the keyframe at
+  once (`preview.request_keyframe`, sent without waiting for its answer), so it lasts a frame or
+  two rather than up to the stream's two seconds between keyframes; the monitors and
+  projectors ask the same way. JPEG frames go through `createImageBitmap` one at a
   time, and while one decodes only the newest that arrives waits, so the last picture
   is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
-  why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
-  channel number, so a late frame of the old stream is never drawn, once the change has
-  held for 250 ms (`preview::SETTLE`). A scene switch from this page shows its scene on
+  why, and the channel is still read for the taps. Showing another scene moves the open
+  stream to it on the same channel (`preview.show`, `Stream::showing`), once the change
+  has held for 250 ms (`preview::SETTLE`): the decoder and the last picture carry on, the
+  engine keeps the stream's encoder where nothing else shares it, and the new scene's
+  first picture is a keyframe, so no new stream opens and nothing flashes. A late frame of
+  the old scene may still be drawn just before it. Should the engine refuse (the stream
+  ended, or a switch to a new channel hasn't opened it yet), the canvas opens the scene's
+  stream on the next channel instead. A scene switch from this page shows its scene on
   program as the selection changes (`Studio::act`), so the canvas never wants the new
   scene on its own and keeps the program stream, with its transition, through the
   switch; settling still keeps it through any other moment the selection runs ahead of
@@ -2125,8 +2135,9 @@ is not a view of the show.
   "Starting…" (the view's first included) and each change to why it has no picture.
   A scene switch that keeps the last picture until the new stream draws (#1205) counts
   no placeholder.
-- `reopens`: every `preview.subscribe` for the view after its first, on a scene switch or
-  the JPEG fallback.
+- `reopens`: every `preview.subscribe` for the view after its first: a new size or rate,
+  a scene switch the engine wouldn't move the open stream for, or the JPEG fallback. A
+  scene switch that moves the stream (`preview.show`) is no reopen.
 
 <a id="build"></a>
 ## Build
