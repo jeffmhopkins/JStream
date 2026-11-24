@@ -225,7 +225,11 @@ pub fn describe(action: &Action, c: &Collection) -> String {
         Action::ShowGoTo {
             show_id,
             bookmark_id,
-        } => format!("Go to {} in {}", bookmark(show_id, bookmark_id), show(show_id)),
+        } => format!(
+            "Go to {} in {}",
+            bookmark(show_id, bookmark_id),
+            show(show_id)
+        ),
         Action::ShowGoToNumber { number } => format!("Go to bookmark {number}"),
         Action::OverlayShow { scene_id } => format!("Show overlay {}", scene(scene_id)),
         Action::OverlayHide { scene_id } => format!("Hide overlay {}", scene(scene_id)),
@@ -624,12 +628,10 @@ impl Pick {
             Pick::ShowBack => one(Action::ShowBack),
             Pick::ShowSkip => one(Action::ShowSkip),
             Pick::ShowGoTo => match target.split_once(BOOKMARK_SEPARATOR) {
-                Some((show_id, bookmark_id)) if !bookmark_id.is_empty() => {
-                    one(Action::ShowGoTo {
-                        show_id: ShowId::new(show_id),
-                        bookmark_id: bookmark_id.to_owned(),
-                    })
-                }
+                Some((show_id, bookmark_id)) if !bookmark_id.is_empty() => one(Action::ShowGoTo {
+                    show_id: ShowId::new(show_id),
+                    bookmark_id: bookmark_id.to_owned(),
+                }),
                 _ => Vec::new(),
             },
             Pick::ShowGoToNumber => match target.parse::<u8>() {
@@ -943,6 +945,83 @@ mod tests {
         for pick in Pick::ALL {
             assert_eq!(Pick::from_key(pick.key()), Some(pick));
         }
+    }
+
+    /// A collection with one show, "Evening", holding two bookmarks.
+    fn with_show() -> Collection {
+        let mut show = jstream_control::protocol::ShowInfo::new("evening");
+        show.name = "Evening".into();
+        let bookmark = |id: &str, name: &str, at_ms: u32| jstream_control::protocol::ShowBookmark {
+            bookmark_id: id.into(),
+            name: name.into(),
+            at_ms,
+            pausing: true,
+            preset_id: None,
+            continue_after_ms: None,
+            note: String::new(),
+        };
+        show.bookmarks = vec![bookmark("intro", "Intro", 0), bookmark("b2", "", 5000)];
+        Collection {
+            shows: vec![show],
+            ..Collection::default()
+        }
+    }
+
+    #[test]
+    fn show_picks_build_the_show_actions() {
+        let c = with_show();
+        assert_eq!(
+            Pick::ShowContinue.actions(&c, "", 0.0),
+            vec![Action::ShowContinue]
+        );
+        assert_eq!(
+            Pick::ShowPlay.actions(&c, "evening", 0.0),
+            vec![Action::ShowPlay {
+                show_id: ShowId::new("evening"),
+                bookmark_id: None,
+                rehearse: false,
+            }]
+        );
+        // A bookmark is picked as its show and its ID together.
+        let targets = targets(&c, Needs::Bookmark);
+        assert_eq!(
+            targets
+                .iter()
+                .map(|(_, label)| label.as_str())
+                .collect::<Vec<_>>(),
+            ["Evening › Intro", "Evening › b2"]
+        );
+        let go_to = Pick::ShowGoTo.actions(&c, &targets[1].0, 0.0);
+        assert_eq!(
+            go_to,
+            vec![Action::ShowGoTo {
+                show_id: ShowId::new("evening"),
+                bookmark_id: "b2".into(),
+            }]
+        );
+        assert_eq!(describe(&go_to[0], &c), "Go to b2 in Evening");
+        assert!(Pick::ShowGoTo.actions(&c, "evening", 0.0).is_empty());
+        // Bookmark 1 to 8, by order.
+        assert_eq!(targets_len(&c, Needs::BookmarkNumber), 8);
+        assert_eq!(
+            Pick::ShowGoToNumber.actions(&c, "3", 0.0),
+            vec![Action::ShowGoToNumber { number: 3 }]
+        );
+        assert!(Pick::ShowGoToNumber.actions(&c, "9", 0.0).is_empty());
+        assert_eq!(
+            describe(&Action::ShowGoToNumber { number: 3 }, &c),
+            "Go to bookmark 3"
+        );
+        assert_eq!(
+            Pick::OverlayToggle.actions(&c, "logo", 0.0),
+            vec![Action::OverlayToggle {
+                scene_id: SceneId::new("logo")
+            }]
+        );
+    }
+
+    fn targets_len(c: &Collection, needs: Needs) -> usize {
+        targets(c, needs).len()
     }
 
     #[test]
