@@ -291,6 +291,7 @@ mod tests {
                 midi: true,
                 ..entry("Bitwig", "192.168.1.5:9000")
             }],
+            live: None,
         };
         write(&file, &midi).expect("saved");
         assert!(
