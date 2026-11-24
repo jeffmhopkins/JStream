@@ -58,7 +58,9 @@ Contents:
   is a `ContextKey`, equal only for the same context: `wgpu::Device` equality compares
   IDs each wgpu instance numbers from zero, so it can't tell two instances' devices
   apart. A `GpuFrame` holds a
-  `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
+  `wgpu::Texture` (or, made with `GpuFrame::planar`, an NV12 frame's Y and CbCr
+  textures over one surface, `GpuFrame::planes`), its `VideoFrameInfo` and an
+  `Arc<dyn FrameSync>`; `GpuFrame::stage`
   stages its fence wait and signal around the engine's next submit, and
   `FrameSync::platform` lets the platform that made a hold recognise it (`None` by
   default). `GpuContext::submit_lock` is the context's `SubmitLock`, which orders the
@@ -391,10 +393,20 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.
-  - `encode_target(&GpuContext, FrameSize)` allocates an **NV12 texture shared with the
-    encoders** and returns it as a `GpuFrame` that render writes into.
+  - `encode_target(&GpuContext, FrameSize)` allocates an **NV12 frame shared with the
+    encoders** and returns it as a `GpuFrame` that render writes into. It is either one
+    native `NV12` texture (`GpuFrame::new`, Windows and Linux) or a **two-plane frame**
+    (`GpuFrame::planar`): an `R8Unorm` Y texture and a half-size `Rg8Unorm` CbCr
+    texture over the two planes of one platform surface, with one `FrameSync` hold.
+    That is the shape for a backend with no NV12 texture format: wgpu's Metal backend
+    has none, so a macOS target wraps an NV12 IOSurface's planes as two textures, as
+    spike S6 did. Both shapes are render targets (`RENDER_ATTACHMENT`), and
+    `jstream-render` picks the plane views or the plane textures
+    (`Nv12Target::gpu_frame`).
 - **`GpuFrame`** is a new `VideoSurface::Gpu` variant. It holds:
-  - the `wgpu::Texture`;
+  - the `wgpu::Texture`, or for a two-plane frame its Y and CbCr textures
+    (`GpuFrame::planes`; `texture()` is then the Y plane). Only encode targets are
+    two-plane, and an encoder only ever gets its own platform's targets;
   - the frame's `VideoFrameInfo` (size, format, colour, `pts`), so `VideoSurface::info`
     works for both variants;
   - a **`FrameSync`** (`Arc<dyn FrameSync>`): the platform's hold on the shared fence for
@@ -428,7 +440,7 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   another platform, or from another `GpuContext`, is `Unsupported`. The virtual camera
   doesn't take them yet.
 - **Equality and `Debug`:** two `GpuFrame`s are equal when they have the same texture
-  (wgpu's resource identity), the same `FrameSync` hold (the same allocation, compared by
+  (wgpu's resource identity; both planes for a two-plane frame), the same `FrameSync` hold (the same allocation, compared by
   data pointer with `ptr::addr_eq`, so two vtables for one hold don't matter) and equal
   `VideoFrameInfo`. `FrameSync` itself has no equality; it only needs `Debug`. So
   `VideoSurface` keeps its derives.

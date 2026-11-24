@@ -209,8 +209,12 @@ pub trait GpuInterop: Send + Sync {
     /// driver refuses.
     fn open_device(&self) -> Result<GpuContext, PlatformError>;
 
-    /// Allocates an NV12 texture of `size` that the platform's encoders and virtual
-    /// camera can read, as a frame the engine writes into. Each use is staged with
+    /// Allocates an NV12 frame of `size` that the platform's encoders and virtual
+    /// camera can read, as a frame the engine writes into. It is either one native
+    /// `NV12` texture ([`GpuFrame::new`]) or a two-plane frame ([`GpuFrame::planar`]): an
+    /// `R8Unorm` Y texture and a half-size `Rg8Unorm` CbCr texture over the two planes
+    /// of one platform surface, for a backend with no NV12 texture format (wgpu's Metal
+    /// backend). Every texture has `RENDER_ATTACHMENT`. Each use is staged with
     /// [`GpuFrame::stage`]. The frame's `pts` is a placeholder; the engine sets the real
     /// one with [`GpuFrame::with_pts`] before handing it on.
     ///
@@ -246,7 +250,8 @@ pub trait FrameSync: Send + Sync + fmt::Debug {
     /// them, so on a context's queue the caller holds the context's [`SubmitLock`] from
     /// the first stage through the submit.
     ///
-    /// That submit must end by transitioning the texture to `wgpu::TextureUses::PRESENT`
+    /// That submit must end by transitioning the texture (both plane textures of a
+    /// two-plane frame) to `wgpu::TextureUses::PRESENT`
     /// (`CommandEncoder::transition_resources`): on D3D12 that is the `COMMON` state the
     /// platform's other APIs expect a shared texture in.
     ///
@@ -267,14 +272,19 @@ pub trait FrameSync: Send + Sync + fmt::Debug {
 /// A frame in a texture shared with the platform: what capture delivers on the GPU path,
 /// and what the encoders and virtual camera take (`VideoSurface::Gpu`).
 ///
-/// Clones share the texture and the [`FrameSync`] hold. Two frames are equal when they
-/// are the same texture and hold, with the same info.
+/// A frame is one texture ([`new`](Self::new)), or an NV12 frame as two plane textures
+/// over one platform surface ([`planar`](Self::planar)), which only encode targets are.
+///
+/// Clones share the textures and the [`FrameSync`] hold. Two frames are equal when they
+/// are the same textures (both planes of a two-plane frame) and hold, with the same info.
 #[derive(Clone, Debug)]
 pub struct GpuFrame {
-    // The hold drops before the texture: the texture may keep the device (and its
-    // driver) alive for the hold's raw objects.
+    // The hold drops before the textures: they may keep the device (and its driver)
+    // alive for the hold's raw objects.
     sync: Arc<dyn FrameSync>,
     texture: wgpu::Texture,
+    /// The CbCr plane of a two-plane frame, whose Y plane is `texture`.
+    chroma: Option<wgpu::Texture>,
     info: VideoFrameInfo,
 }
 
@@ -284,13 +294,40 @@ impl GpuFrame {
         Self {
             sync,
             texture,
+            chroma: None,
             info,
         }
     }
 
-    /// The texture.
+    /// A two-plane NV12 frame: `y`, the Y plane (`R8Unorm`, the frame's size), and `uv`,
+    /// the interleaved CbCr plane (`Rg8Unorm`, half the size on each side), two textures
+    /// over the planes of one platform surface with the one `sync` hold. This is an
+    /// encode target on a backend with no NV12 texture format (wgpu's Metal backend);
+    /// `jstream-render` checks the formats and sizes when it renders into one.
+    pub fn planar(
+        y: wgpu::Texture,
+        uv: wgpu::Texture,
+        info: VideoFrameInfo,
+        sync: Arc<dyn FrameSync>,
+    ) -> Self {
+        Self {
+            sync,
+            texture: y,
+            chroma: Some(uv),
+            info,
+        }
+    }
+
+    /// The texture; for a two-plane frame, its Y plane. Code that may be given a
+    /// two-plane frame asks [`planes`](Self::planes) first.
     pub fn texture(&self) -> &wgpu::Texture {
         &self.texture
+    }
+
+    /// The Y and CbCr textures of a two-plane frame ([`planar`](Self::planar)); `None`
+    /// for a frame in one texture.
+    pub fn planes(&self) -> Option<(&wgpu::Texture, &wgpu::Texture)> {
+        self.chroma.as_ref().map(|uv| (&self.texture, uv))
     }
 
     /// Size, pixel format, colour and presentation time.
@@ -322,6 +359,7 @@ impl GpuFrame {
 impl PartialEq for GpuFrame {
     fn eq(&self, other: &Self) -> bool {
         self.texture == other.texture
+            && self.chroma == other.chroma
             // The data pointers only: the same hold behind two vtables is still one hold.
             && std::ptr::addr_eq(Arc::as_ptr(&self.sync), Arc::as_ptr(&other.sync))
             && self.info == other.info

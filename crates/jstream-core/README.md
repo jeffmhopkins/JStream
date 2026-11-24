@@ -908,7 +908,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   fallback, and failing at
   once when the context's device is lost, on a software device that stands in for the
   platform's (`src/tests/gpu_capture.rs`; the last four skip without
-  `TEXTURE_FORMAT_NV12`), an effect-pack filter that runs too long on the GPU being
+  `TEXTURE_FORMAT_NV12`), the same output getting two-plane encode targets
+  (`GpuFrame::planar`, an `R8Unorm` and an `Rg8Unorm` texture as on Metal) whose planes
+  then hold the program's colour (the same file), an effect-pack filter that runs too long on the GPU being
   quarantined with no device loss (the same file; it skips on a GPU without timestamp
   queries, and draws 64 times the pixels on a hardware GPU, #1723), a page's
   GPU frame drawing only on its own context in
@@ -4991,6 +4993,8 @@ read or dropped. When frames still hold every target (the encoder has fallen beh
 the tick's frame is dropped for that mix's GPU sessions and counted in
 `encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
+A target is a native NV12 texture or a two-plane frame (`GpuFrame::planar`, on a
+backend with no NV12 format), and `Nv12Target::gpu_frame` picks the planes to write.
 Nothing else would hold these composites back: an encoder lets go of a target once its
 copy is queued, and a full session queue drops a frame already drawn. So the draw
 counts each tick's conversions out, and back in when wgpu reports their submit done
