@@ -12,9 +12,9 @@ A project that tours what JStream does, run by a show
 ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)). Real screenshots of
 the app sit in scenes as image sources, and the show loads keyframes that move the scene
 camera onto one part of a screenshot at a time, with a spotlight and a short callout. Three
-chapters are the feature itself rather than pictures of it: a 3D scene whose camera keyframes
-pull focus from card to card, the Keyframes chapter, which moves one scene between three of
-its keyframes, and the Motion chapter, which runs five motion modifiers.
+chapters are the feature itself rather than pictures of it: What you make is a live broadcast
+scene, the Keyframes chapter moves that scene's feeds between three keyframes, and the Motion
+chapter runs five motion modifiers.
 The project doubles as a fixture for the show timeline: it uses every part of a show at
 least once.
 
@@ -63,18 +63,18 @@ pre-release. Open the Show panel, pick **Feature tour** and press Play, or press
 | 0:00 | Pre-show | a loop that Continue leaves at once; a non-pausing bookmark inside it |
 | 0:20 | Welcome | a slow fade on the clip; a sequence cue plays the title build; a camera keyframe on a slow drift; an audio clip |
 | 0:32 | The studio | four camera keyframes over a screenshot, each with a spotlight and a callout |
-| 1:01 | 3D scenes | a 3D scene: three camera keyframes move the camera and pull its depth of field onto one card at a time; a bookmark that plays through |
-| 1:24 | Keyframes | one flat scene and its three layout keyframes, loaded with a Move; one item has its own delay, and one is another scene (the feed's lower third), cropped |
-| 1:50 | Motion | event cues fire an impulse modifier; an audio clip feeds the audio modifier |
-| 2:06 | Sequences & channels | camera keyframes over the Sequence panel |
-| 2:29 | Shows | a stinger on the clip and on the bookmark |
-| 3:09 | 3D cockpit | camera keyframes over two cockpit renders and the cockpit's DAW screens |
-| 3:38 | DAW & web pages | a sequence cue plays a card build |
-| 3:54 | Keys & MIDI | a bookmark that continues by itself after 12 s |
-| 4:12 | Effects | a bookmark that plays through |
-| 4:30 | Plugins, cameras and going live | camera keyframes over screenshots and panels |
-| 5:12 | Under the hood | a sequence cue plays a card build |
-| 5:26 | Thanks | a loop that finishes its pass on Continue; a lane drives the Glow channel; the end goes to Pre-show |
+| 1:01 | What you make | a live broadcast scene of built-in sources, with a nested scene as its lower third; a bookmark that plays through |
+| 1:13 | Keyframes | one flat scene and its three layout keyframes, loaded with a Move; one item has its own delay, and one is another scene (the feed's lower third), cropped |
+| 1:38 | Motion | event cues fire an impulse modifier; an audio clip feeds the audio modifier |
+| 1:54 | Sequences & channels | camera keyframes over the Sequence panel |
+| 2:18 | Shows | a stinger on the clip and on the bookmark |
+| 2:58 | 3D cockpit | camera keyframes over two cockpit renders and the cockpit's DAW screens |
+| 3:27 | DAW & web pages | a sequence cue plays a card build |
+| 3:43 | Keys & MIDI | a bookmark that continues by itself after 12 s |
+| 4:01 | Effects | a bookmark that plays through |
+| 4:19 | Plugins, cameras and going live | camera keyframes over screenshots and panels |
+| 5:00 | Under the hood | a sequence cue plays a card build |
+| 5:14 | Thanks | a loop that finishes its pass on Continue; a lane drives the Glow channel; the end goes to Pre-show |
 
 Overlay tracks put a lower third over the opening of most chapters, one over the title,
 and a "Rendered in JStream" status tag over the whole tour, with fades. A second show,
@@ -99,8 +99,8 @@ and IBM Plex Sans and Mono, which are in `fonts/` under the SIL Open Font Licens
 The three film stills in `media/tos-*.jpg` are from *Tears of Steel*, (CC) Blender
 Foundation, [mango.blender.org](https://mango.blender.org), licensed under
 [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). They are cut to 16:9 in the
-scenes with item crops, and otherwise unchanged. The tour's 3D scene and its Keyframes
-chapter show them, and the bookmark notes name the film.
+scenes with item crops, and otherwise unchanged. The What you make and Keyframes
+chapters show them, and the bookmark notes name the film.
 
 <a id="changing"></a>
 ## Changing it

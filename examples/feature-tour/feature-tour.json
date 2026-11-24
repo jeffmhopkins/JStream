@@ -1631,30 +1631,14 @@
     },
     {
       "id": "s_make",
-      "name": "Tour 3 · Depth of field",
+      "name": "Tour 3 · What you make",
       "folder": "f_tour",
       "labels": [
         "tour"
       ],
-      "camera": {
-        "position": {
-          "x": 933.6969,
-          "y": 217.96541,
-          "z": 1640.692
-        },
-        "target": {
-          "x": 620.0,
-          "y": 330.0,
-          "z": -600.0
-        },
-        "fov_deg": 45.0,
-        "roll_deg": 0.0,
-        "focus_px": 1662.0,
-        "blur_px": 10.0
-      },
       "items": [
         {
-          "id": "mk_i_bd",
+          "id": "mf_i_bd",
           "source_id": "bd",
           "geometry": {
             "center": {
@@ -1662,14 +1646,14 @@
               "y": 540.0
             },
             "size": {
-              "width": 7680.0,
-              "height": 4320.0
+              "width": 1920.0,
+              "height": 1080.0
             },
             "fit_mode": "fill",
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": -3200.0
+            "depth_px": 0.0
           },
           "crop": {
             "left": 0,
@@ -1680,22 +1664,306 @@
           "visible": true
         },
         {
-          "id": "mk_i_sky",
-          "source_id": "img_sky",
+          "id": "mf_i_head",
+          "source_id": "mf_head",
           "geometry": {
             "center": {
-              "x": -560.0,
-              "y": -260.0
+              "x": 168.44,
+              "y": 72.0
             },
             "size": {
-              "width": 1500.0,
-              "height": 843.75
+              "width": 208.88,
+              "height": 32.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_live",
+          "source_id": "mf_live",
+          "geometry": {
+            "center": {
+              "x": 370.0,
+              "y": 72.0
+            },
+            "size": {
+              "width": 92.0,
+              "height": 34.0
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": -1500.0
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_live_t",
+          "source_id": "mf_live_t",
+          "geometry": {
+            "center": {
+              "x": 370.0,
+              "y": 72.0
+            },
+            "size": {
+              "width": 51.19,
+              "height": 24.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_clock",
+          "source_id": "mf_clock",
+          "geometry": {
+            "center": {
+              "x": 1766.0,
+              "y": 72.0
+            },
+            "size": {
+              "width": 180.0,
+              "height": 36.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_robot",
+          "source_id": "img_robot",
+          "geometry": {
+            "center": {
+              "x": 664.0,
+              "y": 497.5
+            },
+            "size": {
+              "width": 1200.0,
+              "height": 675.0
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 210,
+            "top": 0,
+            "right": 288,
+            "bottom": 0
+          },
+          "visible": true,
+          "effects": [
+            {
+              "id": "round",
+              "kind": "rounded_corners",
+              "kind_version": 1,
+              "settings": {
+                "border_color": "#2e333bff",
+                "border_width": 1.0,
+                "radius": 10.0
+              }
+            }
+          ]
+        },
+        {
+          "id": "mf_i_tagbg_robot",
+          "source_id": "mf_tagbg_robot",
+          "geometry": {
+            "center": {
+              "x": 227.5,
+              "y": 193.0
+            },
+            "size": {
+              "width": 295.0,
+              "height": 34.0
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_tag_robot",
+          "source_id": "mf_tag_robot",
+          "geometry": {
+            "center": {
+              "x": 213.57,
+              "y": 193.0
+            },
+            "size": {
+              "width": 243.14,
+              "height": 24.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_lab",
+          "source_id": "img_lab",
+          "geometry": {
+            "center": {
+              "x": 1576.0,
+              "y": 317.5
+            },
+            "size": {
+              "width": 560.0,
+              "height": 315.0
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 210,
+            "top": 0,
+            "right": 288,
+            "bottom": 0
+          },
+          "visible": true,
+          "effects": [
+            {
+              "id": "round",
+              "kind": "rounded_corners",
+              "kind_version": 1,
+              "settings": {
+                "border_color": "#2e333bff",
+                "border_width": 1.0,
+                "radius": 10.0
+              }
+            }
+          ]
+        },
+        {
+          "id": "mf_i_tagbg_lab",
+          "source_id": "mf_tagbg_lab",
+          "geometry": {
+            "center": {
+              "x": 1444.9,
+              "y": 193.0
+            },
+            "size": {
+              "width": 265.8,
+              "height": 34.0
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_tag_lab",
+          "source_id": "mf_tag_lab",
+          "geometry": {
+            "center": {
+              "x": 1432.77,
+              "y": 193.0
+            },
+            "size": {
+              "width": 217.55,
+              "height": 24.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mf_i_sky",
+          "source_id": "img_sky",
+          "geometry": {
+            "center": {
+              "x": 1576.0,
+              "y": 664.5
+            },
+            "size": {
+              "width": 560.0,
+              "height": 315.0
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
           },
           "crop": {
             "left": 100,
@@ -1710,136 +1978,24 @@
               "kind": "rounded_corners",
               "kind_version": 1,
               "settings": {
-                "border_color": "#ffffff12",
+                "border_color": "#2e333bff",
                 "border_width": 1.0,
-                "radius": 14.0
-              }
-            },
-            {
-              "id": "shadow",
-              "kind": "drop_shadow",
-              "kind_version": 1,
-              "settings": {
-                "blur": 100.0,
-                "color": "#000000b3",
-                "offset_x": 0.0,
-                "offset_y": 40.0
+                "radius": 10.0
               }
             }
           ]
         },
         {
-          "id": "mk_i_tag_sky",
-          "source_id": "mk_tag_sky",
+          "id": "mf_i_tagbg_sky",
+          "source_id": "mf_tagbg_sky",
           "geometry": {
             "center": {
-              "x": -1156.77,
-              "y": -711.875
+              "x": 1444.9,
+              "y": 540.0
             },
             "size": {
-              "width": 258.45,
-              "height": 30.0
-            },
-            "fit_mode": "fit",
-            "rotation_deg": 0.0,
-            "tilt_deg": 0.0,
-            "turn_deg": 0.0,
-            "depth_px": -1500.0
-          },
-          "crop": {
-            "left": 0,
-            "top": 0,
-            "right": 0,
-            "bottom": 0
-          },
-          "visible": true
-        },
-        {
-          "id": "mk_i_lab",
-          "source_id": "img_lab",
-          "geometry": {
-            "center": {
-              "x": 1720.0,
-              "y": 300.0
-            },
-            "size": {
-              "width": 960.0,
-              "height": 540.0
-            },
-            "fit_mode": "stretch",
-            "rotation_deg": 0.0,
-            "tilt_deg": 0.0,
-            "turn_deg": 0.0,
-            "depth_px": -700.0
-          },
-          "crop": {
-            "left": 210,
-            "top": 0,
-            "right": 288,
-            "bottom": 0
-          },
-          "visible": true,
-          "effects": [
-            {
-              "id": "round",
-              "kind": "rounded_corners",
-              "kind_version": 1,
-              "settings": {
-                "border_color": "#ffffff12",
-                "border_width": 1.0,
-                "radius": 14.0
-              }
-            },
-            {
-              "id": "shadow",
-              "kind": "drop_shadow",
-              "kind_version": 1,
-              "settings": {
-                "blur": 100.0,
-                "color": "#000000b3",
-                "offset_x": 0.0,
-                "offset_y": 40.0
-              }
-            }
-          ]
-        },
-        {
-          "id": "mk_i_tag_lab",
-          "source_id": "mk_tag_lab",
-          "geometry": {
-            "center": {
-              "x": 1393.23,
-              "y": 0.0
-            },
-            "size": {
-              "width": 258.45,
-              "height": 30.0
-            },
-            "fit_mode": "fit",
-            "rotation_deg": 0.0,
-            "tilt_deg": 0.0,
-            "turn_deg": 0.0,
-            "depth_px": -700.0
-          },
-          "crop": {
-            "left": 0,
-            "top": 0,
-            "right": 0,
-            "bottom": 0
-          },
-          "visible": true
-        },
-        {
-          "id": "mk_i_robot",
-          "source_id": "img_robot",
-          "geometry": {
-            "center": {
-              "x": 760.0,
-              "y": 520.0
-            },
-            "size": {
-              "width": 1100.0,
-              "height": 618.75
+              "width": 265.8,
+              "height": 34.0
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -1848,47 +2004,24 @@
             "depth_px": 0.0
           },
           "crop": {
-            "left": 210,
+            "left": 0,
             "top": 0,
-            "right": 288,
+            "right": 0,
             "bottom": 0
           },
-          "visible": true,
-          "effects": [
-            {
-              "id": "round",
-              "kind": "rounded_corners",
-              "kind_version": 1,
-              "settings": {
-                "border_color": "#ffffff12",
-                "border_width": 1.0,
-                "radius": 14.0
-              }
-            },
-            {
-              "id": "shadow",
-              "kind": "drop_shadow",
-              "kind_version": 1,
-              "settings": {
-                "blur": 100.0,
-                "color": "#000000b3",
-                "offset_x": 0.0,
-                "offset_y": 40.0
-              }
-            }
-          ]
+          "visible": true
         },
         {
-          "id": "mk_i_tag_robot",
-          "source_id": "mk_tag_robot",
+          "id": "mf_i_tag_sky",
+          "source_id": "mf_tag_sky",
           "geometry": {
             "center": {
-              "x": 378.43,
-              "y": 180.625
+              "x": 1432.77,
+              "y": 540.0
             },
             "size": {
-              "width": 288.86,
-              "height": 30.0
+              "width": 217.55,
+              "height": 24.0
             },
             "fit_mode": "fit",
             "rotation_deg": 0.0,
@@ -1905,12 +2038,12 @@
           "visible": true
         },
         {
-          "id": "mk_i_lt",
+          "id": "mf_i_lt",
           "source_id": "src_feed_lt",
           "geometry": {
             "center": {
-              "x": 990.0,
-              "y": 819.375
+              "x": 496.0,
+              "y": 743.0
             },
             "size": {
               "width": 800.0,
@@ -1920,7 +2053,7 @@
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 160.0
+            "depth_px": 0.0
           },
           "crop": {
             "left": 64,
@@ -1929,74 +2062,34 @@
             "bottom": 120
           },
           "visible": true
+        },
+        {
+          "id": "mf_i_made",
+          "source_id": "mf_made",
+          "geometry": {
+            "center": {
+              "x": 1576.0,
+              "y": 880.0
+            },
+            "size": {
+              "width": 560.0,
+              "height": 60.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
         }
       ]
-    },
-    {
-      "id": "s_make_k0",
-      "name": "Main feed in focus",
-      "camera": {
-        "position": {
-          "x": 878.8246,
-          "y": 484.35263,
-          "z": 1188.2457
-        },
-        "target": {
-          "x": 760.0,
-          "y": 520.0,
-          "z": 0.0
-        },
-        "fov_deg": 45.0,
-        "roll_deg": 0.0,
-        "focus_px": 1195.0,
-        "blur_px": 16.0
-      },
-      "variant_of": "s_make",
-      "items": []
-    },
-    {
-      "id": "s_make_k1",
-      "name": "Lab cam in focus",
-      "camera": {
-        "position": {
-          "x": 1533.2756,
-          "y": 316.97495,
-          "z": 148.74695
-        },
-        "target": {
-          "x": 1720.0,
-          "y": 300.0,
-          "z": -700.0
-        },
-        "fov_deg": 45.0,
-        "roll_deg": 0.0,
-        "focus_px": 869.0,
-        "blur_px": 16.0
-      },
-      "variant_of": "s_make",
-      "items": []
-    },
-    {
-      "id": "s_make_k2",
-      "name": "Sky cam in focus",
-      "camera": {
-        "position": {
-          "x": -340.0048,
-          "y": -186.66826,
-          "z": -277.80438
-        },
-        "target": {
-          "x": -560.0,
-          "y": -260.0,
-          "z": -1500.0
-        },
-        "fov_deg": 45.0,
-        "roll_deg": 0.0,
-        "focus_px": 1244.0,
-        "blur_px": 16.0
-      },
-      "variant_of": "s_make",
-      "items": []
     },
     {
       "id": "s_kf",
@@ -12616,7 +12709,7 @@
     },
     {
       "id": "cap_make",
-      "name": "Lower third · Depth of field",
+      "name": "Lower third · A broadcast, built in",
       "folder": "f_overlays",
       "items": [
         {
@@ -12624,11 +12717,11 @@
           "source_id": "cap_make_plate",
           "geometry": {
             "center": {
-              "x": 287.8,
+              "x": 366.2,
               "y": 924.3
             },
             "size": {
-              "width": 383.6,
+              "width": 540.4,
               "height": 119.4
             },
             "fit_mode": "stretch",
@@ -12715,11 +12808,11 @@
           "source_id": "cap_make_eb",
           "geometry": {
             "center": {
-              "x": 221.42,
+              "x": 251.38,
               "y": 896.6
             },
             "size": {
-              "width": 118.05,
+              "width": 177.97,
               "height": 24.0
             },
             "fit_mode": "fit",
@@ -12741,11 +12834,11 @@
           "source_id": "cap_make_t",
           "geometry": {
             "center": {
-              "x": 247.15,
+              "x": 308.3,
               "y": 939.0
             },
             "size": {
-              "width": 250.3,
+              "width": 372.61,
               "height": 52.0
             },
             "fit_mode": "fit",
@@ -15010,7 +15103,7 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 18.0,
-        "text": "3D SCENES",
+        "text": "WHAT YOU MAKE",
         "wrap_width": 0
       }
     },
@@ -15063,7 +15156,7 @@
         "height": 119,
         "radius": 10.0,
         "shape": "rectangle",
-        "width": 384
+        "width": 540
       }
     },
     {
@@ -15093,7 +15186,7 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 40.0,
-        "text": "Depth of field",
+        "text": "A broadcast, built in",
         "wrap_width": 0
       }
     },
@@ -17475,7 +17568,157 @@
       }
     },
     {
-      "id": "mk_tag_lab",
+      "id": "mf_clock",
+      "name": "What you make: clock",
+      "kind": {
+        "type": "builtin",
+        "kind": "timer"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "right",
+        "background": "#00000000",
+        "clock_format": "24h",
+        "color": "#c9ced6ff",
+        "duration": 300,
+        "end_text": "",
+        "face": "regular",
+        "font": {
+          "path": "fonts/IBMPlexMono-Regular-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "format": "auto",
+        "letter_spacing": 1.0,
+        "mode": "clock",
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "restart": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 26.0,
+        "time_zone": ""
+      }
+    },
+    {
+      "id": "mf_head",
+      "name": "What you make: header",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "left",
+        "background": "#00000000",
+        "color": "#8ab4ffff",
+        "face": "bold",
+        "font": {
+          "path": "fonts/IBMPlexMono-SemiBold-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 3.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 24.0,
+        "text": "MISSION FEED",
+        "wrap_width": 0
+      }
+    },
+    {
+      "id": "mf_live",
+      "name": "What you make: live pill",
+      "kind": {
+        "type": "builtin",
+        "kind": "shape"
+      },
+      "kind_version": 1,
+      "settings": {
+        "angle": 90.0,
+        "border_color": "#ffffffff",
+        "border_width": 0.0,
+        "color": "#d23c3cff",
+        "color2": "#000000ff",
+        "fill": "solid",
+        "height": 34,
+        "radius": 17.0,
+        "shape": "rectangle",
+        "width": 92
+      }
+    },
+    {
+      "id": "mf_live_t",
+      "name": "What you make: live",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "center",
+        "background": "#00000000",
+        "color": "#e6e8ebff",
+        "face": "bold",
+        "font": {
+          "path": "fonts/IBMPlexMono-SemiBold-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 2.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 18.0,
+        "text": "LIVE",
+        "wrap_width": 0
+      }
+    },
+    {
+      "id": "mf_made",
+      "name": "What you make: made of",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "left",
+        "background": "#00000000",
+        "color": "#9aa1acff",
+        "face": "regular",
+        "font": {
+          "path": "fonts/IBMPlexSans-Regular-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 0.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 22.0,
+        "text": "Image, text, shape, timer and scene sources. No browser source.",
+        "wrap_width": 560
+      }
+    },
+    {
+      "id": "mf_tag_lab",
       "name": "What you make: Lab cam label",
       "kind": {
         "type": "builtin",
@@ -17500,13 +17743,13 @@
         "shadow_color": "#00000000",
         "shadow_x": 0.0,
         "shadow_y": 0.0,
-        "size": 22.0,
+        "size": 18.0,
         "text": "CAM 2  ·  LAB CAM",
         "wrap_width": 0
       }
     },
     {
-      "id": "mk_tag_robot",
+      "id": "mf_tag_robot",
       "name": "What you make: Main feed label",
       "kind": {
         "type": "builtin",
@@ -17531,13 +17774,13 @@
         "shadow_color": "#00000000",
         "shadow_x": 0.0,
         "shadow_y": 0.0,
-        "size": 22.0,
+        "size": 18.0,
         "text": "CAM 1  ·  MAIN FEED",
         "wrap_width": 0
       }
     },
     {
-      "id": "mk_tag_sky",
+      "id": "mf_tag_sky",
       "name": "What you make: Sky cam label",
       "kind": {
         "type": "builtin",
@@ -17562,9 +17805,72 @@
         "shadow_color": "#00000000",
         "shadow_x": 0.0,
         "shadow_y": 0.0,
-        "size": 22.0,
+        "size": 18.0,
         "text": "CAM 3  ·  SKY CAM",
         "wrap_width": 0
+      }
+    },
+    {
+      "id": "mf_tagbg_lab",
+      "name": "What you make: Lab cam label plate",
+      "kind": {
+        "type": "builtin",
+        "kind": "shape"
+      },
+      "kind_version": 1,
+      "settings": {
+        "angle": 90.0,
+        "border_color": "#ffffffff",
+        "border_width": 0.0,
+        "color": "#0506089e",
+        "color2": "#000000ff",
+        "fill": "solid",
+        "height": 34,
+        "radius": 6.0,
+        "shape": "rectangle",
+        "width": 266
+      }
+    },
+    {
+      "id": "mf_tagbg_robot",
+      "name": "What you make: Main feed label plate",
+      "kind": {
+        "type": "builtin",
+        "kind": "shape"
+      },
+      "kind_version": 1,
+      "settings": {
+        "angle": 90.0,
+        "border_color": "#ffffffff",
+        "border_width": 0.0,
+        "color": "#0506089e",
+        "color2": "#000000ff",
+        "fill": "solid",
+        "height": 34,
+        "radius": 6.0,
+        "shape": "rectangle",
+        "width": 295
+      }
+    },
+    {
+      "id": "mf_tagbg_sky",
+      "name": "What you make: Sky cam label plate",
+      "kind": {
+        "type": "builtin",
+        "kind": "shape"
+      },
+      "kind_version": 1,
+      "settings": {
+        "angle": 90.0,
+        "border_color": "#ffffffff",
+        "border_width": 0.0,
+        "color": "#0506089e",
+        "color2": "#000000ff",
+        "fill": "solid",
+        "height": 34,
+        "radius": 6.0,
+        "shape": "rectangle",
+        "width": 266
       }
     },
     {
@@ -21935,7 +22241,7 @@
         {
           "clip_id": "c_make",
           "scene_id": "s_make",
-          "length_ms": 23500,
+          "length_ms": 12000,
           "preset_id": "fade"
         },
         {
@@ -22035,7 +22341,7 @@
             {
               "clip_id": "cap_sequences",
               "scene_id": "cap_sequences",
-              "start_ms": 126300,
+              "start_ms": 114800,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -22043,7 +22349,7 @@
             {
               "clip_id": "cap_shows",
               "scene_id": "cap_shows",
-              "start_ms": 149800,
+              "start_ms": 138300,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -22051,7 +22357,7 @@
             {
               "clip_id": "cap_cockpit",
               "scene_id": "cap_cockpit",
-              "start_ms": 189800,
+              "start_ms": 178300,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -22059,7 +22365,7 @@
             {
               "clip_id": "cap_keys",
               "scene_id": "cap_keys",
-              "start_ms": 234800,
+              "start_ms": 223300,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -22067,7 +22373,7 @@
             {
               "clip_id": "cap_effects",
               "scene_id": "cap_effects",
-              "start_ms": 252800,
+              "start_ms": 241300,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -22075,7 +22381,7 @@
             {
               "clip_id": "cap_plugins",
               "scene_id": "cap_plugins",
-              "start_ms": 270800,
+              "start_ms": 259300,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -22083,7 +22389,7 @@
             {
               "clip_id": "cap_cameras",
               "scene_id": "cap_cameras",
-              "start_ms": 283300,
+              "start_ms": 271800,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -22112,7 +22418,7 @@
               "clip_id": "bug",
               "scene_id": "s_bug",
               "start_ms": 32000,
-              "length_ms": 294000,
+              "length_ms": 282500,
               "fade_in_ms": 600,
               "fade_out_ms": 300
             }
@@ -22156,216 +22462,193 @@
           "preset_id": "glide"
         },
         {
-          "marker_id": "k_make_0",
-          "at_ms": 65000,
-          "keyframe_id": "s_make_k0",
-          "preset_id": "glide"
-        },
-        {
-          "marker_id": "k_make_1",
-          "at_ms": 70500,
-          "keyframe_id": "s_make_k1",
-          "preset_id": "glide"
-        },
-        {
-          "marker_id": "k_make_2",
-          "at_ms": 76000,
-          "keyframe_id": "s_make_k2",
-          "preset_id": "glide"
-        },
-        {
-          "marker_id": "k_make_home",
-          "at_ms": 81500,
-          "preset_id": "glide"
-        },
-        {
           "marker_id": "k_keyframes_0",
-          "at_ms": 88500,
+          "at_ms": 77000,
           "keyframe_id": "s_kf_k0",
           "preset_id": "layout"
         },
         {
           "marker_id": "k_keyframes_1",
-          "at_ms": 94000,
+          "at_ms": 82500,
           "keyframe_id": "s_kf_k1",
           "preset_id": "layout"
         },
         {
           "marker_id": "k_keyframes_2",
-          "at_ms": 99500,
+          "at_ms": 88000,
           "keyframe_id": "s_kf_k2",
           "preset_id": "layout"
         },
         {
           "marker_id": "k_keyframes_home",
-          "at_ms": 105000,
+          "at_ms": 93500,
           "preset_id": "layout"
         },
         {
           "marker_id": "k_sequences_0",
-          "at_ms": 130000,
+          "at_ms": 118500,
           "keyframe_id": "s_seq_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_sequences_1",
-          "at_ms": 135500,
+          "at_ms": 124000,
           "keyframe_id": "s_seq_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_sequences_2",
-          "at_ms": 141000,
+          "at_ms": 129500,
           "keyframe_id": "s_seq_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_sequences_home",
-          "at_ms": 146500,
+          "at_ms": 135000,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_0",
-          "at_ms": 153500,
+          "at_ms": 142000,
           "keyframe_id": "s_show_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_1",
-          "at_ms": 159000,
+          "at_ms": 147500,
           "keyframe_id": "s_show_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_2",
-          "at_ms": 164500,
+          "at_ms": 153000,
           "keyframe_id": "s_show_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_3",
-          "at_ms": 170000,
+          "at_ms": 158500,
           "keyframe_id": "s_show_k3",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_4",
-          "at_ms": 175500,
+          "at_ms": 164000,
           "keyframe_id": "s_show_k4",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_5",
-          "at_ms": 181000,
+          "at_ms": 169500,
           "keyframe_id": "s_show_k5",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_home",
-          "at_ms": 186500,
+          "at_ms": 175000,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_0",
-          "at_ms": 193500,
+          "at_ms": 182000,
           "keyframe_id": "s_3d_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_1",
-          "at_ms": 199000,
+          "at_ms": 187500,
           "keyframe_id": "s_3d_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_2",
-          "at_ms": 204500,
+          "at_ms": 193000,
           "keyframe_id": "s_3d_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_3",
-          "at_ms": 210000,
+          "at_ms": 198500,
           "keyframe_id": "s_3d_k3",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_home",
-          "at_ms": 215500,
+          "at_ms": 204000,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_keys_0",
-          "at_ms": 238500,
+          "at_ms": 227000,
           "keyframe_id": "s_keys_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_keys_1",
-          "at_ms": 244000,
+          "at_ms": 232500,
           "keyframe_id": "s_keys_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_keys_home",
-          "at_ms": 249500,
+          "at_ms": 238000,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_effects_0",
-          "at_ms": 256500,
+          "at_ms": 245000,
           "keyframe_id": "s_fx_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_effects_1",
-          "at_ms": 262000,
+          "at_ms": 250500,
           "keyframe_id": "s_fx_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_effects_home",
-          "at_ms": 267500,
+          "at_ms": 256000,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_plugins_0",
-          "at_ms": 274500,
+          "at_ms": 263000,
           "keyframe_id": "s_plug_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_plugins_home",
-          "at_ms": 280000,
+          "at_ms": 268500,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_0",
-          "at_ms": 287000,
+          "at_ms": 275500,
           "keyframe_id": "s_cam_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_1",
-          "at_ms": 292500,
+          "at_ms": 281000,
           "keyframe_id": "s_cam_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_2",
-          "at_ms": 298000,
+          "at_ms": 286500,
           "keyframe_id": "s_cam_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_3",
-          "at_ms": 303500,
+          "at_ms": 292000,
           "keyframe_id": "s_cam_k3",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_home",
-          "at_ms": 309000,
+          "at_ms": 297500,
           "preset_id": "glide"
         }
       ],
@@ -22384,7 +22667,7 @@
             },
             {
               "cue_id": "q_link",
-              "at_ms": 218800,
+              "at_ms": 207300,
               "action": {
                 "timeline_id": "link_build",
                 "type": "timeline.play"
@@ -22392,7 +22675,7 @@
             },
             {
               "cue_id": "q_built",
-              "at_ms": 312300,
+              "at_ms": 300800,
               "action": {
                 "timeline_id": "built_build",
                 "type": "timeline.play"
@@ -22400,7 +22683,7 @@
             },
             {
               "cue_id": "q_outro",
-              "at_ms": 326000,
+              "at_ms": 314500,
               "action": {
                 "timeline_id": "outro_glow",
                 "type": "timeline.play"
@@ -22414,7 +22697,7 @@
           "cues": [
             {
               "cue_id": "e_kick0",
-              "at_ms": 114000,
+              "at_ms": 102500,
               "action": {
                 "item_id": "mo_i_impulse",
                 "modifier_id": "kick",
@@ -22423,7 +22706,7 @@
             },
             {
               "cue_id": "e_kick1",
-              "at_ms": 118000,
+              "at_ms": 106500,
               "action": {
                 "item_id": "mo_i_impulse",
                 "modifier_id": "kick",
@@ -22432,7 +22715,7 @@
             },
             {
               "cue_id": "e_kick2",
-              "at_ms": 122000,
+              "at_ms": 110500,
               "action": {
                 "item_id": "mo_i_impulse",
                 "modifier_id": "kick",
@@ -22441,7 +22724,7 @@
             },
             {
               "cue_id": "e_glow_off",
-              "at_ms": 325500,
+              "at_ms": 314000,
               "action": {
                 "channel_id": "glow",
                 "fade_ms": 400,
@@ -22469,7 +22752,7 @@
             {
               "clip_id": "a_motion",
               "source_id": "desk",
-              "start_ms": 110000,
+              "start_ms": 98500,
               "length_ms": 16000,
               "fade_in_ms": 1000,
               "fade_out_ms": 1000,
@@ -22478,7 +22761,7 @@
             {
               "clip_id": "a_thanks",
               "source_id": "desk",
-              "start_ms": 326000,
+              "start_ms": 314500,
               "length_ms": 20000,
               "fade_in_ms": 3000,
               "fade_out_ms": 3000,
@@ -22510,85 +22793,85 @@
         },
         {
           "bookmark_id": "make",
-          "name": "Depth of field",
+          "name": "What you make",
           "at_ms": 61000,
           "pausing": false,
-          "note": "Not every scene is flat. This one is a 3D scene: three camera feeds on cards at different depths, and the lower third floating in front.\n\nThe scene camera has a depth of field. Watch the focus: the show loads three camera keyframes, and each one moves the camera and pulls focus to a different feed. The others go soft.\n\nThe camera can also autofocus on whatever is in the middle of the frame.\n\n*The footage is from Tears of Steel, the Blender Foundation's open film, under CC BY.*"
+          "note": "Here's the kind of scene you can make. This is a live JStream scene, not a picture of one.\n\nEvery piece is a built-in source: the feeds are images, cropped to 16:9 in the scene, the clock is a timer, and the lower third is a scene of its own, shown here as one layer.\n\n*The footage is from Tears of Steel, the Blender Foundation's open film, under CC BY.*"
         },
         {
           "bookmark_id": "keyframes",
           "name": "Keyframes",
-          "at_ms": 84500,
+          "at_ms": 73000,
           "note": "Now the part I'm most excited about: keyframes.\n\nThis is one scene, called Mission feed. A keyframe is a saved arrangement of that same scene. It can change where each item sits, its size, crop, opacity, whether it shows, and its effects.\n\nWatch: Two-up. Close-up. Main feed. Every item glides at once, and each item can have its own delay. See the small picture land a beat late?\n\nThe show is loading these keyframes right now. A sequence, a hotkey or a MIDI pad can load them too."
         },
         {
           "bookmark_id": "motion",
           "name": "Motion",
-          "at_ms": 110000,
+          "at_ms": 98500,
           "pausing": false,
           "note": "Items can also move on their own, with no keyframes at all. These are motion modifiers.\n\nWiggle is seeded noise. Oscillate follows a waveform. Drift is a steady rate. Impulse fires on a cue, and the show is kicking it right now. Audio follows a sound level.\n\nMIDI, live data and channels can drive them too. They work on position, scale, rotation, opacity and effect settings, and on scene cameras."
         },
         {
           "bookmark_id": "sequences",
           "name": "Sequences & channels",
-          "at_ms": 126000,
+          "at_ms": 114500,
           "note": "Sequences move values over time.\n\nA channel is one number. MIDI, live data, keys, cues or a lane on a sequence can move it, and positions, cameras, effects and live settings can follow it.\n\nA sequence has lanes, which are curves on channels, and cues, which are actions on a clock. It can even start itself: when a channel rises, a keyframe loads, a scene shows, or you press a key."
         },
         {
           "bookmark_id": "shows",
           "name": "Shows",
-          "at_ms": 149500,
+          "at_ms": 138000,
           "preset_id": "sting",
           "note": "And this is what's running the whole presentation: a show.\n\nOne timeline, with program, overlay, keyframe, sequence and audio tracks, saved with the project. Bookmarks pause or play through. Loops hold, like a waiting room, until I press Continue.\n\nI can jump to any bookmark, and the studio is set the way playing there would have left it.\n\nAnd the notes I'm reading right now? They're this bookmark's note."
         },
         {
           "bookmark_id": "cockpit",
           "name": "3D cockpit",
-          "at_ms": 189500,
+          "at_ms": 178000,
           "note": "Scenes can be 3D. It's opt in, per scene: give a scene a camera and its items get depth. Most scenes stay 2D.\n\nHere's one example, a glTF cockpit rendered in JStream. Any 2D scene, like a camera feed, can play on the model's monitor.\n\nThe screens show Bitwig, live, over JTunnel. Here the session is simulated. Bitwig sends the clock and tempo, transport, clip grid and scenes, track meters, notes, mixer, device, clip and markers. Pages draw it, and data modifiers map any of it onto the scene. Here the meters drive the cabin lights."
         },
         {
           "bookmark_id": "connected",
           "name": "DAW & web pages",
-          "at_ms": 218500,
+          "at_ms": 207000,
           "note": "JStream connects to your music setup.\n\nJTunnel is a CLAP plugin. It sends a track's audio and MIDI over the local network, and JStream takes the audio as a source and the MIDI as bindings. You accept each sender first.\n\nIn Bitwig, JTunnel also sends the clip grid, transport and device. And a browser source's page can read JStream's clock, scenes, levels, tempo, MIDI and DAW data, each behind its own switch."
         },
         {
           "bookmark_id": "keys",
           "name": "Keys & MIDI",
-          "at_ms": 234500,
+          "at_ms": 223000,
           "continue_after_ms": 12000,
           "note": "Control works one way for everything. Hotkeys, MIDI controllers and tempo sync share one binding system.\n\nA key or a pad runs the same actions the buttons do: switch scenes, load keyframes, play sequences, go live.\n\n*This bookmark continues by itself after 12 seconds.*"
         },
         {
           "bookmark_id": "effects",
           "name": "Effects",
-          "at_ms": 252500,
+          "at_ms": 241000,
           "pausing": false,
           "note": "Effects, quickly. Built-in filters work on sources, items, scenes and outputs. And for anything beyond those, you can write shader sources and filters as WGSL effect packs."
         },
         {
           "bookmark_id": "plugins",
           "name": "Plugins",
-          "at_ms": 270500,
+          "at_ms": 259000,
           "note": "Automation plugins run sandboxed. A plugin only gets the access its manifest asks for and you grant. And if an update asks for more, it stays off until you grant it again."
         },
         {
           "bookmark_id": "cameras",
           "name": "Cameras & going live",
-          "at_ms": 283000,
+          "at_ms": 271500,
           "note": "PTZ cameras: drive them from the panel, recall shots from a key, and map pan, tilt, zoom and focus to MIDI. A scene can carry each camera's shot, so switching the scene aims the cameras.\n\nGoing live: RTMP or RTMPS to YouTube or any service with a stream key, a recording at the same time, and a virtual camera on Windows and Linux. Each stream or recording gets its own encoder, mix and bus.\n\n*The stats panel is from a test engine, so its numbers are illustrative.*"
         },
         {
           "bookmark_id": "built",
           "name": "Under the hood",
-          "at_ms": 312000,
+          "at_ms": 300500,
           "note": "Under the hood.\n\nEverything is an API. The app is just one client of the protocol, so a script, the command line, or an AI agent over MCP can drive almost anything a person can.\n\nIt's Rust, and the real-time audio thread never allocates, locks or blocks. Tests enforce that. It runs headless too. And it's open source, MIT or Apache-2.0."
         },
         {
           "bookmark_id": "thanks",
           "name": "Thanks",
-          "at_ms": 326000,
+          "at_ms": 314500,
           "note": "Thank you! Happy to take questions.\n\n*The Outro loop finishes its pass when you press Continue. Then the show goes back to the Pre-show, ready to run again.*"
         }
       ],
@@ -22603,8 +22886,8 @@
         {
           "loop_id": "outro_loop",
           "name": "Outro",
-          "start_ms": 330000,
-          "end_ms": 342000,
+          "start_ms": 318500,
+          "end_ms": 330500,
           "preset_id": "fade",
           "leave": "finish_pass"
         }
