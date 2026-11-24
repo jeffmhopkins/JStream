@@ -400,6 +400,8 @@ fn value_bindings_aim_ptz_axes() {
         "nothing moves before the control does"
     );
     let midi = engine.midi_inputs();
+    // The pad is a sender whose MIDI is let in (ADR-0218).
+    midi.set_bindable(["Pad".to_owned()]);
     midi.push("Pad", 0, &cc(1, 64));
     assert!(head.wait(|h| h.zoom == 640), "{:?}", head.state());
     midi.push("Pad", 1, &cc(2, 127));

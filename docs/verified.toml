@@ -2082,7 +2082,7 @@ stamp = { hash = "b3:2833b18aab066189", by = "agent:channels", note = "Added the
 stamp = { hash = "b3:58012156c7338f6f", by = "agent:claude", note = "ST5 adds Studio::fades (show scene items fading on their own, beside the transition onto program) to the Studio bullet and ShowFade to the Transitions bullet; checked against studio.rs (fades, end_fades) and transition.rs (ShowFade::of, after, sample)." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/value_bindings.rs"]
-stamp = { hash = "b3:2133d3ab3960b629", by = "agent:issues-thread", note = "merge: Merge of #1711 at a0278b0 (its train merge bdff8a7 with bc989e1's per-action holds and single-action hotkey.clear, protocol 0.187): the train's show scene, PTZ value-binding (ADR-0209), media seek and length text landed beside this PR's ADR-0218 sentences; re-read, the bound-state rebuild and Control::read gate text still holds and agrees with the merged code." }
+stamp = { hash = "b3:dfa4648434b63d2f", by = "agent:issues-thread", note = "The train's two new MIDI-driven tests (value_bindings add/replace sum, tests::ptz value_bindings_aim_ptz_axes) now let their Pad input in with set_bindable, since a binding naming no input reads only the bound state (ADR-0218); no behaviour change, the section's bound-state and tests text still holds." }
 
 ["CRATE-jstream-core#contents-plugins"."body"]
 stamp = { hash = "b3:6351a5fdb4ee9121", by = "agent:plugin-uninstall", note = "re-read: plugins/automation.rs gains uninstall within the WASM plugin module the section names; its CLAP and filter text is unchanged" }
@@ -2250,7 +2250,7 @@ stamp = { hash = "b3:7c0918293c3cf9e2", by = "agent:claude", note = "Re-read: te
 stamp = { hash = "b3:0848b06d8659b67d", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/ptz.rs"]
-stamp = { hash = "b3:71fdba7637c54313", by = "agent:release-alpha13", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them. | merge: Train merge of #1701 at c5d5258 (add or replace mappings, audio inputs): re-read; #1701's added lines are present, its protocol bump renumbered 0.177 to 0.186 (version paragraph, since notes), and the core and graph value-binding text keeps #1709's PTZ axis sentences beside #1701's add/replace text." }
+stamp = { hash = "b3:b1a545d1c2d0703e", by = "agent:issues-thread", note = "The train's two new MIDI-driven tests (value_bindings add/replace sum, tests::ptz value_bindings_aim_ptz_axes) now let their Pad input in with set_bindable, since a binding naming no input reads only the bound state (ADR-0218); no behaviour change, the section's bound-state and tests text still holds." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/rendering.rs"]
 stamp = { hash = "b3:56dbd11340de62f7", by = "agent:claude", note = "tests/rendering.rs gained the model_resolution test and tests/mcp.rs the field in its expected studio.get; the section lists the test files, not each test, and still holds." }

@@ -467,6 +467,8 @@ mod tests {
             )
             .expect("binds");
         let (midi, data) = (MidiInputs::new(), LiveData::new());
+        // The pad is a sender whose MIDI is let in (ADR-0218).
+        midi.set_bindable(["Pad".to_owned()]);
         let mut driver = ValueDriver::default();
         let t0 = Instant::now();
         let mut tick = |graph: &Graph, n: u64| {
