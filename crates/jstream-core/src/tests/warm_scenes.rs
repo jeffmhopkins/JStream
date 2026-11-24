@@ -610,3 +610,52 @@ fn a_warm_scenes_model_is_published_for_the_program_stage() {
     preview(&control, "b");
     assert!(hub.load_warm_models().is_empty(), "a is no longer warm");
 }
+
+/// The upcoming scene a show runs to next (alpha.13 ST6) stays warm past a budget of 0
+/// and past the GPU limit, as Preview does, until it is cleared or deleted.
+#[test]
+fn the_upcoming_scene_is_warm_past_the_budget_and_the_gpu_limit() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let scenes = vec![
+        create("main"),
+        create("b"),
+        screen(),
+        add("b", "shown", "screen"),
+    ];
+    batch(&control, edits(scenes)).expect("scenes");
+    assert!(engine.settle_sources(), "the capture sources were built");
+    // A display capture counts at the canvas's 1920x1080, about 8 MiB (ADR-0150).
+    act(
+        &control,
+        Action::StudioSetWarm {
+            scenes: 0,
+            gpu_mib: Some(4),
+        },
+    );
+    assert_eq!(hub.load_warm().len(), 0, "b is neither preview nor shown");
+
+    engine.set_upcoming(Some("b")).expect("b is upcoming");
+    assert_eq!(hub.load_warm().len(), 1, "upcoming, b is warm past both");
+    engine.set_upcoming(None).expect("cleared");
+    assert_eq!(hub.load_warm().len(), 0, "cleared, it is cold again");
+
+    assert!(matches!(
+        engine.set_upcoming(Some("ghost")),
+        Err(ProtocolError::NotFound { .. })
+    ));
+    engine.set_upcoming(Some("b")).expect("b is upcoming");
+    batch(
+        &control,
+        edits(vec![Edit::SceneDelete {
+            scene_id: SceneId::new("b"),
+        }]),
+    )
+    .expect("deleted");
+    assert_eq!(
+        hub.load_warm().len(),
+        0,
+        "a deleted scene is upcoming no more"
+    );
+}

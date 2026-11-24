@@ -995,6 +995,9 @@ pub(crate) struct Chains {
     /// canvas's width and of its height (ADR-0197): 100 unless the program stage's
     /// render thread lowered it to keep its frames in time.
     pub(crate) model_percent: crate::resolution::Percent,
+    /// Whether a model's layer was drawn since this was last cleared: the render thread
+    /// lowers [`Self::model_percent`] only while there is one to gain from it.
+    pub(crate) model_drawn: bool,
     /// The thread that uploads the models, for the program stage's render thread
     /// ([`Self::upload_models_aside`]). `None` uploads them where they are drawn.
     models_aside: Option<crate::model_uploads::ModelUploads>,

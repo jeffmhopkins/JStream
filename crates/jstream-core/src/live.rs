@@ -207,6 +207,10 @@ struct Running {
     /// Whether it was cued to be shown, on a warm scene no mix drew ([`Source::cue`],
     /// ADR-0117 §7), and not looked at since.
     cued: bool,
+    /// Whether it was sought (`source.seek`) since the program last reached it: the
+    /// plan that shows it next leaves it playing from the seek, rather than starting it
+    /// again as [`Source::show`] would, and it isn't cued meanwhile.
+    sought: bool,
     /// `!resting`, shared with the thread's [`Painted`] entry: the thread paints a
     /// painter only while some mix draws it.
     drawn: Arc<AtomicBool>,
@@ -753,6 +757,7 @@ impl LiveSources {
                 looked: plan,
                 resting: false,
                 cued: false,
+                sought: false,
                 drawn: Arc::new(AtomicBool::new(true)),
                 shown_gpu: None,
                 extent: built.extent,
@@ -848,6 +853,26 @@ impl LiveSources {
             .and_then(|entry| entry.running.as_mut())
         {
             running.source.restart(since(now, running.start));
+        }
+    }
+
+    /// Plays source `source_id` on from `to` into it (`source.seek`):
+    /// [`Source::seek`] on its running instance, at `at`, brought onto the source
+    /// clock's time base as [`Self::restart`] brings it. The seek holds until the
+    /// program reaches the source, so a switch to its scene just before or after doesn't
+    /// start it again from its start. A source with no running instance has nothing to
+    /// seek.
+    pub(crate) fn seek(&mut self, source_id: &SourceId, at: MediaTime, to: MediaTime) {
+        let now = at
+            .rescale(self.now().timebase(), Rounding::Down)
+            .unwrap_or_else(|_| self.now());
+        if let Some(running) = self
+            .entries
+            .get_mut(source_id)
+            .and_then(|entry| entry.running.as_mut())
+        {
+            running.source.seek(since(now, running.start), to);
+            running.sought = true;
         }
     }
 
@@ -989,6 +1014,15 @@ impl LiveSources {
         ))
     }
 
+    /// How long one play of `source_id`'s running instance lasts in milliseconds, for a
+    /// kind with a length ([`Source::duration`]): a `media` file's.
+    pub(crate) fn duration_ms(&self, source_id: &SourceId) -> Option<u64> {
+        let running = self.entries.get(source_id)?.running.as_ref()?;
+        let duration = running.source.duration()?;
+        let ms = duration.rescale(Timebase::MILLIS, Rounding::Nearest).ok()?;
+        u64::try_from(ms.ticks()).ok()
+    }
+
     /// The 3D model `source_id`'s running instance shows (ADR-0107), if it shows one.
     /// It reaches nothing: the source is neither shown nor heard for it.
     pub(crate) fn model(
@@ -1104,9 +1138,11 @@ impl LiveSources {
             running.source.uncue(at);
         }
         if reach {
-            if running.planned + 1 < plan {
+            // Sought since it was last reached, it plays on from the seek.
+            if running.planned + 1 < plan && !std::mem::take(&mut running.sought) {
                 running.source.show(at);
             }
+            running.sought = false;
             running.planned = plan;
         }
         running.looked = plan;
@@ -1286,7 +1322,11 @@ impl LiveSources {
                 continue;
             };
             if warm.contains(id) {
-                if running.planned != plan && running.looked != plan && !running.cued {
+                if running.planned != plan
+                    && running.looked != plan
+                    && !running.cued
+                    && !running.sought
+                {
                     running.source.cue();
                     running.cued = true;
                     cued |= running.source.painter().is_some();

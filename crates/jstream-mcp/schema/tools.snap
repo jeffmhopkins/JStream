@@ -648,6 +648,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -1407,6 +1416,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -9771,6 +9805,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -10530,6 +10573,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -21741,6 +21809,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -22500,6 +22577,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -33306,6 +33408,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -34065,6 +34176,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -45088,7 +45224,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.restart` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.restart` (action), `source.seek` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioFollow": {
@@ -45444,6 +45580,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Lists the collection's sources, ordered by ID. Sources have no display order of\ntheir own.",
                 "properties": {
                   "type": {
@@ -45600,6 +45761,15 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "max_probe_resolution": {
                     "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -46225,6 +46395,15 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "max_probe_resolution": {
                     "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -46991,6 +47170,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },

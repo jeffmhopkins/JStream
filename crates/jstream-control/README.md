@@ -381,8 +381,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   (`invalid_argument` past `MAX_WARM_SCENES` or past `MAX_WARM_GPU_MIB` on `gpu_mib`; it
   only keeps the numbers for `studio.get`, since the mock runs no sources),
   `studio.set_rendering` (`invalid_argument` for a `screen_space_steps` that isn't one
-  of `SCREEN_SPACE_STEPS`, or a `max_probe_resolution` that isn't one of
-  `PROBE_RESOLUTIONS`; it only keeps the switches for `studio.get`, since the
+  of `SCREEN_SPACE_STEPS`, a `max_probe_resolution` that isn't one of
+  `PROBE_RESOLUTIONS`, or a `model_resolution` that isn't one of `MODEL_RESOLUTIONS`; it only keeps the switches for `studio.get`, since the
   mock draws nothing), `item.show`,
   `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
   `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
@@ -399,7 +399,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   stop is in the destination's family, and the
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
   `internal`. So do timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
-  the `timeline.*` edits and actions and `source.restart` answer `internal`, and
+  the `timeline.*` edits and actions, `source.restart` and `source.seek` answer
+  `internal`, and
   `studio.get` lists no timeline playing. So do keyframe tracks
   ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): `scene.set_keyframe` answers
   `internal`, and `studio.get` lists no placed keyframe;
@@ -412,8 +413,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   receiver, so it never sends `jtunnel.senders_changed`;
 - `font.list`, answered with `MOCK_FONTS`, two made-up fonts of one family ("Mock Sans"
   Bold and Regular) whose files don't exist;
-- `source.sizes`, answered with every source and no size, since the mock makes no
-  frames, so it never sends `source.size_changed`;
+- `source.sizes`, answered with every source and no size, depth or `duration_ms`,
+  since the mock makes no frames and plays no files, so it never sends
+  `source.size_changed`;
 - `activity.list`, answered with no entries and the host's clock as `now_ms`: the mock
   keeps no activity log ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md));
 - the deprecated privacy calls, as from the engine

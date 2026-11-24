@@ -39,7 +39,9 @@ const TIME_WRAP_SECONDS: f64 = 86_400.0;
 
 /// One filter kind's drawing: what [`super::VideoFilter`] wraps.
 pub(crate) trait Pass: Send {
-    /// Applies new settings, complete as the graph stores them, in place.
+    /// Applies new settings, complete as the graph stores them, in place. A built-in
+    /// kind's pixel-unit settings arrive scaled to its input's texels (`filter::units`,
+    /// #1680), so the pass counts everything in texels.
     fn update(&mut self, settings: &Settings);
 
     /// The size this filter draws for an input of `width` by `height`.
@@ -90,7 +92,7 @@ pub(crate) trait Pass: Send {
         None
     }
 
-    /// How far, in input pixels, what this filter draws can reach past its input's
+    /// How far, in input texels, what this filter draws can reach past its input's
     /// non-transparent texels, for a kind that draws transparent everywhere farther from
     /// them, keeps its input's size, and draws each pass over the whole frame at that
     /// pass's own scale (#1070). An input whose content is known

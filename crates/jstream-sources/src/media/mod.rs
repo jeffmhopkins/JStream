@@ -105,7 +105,7 @@ impl SourceKind for MediaKind {
             timeline: 0,
             speed: play.speed,
         };
-        let (current, player, audio) = match source::asset(settings, "file")? {
+        let (current, player, audio, length) = match source::asset(settings, "file")? {
             Some((root, path)) => {
                 let media = ctx.media.as_ref().ok_or(SourceError::NoBackend {
                     backend: "media file",
@@ -122,6 +122,11 @@ impl SourceKind for MediaKind {
                 // The decoder has the file open now.
                 drop(hold);
                 let sound = decoder.info().audio.map(|a| a.format);
+                let length = decoder
+                    .info()
+                    .duration
+                    .and_then(micros)
+                    .filter(|us| *us > 0);
                 let (current, first, decoder) = match first_frame(decoder, &path, &ctx.limits)? {
                     (Some((frame, at)), decoder) => {
                         let size = frame.info().size;
@@ -149,10 +154,10 @@ impl SourceKind for MediaKind {
                 let audio = sound.map(|format| {
                     MediaAudio::new(Arc::clone(player.shared()), format, first.is_some())
                 });
-                (current, Some((player, first.is_some())), audio)
+                (current, Some((player, first.is_some())), audio, length)
             }
             // No file: one transparent pixel, as the image kind shows.
-            None => (blank()?, None, None),
+            None => (blank()?, None, None, None),
         };
         let (player, video) = match player {
             Some((player, video)) => (Some(player), video),
@@ -173,6 +178,7 @@ impl SourceKind for MediaKind {
                 held: false,
                 fresh: false,
                 path: file_path(settings),
+                length,
             }))),
         }))
     }
@@ -357,6 +363,8 @@ struct Playhead {
     fresh: bool,
     /// The `file` setting's path, for errors.
     path: String,
+    /// The length the container declares, in microseconds.
+    length: Option<i64>,
 }
 
 /// The clock time a held playhead's timeline starts moving at: never.
@@ -557,6 +565,28 @@ impl Source for MediaSource {
         head.held = false;
         if head.player.is_some() {
             head.restart_at(micros(at).unwrap_or(0).max(0), 0);
+        }
+    }
+
+    /// The container's length, else one play's once a play has reached its end; `None`
+    /// with no file.
+    fn duration(&self) -> Option<MediaTime> {
+        let head = self.head.lock();
+        let player = head.player.as_ref()?;
+        let learned = player.state().length;
+        head.length
+            .or(learned)
+            .map(|us| MediaTime::new(us, Timebase::MICROS))
+    }
+
+    /// Plays the file on from `to` (`source.seek`). The player lands a point past the
+    /// end where that many plays reach on a looping file, else on the last frame.
+    fn seek(&mut self, at: MediaTime, to: MediaTime) {
+        let mut head = self.head.lock();
+        head.held = false;
+        if head.player.is_some() {
+            let to = micros(to).unwrap_or(0).max(0);
+            head.restart_at(micros(at).unwrap_or(0).max(0), to);
         }
     }
 
