@@ -81,13 +81,13 @@ impl Asks {
     /// # Errors
     /// [`AskRefused::Busy`] when [`MAX_OPEN`] asks are open, or one from `ip` is.
     pub(crate) fn open(self: &Arc<Self>, name: &str, ip: IpAddr) -> Result<Pending, AskRefused> {
+        let ip = ip.to_canonical();
         let mut state = self.lock();
         if state.open.len() >= MAX_OPEN || state.open.iter().any(|open| open.ip == ip) {
             return Err(AskRefused::Busy);
         }
         state.next += 1;
         let ask_id = format!("ask_{}", state.next);
-        let ip = ip.to_canonical();
         let ask = PairingAsk::new(ask_id.clone(), name, ip.to_string());
         let (answer, answered) = oneshot::channel();
         state.open.push(Open {
@@ -190,6 +190,12 @@ mod tests {
         let asks = Arc::new(Asks::default());
         let first = asks.open("Deck", ip(1)).expect("opens");
         assert_eq!(asks.open("Deck", ip(1)).err(), Some(AskRefused::Busy));
+        let mapped = IpAddr::V6(Ipv4Addr::new(192, 168, 1, 1).to_ipv6_mapped());
+        assert_eq!(
+            asks.open("Deck", mapped).err(),
+            Some(AskRefused::Busy),
+            "the same address, mapped"
+        );
         let mut held = vec![first];
         for n in 2..=u8::try_from(MAX_OPEN).expect("small") {
             held.push(asks.open("Deck", ip(n)).expect("opens"));

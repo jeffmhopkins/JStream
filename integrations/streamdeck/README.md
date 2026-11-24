@@ -117,7 +117,8 @@ depends_on = ["docs/adr/0104-network-listener-over-tls.md", "docs/adr/0044-pairi
   says to pair again if JStream renewed its certificate.
 - **Pairing** is ADR-0235's ask, `POST /api/v1/pair/ask` with a name, held until the
   person presses Allow or Deny in JStream (the plugin waits 130 seconds, one ask at a
-  time), or ADR-0044's exchange, `POST /api/v1/pair` with the code and a name. Either
+  time, and none while it is paired; pairing with a code meanwhile abandons the ask,
+  which JStream then ends), or ADR-0044's exchange, `POST /api/v1/pair` with the code and a name. Either
   answers with a device token. The token, the fingerprint, the host and the port are kept
   in the plugin's global settings, which the Stream Deck app stores for the plugin on that
   computer. The token admits only this device and can be revoked from JStream at any time.

@@ -339,8 +339,11 @@ its own from a short code instead of the control token.
   (`asks.rs`): every admitted session hears `pairing.asked` with the ask's ID, the name
   and the address it came from, and the request is held until a session answers with
   `pairing.answer {ask_id, allow}`, for at most 2 minutes (`ASK_TIMEOUT`). At most 4
-  asks are open at once (`MAX_OPEN`), and one per address. A device that closes its
-  connection ends its ask. Every session hears `pairing.ask_ended` with how it ended.
+  asks are open at once (`MAX_OPEN`), and one per address (IPv4-mapped addresses
+  compared as IPv4). A device that closes its connection ends its ask. So does closing
+  the network listener (for an ask held on it) or stopping the server: the ask ends as
+  `closed` with `503`, so a close never waits for the person's answer, and an Allow
+  that arrives as network access is turned off pairs nothing. Every session hears `pairing.ask_ended` with how it ended.
   Allowed, the device is paired as with a code (`Devices::add`): no attempt is used up
   and no code needs to be open. The device keeps the certificate it saw (trust on first
   use, ADR-0235 decision 4).
@@ -355,6 +358,7 @@ its own from a short code instead of the control token.
 | Allowed in JStream | 200, `Cache-Control: no-store`, `{"device_id": "dev_…", "token": "<64 hex digits>"}` |
 | Denied in JStream | 403 |
 | No answer in 2 minutes | 408 |
+| The network listener closed, or the server stopped, first | 503 |
 | The device file can't be written | 500, and nothing is paired |
 
 - **Device tokens.** A device token is 32 bytes from `getrandom` as 64 hex digits,

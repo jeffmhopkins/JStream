@@ -1083,10 +1083,10 @@ stamp = { hash = "b3:badf58c8282ce911", by = "agent:claude", note = "Re-read the
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); server-side only, no wire change; section holds | merge: Merged wave/alpha5 (#1288 CLAP scan 0.106, #1332 kinds.changed 0.107, #1396 camera controls, #1343/#1399/#1402 wheel chords, #1336 views, #1313 slow-effect quarantine, #1298 blend modes, network listener). Agent approval is protocol 0.108 in the bullet; the wave's 0.100 to 0.107 entries unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/asks.rs"]
-stamp = { hash = "b3:e1cb46aeefcbc7bb", by = "agent:claude", note = "pairing bullet adds the 0.193 ask (pairing.asked, pairing.answer, pairing.ask_ended, ADR-0235)" }
+stamp = { hash = "b3:a353630c6740e211", by = "agent:claude", note = "server-side changes are the held ask ending on close (503) and config doc; the protocol bullet holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1b4797ddfc8e39fa", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, server parts or gate credentials) | merge: Merged wave/alpha5 (#1288 CLAP scan 0.106, #1332 kinds.changed 0.107, #1396 camera controls, #1343/#1399/#1402 wheel chords, #1336 views, #1313 slow-effect quarantine, #1298 blend modes, network listener). Agent approval is protocol 0.108 in the bullet; the wave's 0.100 to 0.107 entries unchanged. | kept from the merged side: #1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
+stamp = { hash = "b3:7ebacb8e5168f3cc", by = "agent:claude", note = "server-side changes are the held ask ending on close (503) and config doc; the protocol bullet holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:09820a94bf06514c", by = "agent:claude", note = "pairing bullet adds the 0.193 ask (pairing.asked, pairing.answer, pairing.ask_ended, ADR-0235)" }
@@ -1122,7 +1122,7 @@ stamp = { hash = "b3:b788d6a003236bc5", by = "agent:claude", note = "Re-read the
 stamp = { hash = "b3:e4a1d8af8d430535", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:b76e5dffb9eb5822", by = "agent:claude", note = "pairing bullet adds the 0.193 ask (pairing.asked, pairing.answer, pairing.ask_ended, ADR-0235)" }
+stamp = { hash = "b3:572ddd32091df276", by = "agent:claude", note = "server-side changes are the held ask ending on close (503) and config doc; the protocol bullet holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:ef05456aeb08436d", by = "agent:claude", note = "pairing bullet adds the 0.193 ask (pairing.asked, pairing.answer, pairing.ask_ended, ADR-0235)" }
@@ -1140,7 +1140,7 @@ stamp = { hash = "b3:244b82e1e6fe68b4", by = "agent:claude", note = "Re-read the
 stamp = { hash = "b3:cc0136d878a1ce4d", by = "agent:claude", note = "Re-read the pairing and network listener paragraphs: pairing over the TLS listener and the five-attempt sharing are unchanged by the runtime switch; nothing says it applies at start." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests/network.rs"]
-stamp = { hash = "b3:980fc728be19c53b", by = "agent:claude", note = "pairing bullet adds the 0.193 ask (pairing.asked, pairing.answer, pairing.ask_ended, ADR-0235) | kept from the merged side: the network listener paragraph says it is announced on mDNS unless turned off (ADR-0233); no protocol change (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:1308cab59166ebac", by = "agent:claude", note = "server-side changes are the held ask ending on close (503) and config doc; the protocol bullet holds | kept from the merged side: the network listener paragraph says it is announced on mDNS unless turned off (ADR-0233); no protocol change (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:67b338188a2fdf2c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, server parts or gate credentials)" }
@@ -2712,7 +2712,7 @@ stamp = { hash = "b3:75ab7d90b714f962", by = "agent:claude-keyframe-views", note
 stamp = { hash = "b3:fb916fb4301acdcb", by = "agent:claude", note = "Re-read in full after the train merge. Its stale inputs were core's audit-log and logging sections (mute sentences, MIDI binding debug log), which change nothing it says; its option list names --jtunnel-midi and --ptz-camera, both parsed in args.rs." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:b31857859b25264a", by = "agent:claude", note = "deps changed: core lists pairing.answer as server-answered; server design adds the ask endpoint, App::pairs for /pair, and the network receiver taken before the gate. The daemon's --lan description still holds (it serves the ask too) | kept from the merged side: network_config sets NetworkConfig::announce from --lan-quiet; the flag list names --lan-quiet; the server's announcement answers the local network only (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:596be38bceaf186b", by = "agent:claude", note = "dep server design adds that a held ask ends on listener close or shutdown with 503; the daemon's --lan text holds | kept from the merged side: network_config sets NetworkConfig::announce from --lan-quiet; the flag list names --lan-quiet; the server's announcement answers the local network only (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:011c0665f03c1e58", by = "agent:scene-folders", note = "Re-read against ARCH#persistence gaining schema_version 23: its folder mentions are config, plugin, browser and data folders, and it names no collection schema version; holds. | Renumbered ADR-0219 to ADR-0222, the train's final number for this change, and merged the train again (no conflict); re-read the renamed links and references in this section, nothing else changed." }
@@ -6513,7 +6513,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:707bdcd17bc89e64", by = "agent:claude", note = "tests.rs gained renders_at_alternating_sizes_keep_their_targets, an offscreen pixel check at three sizes plus counts of target sets made and kept for three and four sizes in rotation, more sizes than are kept, and a size left unused; it follows the section's approach (small flat colours, interior samples, tolerance 0) and adds no golden file. | kept from the merged side: Edited: the drawn-size list gains the_cache_holds_a_video_frame_at_the_size_it_is_drawn (tests.rs): whole first, a quarter once drawn at an eighth, refilled in place, whole when drawn large, planned start, whole after upload_frame and on a plain cache." }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:b31857859b25264a", by = "agent:claude", note = "Asking instead of a code bullet and table match pair::ask (404/405/415/400/429/200/403/408/500); /pair and the UI challenge now follow App::pairs (pairing or network open, #1745 B1); upgrade takes the network receiver before the gate (B2); Sessions names pairing.answer | kept from the merged side: Announcing it: records, timing, local-network-only answers (on_link), once-a-second group answers, legacy answers repeating the question, goodbye; checked against announce.rs and serve_with_shutdown; socket2 in Dependencies (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:596be38bceaf186b", by = "agent:claude", note = "ask bullet and table add: closing the listener or stopping the server ends a held ask as closed with 503 (#1802 B1), mapped addresses compared as IPv4 (N2); test closing_the_listener_ends_a_held_ask | kept from the merged side: Announcing it: records, timing, local-network-only answers (on_link), once-a-second group answers, legacy answers repeating the question, goodbye; checked against announce.rs and serve_with_shutdown; socket2 in Dependencies (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:2aca07a0ccd583bb", by = "agent:claude", note = "Asking instead of a code bullet and table match pair::ask (404/405/415/400/429/200/403/408/500); /pair and the UI challenge now follow App::pairs (pairing or network open, #1745 B1); upgrade takes the network receiver before the gate (B2); Sessions names pairing.answer" }
@@ -6540,10 +6540,10 @@ stamp = { hash = "b3:badf58c8282ce911", by = "agent:claude", note = "Added 'Open
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/asks.rs"]
-stamp = { hash = "b3:e1cb46aeefcbc7bb", by = "agent:claude", note = "Asking instead of a code bullet and table match pair::ask (404/405/415/400/429/200/403/408/500); /pair and the UI challenge now follow App::pairs (pairing or network open, #1745 B1); upgrade takes the network receiver before the gate (B2); Sessions names pairing.answer" }
+stamp = { hash = "b3:a353630c6740e211", by = "agent:claude", note = "ask bullet and table add: closing the listener or stopping the server ends a held ask as closed with 503 (#1802 B1), mapped addresses compared as IPv4 (N2); test closing_the_listener_ends_a_held_ask" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1b4797ddfc8e39fa", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries. | kept from the merged side: #1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:7ebacb8e5168f3cc", by = "agent:claude", note = "ask bullet and table add: closing the listener or stopping the server ends a held ask as closed with 503 (#1802 B1), mapped addresses compared as IPv4 (N2); test closing_the_listener_ends_a_held_ask" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:09820a94bf06514c", by = "agent:claude", note = "Asking instead of a code bullet and table match pair::ask (404/405/415/400/429/200/403/408/500); /pair and the UI challenge now follow App::pairs (pairing or network open, #1745 B1); upgrade takes the network receiver before the gate (B2); Sessions names pairing.answer" }
@@ -6579,7 +6579,7 @@ stamp = { hash = "b3:b788d6a003236bc5", by = "agent:claude", note = "Added 'Open
 stamp = { hash = "b3:e4a1d8af8d430535", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:b76e5dffb9eb5822", by = "agent:claude", note = "Asking instead of a code bullet and table match pair::ask (404/405/415/400/429/200/403/408/500); /pair and the UI challenge now follow App::pairs (pairing or network open, #1745 B1); upgrade takes the network receiver before the gate (B2); Sessions names pairing.answer" }
+stamp = { hash = "b3:572ddd32091df276", by = "agent:claude", note = "ask bullet and table add: closing the listener or stopping the server ends a held ask as closed with 503 (#1802 B1), mapped addresses compared as IPv4 (N2); test closing_the_listener_ends_a_held_ask" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:ef05456aeb08436d", by = "agent:claude", note = "Asking instead of a code bullet and table match pair::ask (404/405/415/400/429/200/403/408/500); /pair and the UI challenge now follow App::pairs (pairing or network open, #1745 B1); upgrade takes the network receiver before the gate (B2); Sessions names pairing.answer" }
@@ -6597,7 +6597,7 @@ stamp = { hash = "b3:244b82e1e6fe68b4", by = "agent:claude", note = "Added 'Open
 stamp = { hash = "b3:cc0136d878a1ce4d", by = "agent:claude", note = "Added 'Opened and closed while it runs' (NetworkSwitch open/close/set_announce, per-request NetworkState, sessions ending with 1001, router dropped at end), pairing while the listener is open, NetworkInfo, and announce through the served listener." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests/network.rs"]
-stamp = { hash = "b3:980fc728be19c53b", by = "agent:claude", note = "Asking instead of a code bullet and table match pair::ask (404/405/415/400/429/200/403/408/500); /pair and the UI challenge now follow App::pairs (pairing or network open, #1745 B1); upgrade takes the network receiver before the gate (B2); Sessions names pairing.answer | kept from the merged side: Announcing it: records, timing, local-network-only answers (on_link), once-a-second group answers, legacy answers repeating the question, goodbye; checked against announce.rs and serve_with_shutdown; socket2 in Dependencies (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:1308cab59166ebac", by = "agent:claude", note = "ask bullet and table add: closing the listener or stopping the server ends a held ask as closed with 503 (#1802 B1), mapped addresses compared as IPv4 (N2); test closing_the_listener_ends_a_held_ask | kept from the merged side: Announcing it: records, timing, local-network-only answers (on_link), once-a-second group answers, legacy answers repeating the question, goodbye; checked against announce.rs and serve_with_shutdown; socket2 in Dependencies (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:67b338188a2fdf2c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, server parts or gate credentials)" }
@@ -6624,10 +6624,10 @@ stamp = { hash = "b3:badf58c8282ce911", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131: approvals.rs, the UI token, held hello, agent.* answered in Admitted) at protocol 0.108. Merging wave/alpha5 brought the network listener (ADR-0104); Served now carries its network access, and the gate refuses the host UI's token on the network listener as it does the control token, which the README now says and the_network_listener_refuses_the_host_uis_token tests." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/asks.rs"]
-stamp = { hash = "b3:e1cb46aeefcbc7bb", by = "agent:claude", note = "contents add the ask endpoint (PAIR_ASK_PATH) and asks.rs; Admitted answers pairing.answer" }
+stamp = { hash = "b3:a353630c6740e211", by = "agent:claude", note = "asks.rs canonicalises before the per-address check; pair::ask ends on listener close or shutdown; config.rs pairing doc follows ADR-0234; contents unchanged" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1b4797ddfc8e39fa", by = "agent:claude-settings", note = "This branch adds agent approval (ADR-0131: approvals.rs, the UI token, held hello, agent.* answered in Admitted) at protocol 0.108. Merging wave/alpha5 brought the network listener (ADR-0104); Served now carries its network access, and the gate refuses the host UI's token on the network listener as it does the control token, which the README now says and the_network_listener_refuses_the_host_uis_token tests. | kept from the merged side: #1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:7ebacb8e5168f3cc", by = "agent:claude", note = "asks.rs canonicalises before the per-address check; pair::ask ends on listener close or shutdown; config.rs pairing doc follows ADR-0234; contents unchanged" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:09820a94bf06514c", by = "agent:claude", note = "contents add the ask endpoint (PAIR_ASK_PATH) and asks.rs; Admitted answers pairing.answer" }
@@ -6663,7 +6663,7 @@ stamp = { hash = "b3:b788d6a003236bc5", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:e4a1d8af8d430535", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:b76e5dffb9eb5822", by = "agent:claude", note = "contents add the ask endpoint (PAIR_ASK_PATH) and asks.rs; Admitted answers pairing.answer" }
+stamp = { hash = "b3:572ddd32091df276", by = "agent:claude", note = "asks.rs canonicalises before the per-address check; pair::ask ends on listener close or shutdown; config.rs pairing doc follows ADR-0234; contents unchanged" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:ef05456aeb08436d", by = "agent:claude", note = "contents add the ask endpoint (PAIR_ASK_PATH) and asks.rs; Admitted answers pairing.answer" }
@@ -6681,7 +6681,7 @@ stamp = { hash = "b3:244b82e1e6fe68b4", by = "agent:claude", note = "Added the n
 stamp = { hash = "b3:cc0136d878a1ce4d", by = "agent:claude", note = "Added the network switch module (switch.rs, network_state.rs, ADR-0234); announce.rs now stops on a future, the rest holds." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests/network.rs"]
-stamp = { hash = "b3:980fc728be19c53b", by = "agent:claude", note = "contents add the ask endpoint (PAIR_ASK_PATH) and asks.rs; Admitted answers pairing.answer | kept from the merged side: announce.rs in the module list; NetworkConfig has announce (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:1308cab59166ebac", by = "agent:claude", note = "asks.rs canonicalises before the per-address check; pair::ask ends on listener close or shutdown; config.rs pairing doc follows ADR-0234; contents unchanged | kept from the merged side: announce.rs in the module list; NetworkConfig has announce (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:67b338188a2fdf2c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, server parts or gate credentials)" }
@@ -7077,7 +7077,7 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:2124a942640711f4", by = "agent:claude", note = "Re-read: no UI behaviour changed for ADR-0203 yet; Learn still makes a replace binding as described" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/device_asks.rs"]
-stamp = { hash = "b3:b986820230358b9e", by = "agent:claude", note = "Device asks bullet describes DevicePrompt: on pairing.asked, Deny/Allow via pairing.answer, closed on pairing.ask_ended, holds no session" }
+stamp = { hash = "b3:a59d0547f87fcaa0", by = "agent:claude", note = "Device asks bullet still holds; only the subtitle wording changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dialog.rs"]
 stamp = { hash = "b3:94249179cbc368d3", by = "agent:release-alpha13", note = "Re-read: a new Design bullet explains chrome.rs (window contextmenu swallow, chrome::swallow, TEXT, selectstart and the captured pointerdown clear, Menus::open leaving text fields to the browser). | merge: Train merge of #1701 at c5d5258 (add or replace mappings, audio inputs): re-read; #1701's added lines are present, its protocol bump renumbered 0.177 to 0.186 (version paragraph, since notes), and the core and graph value-binding text keeps #1709's PTZ axis sentences beside #1701's add/replace text." }
@@ -7434,7 +7434,7 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:2124a942640711f4", by = "agent:claude", note = "Re-read: UI only fills mode (motion add, learned bindings replace) on literals; purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/device_asks.rs"]
-stamp = { hash = "b3:b986820230358b9e", by = "agent:claude", note = "lib adds device_asks; app draws DevicePrompt beside AgentPrompt; purpose holds" }
+stamp = { hash = "b3:a59d0547f87fcaa0", by = "agent:claude", note = "device_asks.rs subtitle now reads 'Asking from <address>' (N3); purpose unchanged" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dialog.rs"]
 stamp = { hash = "b3:94249179cbc368d3", by = "agent:release-alpha13", note = "Re-read: the Menus bullet now lists chrome.rs; app.rs installs it, lib.rs declares it, tree.rs's tool bar and dialog.rs swallow with it. | merge: Train merge of #1701 at c5d5258 (add or replace mappings, audio inputs): re-read; #1701's added lines are present, its protocol bump renumbered 0.177 to 0.186 (version paragraph, since notes), and the core and graph value-binding text keeps #1709's PTZ axis sentences beside #1701's add/replace text." }
@@ -8571,7 +8571,7 @@ stamp = { hash = "b3:71c171caa84ac726", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:91d8b1042b9fc2de", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.test.ts"]
-stamp = { hash = "b3:cf34413823279b11", by = "agent:claude", note = "tests added: daemon test for deny then allow via askToPair, plugin test pairs by ask; commands unchanged | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:a8b6e42e72f1dd6b", by = "agent:claude", note = "daemon test adds the abandoned ask ending closed; commands unchanged | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/daemon.ts"]
 stamp = { hash = "b3:c9b45998b6182c09", by = "agent:claude", note = "tests added: daemon test for deny then allow via askToPair, plugin test pairs by ask; commands unchanged" }
@@ -8583,7 +8583,7 @@ stamp = { hash = "b3:d799cb1f042d3c1a", by = "agent:claude", note = "tests added
 stamp = { hash = "b3:4a9bcd854ebb2994", by = "agent:claude", note = "daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#design"."body"]
-stamp = { hash = "b3:5c9ff5f71fcd0586", by = "agent:claude", note = "Trust names TOFU for asks; Pairing names /api/v1/pair/ask, 130 s wait, one ask at a time; Discovery wording updated | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:217f1c8b0818879f", by = "agent:claude", note = "Pairing bullet: no ask while paired, a code pairing aborts the ask (hub.ts AbortController), 503 message in tls.ts | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#design"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8598,7 +8598,7 @@ stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:9eac583ee3f1cfb4", by = "agent:claude", note = "Live state: show.open read with ui_settings.get every 2 s while a show key is visible and on a press; discovery lists one entry per instance and address. | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/hub.ts"]
-stamp = { hash = "b3:2fce66f887dd6c55", by = "agent:claude", note = "Trust names TOFU for asks; Pairing names /api/v1/pair/ask, 130 s wait, one ask at a time; Discovery wording updated" }
+stamp = { hash = "b3:b17f9b1451bbb679", by = "agent:claude", note = "Pairing bullet: no ask while paired, a code pairing aborts the ask (hub.ts AbortController), 503 message in tls.ts" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/client.ts"]
 stamp = { hash = "b3:953ac216333edc04", by = "agent:claude", note = "client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8613,7 +8613,7 @@ stamp = { hash = "b3:68b84d51d14515c9", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:2fe2150c3fdcf99c", by = "agent:claude", note = "Live state: show.open read with ui_settings.get every 2 s while a show key is visible and on a press; discovery lists one entry per instance and address. | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/tls.ts"]
-stamp = { hash = "b3:825c3e8030e0d77d", by = "agent:claude", note = "Trust names TOFU for asks; Pairing names /api/v1/pair/ask, 130 s wait, one ask at a time; Discovery wording updated" }
+stamp = { hash = "b3:cf7b92d9c81ae39d", by = "agent:claude", note = "Pairing bullet: no ask while paired, a code pairing aborts the ask (hub.ts AbortController), 503 message in tls.ts" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/lists.ts"]
 stamp = { hash = "b3:335639140afddd29", by = "agent:claude", note = "client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8862,7 +8862,7 @@ stamp = { hash = "b3:f87505261e656e9f", by = "agent:bindings", note = "Checked a
 stamp = { hash = "b3:ea350f0f1e1f0467", by = "agent:claude", note = "re-read: the daemon gained --lan-quiet and the server an mDNS announcement for --lan, which this runbook doesn't use (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:b31857859b25264a", by = "agent:claude", note = "dep server design gained the ask endpoint and B1/B2 fixes; go-live steps don't touch pairing | kept from the merged side: re-read: the daemon gained --lan-quiet and the server an mDNS announcement for --lan, which this runbook doesn't use (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:596be38bceaf186b", by = "agent:claude", note = "dep server design change concerns pairing asks only; go-live steps unaffected | kept from the merged side: re-read: the daemon gained --lan-quiet and the server an mDNS announcement for --lan, which this runbook doesn't use (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["RUNBOOK-LINUX-TESTING#script"."body"]
 stamp = { hash = "b3:956a50f6752c97f7", by = "agent:claude-ci-load", note = "linux-install.yml's jobs now run only on main and on ready PRs into main (ADR-0231); the paths list and the lint/ubuntu/fedora steps are unchanged, and the paragraph on when the workflow runs now says so" }
@@ -9143,6 +9143,9 @@ stamp = { hash = "b3:05c720d239e1c60c", by = "agent:claude", note = "new Accepte
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/announce.rs"]
 stamp = { hash = "b3:badf58c8282ce911", by = "agent:claude", note = "Re-read against the gate and admitted changes: device tokens are accepted while the network listener is open or pairing is on, still only on loopback or TLS; the code's attempts and the mDNS paragraph hold. | kept from the merged side: the ADR-0233 paragraph: what is announced, the exposure, local-network-only and throttled answers, bounded parsing, a spoofed answer meets the fingerprint check (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
+["THREAT-MODEL#pairing"."file:crates/jstream-server/src/asks.rs"]
+stamp = { hash = "b3:a353630c6740e211", by = "agent:claude", note = "asks.rs back in covers (governance note in the PR); ask ends on listener close so nothing pairs after access is turned off; per-address limit canonical" }
+
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:09820a94bf06514c", by = "agent:claude", note = "new Accepted paragraph for ADR-0235: who can ask, limits (4, one per address, 2 min), TOFU, name as data, logging; asks.rs covered" }
 
@@ -9150,7 +9153,7 @@ stamp = { hash = "b3:09820a94bf06514c", by = "agent:claude", note = "new Accepte
 stamp = { hash = "b3:f88ac19478dd3d80", by = "agent:claude", note = "Re-read against the gate and admitted changes: device tokens are accepted while the network listener is open or pairing is on, still only on loopback or TLS; the code's attempts and the mDNS paragraph hold." }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:b76e5dffb9eb5822", by = "agent:claude", note = "new Accepted paragraph for ADR-0235: who can ask, limits (4, one per address, 2 min), TOFU, name as data, logging; asks.rs covered" }
+stamp = { hash = "b3:572ddd32091df276", by = "agent:claude", note = "asks.rs back in covers (governance note in the PR); ask ends on listener close so nothing pairs after access is turned off; per-address limit canonical" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:ef05456aeb08436d", by = "agent:claude", note = "new Accepted paragraph for ADR-0235: who can ask, limits (4, one per address, 2 min), TOFU, name as data, logging; asks.rs covered" }
@@ -9201,7 +9204,7 @@ stamp = { hash = "b3:1df50a44de136981", by = "agent:claude", note = "network acc
 stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "Adds the desktop --mcp listener (127.0.0.1 fixed port, MCP on, token file with the daemon's checks via the shared token_file) and covers token_file.rs; controls unchanged" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1b4797ddfc8e39fa", by = "agent:claude-settings", note = "This branch adds the host UI's in-memory token (ADR-0131), which grants what the control token does. Merging wave/alpha5's network listener: the network listener refuses the UI token as it refuses the control token, in the token paragraph and the Device tokens only bullet, matching gate.rs. | kept from the merged side: #1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
+stamp = { hash = "b3:7ebacb8e5168f3cc", by = "agent:claude", note = "config.rs pairing doc now says it pairs while the listener is open (ADR-0234), matching the section" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/gate.rs"]
 stamp = { hash = "b3:f88ac19478dd3d80", by = "agent:claude", note = "Network access: turning it off now closes the listener at once and ends the sessions admitted on it (ADR-0234); paired devices aren't revoked; the TLS/certificate/gate bullets are unchanged." }

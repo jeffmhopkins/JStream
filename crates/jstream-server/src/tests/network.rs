@@ -617,3 +617,51 @@ fn a_device_that_asks_is_paired_when_the_person_allows_it() {
     assert_eq!(reply.status, 403, "{}", reply.body);
     assert_eq!(outcome, PairingAskOutcome::Denied);
 }
+
+/// ADR-0234 and ADR-0235: closing the network listener ends an ask held on it at once,
+/// as `closed`, with `503`, so the close doesn't wait for the person's answer and
+/// nothing pairs after network access is turned off (#1802 B1).
+#[test]
+fn closing_the_listener_ends_a_held_ask() {
+    use futures_util::StreamExt;
+    use jstream_control::protocol::{Event, PairingAskOutcome};
+    let (harness, identity) = start_network(|config| config.pairing = false);
+    let switch = harness.switch.clone();
+    let pin = identity.fingerprint();
+    let addr = harness.network_addr();
+    let origin = format!("https://{addr}");
+    let control = ok(harness.connect());
+    ok(harness.run(control.hello(hello())));
+    let mut events = control.events();
+    let body = serde_json::json!({"name": "Stream Deck"}).to_string();
+    let headers = [
+        ("Content-Type", "application/json"),
+        ("Origin", origin.as_str()),
+    ];
+    let (reply, outcome) = harness.run(async {
+        let asking = tls_request_to(addr, pin, "POST", crate::PAIR_ASK_PATH, &headers, &body);
+        let closing = async {
+            loop {
+                match events.next().await {
+                    Some(Event::PairingAsked { .. }) => break,
+                    Some(_) => {}
+                    None => panic!("the events ended"),
+                }
+            }
+            // Within `run`'s 10 s, far short of the ask's 2 minutes.
+            switch.close().await;
+            loop {
+                match events.next().await {
+                    Some(Event::PairingAskEnded { outcome, .. }) => break outcome,
+                    Some(_) => {}
+                    None => panic!("the events ended"),
+                }
+            }
+        };
+        let (reply, outcome) = tokio::join!(asking, closing);
+        (reply.expect("tls"), outcome)
+    });
+    assert_eq!(reply.status, 503, "{}", reply.body);
+    assert_eq!(outcome, PairingAskOutcome::Closed);
+    assert_eq!(switch.info(), None);
+}

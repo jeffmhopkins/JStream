@@ -105,7 +105,7 @@ pub fn DevicePrompt() -> impl IntoView {
                                 <span class="agent-name">{ask.name.clone()}</span>
                                 " wants to connect"
                             </h2>
-                            <span class="modal-sub">"From " {ask.address.clone()} " on your network"</span>
+                            <span class="modal-sub">"Asking from " {ask.address.clone()}</span>
                         </div>
                         <button type="button" class="modal-close" aria-label="Close" on:click=move |_| hide()>"×"</button>
                     </div>

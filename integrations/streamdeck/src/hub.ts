@@ -32,8 +32,11 @@ export const studio = new Studio(client);
 
 let settings: GlobalSettings = {};
 
-/** Whether an ask to pair (ADR-0235) is waiting for the person's answer in JStream. */
-let asking = false;
+/**
+ * The ask to pair (ADR-0235) waiting for the person's answer in JStream, if any. Pairing
+ * with a code meanwhile aborts it, which ends the ask in JStream too.
+ */
+let asking: AbortController | undefined;
 
 /** Reads the saved pairing and connects. */
 export async function start(): Promise<void> {
@@ -115,10 +118,12 @@ export async function onInspectorMessage(payload: JsonValue): Promise<boolean> {
 		case "ask":
 			if (request.type === "ask") {
 				// One ask at a time: pressing Connect again keeps waiting on the first.
-				if (asking) {
+				if (asking || settings.token) {
 					return true;
 				}
-				asking = true;
+				asking = new AbortController();
+			} else {
+				asking?.abort();
 			}
 			// "ask" pairs once the person presses Allow in JStream (ADR-0235), trusting the
 			// certificate the probe saw; "pair" trades the code the person typed (ADR-0044).
@@ -132,12 +137,8 @@ export async function onInspectorMessage(payload: JsonValue): Promise<boolean> {
 				const name = String(request.name || `Stream Deck (${hostname()})`).trim().slice(0, 64);
 				const result =
 					request.type === "ask"
-						? await askToPair(host, port, fingerprint, name)
+						? await askToPair(host, port, fingerprint, name, asking?.signal)
 						: await pair(host, port, fingerprint, String(request.code), name);
-				if (request.type === "ask" && settings.token) {
-					// Paired with the code meanwhile: keep that pairing.
-					return true;
-				}
 				await save({ host, port, fingerprint, token: result.token, deviceId: result.deviceId, deviceName: name });
 				await reply({ type: "paired" });
 				await pushConnection();
@@ -145,7 +146,7 @@ export async function onInspectorMessage(payload: JsonValue): Promise<boolean> {
 				await reply({ type: "failed", step: request.type, message: reason(err) });
 			} finally {
 				if (request.type === "ask") {
-					asking = false;
+					asking = undefined;
 				}
 			}
 			return true;

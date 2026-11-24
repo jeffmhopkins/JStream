@@ -134,6 +134,15 @@ test("a Stream Deck that asks to pair is let in when the person allows it", { sk
 	client.setEndpoint({ host, port: lanPort, fingerprint, token: paired.token });
 	await until("connected", () => client.status.state === "connected", 8000);
 	await call({ kind: "action", action: { type: "device.revoke", device_id: paired.deviceId } });
+
+	// Abandoned (paired with a code meanwhile), the ask ends in JStream as closed.
+	from = events.length;
+	const abort = new AbortController();
+	const abandoned = askToPair(host, lanPort, fingerprint, "Stream Deck (asks)", abort.signal);
+	await heard("pairing.asked", from);
+	abort.abort();
+	await assert.rejects(abandoned);
+	assert.equal((await heard("pairing.ask_ended", from)).outcome, "closed");
 });
 
 test("show keys run a show, and the studio says when it plays and waits", { skip }, async (t) => {

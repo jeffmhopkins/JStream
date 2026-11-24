@@ -137,8 +137,8 @@ export const ASK_WAIT_MS = 130_000;
  * over a connection pinned to `fingerprint`, the certificate seen when probing (trust on
  * first use). JStream shows the person Allow / Deny and answers once they do.
  */
-export function askToPair(host: string, port: number, fingerprint: string, name: string): Promise<PairResult> {
-	return postForToken(host, port, fingerprint, "/api/v1/pair/ask", JSON.stringify({ name }), ASK_WAIT_MS, askRefusal);
+export function askToPair(host: string, port: number, fingerprint: string, name: string, signal?: AbortSignal): Promise<PairResult> {
+	return postForToken(host, port, fingerprint, "/api/v1/pair/ask", JSON.stringify({ name }), ASK_WAIT_MS, askRefusal, signal);
 }
 
 /** Posts `body` to `path` and reads the device token from a `200`. */
@@ -150,8 +150,10 @@ function postForToken(
 	body: string,
 	waitMs: number,
 	refusal: (status: number, body: string) => string,
+	signal?: AbortSignal,
 ): Promise<PairResult> {
 	const options: RequestOptions = {
+		signal,
 		host,
 		port,
 		method: "POST",
@@ -202,6 +204,8 @@ export function askRefusal(status: number, body: string): string {
 			return "Denied in JStream.";
 		case 408:
 			return "No one pressed Allow in JStream in time. Try again.";
+		case 503:
+			return "JStream's network access was turned off while it asked.";
 		case 429:
 			return "JStream is already asking about another device. Answer that one, then try again.";
 		case 404:

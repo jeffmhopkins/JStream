@@ -206,6 +206,17 @@ pub(crate) async fn ask(
     if !app.pairs() || !app.pairing_offered && !accepted.network {
         return (StatusCode::NOT_FOUND, "this server pairs no device\n").into_response();
     }
+    // The ask ends when its listener closes or the server stops, so a held ask never
+    // holds up either, and nothing pairs once the person turned network access off.
+    let mut network_stopping = if accepted.network {
+        match app.network.stopping() {
+            Some(stopping) if !*stopping.borrow() => Some(stopping),
+            _ => return closed(),
+        }
+    } else {
+        None
+    };
+    let mut shutdown = app.shutdown.clone();
     let json = headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
@@ -242,7 +253,27 @@ pub(crate) async fn ask(
         }
     };
     // Dropped with the request when the device goes away, which ends the ask.
-    match pending.answer(ASK_TIMEOUT).await {
+    let answer = tokio::select! {
+        answer = pending.answer(ASK_TIMEOUT) => answer,
+        () = stopped(network_stopping.as_mut()) => {
+            pending.finish(PairingAskOutcome::Closed);
+            return closed();
+        }
+        () = stopped(Some(&mut shutdown)) => {
+            pending.finish(PairingAskOutcome::Closed);
+            return closed();
+        }
+    };
+    if network_stopping
+        .as_ref()
+        .is_some_and(|stopping| *stopping.borrow())
+        || *shutdown.borrow()
+    {
+        // Answered as the listener closed: pair nothing.
+        pending.finish(PairingAskOutcome::Closed);
+        return closed();
+    }
+    match answer {
         None => (StatusCode::REQUEST_TIMEOUT, "no one answered in JStream\n").into_response(),
         Some(false) => {
             pending.finish(PairingAskOutcome::Denied);
@@ -273,6 +304,25 @@ pub(crate) async fn ask(
             }
         },
     }
+}
+
+/// Completes once `stopping` turns true or its sender goes; never for `None`.
+async fn stopped(stopping: Option<&mut tokio::sync::watch::Receiver<bool>>) {
+    match stopping {
+        Some(stopping) => {
+            let _ = stopping.wait_for(|stopping| *stopping).await;
+        }
+        None => std::future::pending().await,
+    }
+}
+
+/// The answer to an ask whose listener closed, or whose server stopped, first.
+fn closed() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        "network access was turned off\n",
+    )
+        .into_response()
 }
 
 fn bad_request(reason: &str) -> Response {
