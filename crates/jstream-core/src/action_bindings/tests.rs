@@ -176,3 +176,129 @@ fn only_an_input_let_run_bindings_fires_them() {
     midi.push("Stranger", 2, &note(true, 36));
     assert!(runner.tick(&graph, Some(&midi)).is_empty(), "let out again");
 }
+
+fn pad() -> Trigger {
+    Trigger::MidiNote {
+        note: 36,
+        channel: None,
+        input: Some("Pads".into()),
+    }
+}
+
+/// A runner that has looked at `graph` once, then heard pad 36 pressed: master open.
+fn pressed(graph: &Graph, midi: &MidiInputs) -> ActionBindings {
+    let mut runner = ActionBindings::default();
+    assert!(runner.tick(graph, Some(midi)).is_empty());
+    midi.push("Pads", 1, &note(true, 36));
+    assert_eq!(
+        runner.tick(graph, Some(midi)),
+        vec![talk("master", MuteTo::PushToTalk)]
+    );
+    runner
+}
+
+#[test]
+fn a_held_press_is_let_go_when_its_input_may_no_longer_run_bindings() {
+    let graph = bound(pad(), talk("master", MuteTo::PushToTalk));
+    let midi = inputs();
+    let mut runner = pressed(&graph, &midi);
+    assert!(runner.tick(&graph, Some(&midi)).is_empty(), "still held");
+    midi.set_bindable(Vec::new());
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Muted)],
+        "the switch went off mid-hold: muted again"
+    );
+    assert!(runner.tick(&graph, Some(&midi)).is_empty(), "only once");
+}
+
+#[test]
+fn a_held_press_is_let_go_when_its_binding_changes_or_goes() {
+    let mut graph = bound(pad(), talk("master", MuteTo::PushToTalk));
+    let midi = inputs();
+    let mut runner = pressed(&graph, &midi);
+    graph
+        .apply(&[Edit::BindingClear { trigger: pad() }], None)
+        .expect("unbinds");
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Muted)]
+    );
+    // Rebound to push-to-mute mid-hold: the push-to-talk is let go, and the note-off
+    // later runs the new binding's release.
+    let graph = bound(pad(), talk("master", MuteTo::PushToTalk));
+    let mut runner = pressed(&graph, &midi);
+    let graph = bound(pad(), talk("master", MuteTo::PushToMute));
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Muted)]
+    );
+    midi.push("Pads", 2, &note(false, 36));
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Unmuted)]
+    );
+}
+
+#[test]
+fn a_held_press_is_let_go_when_the_midi_inputs_go() {
+    let graph = bound(pad(), talk("master", MuteTo::PushToTalk));
+    let midi = inputs();
+    let mut runner = pressed(&graph, &midi);
+    assert_eq!(
+        runner.tick(&graph, None),
+        vec![talk("master", MuteTo::Muted)]
+    );
+    assert!(runner.tick(&graph, None).is_empty());
+}
+
+#[test]
+fn a_held_press_is_let_go_when_its_sender_falls_silent() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+
+    let graph = bound(pad(), talk("master", MuteTo::PushToTalk));
+    let midi = inputs();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    assert!(midi.set_clock(std::sync::Arc::new(clock.clone())));
+    let pads = midi.input("Pads").expect("an input");
+    pads.alive(0);
+    let mut runner = pressed(&graph, &midi);
+    // Its sender keeps sending frames: still held, however long.
+    for _ in 0..4 {
+        clock.advance(SILENT_MS);
+        pads.alive(midi.now_ms().expect("a clock"));
+        assert!(runner.tick(&graph, Some(&midi)).is_empty());
+    }
+    // It drops: let go once it has been silent long enough, and only once.
+    clock.advance(SILENT_MS);
+    assert!(runner.tick(&graph, Some(&midi)).is_empty(), "not yet");
+    clock.advance(1);
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Muted)]
+    );
+    assert!(runner.tick(&graph, Some(&midi)).is_empty());
+}
+
+#[test]
+fn a_port_that_keeps_no_link_alive_holds_until_released() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+
+    let graph = bound(pad(), talk("master", MuteTo::PushToTalk));
+    let midi = inputs();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    assert!(midi.set_clock(std::sync::Arc::new(clock.clone())));
+    let mut runner = pressed(&graph, &midi);
+    clock.advance(60_000);
+    assert!(
+        runner.tick(&graph, Some(&midi)).is_empty(),
+        "a held key is held"
+    );
+    midi.push("Pads", 60_000, &note(false, 36));
+    assert_eq!(
+        runner.tick(&graph, Some(&midi)),
+        vec![talk("master", MuteTo::Muted)]
+    );
+}

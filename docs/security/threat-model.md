@@ -761,7 +761,9 @@ somewhere it shouldn't.
   `--jtunnel-midi`), off by default
   ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md) §3,
   [ADR-0207](../adr/0207-mute-actions-and-held-triggers.md)): the engine's binding runner
-  reads only the inputs `MidiInputs::bindable` names. Value bindings and channels read a
+  reads only the inputs `MidiInputs::bindable` names. A press a sender holds (a
+  push-to-talk) is let go once the switch goes off, its binding changes, or the sender
+  has sent nothing for 500 ms, so a dropped sender can't leave a mute open. Value bindings and channels read a
   sender's MIDI without that switch, which ADR-0123 §3 also covers; that is open.
 - A sender's state packets (JTunnel's side channel, a DAW's JSON messages under keys,
   [ADR-0171](../adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2) are

@@ -169,6 +169,9 @@ pub struct MidiState {
     pushed: AtomicU64,
     /// When the last message arrived, in milliseconds, plus one; 0 before any.
     last_ms: AtomicU64,
+    /// When a sender that keeps its link alive was last heard from, in milliseconds,
+    /// plus one; 0 for an input that keeps none, such as a MIDI port (ADR-0207).
+    alive_ms: AtomicU64,
     /// Messages pushed, of every kind: what a settled source compares to see whether
     /// anything changed.
     changes: AtomicU64,
@@ -225,6 +228,7 @@ impl MidiState {
                 .collect(),
             controls_pushed: AtomicU64::new(0),
             last_ms: AtomicU64::new(0),
+            alive_ms: AtomicU64::new(0),
             changes: AtomicU64::new(0),
             tempo: tempo::TempoCell::new(),
             last_cc: AtomicU64::new(0),
@@ -371,6 +375,20 @@ impl MidiState {
     /// When the last message arrived, in milliseconds, or `None` before any.
     pub fn last_ms(&self) -> Option<u64> {
         self.last_ms.load(Ordering::Relaxed).checked_sub(1)
+    }
+
+    /// Records that the input's sender was heard from at `at_ms` on the media clock,
+    /// with or without MIDI: a JTunnel stream does this for each frame it plays, so a
+    /// held press can be let go once its sender falls silent (ADR-0207).
+    pub fn alive(&self, at_ms: u64) {
+        self.alive_ms
+            .fetch_max(at_ms.saturating_add(1), Ordering::Relaxed);
+    }
+
+    /// When the input's sender was last heard from, in milliseconds, or `None` for an
+    /// input that keeps no link alive, or before it was first heard from.
+    pub fn alive_ms(&self) -> Option<u64> {
+        self.alive_ms.load(Ordering::Relaxed).checked_sub(1)
     }
 
     /// Messages pushed so far, of every kind, whether or not they changed anything.

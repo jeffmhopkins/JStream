@@ -21,6 +21,12 @@
 //!   controller not heard before is taken to rest at 0.
 //! - A program change binding fires on its program change, and has no release.
 //!
+//! A press whose action has a release is held until its release is heard, and is let
+//! go (its release runs) sooner if what it came from goes away: its input may no longer
+//! run bindings, its binding is changed or removed, the MIDI inputs go, or its JTunnel
+//! sender has not been heard from for [`SILENT_MS`]. So a push-to-talk never stays open
+//! because its note-off was lost.
+//!
 //! Docs: docs/adr/0207-mute-actions-and-held-triggers.md
 
 use std::collections::BTreeMap;
@@ -31,6 +37,11 @@ use jstream_sources::{ControlEvent, ControlKind, MidiInputs, NoteEvent};
 
 /// The value a control change crosses to fire: the middle of 0 to 127.
 const MIDDLE: u8 = 64;
+
+/// How long a JTunnel sender may go unheard before its held presses are let go, in
+/// milliseconds. A sender sends a frame every few milliseconds while linked, even with
+/// no MIDI, so this is only reached once it has dropped.
+pub(crate) const SILENT_MS: u64 = 500;
 
 /// One event from an input's logs, notes and controls together.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,11 +130,24 @@ struct Seen {
     values: BTreeMap<(u8, u8), u8>,
 }
 
-/// The action bindings between ticks: how far each input's logs have been read.
+/// A press whose release has not been heard yet.
+#[derive(Debug)]
+struct Held {
+    input: String,
+    trigger: Trigger,
+    /// The action it ran, which its binding must still run for it to stay held.
+    action: Action,
+    /// What letting it go runs.
+    release: Action,
+}
+
+/// The action bindings between ticks: how far each input's logs have been read, and
+/// the presses held.
 #[derive(Debug, Default)]
 pub(crate) struct ActionBindings {
     /// By input's name.
     seen: BTreeMap<String, Seen>,
+    held: Vec<Held>,
     notes: Vec<NoteEvent>,
     controls: Vec<ControlEvent>,
 }
@@ -134,7 +158,7 @@ impl ActionBindings {
     pub(crate) fn tick(&mut self, graph: &Graph, midi: Option<&MidiInputs>) -> Vec<Action> {
         let Some(midi) = midi else {
             self.seen.clear();
-            return Vec::new();
+            return self.held.drain(..).map(|held| held.release).collect();
         };
         // Each input that may run bindings, with the bindings listening to it: those
         // naming it and those listening to every input. Only an input whose MIDI the
@@ -154,7 +178,27 @@ impl ActionBindings {
         // An input no binding listens to any more is forgotten, so a binding made later
         // starts from what it sends then.
         self.seen.retain(|input, _| inputs.contains_key(input));
+        // A held press is let go once its input may no longer run bindings, its binding
+        // no longer runs its action, or its sender fell silent.
+        let now_ms = midi.now_ms();
         let mut run = Vec::new();
+        self.held.retain(|held| {
+            let bound = inputs.get(&held.input).is_some_and(|bindings| {
+                bindings
+                    .iter()
+                    .any(|(trigger, action)| **trigger == held.trigger && **action == held.action)
+            });
+            let silent = midi
+                .input(&held.input)
+                .and_then(|state| state.alive_ms())
+                .zip(now_ms)
+                .is_some_and(|(alive, now)| now.saturating_sub(alive) > SILENT_MS);
+            if bound && !silent {
+                return true;
+            }
+            run.push(held.release.clone());
+            false
+        });
         for (input, bindings) in inputs {
             let Some(state) = midi.input(&input) else {
                 continue;
@@ -193,10 +237,26 @@ impl ActionBindings {
             // Stable, so events at the same millisecond keep the order they came in.
             heard.sort_by_key(Heard::at_ms);
             for event in &heard {
-                for (trigger, action) in &bindings {
+                for &(trigger, action) in &bindings {
                     match fired(trigger, event) {
-                        Some(Fired::Press) => run.push((*action).clone()),
-                        Some(Fired::Release) => run.extend(action.on_release()),
+                        Some(Fired::Press) => {
+                            run.push(action.clone());
+                            if let Some(release) = action.on_release() {
+                                self.held
+                                    .retain(|held| held.input != input || held.trigger != *trigger);
+                                self.held.push(Held {
+                                    input: input.clone(),
+                                    trigger: trigger.clone(),
+                                    action: action.clone(),
+                                    release,
+                                });
+                            }
+                        }
+                        Some(Fired::Release) => {
+                            self.held
+                                .retain(|held| held.input != input || held.trigger != *trigger);
+                            run.extend(action.on_release());
+                        }
                         None => {}
                     }
                 }

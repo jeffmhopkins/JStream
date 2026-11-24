@@ -90,7 +90,13 @@ the new one over the block, so a mute set between two blocks fades in one block 
    to the every-input state, which also holds the senders left out. This replaces
    ADR-0142 §2's "it doesn't reach the binding system" for action bindings, within
    ADR-0123's bounds; value bindings and channels, which read a sender's MIDI without the
-   switch today, are left to their own change. Firing on the values tick, not on the render tick of the message's
+   switch today, are left to their own change. **A held press never outlives its
+   source.** The engine keeps each press whose action has a release until that release is
+   heard, and runs the release itself as soon as the input is no longer let in, the
+   binding is cleared or runs another action, or the MIDI inputs go. A JTunnel sender
+   marks its input alive with every frame it really sends, MIDI or not, so the engine
+   also lets its presses go once it has sent nothing for 500 ms; a MIDI port, which keeps
+   no link alive, holds a key until its note-off. Firing on the values tick, not on the render tick of the message's
    time, adds up to one tick of latency; that is fine for a mute and leaves
    beat-accurate firing to a later change.
 5. **Switches are value targets.** `ValueTarget` gains `source_mute`, `bus_mute` and

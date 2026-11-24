@@ -310,7 +310,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   and to its every-input state
   ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §2), stamped on the
   media clock at their sample offset, whether or not a source records the sender; its
-  clock and transport messages also run the sender's tempo there (§3).
+  clock and transport messages also run the sender's tempo there (§3). Each frame the
+  sender really sent, MIDI or not (not one concealed for a gap), marks its input alive
+  (`MidiFeed::alive`), so a press it holds is let go once it falls silent
+  ([Action bindings](#contents-motion)).
   A `jstream-tempo` thread (`tempo.rs`, [ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md)
   §1) starts with the receiver and, every 20 ms, reads the every-input state's tempo
   and publishes it as the shared values `tempo.bpm` (to a tenth, moved only by a tenth
@@ -332,7 +335,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   accepted-sender and setup checks, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
-  reaching its MIDI input with no source recording it, and its clock giving that input
+  reaching its MIDI input with no source recording it, its frames marking that input
+  alive after its last message, and its clock giving that input
   a tempo and publishing the `tempo.*` values. A fake mDNS responder on loopback tests
   discovery: the query sent from the receive socket, the senders that answer listed
   with whether they are accepted, a goodbye, an unreadable answer counted, a long
@@ -488,8 +492,17 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   (`Action::on_release`) on that note's note-off or the control falling back below 64.
   It reads only the inputs `MidiInputs::bindable` names (a JTunnel sender with "Use
   this sender's MIDI" on, ADR-0123 §3), each for a binding naming it or naming none.
-  The first look at an input runs nothing. The actions run as their calls would, credited
-  to the engine with no audit entry, and a failure is logged at debug.
+  The first look at an input runs nothing. A press whose action has a release is held
+  until its release is heard, and let go sooner (its release runs on the next tick) once
+  its input is no longer bindable, its binding is cleared or runs another action, the
+  MIDI inputs go, or its input was marked alive (a JTunnel sender) and has not been for
+  `SILENT_MS`, 500 ms, on the media clock. A MIDI port is never marked alive, so its
+  held key stays held. So a push-to-talk never stays open because its note-off was
+  lost. The actions run as their calls would, credited
+  to the engine with no audit entry, and a failure is logged at debug. Tests cover a
+  note pressed and let go between ticks, a control crossing 64 both ways, a program
+  change, a toggle ignoring its note-off, an input not let run bindings, and a held
+  press let go by each of those four, and kept held for a port.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
   each channel's inputs with the same readers and smoothing, in an order where a

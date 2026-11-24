@@ -1125,6 +1125,11 @@ impl Run {
                 // MIDI is drawn whether or not a source records the audio, stamped at
                 // its sample within the frame.
                 if let Some(feed) = &mut stream.midi {
+                    // A frame the sender really sent keeps its held presses held; one
+                    // concealed for a gap doesn't (ADR-0207).
+                    if !due.concealed {
+                        feed.alive(due.time_ns);
+                    }
                     for (offset, event) in due.events() {
                         if let wire::Event::Midi(message) = event {
                             let ns = due.time_ns.saturating_add(

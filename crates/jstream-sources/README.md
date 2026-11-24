@@ -242,7 +242,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   bindings do ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)).
   `MidiInputs::set_bindable` names the inputs whose MIDI may run those bindings
   (`bindable`), the JTunnel senders whose "Use this sender's MIDI" is on; what every
-  input draws doesn't change. A reader skips a log slot a push is writing. CC 120
+  input draws doesn't change. `MidiState::alive(at_ms)` (or `MidiFeed::alive`) records
+  that the input's sender was heard from, MIDI or not, and `alive_ms` reads it back,
+  `None` for an input never marked, such as a MIDI port: the bindings let a held press go
+  once a marked input falls silent. A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
   `drawn(name)` is the state a source's `input` setting draws. An input thread pushes
