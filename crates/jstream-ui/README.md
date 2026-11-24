@@ -221,7 +221,8 @@ Contents ([Design](#design) explains the choices):
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path, each trigger's sentence, the loop button's steps and
   range and a menu line's trigger toggle tested natively; `lane_offers.rs`: the settings
-  and switches Add lane offers and the switch lanes' bars, tested natively), its
+  and switches Add lane offers and the switch lanes' bars, how one is added, dragged and
+  written back as points, tested natively), its
   Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
   which cues it edits and how it finds one, tested natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
