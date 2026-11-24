@@ -2495,6 +2495,41 @@ pub(crate) fn still_on_screen(
     on_screen_until_end(graph, running, now, look, assets, true)
 }
 
+/// The fades still running at `now` of `running`, an in-place Move that draws the
+/// program scene as it is (ADR-0237): what another item's show or hide that cuts it short
+/// carries on. Empty when it has ended; `None` when it is drawn track by track, so the
+/// next one must be too, to go on from where its items are.
+pub(crate) fn glide_fades(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Option<ShowFades> {
+    let state = graph.state();
+    let mut shot = Shot {
+        canvas: state.canvas(),
+        ..Shot::default()
+    };
+    let mut planner = Planner {
+        state,
+        look,
+        assets,
+        wake: None,
+        quiet: false,
+        fades: None,
+        glide: None,
+        appearing: None,
+    };
+    let (planned, _) = planner.transition(running, &mut shot);
+    if end_time(running.start, planned.end_ms).is_none_or(|end| now >= end) {
+        return Some(ShowFades::new());
+    }
+    let mut fades = planner.moves_only_the_camera(running, &planned, &shot)?;
+    fades.retain(|_, fade| !fade.ended(now));
+    Some(fades)
+}
+
 fn on_screen_until_end(
     graph: &Graph,
     running: &Running,
@@ -3049,13 +3084,25 @@ impl<'a> Planner<'a, '_> {
                             .as_ref()
                             .is_none_or(|inside| still(&inside.planned.tracks, in_place))
                 }
+                // In place, the two halves of an item that goes and comes back can
+                // differ by live values too, and a Move cut short leaves the half that
+                // was going on screen beside the one coming back.
                 Track::Disappear { from, .. } => {
-                    visual.inside.is_none() && comes_back(tracks, visual, from)
+                    visual.inside.is_none()
+                        && if in_place {
+                            tracks.iter().any(|(other, track)| {
+                                matches!(track, Track::Appear { .. })
+                                    && other.item_id == visual.item_id
+                                    && other.inside.is_none()
+                            })
+                        } else {
+                            comes_back(tracks, visual, from)
+                        }
                 }
                 Track::Appear { to, .. } => {
                     visual.inside.is_none()
                         && tracks.iter().any(|(other, track)| {
-                            matches!(track, Track::Disappear { from, .. } if from == to)
+                            matches!(track, Track::Disappear { from, .. } if in_place || from == to)
                                 && other.item_id == visual.item_id
                         })
                 }
@@ -3069,6 +3116,13 @@ impl<'a> Planner<'a, '_> {
         let mut blends = Vec::new();
         effect_blends(&planned.tracks, &out.chains, &mut blends);
         if camera.anchor.is_some() || (!blends.is_empty() && !running.in_place) {
+            tracing::debug!(
+                scene = %running.to,
+                anchored = camera.anchor.is_some(),
+                blends = blends.len(),
+                in_place = running.in_place,
+                "a Move within a 3D family pauses its chain"
+            );
             return None;
         }
         // An item of the scene itself that appears or goes on its own, where the shown
@@ -3106,7 +3160,27 @@ impl<'a> Planner<'a, '_> {
                 None => rest.push((visual.clone(), track.clone())),
             }
         }
-        still(&rest, running.in_place).then_some(fades)
+        // The fades of the Move this one cut short go on from where they were: one going
+        // the same way keeps its course, and one turned back picks up where it is
+        // (ADR-0237 decision 2).
+        for (item, before) in &running.carried {
+            match fades.get_mut(item) {
+                Some(fade) if fade.visible == before.visible => *fade = *before,
+                Some(fade) => *fade = fade.after(Some(before), running.start),
+                None => {
+                    fades.insert(item.clone(), *before);
+                }
+            }
+        }
+        let kept = still(&rest, running.in_place);
+        if !kept {
+            tracing::debug!(
+                scene = %running.to,
+                in_place = running.in_place,
+                "a Move within a 3D family pauses its chain: an item moves or comes alone"
+            );
+        }
+        kept.then_some(fades)
     }
 
     /// Whether `running` is a Move within the family of a 3D scene (ADR-0180): from one

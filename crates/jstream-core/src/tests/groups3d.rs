@@ -1195,3 +1195,249 @@ fn items_hidden_one_after_another_on_a_3d_keyframe_keep_its_chain() {
     clock.advance(200_000);
     check("once the card has gone");
 }
+
+/// Items shown one after another on a 3D scene keep its chain running while an item that
+/// can't glide stays on it (ADR-0237 decision 2): the second show starts while the first
+/// is still running, from what is on screen, where that item is both going and coming
+/// back. On a streaming PC, a hologram's second cue showed its cards beside a cockpit
+/// model and dropped the chain.
+#[test]
+fn items_shown_one_after_another_beside_an_item_that_cant_glide_keep_the_chain() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let (engine, control) = rig_with(true, engine);
+    let call = |action: Action| {
+        super::block_on(control.call(Call::Action { action })).expect("action");
+    };
+    let hidden = |item: &str| Edit::ItemSetVisible {
+        item_id: ItemId::new(item),
+        scene_id: None,
+        visible: false,
+    };
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("rig_item"),
+            },
+            place(
+                "main",
+                "beam",
+                "red",
+                boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            place(
+                "main",
+                "card",
+                "red",
+                boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+            ),
+            hidden("beam"),
+            hidden("card"),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            // The wall's effect runs over the canvas, as a model's layer does, so it
+            // can't glide (ADR-0106): it goes and comes back the same.
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("wall"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("wall_fx"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("wall"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("main"),
+                name: "K".into(),
+            },
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ]),
+    )
+    .expect("two cards, a wall that can't glide and a keyframe");
+    batch(
+        &control,
+        edits(vec![Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("fade"),
+        }]),
+    )
+    .expect("fade by default");
+    let main = SceneId::new("main");
+    let check = |when: &str| {
+        engine.replan();
+        let loaded = engine.render_hub().load();
+        let shot = loaded.shot();
+        assert!(!shot.transitioning(), "no tracks {when}");
+        assert!(shot.scene_chain(&main).is_some(), "the chain runs {when}");
+    };
+    for (visible, what) in [(true, "shown"), (false, "hidden")] {
+        let act = |item: &str| {
+            let item_id = ItemId::new(item);
+            call(if visible {
+                Action::ItemShow {
+                    item_id,
+                    scene_id: None,
+                }
+            } else {
+                Action::ItemHide {
+                    item_id,
+                    scene_id: None,
+                }
+            });
+        };
+        act("beam");
+        clock.advance(120_000);
+        check(&format!("while the beam is {what}"));
+        act("card");
+        clock.advance(80_000);
+        check(&format!("while the card is {what} after it"));
+        clock.advance(200_000);
+        check(&format!("once the beam is {what}"));
+        clock.advance(400_000);
+        check(&format!("once both are {what}"));
+    }
+}
+
+/// A second show or hide on a 3D scene, partway through the first, carries the first
+/// item's fade on from where it is (ADR-0237 decision 2): the card, half gone or half
+/// come, neither jumps back nor starts its fade again, whether the second cue is another
+/// item's or the card's own turned back.
+#[test]
+fn a_second_show_or_hide_carries_a_fade_on_from_where_it_is() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    use jstream_protocol::{Action, Call, Easing, Settings, TransitionPresetId};
+    // An item and whether the cue shows it.
+    type Cue = (&'static str, bool);
+    // What the card starts as, its first cue, and the second cue.
+    let cases: [(bool, Cue, Cue); 3] = [
+        (true, ("card", false), ("beam", false)),
+        (true, ("card", false), ("card", true)),
+        (false, ("card", true), ("beam", false)),
+    ];
+    for (shown, first, second) in cases {
+        let _gpu = super::one_gpu_test_at_a_time();
+        let clock = FakeClock::new(Timebase::MICROS);
+        let engine = Engine::new();
+        engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+        let (engine, control) = rig_with(true, engine);
+        if pixel(&control, 960, 540).is_none() {
+            return;
+        }
+        let call = |(item, visible): (&str, bool)| {
+            let item_id = ItemId::new(item);
+            let action = if visible {
+                Action::ItemShow {
+                    item_id,
+                    scene_id: None,
+                }
+            } else {
+                Action::ItemHide {
+                    item_id,
+                    scene_id: None,
+                }
+            };
+            super::block_on(control.call(Call::Action { action })).expect("action");
+        };
+        batch(
+            &control,
+            edits(vec![
+                Edit::ItemRemove {
+                    item_id: ItemId::new("rig_item"),
+                },
+                place(
+                    "main",
+                    "card",
+                    "red",
+                    boxed(700.0, 540.0, (300.0, 300.0), 200.0),
+                ),
+                place(
+                    "main",
+                    "beam",
+                    "red",
+                    boxed(1220.0, 540.0, (300.0, 300.0), 200.0),
+                ),
+                Edit::ItemSetVisible {
+                    item_id: ItemId::new("card"),
+                    scene_id: None,
+                    visible: shown,
+                },
+                Edit::FilterAdd {
+                    owner: jstream_protocol::FilterOwner::Scene {
+                        scene_id: SceneId::new("main"),
+                    },
+                    chain: jstream_protocol::FilterChain::Video,
+                    filter_id: jstream_protocol::FilterId::new("look"),
+                    kind: "sharpen".into(),
+                    settings: Settings::default(),
+                    enabled: None,
+                    index: None,
+                },
+                Edit::TransitionCreate {
+                    preset_id: TransitionPresetId::new("fade"),
+                    name: "Fade".into(),
+                    kind: "fade".into(),
+                    duration_ms: 400,
+                    easing: Easing::Linear,
+                    settings: Settings::default(),
+                },
+            ]),
+        )
+        .expect("two cards");
+        batch(
+            &control,
+            edits(vec![Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("fade"),
+            }]),
+        )
+        .expect("fade by default");
+        let half = |when: &str| {
+            engine.replan();
+            let loaded = engine.render_hub().load();
+            let shot = loaded.shot();
+            assert!(
+                !shot.transitioning() && shot.scene_chain(&SceneId::new("main")).is_some(),
+                "drawn as the scene, with its chain, {when}: {first:?} then {second:?}"
+            );
+            let [red, green, blue, _] = pixel(&control, 700, 540).expect("an adapter");
+            assert!(
+                (100..=160).contains(&red) && green == 0 && (95..=155).contains(&blue),
+                "the card half there {when}: {red} {green} {blue}, {first:?} then {second:?}"
+            );
+        };
+        call(first);
+        clock.advance(200_000);
+        half("half-way");
+        call(second);
+        clock.advance(1_000);
+        half("just after the second cue");
+    }
+}

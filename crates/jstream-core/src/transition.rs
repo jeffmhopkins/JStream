@@ -256,6 +256,9 @@ pub(crate) struct Running {
     /// scene as it was drawn (ADR-0237): its other items are where the scene places
     /// them, though their live values may have moved since it started.
     pub(crate) in_place: bool,
+    /// The fades of the in-place Move it cut short that were still running as it
+    /// started, by item (ADR-0237 decision 2): each goes on from where it was.
+    pub(crate) carried: crate::snapshot::ShowFades,
 }
 
 impl Running {

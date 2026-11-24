@@ -2590,6 +2590,7 @@ fn looked_up(via: &[&str]) -> Vec<String> {
         from_camera: None,
         via: via.iter().map(|id| SceneId::new(*id)).collect(),
         in_place: false,
+        carried: Default::default(),
     };
     let white: Vec<u8> = std::iter::repeat_n([255u8; 4], 4).flatten().collect();
     let frame = Frame::new(2, 2, &white, 1).expect("2x2 RGBA8");

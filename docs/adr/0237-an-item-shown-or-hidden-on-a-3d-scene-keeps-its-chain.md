@@ -47,12 +47,22 @@ is drawn and nothing on the wire.
    Move, and then plans the scene at rest.
 2. **Its other items are as the scene draws them now.** Such a Move starts from the
    program scene as it was drawn, at rest or partway through another item's showing
-   or hiding (`Running::in_place`). Its other items can still differ at their two ends,
+   or hiding drawn this way (`Running::in_place`). A fade of the Move it cuts short
+   that is still running goes on as it was (`Running::carried`): one going the same way
+   keeps its course, and one the new Move turns back picks up where it is, as the show
+   scene's fades do. So an item half shown or half gone neither jumps nor starts again.
+   A Move cut short that was drawn track by track leaves the new one to be drawn so too.
+   Its other items can still differ at their two ends,
    and in their effects' settings, because the live values that drive them (a
    sequence's channel lanes, mappings) have moved since the cue. Those differences
    don't count as the Move moving them: the scene drawn as it is shows them as they
    are now, as it would at rest. On a streaming PC, a hologram's hide ran its lanes
-   while its cards went, and without this its Move dropped the chain.
+   while its cards went, and without this its Move dropped the chain. The same holds
+   for an item that can't glide and so goes and comes back
+   ([ADR-0106](0106-item-effects-in-canvas-space.md)): its two halves
+   may differ, and a show that starts while another is running finds the half that was
+   going still on screen beside the one coming back. On the streaming PC, a hologram's
+   second cue found the cockpit's model so and dropped the chain.
 3. **Everything else is unchanged.** A Move whose items also move, re-crop, blend an
    effect or leave a camera anchored to a group, an item that appears or goes inside a
    group, a Move between families, a Fade and a cut are drawn as ADR-0180 and ADR-0226

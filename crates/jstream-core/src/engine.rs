@@ -6329,6 +6329,7 @@ impl State {
                     from_camera,
                     via: Vec::new(),
                     in_place: false,
+                    carried: Default::default(),
                 }),
             );
         }
@@ -6840,6 +6841,7 @@ impl State {
                     // Only a Move within the family follows a path (ADR-0166 decision 2).
                     via: if by_item { via } else { Vec::new() },
                     in_place: false,
+                    carried: Default::default(),
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
@@ -7015,8 +7017,36 @@ impl State {
             (self.screen_now(program, run, now), shown)
         });
         // From the program scene as it was drawn: at rest, or partway through another
-        // item's showing or hiding there, never a Move between views (ADR-0237).
-        let in_place = self.studio.running().is_none_or(|running| running.in_place);
+        // item's showing or hiding there, drawn as the scene with its fades, which go on
+        // (ADR-0237); never a Move between views, or one drawn track by track.
+        let carried = match self.studio.running() {
+            None => Some(snapshot::ShowFades::new()),
+            Some(running) if running.in_place => {
+                let Self {
+                    graph,
+                    shown,
+                    frames,
+                    frame_versions,
+                    live,
+                    ..
+                } = self;
+                let graph: &Graph = shown.as_ref().unwrap_or(graph);
+                let assets = live.filter_assets();
+                snapshot::glide_fades(
+                    graph,
+                    running,
+                    now,
+                    &mut |id| match frames.get(id) {
+                        Some(frame) => Some(Look::frame(frame.clone(), None)),
+                        None => live.look_quiet(id, now, frame_versions),
+                    },
+                    &assets,
+                )
+            }
+            Some(_) => None,
+        };
+        let in_place = carried.is_some();
+        let carried = carried.unwrap_or_default();
         let applied = self
             .graph
             .apply_with_running(&edits, None, &running)
@@ -7046,6 +7076,7 @@ impl State {
                     from_camera,
                     via: Vec::new(),
                     in_place,
+                    carried,
                 }),
             );
         }
@@ -7183,6 +7214,7 @@ impl State {
             from_camera: transition::camera_of(&self.graph, program),
             via: Vec::new(),
             in_place: false,
+            carried: Default::default(),
         };
         let Self {
             graph,

@@ -4649,6 +4649,7 @@ mod tests {
             from_camera: crate::transition::camera_of(&graph, &main),
             via: Vec::new(),
             in_place: false,
+            carried: Default::default(),
         };
         let switching = draw(&graph, sky(true), Some(&running)).expect("an adapter");
         assert_eq!(
@@ -6765,6 +6766,7 @@ mod tests {
             from_camera: crate::transition::camera_of(&graph, &main),
             via: Vec::new(),
             in_place: false,
+            carried: Default::default(),
         };
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
         let Some(landed) = lit_centre(&graph, light.clone()) else {

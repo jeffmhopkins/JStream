@@ -922,7 +922,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   started after a Fade onto the scene ended but before a plan let it go, and an
   item shown and hidden with a Fade on a filtered 3D keyframe drawn through its camera
   in the keyframe's pass with the chain still running, two items hidden one after the
-  other while another moves keeping it too, and an
+  other while another moves keeping it too, as do two shown one after the other beside
+  an item that can't glide, a second show or hide carrying a half-done fade on with no
+  jump, and an
   effect setting changed after the first frame reaching a 3D card, a legacy-transform
   child placed through its group; and, from the planned shot, a group's motion and a
   child's own moving it in the group's space during a Move, and a Move splitting the
@@ -1500,7 +1502,8 @@ audit entry and errors.
   initial cut included, starts no run, so the item shows or hides on the next frame
   even when it has its own effect. A `cut` that stores a duration still plays that
   effect over it. A transition in flight is
-  continued from what is on screen; a press program doesn't see (another keyframe's
+  continued from what is on screen, and one that draws a 3D scene as it is hands its
+  running fades on (`Running::carried`, ADR-0237); a press program doesn't see (another keyframe's
   placement) leaves it as it is. A source the next plan reaches again restarts as on a
   switch (`restart_on_show`). An item of the internal show scene's own (`scene_id`
   omitted) plays the same effect over program on its own instead
@@ -1837,7 +1840,8 @@ though no plan has let it go yet (the clock held, [ADR-0172](../../docs/adr/0172
 `snapshot::still_on_screen` finds it ended, and the switch, `set_keyframe` and
 `item.show` start from the program scene at rest, as after the plan that lets it go
 (#1598, #1632). An `item.show` or `item.hide` that starts from program at rest, or
-while another of them runs, is marked `Running::in_place` (ADR-0237). A switch to the scene already on program, even
+while another of them runs drawn as the scene, is marked `Running::in_place` and carries
+that one's running fades (`Running::carried`, found by `snapshot::glide_fades`) (ADR-0237). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
 Beside it the studio keeps the show scene's items fading in or out on their own
 (`Studio::fades`, one `ShowFade` per item: its start, direction, effect and timing),
@@ -2727,7 +2731,13 @@ it appears or goes (`an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera`
 item's show or hide that starts from the program scene as drawn (`Running::in_place`)
 lets its other items differ at their ends, and in their effects' settings, by the live
 values that moved since the cue
-(`items_hidden_one_after_another_on_a_3d_keyframe_keep_its_chain`). A 3D
+(`items_hidden_one_after_another_on_a_3d_keyframe_keep_its_chain`), and an item that
+can't glide go and come back as two halves that differ
+(`items_shown_one_after_another_beside_an_item_that_cant_glide_keep_the_chain`). The
+fades of the Move it cut short (`Running::carried`) go on in its own: one going the same
+way keeps its course and one turned back picks up where it is (`ShowFade::after`), so a
+card half gone neither jumps nor starts again
+(`a_second_show_or_hide_carries_a_fade_on_from_where_it_is`). A 3D
 scene's picture was drawn through its own camera, so its track is drawn flat, through
 no camera (`Visual::is_whole_scene`, `Transitioning::whole`): a Fade into or out of a
 filtered 3D scene shows it as it is

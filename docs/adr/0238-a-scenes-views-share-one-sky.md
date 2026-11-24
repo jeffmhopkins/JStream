@@ -56,3 +56,5 @@ This amends ADR-0167 and ADR-0188.
 - After a warp, every view of a set shows the same planet or nebula in the same place,
   and the warp and stars run on unbroken across view switches.
 - Two different scenes, which are not views of each other, still keep a sky each.
+- The shared sky steps once a frame. When two views drawn in one frame set different
+  warps on their keyframes, the first view drawn sets that frame's step.
