@@ -177,6 +177,8 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::AudioResetLoudness {} => "Reset the loudness meter".to_owned(),
         Action::PreviewSubscribe { .. } => "Opened a preview stream".to_owned(),
         Action::PreviewUnsubscribe { .. } => "Closed a preview stream".to_owned(),
+        Action::PreviewShow { .. } => "Changed what a preview stream shows".to_owned(),
+        Action::PreviewRequestKeyframe { .. } => "Asked a preview stream for a keyframe".to_owned(),
         Action::YoutubeSignIn => "Started a YouTube sign-in".to_owned(),
         Action::YoutubeSignOut => "Signed out of YouTube".to_owned(),
         Action::YoutubeCreateBroadcast { .. } => "Created a YouTube broadcast".to_owned(),

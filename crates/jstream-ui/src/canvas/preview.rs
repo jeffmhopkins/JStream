@@ -180,12 +180,37 @@ impl Stream {
         })
     }
 
-    /// The stream that shows `scene` next, on the next channel.
+    /// The same stream showing `scene`, on the same channel: the engine moves it there
+    /// with `preview.show` ([`Stream::show`]), so the decoder and the last picture carry
+    /// on with no new stream to open (#1205).
     pub fn showing(&self, scene: Option<SceneId>) -> Stream {
         Stream {
-            channel: self.channel.wrapping_add(1).max(1),
             scene,
             ..self.clone()
+        }
+    }
+
+    /// The same stream on the next channel: opened anew with `preview.subscribe`, when
+    /// the engine couldn't move this one.
+    pub fn on_next_channel(&self) -> Stream {
+        Stream {
+            channel: self.channel.wrapping_add(1).max(1),
+            ..self.clone()
+        }
+    }
+
+    /// Its `preview.show`: what an open stream on its channel shows becomes its scene.
+    pub fn show(&self) -> Action {
+        Action::PreviewShow {
+            channel: self.channel,
+            scene_id: self.scene.clone(),
+        }
+    }
+
+    /// Its `preview.request_keyframe`.
+    pub fn keyframe(&self) -> Action {
+        Action::PreviewRequestKeyframe {
+            channel: self.channel,
         }
     }
 
@@ -251,13 +276,18 @@ pub enum Step {
 
 /// Feeds a decoder H.264 frames so that it only ever gets a stream it can decode: it
 /// starts at a keyframe, is reconfigured when the stream's profile or level changes,
-/// and, once its backlog grows past [`MAX_BACKLOG`], skips to the next keyframe.
+/// and, once its backlog grows past [`MAX_BACKLOG`], skips to the next keyframe, which
+/// it asks the engine for at once ([`H264Feed::take_keyframe_ask`], `preview.request_keyframe`)
+/// so the skip lasts a frame or two rather than up to the stream's two seconds
+/// between keyframes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct H264Feed {
     /// The codec string the decoder is configured with, if it is.
     configured: Option<String>,
     /// Dropping frames until a keyframe.
     waiting: bool,
+    /// A keyframe to ask the engine for, once.
+    ask: bool,
 }
 
 impl H264Feed {
@@ -284,6 +314,7 @@ impl H264Feed {
         }
         if backlog > MAX_BACKLOG {
             self.waiting = true;
+            self.ask = true;
             return Step::Skip;
         }
         Step::Decode { key: false }
@@ -297,6 +328,12 @@ impl H264Feed {
     /// The decoder was reset or failed: start again at the next keyframe with SPS.
     pub fn reset(&mut self) {
         *self = H264Feed::default();
+    }
+
+    /// Whether to ask the engine for a keyframe now: once each time a backlog starts a
+    /// skip, never again until the next one.
+    pub fn take_keyframe_ask(&mut self) -> bool {
+        std::mem::take(&mut self.ask)
     }
 }
 
@@ -454,9 +491,13 @@ mod tests {
         let mut feed = H264Feed::default();
         let delta = [0, 0, 1, 0x41, 0x9a];
         feed.step(true, &keyframe(0x42, 0x1e), 0);
+        assert!(!feed.take_keyframe_ask(), "nothing to ask for yet");
         assert_eq!(feed.step(false, &delta, MAX_BACKLOG + 1), Step::Skip);
-        // Still waiting, even once the decoder has caught up.
+        assert!(feed.take_keyframe_ask(), "the skip asks for a keyframe");
+        assert!(!feed.take_keyframe_ask(), "once");
+        // Still waiting, even once the decoder has caught up, and asking no more.
         assert_eq!(feed.step(false, &delta, 0), Step::Skip);
+        assert!(!feed.take_keyframe_ask());
         assert_eq!(
             feed.step(true, &keyframe(0x42, 0x1e), 0),
             Step::Decode { key: true }
@@ -487,7 +528,7 @@ mod tests {
     }
 
     #[test]
-    fn the_stream_follows_the_shown_scene_on_a_new_channel() {
+    fn the_stream_follows_the_shown_scene_on_its_channel() {
         let (main, other) = (SceneId::new("main"), SceneId::new("other"));
         assert_eq!(
             stream_scene(Some(&main), Some(&main)),
@@ -499,13 +540,23 @@ mod tests {
         assert_eq!(stream_scene(Some(&other), None), Some(other.clone()));
         let first = Stream::first((800.0, 450.0, 1.0), true, FPS);
         let next = first.showing(Some(other.clone()));
+        assert_eq!((next.channel, next.scene.as_ref()), (CHANNEL, Some(&other)));
         assert_eq!(
-            (next.channel, next.scene.as_ref()),
-            (CHANNEL + 1, Some(&other))
+            next.show(),
+            Action::PreviewShow {
+                channel: CHANNEL,
+                scene_id: Some(other.clone()),
+            }
         );
+        assert_eq!(
+            next.keyframe(),
+            Action::PreviewRequestKeyframe { channel: CHANNEL }
+        );
+        // When the engine can't move it, the same picture on a new stream.
+        let reopened = next.on_next_channel();
         let Action::PreviewSubscribe {
             channel, scene_id, ..
-        } = next.subscribe()
+        } = reopened.subscribe()
         else {
             panic!("a subscribe");
         };
@@ -514,7 +565,7 @@ mod tests {
             channel: u32::MAX,
             ..first
         };
-        assert_eq!(wrapped.showing(None).channel, 1, "0 is skipped");
+        assert_eq!(wrapped.on_next_channel().channel, 1, "0 is skipped");
     }
 
     /// A collection at 60 fps gets a 60 fps live view, on a new stream of the same
@@ -547,10 +598,10 @@ mod tests {
         assert_eq!(settled_switch(&program, &b, &None), None);
         // Wanted the program all along: nothing to do.
         assert_eq!(settled_switch(&program, &None, &None), None);
-        // B held: the stream switches to it, on the next channel.
+        // B held: the stream switches to it, on its own channel.
         let next = settled_switch(&program, &b, &b).expect("a switch");
         assert_eq!(next.scene, b);
-        assert_ne!(next.channel, program.channel);
+        assert_eq!(next.channel, program.channel);
         // B shown already: a second settle of the same change does nothing.
         assert_eq!(settled_switch(&next, &b, &b), None);
     }

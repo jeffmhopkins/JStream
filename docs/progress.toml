@@ -1423,10 +1423,10 @@ needs = ["build"]
 id = "F7"
 milestone = "M3"
 title = "Direct NVENC and AMF encoders, if measurements justify them"
-status = "planned"
-prs = []
-note = "ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so"
-needs = ["build"]
+status = "review"
+prs = [1764]
+note = "ADR-0217: the maintainer chose to build them for alpha.13 and measure alongside: NVENC and AMF first on the Windows GPU path, the MFT as fallback, off by default per vendor until its hw-tests run passes (JSTREAM_DIRECT_ENCODERS=on to try one); AMF passed on a Radeon 780M and is on by default (0.52 ms vs the MFT's 0.98 ms per frame at 1080p30); NVENC still needs its NVIDIA run"
+needs = ["hardware"]
 
 [[item]]
 id = "CL2"
@@ -1678,3 +1678,12 @@ release = "alpha.4"
 gate = true
 prs = [1179]
 note = "Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build"
+
+[[item]]
+id = "SHW1"
+milestone = "M3"
+title = "Shows: a saved run order of scenes, with overlays, keyframes, sequences, audio, bookmarks and loops, run from the Show panel, keys, MIDI or an agent (ADR-0210)"
+status = "review"
+prs = [1716, 1750, 1757, 1763, 1773]
+note = "on the alpha.13 train (#1745): the protocol and ADR-0210 (#1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance (#1773)"
+needs = ["wave"]

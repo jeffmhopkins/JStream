@@ -148,7 +148,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-crash` | Local crash reports for the apps ([ADR-0067](adr/0067-shared-crash-reports.md)): the panic hook, redaction of registered secrets by BLAKE3 digest, the report format and pruning, and `Redacting`, which registers each stream key and refresh token passing through a credential store. The secrets live in a `Secrets` handle the app holds, not in global state | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, direct NVENC and AMF, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens, and the desktop app's global hotkeys and open and save panels (M3; [ADR-0063](adr/0063-macos-platform-support.md), [ADR-0144](adr/0144-the-desktop-app-on-macos.md); Apple frameworks through the objc2 crates, Carbon's hotkeys declared by hand) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader (its encoder, and its decoder for the engine's own H.264 streams), AAC encoding through `jstream-aac`, media files as far as [ADR-0072](adr/0072-linux-media-file-decoding.md)'s decoders are built (symphonia's royalty-free audio and AAC-LC ([ADR-0160](adr/0160-aac-lc-decoder-patent-check.md)), Opus through `rusty-opus` ([ADR-0159](adr/0159-opus-decodes-in-pure-rust-on-linux.md)), H.264 in MP4, MOV and Matroska, VP8 and VP9 in WebM and AV1 in MP4, Matroska and WebM on VA-API, so far), secrets in the Secret Service with a `0600` file fallback, X11 global hotkeys for the desktop app ([ADR-0112](adr/0112-assignable-camera-zoom-bindings.md)), the virtual camera on a v4l2loopback device ([ADR-0156](adr/0156-linux-virtual-camera-through-v4l2loopback.md)) (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0140](adr/0140-source-types-and-decoding-scope-v3.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
@@ -1157,8 +1157,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise, or in PNG for a client that asks
   for it alone to take a screenshot (0.71,
-  [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md)); `preview.unsubscribe` or the
-  session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
+  [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md)); `preview.show` (0.188) moves
+  an open stream to another scene on its channel, keeping its encoder where nothing else
+  shares it, `preview.request_keyframe` asks it for a keyframe at once, and `preview.unsubscribe`
+  or the session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
   keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
   frames drops up to the next keyframe when full, so a slow client still decodes what
   it gets. The layout is in
@@ -1354,21 +1356,22 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    over the planes of one surface instead, an `R8Unorm` Y and a half-size `Rg8Unorm`
    CbCr (`GpuFrame::planar`, as spike S6 wraps an IOSurface's), written by the same
    two passes.
-5. **Encode:** the NV12 texture is shared back to D3D11 for the Media Foundation encoders
-   (fence-synchronized).
+5. **Encode:** the NV12 texture is shared back to D3D11 for the hardware encoders
+   (fence-synchronized): the GPU vendor's own NVENC or AMF where it is turned on and opens,
+   else the Media Foundation MFT ([ADR-0217](adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)).
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.
 
 **On macOS** ([ADR-0063](adr/0063-macos-platform-support.md) decision 8,
 `jstream-platform-macos`'s `gpu/`), the engine's wgpu device is on Metal. Capture needs no
-copy: ScreenCaptureKit's frames are IOSurface-backed BGRA pixel buffers, which the
-platform wraps as Metal textures (`newTextureWithDescriptor:iosurface:plane:`) and adopts
+copy: ScreenCaptureKit's frames are IOSurface-backed BGRA pixel buffers, as are
+AVFoundation's webcam frames when the output asks for BGRA, which the platform wraps as Metal textures (`newTextureWithDescriptor:iosurface:plane:`) and adopts
 into wgpu through wgpu-hal, as in steps 1 and 2. They are complete when delivered, so a
 read waits for nothing; the release is what is ordered. Each staged use signals the
 context's `MTLSharedEvent` after the submit that reads the frame, and a frame's last
-clone keeps its pixel buffer until the event reaches that value, so ScreenCaptureKit
-never writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so an
+clone keeps its pixel buffer until the event reaches that value, so neither producer
+writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so an
 encode target is two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12 IOSurface, as
 spike S6 does, written by step 4's passes. Its staged write signals the same event; the
 VideoToolbox encoder waits on the CPU for that value (`waitUntilSignaledValue`), hands
@@ -1547,8 +1550,9 @@ pass, so the render thread copies bytes but converts no pixel
 ([ADR-0117](adr/0117-real-time-video-thread-model.md) §2). A
 browser source's page paints on the same context and is imported the same way, read
 as premultiplied sRGB (`import_premultiplied`), CEF's layout. Step 5's encoder side is built:
-on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
-on D3D11 into a texture of their own, fence-synchronized both ways, and
+on Windows, `Codecs::on_context` gives H.264, HEVC and AV1 encoders (NVENC or AMF
+directly where turned on and the GPU's vendor runtime opens, else Media Foundation's MFT) that copy each
+NV12 encode target on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
 ([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
 Step 4's NV12 pass is built too: it reads the sRGB output and writes the Y and CbCr
