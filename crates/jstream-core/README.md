@@ -1783,7 +1783,9 @@ The engine runs one show at a time (ADR-0210) as studio state beside the program
 collection's `ShowInfo` (overlay tracks flattened by start, a `timeline.play` cue as a
 sequence clip as long as its sequence, every other cue an event) and starts a `Runner`
 from the start or as a jump to a bookmark would land. The plan is built again on every
-call and tick, so editing a running show takes effect at once. The live ticker advances
+call and tick, and when an edit (`show.set`) changes it the runner re-plans onto it at
+the same show time (`Runner::replan`), so a clip changed or removed under the play head
+takes effect at once. The live ticker advances
 it before the timelines (`show_tick`), as do `clock.step` and `clock.release`, so a
 sequence clip's cues fire on time. A show call ends by ticking the show and the
 timelines and waking the ticker (`show_settle`), so after a jump it plans from the
@@ -1813,7 +1815,8 @@ going to bookmarks by ID and number, Back, early Continue, arming, a hand switch
 off script, stopping, deleting, refused calls, a sequence clip's cue firing within the
 `clock.step` that starts it, a jump waking the live ticker in real time, and
 `show.pause` holding show time until `show.continue` or `show.play` plays on, and
-keyframe markers moving program to a keyframe scene and back.
+keyframe markers moving program to a keyframe scene and back, and an edit of the
+running show cutting program to the clip now under the play head.
 `src/tests/timelines.rs` checks that a timeline played while the ticker waits for a
 later cue fires on time.
 

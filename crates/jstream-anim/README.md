@@ -126,8 +126,12 @@ Contents:
   were; program runs on through it and is not sought back. Every move puts up state by
   diffing the target `Spanning` against what it last put up (`Applied`), so a jump
   lands the state playing there would leave and re-applies only state events whose
-  value it changed itself; one-shots are never replayed. It returns `Step`s: each
-  `Effect` with the exact clock time it fell due.
+  value it changed itself; one-shots are never replayed. `replan` carries a running
+  runner over to an edited plan at the same show time: it maps what it put up onto the
+  new plan (clips by scene, track or timeline, state events by key) and puts up what
+  spans the play head there, so an overlay whose clip no longer covers the head goes
+  off and one that now does comes on; a play head past the new end ends the show. It
+  returns `Step`s: each `Effect` with the exact clock time it fell due.
 
 **Tests** (in `keyframe.rs`, `switch.rs`, `modifier.rs`, `audio.rs`, `timeline.rs` and `show/`): live follow of absent fields, each
 write and clear inverse, the no-op clear, refused opacities, reset and its restore,
@@ -154,7 +158,7 @@ plan's checks and `spanning` on both edges; cuts with each clip's transition, pa
 before a pausing bookmark's point and Continue firing what sits there, non-pausing
 bookmarks, `go_to`, Back, Skip, early Continue, an armed spot, loops (passes, clips
 spanning a wrap staying up, a sequence clip ending at the loop's end stopped and played again on each wrap, a bookmark at a loop's start pausing once and one at its
-end never pausing a pass, both ways of leaving), every end of show, the pause limit, a pause by hand holding show time and its sequences and playing on from there,
+end never pausing a pass, both ways of leaving), every end of show, the pause limit, a pause by hand holding show time and its sequences and playing on from there, a re-plan carrying what is up over to an edited plan,
 off script, `stop`, one-shots never replayed and hand-set values left alone, exact
 step times on a late tick, `next` and `next_due`; and property tests that a jump to a
 random bookmark or point leaves the same program, keyframe, overlays, sequences and

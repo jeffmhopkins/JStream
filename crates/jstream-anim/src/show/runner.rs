@@ -124,6 +124,8 @@ pub enum Effect<K: ShowKeys> {
         clip: usize,
         /// Its track.
         track: K::Track,
+        /// Its scene.
+        scene: K::Scene,
         /// Fade, in milliseconds: the clip's fade out at its end, a short fade on a jump.
         fade_ms: u32,
     },
@@ -556,6 +558,7 @@ impl<T: Ord + Clone> Runner<T> {
                 let effect = Effect::OverlayOff {
                     clip,
                     track: c.track.clone(),
+                    scene: c.scene.clone(),
                     fade_ms: c.fade_out_ms.min(SHORT_FADE_MS),
                 };
                 out.push(Step {
@@ -565,6 +568,125 @@ impl<T: Ord + Clone> Runner<T> {
             }
         }
         *self = Self::new();
+        out
+    }
+
+    /// The show was edited while it runs: carries what it has up from `old` over to
+    /// `new` by what each thing is (a program clip and an overlay by scene and track, a
+    /// sequence by its timeline, a bookmark by ID), so unchanged things stay up with no
+    /// flicker, then puts up what `new` spans at the play head as playing into it would
+    /// (nothing re-seeks or plays again): an overlay or sequence whose clip is gone or no longer covers the
+    /// head goes, one that now does comes up, and a changed program clip cuts. Show time
+    /// stays where it is; a show edited shorter than where it is ends there.
+    pub fn replan<K: ShowKeys<Timeline = T>>(
+        &mut self,
+        old: &Plan<K>,
+        new: &Plan<K>,
+        now_ns: i64,
+    ) -> Vec<Step<K>> {
+        let mut out = Vec::new();
+        if matches!(self.status, Status::Stopped | Status::Ended) {
+            return out;
+        }
+        let at = self.position_ms(now_ns);
+        // Waiting at a point shows what is just before it (and the clip a pausing
+        // bookmark there starts), as the pause put up.
+        let waiting = matches!(self.status, Status::Paused { .. }) && !self.held;
+        let mut target = spanning(new, at, if waiting { Edge::Before } else { Edge::At });
+        if waiting
+            && pausing_at(new, at).is_some()
+            && let Some(clip) = clip_starting_at(new, at)
+        {
+            target.program = Some((clip, 0));
+            target.keyframe = None;
+        }
+        // Program: the same scene stays up as the new clip.
+        let program = self.applied.program.and_then(|i| old.program.get(i));
+        self.applied.program = match (program, target.program) {
+            (Some(was), Some((j, _)))
+                if new.program.get(j).is_some_and(|c| c.scene == was.scene) =>
+            {
+                Some(j)
+            }
+            _ => None,
+        };
+        // Keyframe: the same marker, if it is still there.
+        let keyframe = self.applied.keyframe.and_then(|i| old.keyframes.get(i));
+        self.applied.keyframe = keyframe.and_then(|m| {
+            new.keyframes
+                .iter()
+                .position(|n| n.at_ms == m.at_ms && n.keyframe == m.keyframe)
+        });
+        // Overlays: kept by track and scene where the new plan spans one; the rest go.
+        for clip in std::mem::take(&mut self.applied.overlays) {
+            let Some(c) = old.overlays.get(clip) else {
+                continue;
+            };
+            let kept = target.overlays.keys().copied().find(|&j| {
+                new.overlays
+                    .get(j)
+                    .is_some_and(|n| n.track == c.track && n.scene == c.scene)
+                    && !self.applied.overlays.contains(&j)
+            });
+            match kept {
+                Some(j) => self.applied.overlays.push(j),
+                None => out.push(Step {
+                    at_ns: now_ns,
+                    effect: Effect::OverlayOff {
+                        clip,
+                        track: c.track.clone(),
+                        scene: c.scene.clone(),
+                        fade_ms: c.fade_out_ms.min(SHORT_FADE_MS),
+                    },
+                }),
+            }
+        }
+        // Sequences: kept by timeline where the new plan spans one; the rest stop.
+        for (timeline, clip) in std::mem::take(&mut self.applied.sequences) {
+            match target.sequences.get(&timeline) {
+                Some(&(j, _)) => {
+                    self.applied.sequences.insert(timeline, j);
+                }
+                None => out.push(Step {
+                    at_ns: now_ns,
+                    effect: Effect::SequenceStop { clip, timeline },
+                }),
+            }
+        }
+        // State events: the last one per key the new plan has before the head counts as
+        // applied, so an edit never fires one again.
+        let mut states = BTreeMap::new();
+        for i in state_events_before(new, at.saturating_add(1)) {
+            if let Some(key) = new.events.get(i).and_then(|e| e.action.state_key()) {
+                let key = format!("{key:?}");
+                if self.applied.states.contains_key(&key) {
+                    states.insert(key, i);
+                }
+            }
+        }
+        self.applied.states = states;
+        // Where it waits, loops and is armed, in the new plan's terms.
+        if let Status::Paused {
+            bookmark: Some(b),
+            since_ns,
+        } = self.status
+        {
+            let id = old.bookmarks.get(b).map(|b| &b.id);
+            self.status = Status::Paused {
+                bookmark: id.and_then(|id| new.bookmark(id)),
+                since_ns,
+            };
+        }
+        let pass = self.looping.map_or(0, |(_, pass)| pass);
+        self.looping = new.loop_at(at).map(|i| (i, pass));
+        self.put_up(new, &target, Mode::Play, None, now_ns, &mut out);
+        let length = new.length_ms();
+        if at >= length && self.status == Status::Playing {
+            self.done_ms = Some(length);
+            self.end(new, length, now_ns, &mut out);
+        } else if self.done_ms.is_some_and(|d| d > at) {
+            self.done_ms = at.checked_sub(1);
+        }
         out
     }
 
@@ -1070,6 +1192,7 @@ impl<T: Ord + Clone> Runner<T> {
                 push(Effect::OverlayOff {
                     clip,
                     track: c.track.clone(),
+                    scene: c.scene.clone(),
                     fade_ms: fade(c.fade_out_ms),
                 });
             }

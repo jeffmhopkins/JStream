@@ -500,3 +500,30 @@ fn a_keyframe_marker_moves_program_to_its_keyframe_scene() {
     step(&control, 1000);
     assert_eq!(program(&control).as_deref(), Some("a"));
 }
+
+/// Editing the running show carries it over: a clip changed under the play head cuts
+/// to its new scene, with show time where it was.
+#[test]
+fn an_edit_of_the_running_show_takes_effect_at_the_play_head() {
+    let (_engine, control) = engine_with_show();
+    act(&control, play()).expect("play");
+    step(&control, 300);
+    assert_eq!(program(&control).as_deref(), Some("a"));
+    let mut show = ShowInfo::new("s");
+    show.program = vec![
+        clip("ca", "c", 1000),
+        clip("cb", "b", 1000),
+        clip("cc", "c", 1000),
+    ];
+    apply(&control, vec![Edit::ShowSet { show }]);
+    assert_eq!(program(&control).as_deref(), Some("c"));
+    let show = running(&control);
+    assert_eq!(show.state, ShowState::Playing);
+    assert_eq!(show.at_ms, 300);
+    step(&control, 800);
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("b"),
+        "plays on in the new plan"
+    );
+}

@@ -1923,3 +1923,67 @@ fn pause_holds_show_time_and_its_sequences_and_continue_plays_on_from_there_with
     );
     assert_eq!(rig.cmd(|r, p, n| r.unpause(p, n)), vec![]);
 }
+
+#[test]
+fn replan_carries_what_is_up_over_to_an_edited_plan() {
+    let mut old = plan(vec![clip("A", 100)]);
+    old.overlays = vec![overlay(0, "O", 0, 50), overlay(1, "P", 10, 50)];
+    old.sequences = vec![seq(1, 0, 80)];
+    let mut r: Runner<u8> = Runner::new();
+    r.start(&old, 0, Landing::PlayOn, 0);
+    r.tick(&old, 20 * MS);
+    assert_eq!(r.applied().overlays.len(), 2);
+
+    // An unchanged edit changes nothing.
+    assert!(r.replan(&old, &old.clone(), 20 * MS).is_empty());
+
+    // O's clip is removed, so P moves to index 0; nothing about P changes.
+    let mut new = old.clone();
+    new.overlays.remove(0);
+    let e = Rig::effects(r.replan(&old, &new, 20 * MS));
+    assert_eq!(
+        e,
+        vec![Effect::OverlayOff {
+            clip: 0,
+            track: 0,
+            scene: "O",
+            fade_ms: 0
+        }]
+    );
+    assert_eq!(r.applied().overlays, vec![0]);
+
+    // P trimmed so it no longer covers the head goes; a new clip there comes up; the
+    // sequence, still spanning, keeps playing; a new program scene cuts.
+    let old = new;
+    let mut new = old.clone();
+    new.overlays[0].length_ms = 5;
+    new.overlays.push(overlay(2, "Q", 15, 10));
+    new.program[0].scene = "B";
+    let e = Rig::effects(r.replan(&old, &new, 20 * MS));
+    assert!(
+        has(&e, |e| matches!(e, Effect::OverlayOff { scene: "P", .. })),
+        "{e:?}"
+    );
+    assert!(
+        has(&e, |e| matches!(e, Effect::OverlayOn { scene: "Q", .. })),
+        "{e:?}"
+    );
+    assert!(
+        has(&e, |e| matches!(e, Effect::Program { scene: "B", .. })),
+        "{e:?}"
+    );
+    assert!(!has(&e, |e| matches!(
+        e,
+        Effect::SequencePlay { .. } | Effect::SequenceStop { .. }
+    )));
+    assert_eq!(r.position_ms(20 * MS), 20);
+
+    // Edited shorter than where it is, it ends there.
+    let old = new;
+    let mut new = plan(vec![clip("B", 10)]);
+    new.sequences = old.sequences.clone();
+    new.sequences[0].length_ms = 5;
+    let e = Rig::effects(r.replan(&old, &new, 20 * MS));
+    assert!(has(&e, |e| matches!(e, Effect::Ended)), "{e:?}");
+    assert_eq!(r.status(), Status::Ended);
+}

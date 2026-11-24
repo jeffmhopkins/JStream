@@ -45,6 +45,9 @@ pub(super) struct Run {
     pub(super) runner: Runner<TimelineId>,
     /// The client and request that started it, which its effects are credited to.
     pub(super) by: (ClientId, RequestId),
+    /// The plan as of the last call, so an edit of the running show can be carried over
+    /// (`Runner::replan`).
+    pub(super) plan: Plan<Keys>,
 }
 
 /// The plan of `info`, as the runner reads it: the overlay tracks' clips flattened by
@@ -320,6 +323,7 @@ impl State {
             show_id: show_id.clone(),
             runner,
             by: (client_id.clone(), request_id.clone()),
+            plan: plan.clone(),
         });
         self.emit_show(ShowChange::Started, None, None, wake);
         self.run_show_steps(&plan, steps, wake);
@@ -656,6 +660,21 @@ impl State {
             .is_some_and(|run| self.graph.show(&run.show_id).is_none());
         if gone {
             self.show_stop(ShowChange::Stopped, wake);
+            return;
         }
+        // An edit of the running show: carry what it has up over to the new plan.
+        let Some(new) = self.show_plan() else {
+            return;
+        };
+        let now = self.show_now();
+        let steps = match self.show.as_mut() {
+            Some(run) if run.plan != new => {
+                let old = std::mem::replace(&mut run.plan, new.clone());
+                run.runner.replan(&old, &new, now)
+            }
+            _ => return,
+        };
+        self.run_show_steps(&new, steps, wake);
+        self.show_settle(wake);
     }
 }
