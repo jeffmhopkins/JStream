@@ -244,7 +244,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   (`bindable`), the JTunnel senders whose "Use this sender's MIDI" is on (ADR-0123 §3),
   and marks each named state (`MidiState::bindable`, one atomic; a state made later
   takes the set it's made in). `bound()` is a state like `any()` that each input feeds
-  only while it is bindable: what the engine's value bindings, channels and `midi`
+  only while it is bindable, rebuilt from the inputs still bindable (a key held in any,
+  each value the largest) when `set_bindable` drops one
+  ([ADR-0218](../../docs/adr/0218-every-midi-reader-goes-through-the-senders-switch.md)):
+  what the engine's value bindings, channels and `midi`
   modifiers read when they name no input; a named input that isn't bindable they read
   as one that never sent anything. What every input draws doesn't change.
   `MidiState::alive(at_ms)` (or `MidiFeed::alive`) records that the input's sender was

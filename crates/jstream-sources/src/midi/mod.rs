@@ -309,6 +309,59 @@ impl MidiState {
         self.changes.fetch_add(1, Ordering::Release);
     }
 
+    /// Sets what is held and where each controller, bend and pressure is to what
+    /// `inputs` hold now: a key held in any of them, each value the largest (a bend the
+    /// furthest from centre), and nothing for none. The logs and the tempo are kept.
+    /// [`MidiInputs::set_bindable`] rebuilds the bound state this way when it drops an
+    /// input, so nothing the input held while it was let in stays held there.
+    fn rebuild_from(&self, inputs: &[Arc<MidiState>]) {
+        let largest = |of: &dyn Fn(&MidiState) -> u8| inputs.iter().map(|s| of(s)).max();
+        let furthest = |of: &dyn Fn(&MidiState) -> i16| {
+            inputs
+                .iter()
+                .map(|s| of(s))
+                .max_by_key(|v| v.unsigned_abs())
+                .unwrap_or(0)
+        };
+        for (i, key) in self.keys.iter().enumerate() {
+            key.store(
+                largest(&|s| s.keys[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for (i, value) in self.controllers.iter().enumerate() {
+            value.store(
+                largest(&|s| s.controllers[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for (i, value) in self.any_controllers.iter().enumerate() {
+            value.store(
+                largest(&|s| s.any_controllers[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for channel in 0..CHANNELS {
+            self.bend[channel].store(
+                furthest(&|s| s.bend[channel].load(Ordering::Relaxed)),
+                Ordering::Relaxed,
+            );
+            self.pressure[channel].store(
+                largest(&|s| s.pressure[channel].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        self.any_bend.store(
+            furthest(&|s| s.any_bend.load(Ordering::Relaxed)),
+            Ordering::Relaxed,
+        );
+        self.any_pressure.store(
+            largest(&|s| s.any_pressure.load(Ordering::Relaxed)).unwrap_or(0),
+            Ordering::Relaxed,
+        );
+        self.changes.fetch_add(1, Ordering::Release);
+    }
+
     fn note(&self, at_ms: u64, channel: u8, key: u8, velocity: u8) {
         let key = key & 0x7F;
         self.keys[index(channel, key)].store(velocity, Ordering::Relaxed);
@@ -599,11 +652,23 @@ impl MidiInputs {
         // the new set.
         let named = lock(&self.named);
         let mut bindable = lock(&self.bindable);
-        *bindable = names.into_iter().collect();
+        let was = std::mem::replace(&mut *bindable, names.into_iter().collect());
         for (name, state) in named.iter() {
             state
                 .bindable
                 .store(bindable.contains(name), Ordering::Relaxed);
+        }
+        // An input dropped while it held a key or a controller leaves nothing in the
+        // bound state: it is rebuilt from what the inputs still let in hold now. A
+        // message one of them sends meanwhile may be overwritten by what it held just
+        // before, until its next message.
+        if was.iter().any(|name| !bindable.contains(name)) {
+            let kept: Vec<_> = named
+                .iter()
+                .filter(|(name, _)| bindable.contains(*name))
+                .map(|(_, state)| Arc::clone(state))
+                .collect();
+            self.bound.rebuild_from(&kept);
         }
     }
 

@@ -844,12 +844,51 @@ fn only_a_bindable_input_reaches_the_bound_state() {
     assert_eq!(inputs.any().controller(0, 8), 90, "though it is drawn");
     assert_eq!(inputs.any().held(0, 60), 80);
 
-    // Switched off, an input stops reaching it; a new input learns the set it's made in.
+    // Switched off, an input stops reaching it, and what it sent goes; a new input
+    // learns the set it's made in.
     inputs.set_bindable(["Later".to_owned()]);
     assert!(!inputs.input("Kept").expect("known").bindable());
+    assert_eq!(inputs.bound().controller(0, 7), 0);
     kept.push(2, &msg(&[0xB0, 7, 5]));
-    assert_eq!(inputs.bound().controller(0, 7), 100);
+    assert_eq!(inputs.bound().controller(0, 7), 0);
     assert!(inputs.input("Later").expect("made").bindable());
     inputs.push("Later", 3, &msg(&[0xB0, 9, 64]));
     assert_eq!(inputs.bound().controller(0, 9), 64);
+}
+
+#[test]
+fn an_input_dropped_mid_hold_leaves_nothing_held_in_the_bound_state() {
+    // ADR-0123 §3: switched off while holding a key and a controller, a sender leaves
+    // nothing in what a binding with no input reads; what an input still let in holds
+    // stays.
+    let inputs = MidiInputs::new();
+    inputs.set_bindable(["Pads", "Desk"].map(String::from));
+    inputs.push("Pads", 0, &on(36, 100));
+    inputs.push("Pads", 0, &msg(&[0xB0, 7, 100]));
+    inputs.push("Pads", 0, &msg(&[0xE0, 0, 0x7F]));
+    inputs.push("Desk", 1, &msg(&[0xB0, 8, 50]));
+    inputs.push("Desk", 1, &on(40, 90));
+    let bound = inputs.bound();
+    assert_eq!(bound.held(0, 36), 100);
+    assert_eq!(bound.controller_any(7), 100);
+    assert_ne!(bound.bend_any(), 0);
+    let changes = bound.changes();
+
+    inputs.set_bindable(["Desk".to_owned()]);
+    assert_eq!(bound.held(0, 36), 0, "the dropped sender's key goes");
+    assert_eq!(bound.controller(0, 7), 0);
+    assert_eq!(bound.controller_any(7), 0);
+    assert_eq!((bound.bend(0), bound.bend_any()), (0, 0));
+    assert_eq!(bound.held(0, 40), 90, "the kept one's stays");
+    assert_eq!(bound.controller(0, 8), 50);
+    assert_eq!(bound.controller_any(8), 50);
+    assert!(
+        bound.changes() > changes,
+        "a settled reader sees it changed"
+    );
+    assert_eq!(inputs.any().held(0, 36), 100, "though it is still drawn");
+
+    // Dropping every input leaves the bound state at rest.
+    inputs.set_bindable(Vec::new());
+    assert_eq!((bound.held(0, 40), bound.controller_any(8)), (0, 0));
 }

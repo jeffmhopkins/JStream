@@ -441,7 +441,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   modifier, binding or channel input naming no input reads `MidiInputs::bound`, never the
   every-input state the sources draw: a JTunnel sender with "Use this sender's MIDI" off
   moves none of them ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
-  §3). Switched on, an input is read from where its controls are.
+  §3, [ADR-0218](../../docs/adr/0218-every-midi-reader-goes-through-the-senders-switch.md)),
+  and one switched off mid-hold leaves nothing held. Switched on, an input is read from
+  where its controls are.
   A scene camera's `midi` and `data` modifiers are recorded and smoothed the
   same way, by scene family and modifier ID instead of item
   ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
@@ -1064,7 +1066,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   A JTunnel sender left out of `MidiInputs::bindable` (ADR-0123 §3) moves no value
   binding, named or listening to every input, until it is let in; `channels.rs` and
   `reactive.rs` show the same for a channel's input and a `midi` modifier, while an
-  input let in still moves them. These tests name their inputs bindable.
+  input let in still moves them, and a sender switched off mid-hold lets go of a channel
+  listening to every input. These tests name their inputs bindable.
   Channels (`src/tests/channels.rs`, ADR-0183): a held note drives a channel to 1 and
   its release to 0, `channel.set_value` takes over, `channel.switch` holds the off value,
   a missing channel's action fails, and a binding's `amount` gives half the throw at

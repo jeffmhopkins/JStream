@@ -1225,6 +1225,48 @@ mod tests {
         assert_eq!(rig.value("pad"), Some(0.2), "its own starts it again");
     }
 
+    /// ADR-0123 §3: a sender switched off while it holds a note lets go of a channel
+    /// that listens to every input, as one that names it does.
+    #[test]
+    fn a_sender_switched_off_mid_hold_lets_go_of_an_every_input_channel() {
+        let mut rig = Rig::new();
+        rig.midi.set_bindable(["Pad", "Stranger"].map(String::from));
+        let note = |input: Option<&str>| MotionKind::Midi {
+            control: MotionMidiControl::Note,
+            controller: Some(36),
+            channel: None,
+            input: input.map(str::to_owned),
+            smoothing_ms: 0,
+            curve: MotionCurve::Linear,
+            from: Finite32::ZERO,
+            to: Finite32::ONE,
+        };
+        for (id, input) in [("any", None), ("named", Some("Stranger"))] {
+            set(
+                &mut rig.graph,
+                ChannelInfo {
+                    default: f(0.2),
+                    inputs: vec![note(input)],
+                    ..ChannelInfo::new(id)
+                },
+            );
+        }
+        rig.tick(0);
+        rig.midi.push("Stranger", 0, &message(&[0x99, 36, 100]));
+        rig.tick(33);
+        assert_eq!(rig.value("any"), Some(1.0), "held");
+        assert_eq!(rig.value("named"), Some(1.0), "held");
+        // Switched off mid-hold: neither stays held, with no note-off sent.
+        rig.midi.set_bindable(["Pad".to_owned()]);
+        rig.tick(66);
+        assert_eq!(rig.value("any"), Some(0.0), "every input lets go");
+        assert_eq!(rig.value("named"), Some(0.0), "its own input lets go");
+        // An input still let in holds it again.
+        rig.midi.push("Pad", 70, &message(&[0x99, 36, 100]));
+        rig.tick(100);
+        assert_eq!(rig.value("any"), Some(1.0));
+    }
+
     fn lane_timeline(id: &str, value: f32) -> jstream_protocol::TimelineInfo {
         jstream_protocol::TimelineInfo {
             timeline_id: jstream_protocol::TimelineId::new(id),
