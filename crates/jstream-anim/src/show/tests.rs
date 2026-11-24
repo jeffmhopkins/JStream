@@ -645,7 +645,8 @@ fn pausing_bookmark_pauses_before_its_point_and_continue_runs_it() {
         }
     );
     assert_eq!(g.pos(), 10);
-    assert_eq!(g.w.program, Some((0, Some(0))));
+    // The clip that starts at the bookmark is up; everything else there waits.
+    assert_eq!(g.w.program, Some((1, Some(10))));
     assert!(g.w.overlays.is_empty() && g.w.sequences.is_empty());
     assert!(g.w.states.is_empty() && g.w.shots.is_empty());
     assert_eq!(g.next(), Next::Resume);
@@ -701,12 +702,13 @@ fn go_to_pausing_bookmark_lands_before_it() {
     g.start(0, Landing::PlayOn);
     g.at(2);
     let e = g.go_to(1);
+    // A pausing bookmark where clip C starts cuts to C and waits there.
     assert!(has(&e, |e| *e
         == Effect::Program {
-            clip: 1,
-            scene: "B",
+            clip: 2,
+            scene: "C",
             transition: Some("arr"),
-            offset_ms: 10
+            offset_ms: 0
         }));
     assert!(has(&e, |e| *e
         == Effect::Paused {
@@ -721,19 +723,14 @@ fn go_to_pausing_bookmark_lands_before_it() {
         }
     ));
     assert_eq!(g.pos(), 20);
-    assert_eq!(g.w.program, Some((1, None)));
+    assert_eq!(g.w.program, Some((2, Some(20))));
     assert_eq!(g.w.states, BTreeMap::from([(1, 3)]));
     assert!(g.w.shots.is_empty());
 
     g.at(4);
     let e = g.cont();
-    assert!(has(&e, |e| *e
-        == Effect::Program {
-            clip: 2,
-            scene: "C",
-            transition: Some("wipe"),
-            offset_ms: 0
-        }));
+    // C is already up: Continue runs only what else sits at 20.
+    assert!(!has(&e, |e| matches!(e, Effect::Program { .. })));
     assert_eq!(g.w.states, BTreeMap::from([(1, 5)]));
     assert_eq!(g.w.shots, vec![1]);
 }
@@ -907,7 +904,11 @@ fn into_loop(leave: Leave) -> Rig {
         ),
         "pauses on entry"
     );
-    assert_eq!(g.w.program, Some((0, Some(0))));
+    assert_eq!(
+        g.w.program,
+        Some((1, Some(10))),
+        "on the clip the bookmark starts"
+    );
     g.cont();
     assert_eq!(g.w.program, Some((1, Some(10))));
     g.at(29);
@@ -982,7 +983,11 @@ fn loop_wraps_and_continue_at_once_lands_at_its_end() {
         }
     ));
     assert_eq!(g.r.looping(), None);
-    assert_eq!(g.w.program, Some((1, Some(10))));
+    assert_eq!(
+        g.w.program,
+        Some((2, Some(30))),
+        "on the clip the bookmark starts"
+    );
     g.cont();
     assert_eq!(g.w.program, Some((2, Some(30))));
 
@@ -1569,7 +1574,11 @@ fn jump_equals_play(
         (tgt, Land::GoTo(i))
     } else {
         let t = a % (len + 1);
-        if pausing && t > 0 {
+        if pausing && t > 0 && plan.bookmarks.iter().any(|b| b.pausing && b.at_ms == t) {
+            // A pausing landing on a pausing bookmark's point is a pause there, which
+            // puts up the program clip that starts there.
+            (Target::PauseAt(t), Land::Jump(t, Landing::Pausing))
+        } else if pausing && t > 0 {
             (Target::Before(t), Land::Jump(t, Landing::Pausing))
         } else {
             (Target::At(t), Land::Jump(t, Landing::PlayOn))

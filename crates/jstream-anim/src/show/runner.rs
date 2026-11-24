@@ -779,10 +779,17 @@ impl<T: Ord + Clone> Runner<T> {
             self.resume_ms = Some(from);
             return;
         }
-        // 2. A pausing bookmark pauses before anything here.
+        // 2. A pausing bookmark pauses before anything here, but the program clip that
+        //    starts here goes up first, so the show waits on the scene it marks.
         if self.resume_ms != Some(p)
             && let Some(b) = pausing_at(plan, p)
         {
+            if let Some(clip) = clip_starting_at(plan, p) {
+                let mut target = spanning(plan, p, Edge::Before);
+                target.program = Some((clip, 0));
+                target.keyframe = None;
+                self.put_up(plan, &target, Mode::Play, None, due, out);
+            }
             self.anchor(p, due);
             self.status = Status::Paused {
                 bookmark: Some(b),
@@ -973,6 +980,15 @@ impl<T: Ord + Clone> Runner<T> {
             target.program = last.program;
             target.keyframe = last.keyframe;
             seek = false;
+        }
+        if edge == Edge::Before
+            && pausing_at(plan, t).is_some()
+            && let Some(clip) = clip_starting_at(plan, t)
+        {
+            // A pausing bookmark where a program clip starts waits on that clip, as
+            // playing there does: what else sits at `t` happens on Continue.
+            target.program = Some((clip, 0));
+            target.keyframe = None;
         }
         self.put_up(plan, &target, Mode::Jump { seek }, transition, at_ns, out);
         for i in state_events_before(plan, t) {
@@ -1166,6 +1182,11 @@ struct Arrival<P> {
     jumped_from: Option<u32>,
 }
 
+/// The program clip that starts at `t`, if one does.
+fn clip_starting_at<K: ShowKeys>(plan: &Plan<K>, t: u32) -> Option<usize> {
+    (0..plan.program.len()).find(|&i| plan.program_start(i) == t)
+}
+
 fn bookmark_landing<K: ShowKeys>(
     plan: &Plan<K>,
     b: &Bookmark<K>,
@@ -1335,35 +1356,24 @@ mod unit {
         ));
         assert!(effects(r.tick(&p, 0)).is_empty());
         let s = r.tick(&p, 1500 * MS);
-        assert_eq!(s.len(), 4, "{s:?}");
+        // The clip starting at the bookmark goes up as the show pauses there.
+        assert_eq!(s.len(), 5, "{s:?}");
         assert_eq!(s[0].at_ns, 100 * MS);
+        assert!(matches!(s[3].effect, Effect::Program { clip: 1, .. }));
         assert!(matches!(
-            s[3].effect,
+            s[4].effect,
             Effect::Paused {
                 bookmark: Some(0),
                 at_ms: 1000
             }
         ));
-        assert_eq!(s[3].at_ns, 1000 * MS);
+        assert_eq!(s[4].at_ns, 1000 * MS);
         assert_eq!(r.position_ms(5000 * MS), 1000);
         assert_eq!(r.next(&p, 5000 * MS), Next::Resume);
         let s = effects(r.continue_(&p, 5000 * MS));
         assert_eq!(s, vec![Effect::Resumed { at_ms: 1000 }]);
         let s = effects(r.tick(&p, 5000 * MS));
-        assert!(
-            matches!(
-                s[..],
-                [
-                    Effect::Program {
-                        clip: 1,
-                        transition: Some("cut"),
-                        ..
-                    },
-                    Effect::Action { event: 1, .. }
-                ]
-            ),
-            "{s:?}"
-        );
+        assert!(matches!(s[..], [Effect::Action { event: 1, .. }]), "{s:?}");
         assert_eq!(r.next_due(&p), Some(5200 * MS));
         let s = effects(r.tick(&p, 7000 * MS));
         assert!(matches!(s.last(), Some(Effect::Ended)), "{s:?}");

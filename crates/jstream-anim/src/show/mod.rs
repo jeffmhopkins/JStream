@@ -30,7 +30,8 @@
 //!    (so a bookmark at a loop's end is outside it, and never pauses a pass); a sequence
 //!    clip that ended at `p` stops, and plays again if it spans the loop's start;
 //! 2. a pausing bookmark at `p` pauses the show *before* anything at `p`: whatever sits at
-//!    `p` happens on Continue. A bookmark the show just resumed from, or a loop's start
+//!    `p` happens on Continue, apart from a program clip that starts at `p`, which goes
+//!    up as it pauses, so the show waits on the clip the bookmark marks. A bookmark the show just resumed from, or a loop's start
 //!    it just wrapped to, does not pause again;
 //! 3. the spanning state at `p` is put up (program cuts use the incoming clip's
 //!    transition);
@@ -40,8 +41,9 @@
 //! # Landing
 //!
 //! A jump to `t` lands one of two ways. A *pausing* landing (a pausing bookmark, Back,
-//! Skip) puts up the state *just before* `t` ([`Edge::Before`]) and pauses at `t`; things
-//! at `t` happen on Continue, exactly as playing there would have left it. A *play-on*
+//! Skip) puts up the state *just before* `t` ([`Edge::Before`]), with the program clip
+//! starting at `t` if a pausing bookmark is there, and pauses at `t`; other things at
+//! `t` happen on Continue, exactly as playing there would have left it. A *play-on*
 //! landing (a non-pausing bookmark, early Continue, an armed spot) puts up the state *at*
 //! `t` ([`Edge::At`]) and plays on, firing the events at `t`. Either way the state events
 //! before `t` are re-applied, last per key, and only where the runner's own last value for

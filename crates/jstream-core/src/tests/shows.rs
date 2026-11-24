@@ -144,8 +144,8 @@ fn a_show_plays_its_program_track_and_waits_at_a_pausing_bookmark() {
     step(&control, 600);
     assert_eq!(
         program(&control).as_deref(),
-        Some("a"),
-        "b starts on Continue"
+        Some("b"),
+        "the clip the bookmark starts is up while it waits"
     );
     let show = running(&control);
     assert_eq!(show.state, ShowState::Paused);
@@ -214,7 +214,11 @@ fn go_to_lands_the_state_playing_there_would_leave() {
     let show = running(&control);
     assert_eq!(show.state, ShowState::Paused);
     assert_eq!(show.at_ms, 1000);
-    assert_eq!(program(&control).as_deref(), Some("a"));
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("b"),
+        "Back cuts to the bookmark's clip"
+    );
 
     act(&control, Action::ShowGoToNumber { number: 2 }).expect("number 2");
     assert_eq!(running(&control).at_ms, 2000);
@@ -449,4 +453,50 @@ fn pause_holds_the_play_head_until_continue_or_play() {
     let show = running(&control);
     assert_eq!(show.state, ShowState::Playing);
     assert_eq!(show.at_ms, 500);
+}
+
+/// A keyframe marker moves program itself to the keyframe scene of the scene on
+/// program, and a marker with none back to the scene's own values.
+#[test]
+fn a_keyframe_marker_moves_program_to_its_keyframe_scene() {
+    use jstream_protocol::KeyframeMarker;
+    let engine = Engine::new();
+    engine.set_source_clock(Arc::new(FakeClock::new(Timebase::MILLIS)));
+    let control = connected(&engine);
+    let mut show = ShowInfo::new("s");
+    show.program = vec![clip("ca", "a", 3000)];
+    show.keyframes = vec![
+        KeyframeMarker {
+            marker_id: "k1".into(),
+            at_ms: 500,
+            keyframe_id: Some(SceneId::new("a_k1")),
+            preset_id: None,
+        },
+        KeyframeMarker {
+            marker_id: "base".into(),
+            at_ms: 1500,
+            keyframe_id: None,
+            preset_id: None,
+        },
+    ];
+    apply(
+        &control,
+        vec![
+            create("a"),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("a_k1"),
+                variant_of: SceneId::new("a"),
+                name: "K1".into(),
+            },
+            Edit::ShowSet { show },
+        ],
+    );
+    act(&control, Action::ClockHold).expect("hold");
+    act(&control, play()).expect("play");
+    assert_eq!(program(&control).as_deref(), Some("a"));
+    step(&control, 600);
+    assert_eq!(program(&control).as_deref(), Some("a_k1"));
+    assert_eq!(running(&control).off_script, None, "the show's own move");
+    step(&control, 1000);
+    assert_eq!(program(&control).as_deref(), Some("a"));
 }

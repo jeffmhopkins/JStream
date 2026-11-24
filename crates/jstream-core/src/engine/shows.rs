@@ -309,6 +309,7 @@ impl State {
         if self.show.is_some() {
             self.show_stop(ShowChange::Stopped, wake);
         }
+        let before = self.studio.program().cloned();
         let now = self.show_now();
         let mut runner = Runner::new();
         let steps = match bookmark {
@@ -322,6 +323,11 @@ impl State {
         });
         self.emit_show(ShowChange::Started, None, None, wake);
         self.run_show_steps(&plan, steps, wake);
+        // A show that starts on the scene already on program starts its timers again, as
+        // the cut to it would have.
+        if let Some(program) = before.filter(|p| self.studio.program() == Some(p)) {
+            self.restart_timers(&program);
+        }
         self.show_settle(wake);
         Ok(())
     }
@@ -378,6 +384,29 @@ impl State {
         };
         self.run_show_steps(&plan, steps, wake);
         self.show_settle(wake);
+    }
+
+    /// Restarts every `timer` source `scene` draws (its countdowns among them), at the
+    /// action's time (`LiveSources::restart`).
+    fn restart_timers(&mut self, scene: &SceneId) {
+        let state = self.graph.state();
+        let timers: std::collections::BTreeSet<_> = state
+            .tree_items(state.family_of(scene))
+            .into_iter()
+            .filter_map(|item| state.item(item).map(|(_, item)| item.source_id().clone()))
+            .filter(|source| {
+                state.source(source).is_some_and(|s| {
+                    matches!(
+                        s.kind(),
+                        jstream_protocol::SourceKind::Builtin { kind } if kind == "timer"
+                    )
+                })
+            })
+            .collect();
+        let at = self.action_now();
+        for source in timers {
+            self.live.restart(&source, at);
+        }
     }
 
     /// After a show call: runs what fell due, ticks the timelines (a sequence the show
@@ -470,9 +499,37 @@ impl State {
             Effect::Keyframe {
                 keyframe, preset, ..
             } => {
-                if let Some(scene_id) = self.studio.program().cloned() {
+                let Some(program) = self.studio.program().cloned() else {
+                    return;
+                };
+                let state = self.graph.state();
+                if state.scene(&program).is_none() {
+                    return;
+                }
+                let family = state.family_of(&program).clone();
+                let target = keyframe.clone().unwrap_or_else(|| family.clone());
+                let ours = state
+                    .scene(&target)
+                    .is_some_and(|_| *state.family_of(&target) == family);
+                if ours {
+                    // A keyframe of the scene on program: program itself moves to it, as a
+                    // switch within the family (a placed keyframe only changes how other
+                    // scenes draw it).
+                    if target != program {
+                        self.show_switching = true;
+                        let _ = self.switch(
+                            client_id,
+                            request_id,
+                            target,
+                            preset.as_ref(),
+                            Vec::new(),
+                            wake,
+                        );
+                        self.show_switching = false;
+                    }
+                } else {
                     let _ =
-                        self.set_keyframe(client_id, request_id, scene_id, keyframe, preset, wake);
+                        self.set_keyframe(client_id, request_id, program, keyframe, preset, wake);
                 }
             }
             Effect::OverlayOn { .. } | Effect::OverlayOff { .. } => {}

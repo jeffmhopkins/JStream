@@ -117,8 +117,8 @@ Contents:
   `Edge` (just before it, or at it) and `state_events_before` the last state event per
   `CueAction::state_key` before it. `Runner` walks show time on the animation clock:
   `tick` runs the points due in order (a loop wraps at its end before a bookmark there
-  could pause, a pausing bookmark pauses before anything at its time, then the spanning
-  state, then the events), and `continue_`, `back`, `skip`, `go_to`, `jump`, `arm`,
+  could pause, a pausing bookmark pauses before anything at its time but a program clip
+  starting there, which goes up as it pauses, then the spanning state, then the events), and `continue_`, `back`, `skip`, `go_to`, `jump`, `arm`,
   `off_script`, `back_to_script` and `stop` move it; `start_at_bookmark` starts as a
   jump to a bookmark would land, with its arrive transition. `pause` holds show time
   where the play head is by hand (`held`) and stops the sequences it started;

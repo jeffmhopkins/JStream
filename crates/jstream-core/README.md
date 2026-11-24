@@ -1794,19 +1794,26 @@ instead of from the start. `show.pause` holds a playing show's play head where i
 stops the sequences it started and keeps program as it is; `show.continue` plays on
 from there too. Program, its media included, runs on through the pause (ADR-0210). Each
 `Effect` runs as of its own time (`cue_at`) as the call a key or pad would make:
-`scene.switch` with the clip's preset, `scene.set_keyframe` on the program scene,
+`scene.switch` with the clip's preset; for a keyframe marker, a `scene.switch` of program
+to that keyframe scene (or back to its family's own scene for none), with the marker's
+preset, when the keyframe is of the scene on program (a placed keyframe,
+`scene.set_keyframe`, only changes how other scenes draw a scene, never program
+itself), else `scene.set_keyframe` on the program scene;
 `timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a
 `show.*` action in a cue is skipped, so a cue can't re-enter the runner). Overlay
 clips and media seeks are not run yet. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
-it. `studio.get`'s `show` reports it, and `show.changed` says what it did.
+it. A show that starts on the scene already on program restarts every `timer` source
+that scene draws (`source.restart`), as the cut to it would have.
+`studio.get`'s `show` reports it, and `show.changed` says what it did.
 `src/tests/shows.rs` checks playing through, pausing before a pausing bookmark's
 point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
 going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
 off script, stopping, deleting, refused calls, a sequence clip's cue firing within the
 `clock.step` that starts it, a jump waking the live ticker in real time, and
-`show.pause` holding show time until `show.continue` or `show.play` plays on.
+`show.pause` holding show time until `show.continue` or `show.play` plays on, and
+keyframe markers moving program to a keyframe scene and back.
 `src/tests/timelines.rs` checks that a timeline played while the ticker waits for a
 later cue fires on time.
 
