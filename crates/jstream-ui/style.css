@@ -877,6 +877,23 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .key-value .key { color: var(--muted); }
 .key-value select { width: 150px; }
 .inspector .note { margin: 6px 0 0; color: var(--dim); font-size: 11px; }
+/* The Show page (panels/show/inspector.rs): what the Show panel selected, in the same
+   label-and-field grid, with its kind beside the panel's title. */
+h2 .h2-sub { margin-left: 14px; color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.show-fields { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.panel-inspector .fold-body > .field-grid > .text-field input { height: 28px; padding: 0 8px; }
+.panel-inspector .fold-body > .field-grid > .switch-field { display: grid; grid-template-columns: minmax(0, 88px) auto; justify-content: start; align-items: center; gap: 8px; }
+.panel-inspector .fold-body > .note-field { display: grid; grid-template-columns: minmax(0, 88px) minmax(0, 1fr); gap: 8px; margin-top: 6px; }
+.panel-inspector .note-field textarea { min-height: 3rem; }
+.show-rows { display: grid; gap: 6px; margin-bottom: 6px; }
+.show-row { display: grid; grid-template-columns: minmax(0, 88px) minmax(0, 1fr); align-items: center; gap: 8px; }
+.show-row .key, .show-read .key { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.show-box { display: flex; align-items: center; min-width: 0; height: 28px; border: 1px solid var(--border); border-radius: 5px; background: var(--app); }
+.show-box-text { flex: 1 1 auto; min-width: 0; padding: 0 8px; border: 0; background: none; color: var(--text); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.show-box-text:hover:not(:disabled) { background: none; color: var(--link); }
+.show-read .value { color: var(--text-soft); }
+.show-actions { display: flex; gap: 8px; }
+.show-delete { color: var(--danger-text); }
 .motion-row { margin: 8px 0; padding: 8px 0 0; border-top: 1px solid var(--border); }
 .motion-row-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
 .motion-row-actions .check { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }

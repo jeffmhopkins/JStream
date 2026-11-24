@@ -8,7 +8,8 @@
 //! source's settings and filters are in the Properties dialog the header's button opens. With no item selected, the
 //! selected scene's header over its object count, the scenes that use it as a source,
 //! and its transition overrides. Every field sends its edit when it changes, so the
-//! canvas and the Inspector show the same committed numbers.
+//! canvas and the Inspector show the same committed numbers. While the Show panel's
+//! selection names something in the open show, its page (`show::inspector`) comes first.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
@@ -17,6 +18,7 @@ use super::keyframe_timing::{self, KeyframeTimingFields};
 use super::motion::MotionSection;
 use super::number::{AxisRow, NumberField};
 use super::scene_properties::SceneDialog;
+use super::show::inspector as show_inspector;
 use super::source_properties::{self, PropertiesDialog};
 use super::studio;
 use crate::app::SessionContext;
@@ -544,9 +546,41 @@ pub fn Inspector() -> impl IntoView {
     // The tab shown: the one last picked, here or in an earlier session.
     let tab = RwSignal::new(Tab::restore());
 
+    // The Show panel's selection, when it names something in the open show: its page
+    // comes first. Selecting a scene or an item elsewhere clears it.
+    let show_panel = use_context::<crate::panels::show::ShowPanel>();
+    let show_pick = Memo::new(move |_| {
+        let panel = show_panel?;
+        let id = panel.selected.get()?;
+        let open = panel.show()?.id;
+        studio.collection.with(|c| {
+            let show = c
+                .as_ref()?
+                .shows
+                .iter()
+                .find(|s| s.show_id.as_str() == open)?;
+            show_inspector::kind_of(show, &id).map(|kind| (open.clone(), id, kind))
+        })
+    });
+    if let Some(panel) = show_panel {
+        Effect::new(move |seen: Option<()>| {
+            studio.selection.track();
+            if seen.is_some() {
+                panel.selected.set(None);
+            }
+        });
+    }
+
     view! {
-        <h2>"Inspector"</h2>
-        {move || match selection_shown.get() {
+        <h2>
+            "Inspector"
+            {move || show_pick.get().map(|(_, _, kind)| view! { <span class="h2-sub">{kind.title()}</span> })}
+        </h2>
+        {move || match show_pick.get() {
+            Some((show, id, kind)) => {
+                view! { <show_inspector::ShowPage show_id=show id=id kind=kind /> }.into_any()
+            }
+            None => view! { {move || match selection_shown.get() {
             Shown::Nothing => view! { <p class="placeholder">"Nothing to inspect."</p> }.into_any(),
             Shown::Item(scene, item) => view! {
                 <div class="inspector">
@@ -568,6 +602,7 @@ pub fn Inspector() -> impl IntoView {
                 </div>
             }
             .into_any(),
+        }} }.into_any(),
         }}
     }
 }
