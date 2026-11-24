@@ -1,4 +1,4 @@
-//! libva's H.264 and HEVC encode structs, its H.264, VP8, VP9 and AV1 decode structs
+//! libva's H.264, HEVC and AV1 encode structs, its H.264, VP8, VP9 and AV1 decode structs
 //! (ADR-0072), and their constants, hand-written (ADR-0060 §8).
 //!
 //! Each struct mirrors its C declaration field for field, `#[repr(C)]`, with C bitfield
@@ -20,7 +20,9 @@
 //! `segment_flags` field printed one at a time, and the VP8 ones (`va/va_dec_vp8.h`,
 //! and `VAIQMatrixBufferVP8` and `VAProbabilityDataBufferVP8` from `va/va.h`), with
 //! the bit of each `pic_fields` field printed the same way. So were the AV1 ones
-//! (`va/va_dec_av1.h`), with a bit of each bitfield union printed the same way.
+//! (`va/va_dec_av1.h`), with a bit of each bitfield union printed the same way, and
+//! the AV1 encode ones (`va/va_enc_av1.h`), with each bitfield `av1` packs, and the
+//! `VAConfigAttribValEncAV1Ext2` fields it reads, printed the same way.
 //!
 //! The surface attributes and the DRM PRIME descriptor that import an encode target
 //! (`va/va.h`, `va/va_drmcommon.h`) were checked the same way, against the same
@@ -438,6 +440,8 @@ pub(crate) const RC_CBR: u32 = 0x2;
 pub(crate) const RC_VBR: u32 = 0x4;
 /// `VA_ENC_PACKED_HEADER_SEQUENCE`.
 pub(crate) const PACKED_HEADER_SEQUENCE: u32 = 0x1;
+/// `VA_ENC_PACKED_HEADER_PICTURE`.
+pub(crate) const PACKED_HEADER_PICTURE: u32 = 0x2;
 /// `VA_ENC_PACKED_HEADER_SLICE`.
 pub(crate) const PACKED_HEADER_SLICE: u32 = 0x4;
 /// `VA_FEATURE_REQUIRED`: a two-bit field of `VAConfigAttribValEncHEVCFeatures` whose
@@ -498,6 +502,8 @@ pub(crate) mod attrib {
     pub(crate) const ENC_HEVC_FEATURES: i32 = 50;
     /// `VAConfigAttribEncHEVCBlockSizes`: a `VAConfigAttribValEncHEVCBlockSizes`.
     pub(crate) const ENC_HEVC_BLOCK_SIZES: i32 = 51;
+    /// `VAConfigAttribEncAV1Ext2`: a `VAConfigAttribValEncAV1Ext2`.
+    pub(crate) const ENC_AV1_EXT2: i32 = 54;
 }
 
 /// `VABufferType` values.
@@ -522,6 +528,8 @@ pub(crate) mod buffer {
 pub(crate) mod packed {
     /// `VAEncPackedHeaderSequence`.
     pub(crate) const SEQUENCE: u32 = 1;
+    /// `VAEncPackedHeaderPicture` (AV1's frame header OBU).
+    pub(crate) const PICTURE: u32 = 2;
     /// `VAEncPackedHeaderSlice` (`VAEncPackedHeaderHEVC_Slice`).
     pub(crate) const SLICE: u32 = 3;
 }
@@ -844,6 +852,201 @@ pub(crate) struct MiscParam<T> {
     pub(crate) data: T,
 }
 
+/// `VAEncSequenceParameterBufferAV1`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SeqParamAv1 {
+    pub(crate) seq_profile: u8,
+    pub(crate) seq_level_idx: u8,
+    pub(crate) seq_tier: u8,
+    pub(crate) hierarchical_flag: u8,
+    pub(crate) intra_period: u32,
+    pub(crate) ip_period: u32,
+    pub(crate) bits_per_second: u32,
+    /// The `seq_fields` bitfield union.
+    pub(crate) seq_fields: u32,
+    pub(crate) order_hint_bits_minus_1: u8,
+    pub(crate) va_reserved: [u32; 16],
+}
+
+/// `VAEncSegParamAV1`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SegParamAv1 {
+    /// The `seg_flags` bitfield union.
+    pub(crate) seg_flags: u8,
+    pub(crate) segment_number: u8,
+    pub(crate) feature_data: [[i16; 8]; 8],
+    pub(crate) feature_mask: [u8; 8],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAEncPictureParameterBufferAV1`. Its `wm` is the decoder's [`WarpedMotionAv1`],
+/// which `VAEncWarpedMotionParamsAV1` matches field for field.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PicParamAv1 {
+    pub(crate) frame_width_minus_1: u16,
+    pub(crate) frame_height_minus_1: u16,
+    pub(crate) reconstructed_frame: Id,
+    pub(crate) coded_buf: Id,
+    /// The surfaces in the eight reference slots, `INVALID_ID` where unused.
+    pub(crate) reference_frames: [Id; 8],
+    pub(crate) ref_frame_idx: [u8; 7],
+    pub(crate) hierarchical_level_plus1: u8,
+    pub(crate) primary_ref_frame: u8,
+    pub(crate) order_hint: u8,
+    pub(crate) refresh_frame_flags: u8,
+    pub(crate) reserved8bits1: u8,
+    /// The `VARefFrameCtrlAV1` unions for list 0 and list 1.
+    pub(crate) ref_frame_ctrl_l0: u32,
+    pub(crate) ref_frame_ctrl_l1: u32,
+    /// The `picture_flags` bitfield union.
+    pub(crate) picture_flags: u32,
+    pub(crate) seg_id_block_size: u8,
+    pub(crate) num_tile_groups_minus1: u8,
+    pub(crate) temporal_id: u8,
+    pub(crate) filter_level: [u8; 2],
+    pub(crate) filter_level_u: u8,
+    pub(crate) filter_level_v: u8,
+    /// The `loop_filter_flags` bitfield union.
+    pub(crate) loop_filter_flags: u8,
+    pub(crate) superres_scale_denominator: u8,
+    pub(crate) interpolation_filter: u8,
+    pub(crate) ref_deltas: [i8; 8],
+    pub(crate) mode_deltas: [i8; 2],
+    pub(crate) base_qindex: u8,
+    pub(crate) y_dc_delta_q: i8,
+    pub(crate) u_dc_delta_q: i8,
+    pub(crate) u_ac_delta_q: i8,
+    pub(crate) v_dc_delta_q: i8,
+    pub(crate) v_ac_delta_q: i8,
+    pub(crate) min_base_qindex: u8,
+    pub(crate) max_base_qindex: u8,
+    /// The `qmatrix_flags` bitfield union.
+    pub(crate) qmatrix_flags: u16,
+    pub(crate) reserved16bits1: u16,
+    /// The `mode_control_flags` bitfield union.
+    pub(crate) mode_control_flags: u32,
+    pub(crate) segments: SegParamAv1,
+    pub(crate) tile_cols: u8,
+    pub(crate) tile_rows: u8,
+    pub(crate) reserved16bits2: u16,
+    pub(crate) width_in_sbs_minus_1: [u16; 63],
+    pub(crate) height_in_sbs_minus_1: [u16; 63],
+    pub(crate) context_update_tile_id: u16,
+    pub(crate) cdef_damping_minus_3: u8,
+    pub(crate) cdef_bits: u8,
+    pub(crate) cdef_y_strengths: [u8; 8],
+    pub(crate) cdef_uv_strengths: [u8; 8],
+    /// The `loop_restoration_flags` bitfield union.
+    pub(crate) loop_restoration_flags: u16,
+    pub(crate) wm: [WarpedMotionAv1; 7],
+    /// Where the driver rewrites what its rate controller chooses in the packed frame
+    /// header: bit offsets into the frame header OBU, and the OBU size field's byte
+    /// offset into the packed headers.
+    pub(crate) bit_offset_qindex: u32,
+    pub(crate) bit_offset_segmentation: u32,
+    pub(crate) bit_offset_loopfilter_params: u32,
+    pub(crate) bit_offset_cdef_params: u32,
+    pub(crate) size_in_bits_cdef_params: u32,
+    pub(crate) byte_offset_frame_hdr_obu_size: u32,
+    pub(crate) size_in_bits_frame_hdr_obu: u32,
+    /// The `tile_group_obu_hdr_info` bitfield union.
+    pub(crate) tile_group_obu_hdr_info: u8,
+    pub(crate) number_skip_frames: u8,
+    pub(crate) reserved16bits3: u16,
+    pub(crate) skip_frames_reduced_size: i32,
+    pub(crate) va_reserved: [u32; 16],
+}
+
+impl PicParamAv1 {
+    /// Every field zero and every reference slot empty.
+    pub(crate) const EMPTY: Self = Self {
+        frame_width_minus_1: 0,
+        frame_height_minus_1: 0,
+        reconstructed_frame: INVALID_ID,
+        coded_buf: INVALID_ID,
+        reference_frames: [INVALID_ID; 8],
+        ref_frame_idx: [0; 7],
+        hierarchical_level_plus1: 0,
+        primary_ref_frame: 0,
+        order_hint: 0,
+        refresh_frame_flags: 0,
+        reserved8bits1: 0,
+        ref_frame_ctrl_l0: 0,
+        ref_frame_ctrl_l1: 0,
+        picture_flags: 0,
+        seg_id_block_size: 0,
+        num_tile_groups_minus1: 0,
+        temporal_id: 0,
+        filter_level: [0; 2],
+        filter_level_u: 0,
+        filter_level_v: 0,
+        loop_filter_flags: 0,
+        superres_scale_denominator: 0,
+        interpolation_filter: 0,
+        ref_deltas: [0; 8],
+        mode_deltas: [0; 2],
+        base_qindex: 0,
+        y_dc_delta_q: 0,
+        u_dc_delta_q: 0,
+        u_ac_delta_q: 0,
+        v_dc_delta_q: 0,
+        v_ac_delta_q: 0,
+        min_base_qindex: 0,
+        max_base_qindex: 0,
+        qmatrix_flags: 0,
+        reserved16bits1: 0,
+        mode_control_flags: 0,
+        segments: SegParamAv1 {
+            seg_flags: 0,
+            segment_number: 0,
+            feature_data: [[0; 8]; 8],
+            feature_mask: [0; 8],
+            va_reserved: [0; 4],
+        },
+        tile_cols: 0,
+        tile_rows: 0,
+        reserved16bits2: 0,
+        width_in_sbs_minus_1: [0; 63],
+        height_in_sbs_minus_1: [0; 63],
+        context_update_tile_id: 0,
+        cdef_damping_minus_3: 0,
+        cdef_bits: 0,
+        cdef_y_strengths: [0; 8],
+        cdef_uv_strengths: [0; 8],
+        loop_restoration_flags: 0,
+        wm: [WarpedMotionAv1 {
+            wmtype: 0,
+            wmmat: [0; 8],
+            invalid: 0,
+            va_reserved: [0; 4],
+        }; 7],
+        bit_offset_qindex: 0,
+        bit_offset_segmentation: 0,
+        bit_offset_loopfilter_params: 0,
+        bit_offset_cdef_params: 0,
+        size_in_bits_cdef_params: 0,
+        byte_offset_frame_hdr_obu_size: 0,
+        size_in_bits_frame_hdr_obu: 0,
+        tile_group_obu_hdr_info: 0,
+        number_skip_frames: 0,
+        reserved16bits3: 0,
+        skip_frames_reduced_size: 0,
+        va_reserved: [0; 16],
+    };
+}
+
+/// `VAEncTileGroupBufferAV1`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TileGroupAv1 {
+    pub(crate) tg_start: u8,
+    pub(crate) tg_end: u8,
+    pub(crate) va_reserved: [u32; 4],
+}
+
 /// `VAEncPackedHeaderParameterBuffer`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1068,6 +1271,43 @@ const _: () = {
     use core::mem::{align_of, offset_of, size_of};
 
     assert!(size_of::<ConfigAttrib>() == 8);
+    assert!(size_of::<SeqParamAv1>() == 88);
+    assert!(offset_of!(SeqParamAv1, intra_period) == 4);
+    assert!(offset_of!(SeqParamAv1, seq_fields) == 16);
+    assert!(offset_of!(SeqParamAv1, order_hint_bits_minus_1) == 20);
+    assert!(offset_of!(SeqParamAv1, va_reserved) == 24);
+    assert!(size_of::<SegParamAv1>() == 156);
+    assert!(offset_of!(SegParamAv1, feature_mask) == 130);
+    assert!(offset_of!(SegParamAv1, va_reserved) == 140);
+    assert!(size_of::<WarpedMotionAv1>() == 56);
+    assert!(offset_of!(WarpedMotionAv1, invalid) == 36);
+    assert!(size_of::<PicParamAv1>() == 1032);
+    assert!(offset_of!(PicParamAv1, reference_frames) == 12);
+    assert!(offset_of!(PicParamAv1, ref_frame_idx) == 44);
+    assert!(offset_of!(PicParamAv1, refresh_frame_flags) == 54);
+    assert!(offset_of!(PicParamAv1, ref_frame_ctrl_l0) == 56);
+    assert!(offset_of!(PicParamAv1, picture_flags) == 64);
+    assert!(offset_of!(PicParamAv1, filter_level) == 71);
+    assert!(offset_of!(PicParamAv1, ref_deltas) == 78);
+    assert!(offset_of!(PicParamAv1, base_qindex) == 88);
+    assert!(offset_of!(PicParamAv1, min_base_qindex) == 94);
+    assert!(offset_of!(PicParamAv1, qmatrix_flags) == 96);
+    assert!(offset_of!(PicParamAv1, mode_control_flags) == 100);
+    assert!(offset_of!(PicParamAv1, segments) == 104);
+    assert!(offset_of!(PicParamAv1, tile_cols) == 260);
+    assert!(offset_of!(PicParamAv1, width_in_sbs_minus_1) == 264);
+    assert!(offset_of!(PicParamAv1, height_in_sbs_minus_1) == 390);
+    assert!(offset_of!(PicParamAv1, context_update_tile_id) == 516);
+    assert!(offset_of!(PicParamAv1, cdef_y_strengths) == 520);
+    assert!(offset_of!(PicParamAv1, loop_restoration_flags) == 536);
+    assert!(offset_of!(PicParamAv1, wm) == 540);
+    assert!(offset_of!(PicParamAv1, bit_offset_qindex) == 932);
+    assert!(offset_of!(PicParamAv1, byte_offset_frame_hdr_obu_size) == 952);
+    assert!(offset_of!(PicParamAv1, size_in_bits_frame_hdr_obu) == 956);
+    assert!(offset_of!(PicParamAv1, tile_group_obu_hdr_info) == 960);
+    assert!(offset_of!(PicParamAv1, skip_frames_reduced_size) == 964);
+    assert!(offset_of!(PicParamAv1, va_reserved) == 968);
+    assert!(size_of::<TileGroupAv1>() == 20);
     assert!(size_of::<PictureH264>() == 36);
     assert!(size_of::<DecPicParamH264>() == 672);
     assert!(offset_of!(DecPicParamH264, reference_frames) == 36);

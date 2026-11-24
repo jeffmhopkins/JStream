@@ -83,6 +83,9 @@ pub enum TrackKind {
     Sequences(u8),
     /// A1 and up: audio clips. Numbered from 1.
     Audio(u8),
+    /// The scene audio of video track V`n` (1 for program): drawn from its clips'
+    /// scenes, read only, each clip linked to its scene clip (ADR-0216).
+    Linked(u8),
 }
 
 impl TrackKind {
@@ -94,6 +97,7 @@ impl TrackKind {
             TrackKind::Keyframes => "K".to_owned(),
             TrackKind::Sequences(n) => format!("S{n}"),
             TrackKind::Audio(n) => format!("A{n}"),
+            TrackKind::Linked(n) => format!("V{n}"),
         }
     }
 
@@ -105,6 +109,7 @@ impl TrackKind {
             TrackKind::Keyframes => "Keyframes",
             TrackKind::Sequences(_) => "Sequences",
             TrackKind::Audio(_) => "Audio",
+            TrackKind::Linked(_) => "Scene audio",
         }
     }
 
@@ -116,6 +121,7 @@ impl TrackKind {
             TrackKind::Keyframes => "keyframes",
             TrackKind::Sequences(_) => "sequences",
             TrackKind::Audio(_) => "audio",
+            TrackKind::Linked(_) => "linked",
         }
     }
 }
@@ -127,6 +133,8 @@ pub struct TrackView {
     pub id: String,
     /// What it holds.
     pub kind: TrackKind,
+    /// The name its author gave it; empty for the kind's own ([`TrackKind::title`]).
+    pub name: String,
     /// Its clips, in show time order.
     pub clips: Vec<ClipView>,
     /// Whether it is muted: its clips do nothing when the show plays.
@@ -184,6 +192,8 @@ pub enum ClipKind {
     Event(String),
     /// An audio source, by ID, up for the clip.
     Audio(String),
+    /// A scene clip's own audio, by the scene's ID: its ID is the scene clip's.
+    Linked(String),
 }
 
 /// A show bookmark: a named point the show can jump to.
@@ -199,6 +209,8 @@ pub struct BookmarkView {
     pub pausing: bool,
     /// The key bound to "go to" it, if any, as it shows on a key cap: F2.
     pub key: Option<String>,
+    /// What to say or do there, read from the Run view's notes like a teleprompter.
+    pub note: String,
 }
 
 /// A loop: a region the play head goes round until the operator leaves.
@@ -318,6 +330,7 @@ pub(crate) mod demo {
             at_ms,
             pausing,
             key: Some(key.to_owned()),
+            note: String::new(),
         }
     }
 
@@ -325,6 +338,7 @@ pub(crate) mod demo {
         TrackView {
             id: id.to_owned(),
             kind,
+            name: String::new(),
             clips,
             muted: false,
             locked: false,

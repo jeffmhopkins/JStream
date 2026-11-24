@@ -38,8 +38,11 @@ Contents (a first cut; [Design](#design) explains the choices):
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output`, `ptz` and `source`;
   `batch`, which carries their edits, is open-world too; `REVERSIBLE_ACTIONS` names the
   actions that don't make a tool destructive), and the decoding of tool arguments into
-  protocol calls, which refuses an output edit with a `youtube` target, and in `batch` the
-  `OUTPUT_ONLY_EDITS` that can remove a stream key.
+  protocol calls, which refuses an output edit with a `youtube` target, a people-only or
+  deprecated op nested anywhere in the arguments, and in `batch` the
+  `OUTPUT_ONLY_EDITS` that can remove a stream key. The tools carry the command unions
+  (`SHARED_UNIONS`, `Action` and `Edit`) as stubs, and `Tools::describe` answers
+  `describe_api`, whole or for one `name` (#1718).
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
   a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
   `live.changed` may be merged into an unread one of its gesture, and `youtube.*`
@@ -96,13 +99,17 @@ or a status line.
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
-target stays open to agents), and the `events` feed drops `youtube.*` and `plugin.*` events. `describe_api` still returns the whole schema, YouTube and plugins included.
+target stays open to agents), and the `events` feed drops `youtube.*` and `plugin.*` events.
+Nor can an agent put one of these ops, or a deprecated one, where a person would run it
+later: a hotkey's or binding's `action`, a timeline's or show's cue, or an edit in
+`batch`. Any object in a tool's arguments whose `type` names such an op is refused with
+`invalid_argument` at its path, before anything is sent (#1758). `describe_api` still returns the whole schema, YouTube and plugins included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
 | one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `data`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `jtunnel`, `kind`, `label`, `live`, `midi`, `output`, `overlay`, `pack`, `pairing`, `preview`, `profile`, `ptz`, `quality`, `scene`, `send`, `show`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
-| `describe_api` | nothing | the whole protocol schema, without calling the engine |
+| `describe_api` | `name`, optional: a definition (`Action`) or an op (`scene.create`) | the whole protocol schema, or that definition or op standing alone, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
 
 A group tool's arguments are `{"op": {...}, "expected_rev"?, "idempotency_key"?}`. `op`
@@ -116,7 +123,16 @@ placements, crops and a source's `live` settings
 and `ends_gesture` ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and the
 gestures it leaves open expire when its session ends. Unknown argument keys are rejected too, so a misspelt
 `expected_rev` can't silently drop the concurrency check. Each tool's `inputSchema`
-carries, under `$defs`, every protocol definition it refers to, so it stands alone. Tool
+carries, under `$defs`, every protocol definition it refers to, so it stands alone,
+except the command unions `Edit` and `Action` (`SHARED_UNIONS`). They refer to each
+other, so either pulls in nearly every definition, and copying them into each tool that
+takes an action or edit inside its op (`batch`, `hotkey`, `binding`, `timeline`, `show`,
+`live`) made the compact `tools/list` about 2 MB (#1718). A tool carries a stub for each
+instead: an object whose `type` must be one of the union's variant names, with a
+description that sends the agent to the tool its noun names or to `describe_api` with
+`name`. A group tool's own ops stay whole under `op`, and the server still checks the
+whole shape when a call arrives, so a stub only loosens what a client could check
+before sending. That brings the list to about 385 KB. Tool
 names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-root test
 `tool_names_are_valid`, and the whole list is snapshot-tested in
 [`schema/tools.snap`](schema/tools.snap): a protocol change shows up there as the tool
@@ -527,10 +543,11 @@ official Rust SDK (`rmcp`):
 <!-- @section
 -->
 
-1. **Progressive discovery.** Each group tool carries its full op schemas, and `batch`
-   carries every edit's (about 1,300 lines of JSON in total today). ARCH plans small
-   schemas plus `describe_api` on demand. When the protocol grows, should group schemas
-   shrink to the op names, with `describe_api` taking a group or op name?
+1. **Progressive discovery.** Partly done: the command unions nested in an op are
+   stubs, and `describe_api` takes a definition or op `name` ([Design](#design)). Each
+   group tool still carries its own ops' full schemas (`item` and `scene`, the largest,
+   about 60 KB each). When the protocol grows, should group schemas shrink to the op
+   names too?
 2. **`disconnected`.** A lost engine connection is reported with an MCP-layer error code
    that the protocol doesn't define. Should the protocol define it, or should it be a
    JSON-RPC error instead?

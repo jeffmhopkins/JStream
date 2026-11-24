@@ -47,8 +47,8 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
   otherwise a CPU one; `path()` returns the `VideoPath` it took.
   `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
   `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
-  `VideoSession::stats_handle()` gives a `StatsHandle` that reads `stats()` from
-  anywhere without keeping the session alive.
+  `VideoSession::stats_handle()` gives a `StatsHandle` that reads `stats()` and
+  `codec()` from anywhere without keeping the session alive.
   `VideoSession::codec()` is the codec encoding now: `info()`'s, or the one the encoder
   fell back to after it opened (a hardware encoder refusing its first frame, #443),
   which the encode thread records once.

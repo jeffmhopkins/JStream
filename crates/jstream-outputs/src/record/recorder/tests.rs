@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use jstream_media::{Codec, MediaTime, Packet, Timebase};
 use jstream_mux::aac::AudioSpecificConfig;
-use jstream_mux::fmp4::{AudioTrack, Fmp4Config, Fmp4Muxer, Fmp4Writer, Segment, VideoTrack};
+use jstream_mux::fmp4::{
+    AudioTrack, Fmp4Config, Fmp4Muxer, Fmp4Writer, Segment, VideoConfig, VideoTrack,
+};
 use jstream_mux::h264::AvcDecoderConfig;
 
 use super::{Durable, Sink, move_no_replace, reserve_then_rename, temp_path_for};
@@ -46,8 +48,9 @@ fn config(avc: bool) -> Fmp4Config {
         video: Some(VideoTrack {
             width: 1280,
             height: 720,
-            avc: avc
-                .then(|| AvcDecoderConfig::new(vec![SPS.to_vec()], vec![PPS.to_vec()]).unwrap()),
+            config: VideoConfig::Avc(
+                avc.then(|| AvcDecoderConfig::new(vec![SPS.to_vec()], vec![PPS.to_vec()]).unwrap()),
+            ),
         }),
         audio: Some(AudioTrack {
             config: AudioSpecificConfig::aac_lc(48_000, 2).unwrap(),

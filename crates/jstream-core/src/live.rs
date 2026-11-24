@@ -1224,6 +1224,10 @@ impl LiveSources {
                 let frame = match &running.shown_gpu {
                     Some((shown, frame)) if *shown == texture => frame.clone(),
                     _ => {
+                        // A new texture is a new paint of the page (ADR-0021): counted, at
+                        // no cost to this thread, so `profile.get` shows how often a
+                        // browser source paints (#1556).
+                        self.meters.painted(source_id, Duration::ZERO);
                         *versions = versions.saturating_add(1);
                         let frame = Frame::from_gpu(texture.clone(), context.clone(), *versions);
                         running.size = Some(running.extent.unwrap_or(texture.info().size));

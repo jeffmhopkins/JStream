@@ -21,13 +21,20 @@
 //! destination is the program scene itself. The budget is an application setting: a
 //! new collection's studio keeps it ([`Studio::fresh`]). So is its limit on the GPU bytes
 //! the warm scenes hold (ADR-0150), which the engine applies once it has planned them.
+//!
+//! Beside program's transition, the studio keeps each item of the internal show scene
+//! that is fading in or out on its own ([`ShowFade`]), until it ends: an overlay's fade is
+//! drawn over program and runs apart from program's transition, so both can overlap.
+
+use std::collections::BTreeMap;
 
 use jstream_graph::State;
+use jstream_media::MediaTime;
 use jstream_protocol::{
-    Action, DEFAULT_WARM_SCENES, EntityKind, MAX_WARM_SCENES, ProtocolError, SceneId,
+    Action, DEFAULT_WARM_SCENES, EntityKind, ItemId, MAX_WARM_SCENES, ProtocolError, SceneId,
 };
 
-use crate::transition::Running;
+use crate::transition::{Running, ShowFade};
 
 /// The most scenes the studio remembers as recently on program: as many as the largest
 /// budget can keep warm.
@@ -43,6 +50,8 @@ pub(crate) struct Studio {
     /// runner; `None` while no show runs.
     upcoming: Option<SceneId>,
     running: Option<Running>,
+    /// The show scene's items fading in or out on their own, by item, until each ends.
+    fades: BTreeMap<ItemId, ShowFade>,
     /// The scenes on program before the current one, the most recent first, never the
     /// program scene, at most [`RECENT`].
     recent: Vec<SceneId>,
@@ -60,6 +69,7 @@ impl Default for Studio {
             preview: None,
             upcoming: None,
             running: None,
+            fades: BTreeMap::new(),
             recent: Vec::new(),
             budget: DEFAULT_WARM_SCENES as usize,
             gpu_mib: 0,
@@ -123,6 +133,40 @@ impl Studio {
     /// The transition running toward the program scene, if one is.
     pub(crate) fn running(&self) -> Option<&Running> {
         self.running.as_ref()
+    }
+
+    /// The show scene's items fading in or out on their own.
+    pub(crate) fn fades(&self) -> &BTreeMap<ItemId, ShowFade> {
+        &self.fades
+    }
+
+    /// Starts `fade` on `item_id`, an item of the show scene, at `now`, in place of the
+    /// one it ran ([`ShowFade::after`]); `None` shows or hides it at once, which ends a
+    /// fade it ran.
+    pub(crate) fn fade(&mut self, item_id: ItemId, fade: Option<ShowFade>, now: MediaTime) {
+        match fade {
+            Some(fade) => {
+                let fade = fade.after(self.fades.get(&item_id), now);
+                self.fades.insert(item_id, fade);
+            }
+            None => {
+                self.fades.remove(&item_id);
+            }
+        }
+    }
+
+    /// Lets go of the fades that have ended by `now`, and of those whose item is no
+    /// longer an item of `collection`'s show scene. `true` when one went.
+    pub(crate) fn end_fades(&mut self, collection: &State, now: MediaTime) -> bool {
+        let before = self.fades.len();
+        let show = collection.show_scene();
+        self.fades.retain(|item_id, fade| {
+            !fade.ended(now)
+                && collection
+                    .item(item_id)
+                    .is_some_and(|(scene, _)| Some(scene.id()) == show)
+        });
+        self.fades.len() != before
     }
 
     /// Puts `scene_id`, which the caller checked, on program, with `running` as the

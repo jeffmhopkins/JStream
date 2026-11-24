@@ -537,8 +537,12 @@ that does not want to change the graph it has.
   `send.set` would make it. `binding.clear_value` is `not_found` (entity `binding`) for an
   ID none has. Deleting what a value binding names leaves it in place, so its touched set
   names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
-  a number's ends and whether it is whole, or a switch), `None` while it is missing, and
-  `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
+  a number's ends and whether it is whole, or a switch), `None` while it is missing,
+  `Graph::stored_value` the number it holds as stored (a setting's own or its kind's
+  default, a gain in dB, a switch as 0 or 1), which `add` bindings add to
+  ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)), and `value_edit` the
+  setter edit that gives it a value, clamped, rounded or switched. A motion modifier's
+  `mode` becomes `jstream_anim::Modifier::replace` (`motion.rs`), a camera's too.
   A PTZ head's axis (`ptz_axis`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md))
   is bound with no lookup and no setter probe, since the camera list is the machine's,
   not the collection's: its range is the axis's whole counts, and it has no
