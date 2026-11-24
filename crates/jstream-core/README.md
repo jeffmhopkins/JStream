@@ -774,7 +774,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   drawn until committed or cancelled, and dropped with its source; a filter's live
   setting, an opacity, a source's and the master's fader and a send drawn and heard until
   committed or cancelled, one undo step, a non-live filter setting and a fader value
-  carrying more than its gain refused, and values dropped with their filter or send,
+  carrying more than its gain refused, a live send to a send that doesn't exist refused,
+  and values dropped with their filter or send,
   ADR-0213) and a live value drawn
   over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
