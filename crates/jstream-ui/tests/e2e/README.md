@@ -136,9 +136,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Tool bars** (`tool-bars.spec.js`): the Scenes bar's arrows moving the selected
   scene up and back down, off at either end; Add scene making a scene with its name
   open, whose empty Sources list says how to add one; Scene properties and Scene
-  filters on the selected scene, and both off, with the arrows, for a keyframe, as Add source is. The Sources bar with nothing selected (only Add source
+  filters (the same dialog, on Filters) on the selected scene, and both off, with the arrows, for a keyframe, as Add source is. The Sources bar with nothing selected (only Add source
   on); Add source opening the dialog, placing the Backdrop again; the arrows restacking
-  the selected item, each off at its end of the stack; Properties and Filters on it; Remove from scene taking it out. A
+  the selected item, each off at its end of the stack; Properties and Filters (the same dialog, on Filters) on it; Remove from scene taking it out. A
   right-click on a bar opens no menu, and the panel menu still opens on an empty scene.
   Delete scene needs `delete.plan`, so it is tested natively.
 - **Scene folders** (`folders.spec.js`): New folder from the panel's and a folder's menu,
@@ -283,7 +283,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
   picked) or description ("nest" leaves Scene), shows "No source type matches." with
   Add disabled when none match, the dialog keeping its height throughout, and an empty
-  search lists them all again. An item row's menu lists the item menu's grouped lines and Delete source everywhere…, Send to back,
+  search lists them all again. An item row's menu lists the item menu's grouped lines, Properties… and Edit filters…
+  first (Edit filters… opening Properties on Filters), and Delete source everywhere…, Send to back,
   from the Order submenu, restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
   with its check following, Screenshot (source) shows a toast (the mock engine streams
@@ -298,7 +299,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   both; a placement of a shared source switches, from the Reference or clone submenu, to an independent clone and back to a
   reference in one edit each, its menu's head and checks following, and the original,
   placed once, has no switch; Ctrl+D and Ctrl+Shift+D duplicate on the canvas and in a
-  row, and Del removes there; a nested scene's menu opens it; a scene row's Rename
+  row, and Del removes there; a nested scene's menu opens it, and the Sources caption's Back to “Main” goes back up
+  with the nesting row selected; a scene row's Rename
   renames, and the Scenes panel's New scene adds one with its name field focused. The
   header's menus act as a menu bar: a click opens File, pointing at Edit and View opens
   each in its place, a click on the open menu's button closes it, after which pointing
@@ -389,7 +391,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   chain; with the Backdrop selected, its title, note, one video chain of its source
   (above the item's effects) with its count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
   drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
-  an item's menu selecting the item and showing the panel behind the Arrange tab; the
+  an item's menu selecting the item and opening its Properties on Filters; the
   Add filter dialog from the panel and over the Properties dialog, which Escape leaves
   open; and the Filters window on a double-click, named for the Backdrop, with the
   prototype's hint for Blur, the source's picture, and one footer of a note and Close:
@@ -421,8 +423,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Main's empty video chain with the scene note; with Sharpen and Gain described, Add
   filter offering only Sharpen, with the scene's foot, as one edit on the scene, while
   the Backdrop keeps its own two; another scene selected showing its own chain; a scene
-  row's Edit filters… showing that scene's chain from behind the Arrange tab while
-  the item stays selected, selecting a scene going back to its chain, and the canvas
+  row's menu leading with Properties… and Edit filters…, which opens Scene properties on
+  Filters while the item stays selected (Properties… still on Settings), selecting a
+  scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog's Filters segment (counting 0, then 1) listing the scene's chain and adding to
   it at once, the new filter's settings showing beside it (the footer's Defaults

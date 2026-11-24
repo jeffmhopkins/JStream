@@ -831,6 +831,18 @@ impl Context {
     /// Selects the item alone and opens its source's Properties dialog: a reference's
     /// is its source's, and a nested scene's is the scene's (DL-03).
     pub fn properties(self, item_id: ItemId) {
+        self.open_properties(item_id, false);
+    }
+
+    /// Selects the item alone and opens its source's Properties dialog on its Filters
+    /// segment, as [`Context::properties`] opens it on Settings; a source the dialog
+    /// doesn't show has its chains in the Filters panel instead.
+    pub fn filters(self, item_id: ItemId) {
+        self.open_properties(item_id, true);
+    }
+
+    /// Opens the item's Properties, on Filters when `filters`.
+    fn open_properties(self, item_id: ItemId, filters: bool) {
         let source = self.studio.collection.with_untracked(|c| {
             let c = c.as_ref()?;
             let (_, item) = c.item(&item_id)?;
@@ -839,27 +851,30 @@ impl Context {
         });
         self.studio.select_item(Some(item_id));
         match (source, self.props, self.scenes) {
+            (Some((SourceKind::Scene { scene_id }, _)), _, Some(scenes)) if filters => {
+                scenes.open_filters(scene_id);
+            }
             (Some((SourceKind::Scene { scene_id }, _)), _, Some(scenes)) => scenes.open(scene_id),
             (Some((kind, source_id)), Some(props), _) if source_properties::shows(&kind) => {
-                props.open(source_id);
+                if filters {
+                    props.open_filters(source_id);
+                } else {
+                    props.open(source_id);
+                }
+            }
+            _ if filters => {
+                if let Some(dialogs) = self.filters {
+                    dialogs.unpick();
+                }
+                if let Some(dock) = self.dock {
+                    dock.0.update(|d| d.show(PanelId::Filters));
+                }
             }
             _ => {
                 if let Some(dock) = self.dock {
                     dock.0.update(|d| d.show(PanelId::Inspector));
                 }
             }
-        }
-    }
-
-    /// Selects the item alone and shows the Filters panel, which shows its source's
-    /// chains.
-    pub fn filters(self, item_id: ItemId) {
-        self.studio.select_item(Some(item_id));
-        if let Some(filters) = self.filters {
-            filters.unpick();
-        }
-        if let Some(dock) = self.dock {
-            dock.0.update(|d| d.show(PanelId::Filters));
         }
     }
 

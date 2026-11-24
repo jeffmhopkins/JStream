@@ -34,18 +34,26 @@ use jstream_control::protocol::{
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
-/// The dialog's state as context: the scene it shows while open.
+/// The dialog's state as context: the scene it shows while open, and whether it opens
+/// on its Filters segment.
 #[derive(Clone, Copy)]
-pub struct SceneDialog(RwSignal<Option<SceneId>>);
+pub struct SceneDialog(RwSignal<Option<SceneId>>, RwSignal<bool>);
 
 impl SceneDialog {
     /// A closed dialog.
     pub fn new() -> SceneDialog {
-        SceneDialog(RwSignal::new(None))
+        SceneDialog(RwSignal::new(None), RwSignal::new(false))
     }
 
     /// Opens the dialog on `scene_id`.
     pub fn open(&self, scene_id: SceneId) {
+        self.1.set(false);
+        self.0.set(Some(scene_id));
+    }
+
+    /// Opens the dialog on `scene_id`, on its Filters segment (a menu's Edit filters…).
+    pub fn open_filters(&self, scene_id: SceneId) {
+        self.1.set(true);
         self.0.set(Some(scene_id));
     }
 }
@@ -330,7 +338,8 @@ pub fn SceneProperties() -> impl IntoView {
             };
             move || {
                 if present.get() {
-                    Some(view! { <SceneBody scene_id=scene_id.clone() close=close /> })
+                    let filters = dialog.1.get_untracked();
+                    Some(view! { <SceneBody scene_id=scene_id.clone() filters=filters close=close /> })
                 } else {
                     request_animation_frame(close);
                     None
@@ -341,7 +350,12 @@ pub fn SceneProperties() -> impl IntoView {
 }
 
 #[component]
-fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static) -> impl IntoView {
+fn SceneBody(
+    scene_id: SceneId,
+    /// Whether it opens on the Filters segment rather than Settings.
+    filters: bool,
+    close: impl Fn() + Copy + Send + Sync + 'static,
+) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let Some(opened) = studio
@@ -373,7 +387,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     // Filter edits apply at once; Cancel puts back each one the dialog sent.
     let undo = FilterUndo::begin(std::slice::from_ref(&owner));
     let selected = RwSignal::new(None::<FilterId>);
-    let on_filters = RwSignal::new(false);
+    let on_filters = RwSignal::new(filters);
     let note = match parent {
         Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
         None => "the whole scene".to_owned(),
