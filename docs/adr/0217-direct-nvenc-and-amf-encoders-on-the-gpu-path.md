@@ -44,7 +44,7 @@ Linux is reached the same way ([ADR-0060](0060-linux-platform-support.md)).
    the context's encode targets. The GPU's vendor picks the encoder: NVENC on an
    NVIDIA adapter, AMF on an AMD one. Intel stays on Media Foundation, as ADR-0140 has
    it (QSV's dispatcher is C++). The CPU path is unchanged.
-2. **Order.** The direct encoder is tried first. If it can't open (no runtime, a driver
+2. **Order.** Where the direct encoder is tried (§6), it goes first. If it can't open (no runtime, a driver
    too old, a codec or size the hardware doesn't encode), the Media Foundation MFT for
    the same GPU opens as before, and the engine logs why the direct one didn't. Both are
    hardware encoders, so `HardwarePreference` treats them alike, and a configuration
@@ -65,19 +65,27 @@ Linux is reached the same way ([ADR-0060](0060-linux-platform-support.md)).
    texture, so the target goes back to its producer at once), and each packet gets its
    frame's exact `pts` back. The quality settings are the vendors' streaming defaults
    as OBS uses them (NVENC P5 with the high-quality tuning; AMF's transcoding usage).
-6. **A switch, not a setting.** `JSTREAM_DIRECT_ENCODERS=off` keeps every GPU encoder on
-   Media Foundation. Like `JSTREAM_GPU_PRIORITY` ([ADR-0195](0195-the-engine-runs-at-top-priority.md))
+6. **On per vendor once proven, and a switch, not a setting.** The MFT fallback only
+   catches a refused open, not a crash in the vendor's DLL, a bad bitstream or a hang,
+   so a vendor's direct encoder is tried by default only after its `hw-tests` run (the
+   `_directly` tests) has passed on that vendor's GPU and been posted; each turns on in
+   its own change. Until then both are off by default. `JSTREAM_DIRECT_ENCODERS` says
+   otherwise for a machine: `auto` (the default) tries the proven vendors, `on` tries the
+   GPU's vendor encoder whether proven or not (for the hardware runs and for trying one),
+   and `off` keeps every GPU encoder on Media Foundation. Like `JSTREAM_GPU_PRIORITY` ([ADR-0195](0195-the-engine-runs-at-top-priority.md))
    it describes the machine, not a show, so it is an environment variable and not a
    protocol setting. `CodecInfo::name` says which encoder opened ("… (direct)"), which
    `output.status` and `profile.get` already report.
 
 <a id="consequences"></a>
 ## Consequences
-- NVIDIA and AMD machines encode through the vendor's own API by default, with the
-  MFT as the fallback, and a run can compare the two with one variable.
+- Once proven, NVIDIA and AMD machines encode through the vendor's own API by default,
+  with the MFT as the fallback, and a run can compare the two with one variable. Until
+  then nothing changes for a machine that doesn't set it.
 - The crate carries two more hand-written FFI layers to keep in step with the vendors'
   headers. The layout asserts catch a wrong size or offset at build time, but not a
-  wrong meaning, so each needs a `hw-tests` run on its vendor's GPU before it is trusted:
+  wrong meaning, so each needs a `hw-tests` run on its vendor's GPU before it is on by
+  default:
   AMF on the streaming PC's Radeon 780M, NVENC on an NVIDIA GPU when one is at hand.
 - A driver older than NVENC API 12.0 or an AMF runtime too old for the codec fails the
   direct open and falls back to the MFT, with the reason in the log.

@@ -112,13 +112,15 @@
 //!   `Unsupported`, and so is a machine with no H.264 decoder MFT (an N edition without
 //!   the Media Feature Pack).
 //! - **Direct vendor encoders** (ADR-0217, `codec/direct/`): on the GPU path the
-//!   adapter's vendor encoder is tried before the MFTs, NVENC on NVIDIA and AMF on AMD,
+//!   adapter's vendor encoder can be tried before the MFTs, NVENC on NVIDIA and AMF on AMD,
 //!   through the runtime DLL the display driver installs. It reads the encode targets
 //!   the same way (a GPU copy into a texture of its own, eight at most, `Busy` when it
 //!   holds all of them), is configured and frames its packets as the MFT path does, and
 //!   names itself "… (direct)" in `CodecInfo::name`. When it can't open, the MFT opens
 //!   instead and `tracing` logs why; when both refuse, the error names both.
-//!   `JSTREAM_DIRECT_ENCODERS=off` (read when the backend goes on a context) skips it.
+//!   `JSTREAM_DIRECT_ENCODERS` (read when the backend goes on a context) chooses: `auto`,
+//!   the default, tries only vendors whose hardware run has passed (`Vendor::proven`,
+//!   none yet); `on` tries the GPU's vendor anyway; `off` never does.
 //! - **Not yet:** HEVC and AV1 decoders, which report `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.

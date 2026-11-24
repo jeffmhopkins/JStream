@@ -1,6 +1,8 @@
 //! Direct vendor encoders on the GPU path (ADR-0217): NVIDIA's NVENC and AMD's AMF,
 //! reached through the vendor's own runtime DLL, which its display driver installs, and
-//! tried before the Media Foundation hardware MFT for the same GPU.
+//! tried before the Media Foundation hardware MFT for the same GPU: by default only for a
+//! vendor whose hardware run has passed ([`Vendor::proven`]), or for any with
+//! `JSTREAM_DIRECT_ENCODERS=on`.
 //!
 //! Both read the context's encode targets the way the MFT path does: each target is
 //! copied on the GPU into a texture of the encoder's own ([`Ring`], `EncodeGpu::copy`),
@@ -54,7 +56,7 @@ impl Vendor {
     pub(crate) fn of_pci(id: u32) -> Self {
         match id {
             0x10DE => Self::Nvidia,
-            0x1002 | 0x1022 => Self::Amd,
+            0x1002 => Self::Amd,
             _ => Self::Other,
         }
     }
@@ -67,6 +69,15 @@ impl Vendor {
             Self::Other => None,
         }
     }
+
+    /// Whether this vendor's direct encoder has passed its `hw-tests` run on the
+    /// vendor's hardware, so the default policy tries it (ADR-0217 §6). Each turns on
+    /// here, in its own change, once a passing run is posted.
+    pub(crate) fn proven(self) -> bool {
+        match self {
+            Self::Nvidia | Self::Amd | Self::Other => false,
+        }
+    }
 }
 
 /// Which direct encoders the GPU path tries before Media Foundation, from
@@ -75,8 +86,11 @@ impl Vendor {
 pub(crate) enum Policy {
     /// None: every GPU encoder is a Media Foundation MFT (`off`).
     Off,
-    /// The default (unset, or `on`): the direct encoder of the context's GPU, whichever
-    /// vendor it is.
+    /// The default (unset, or `auto`): the direct encoder of the context's GPU when that
+    /// vendor's encoder has passed its hardware run ([`Vendor::proven`]).
+    Auto,
+    /// The direct encoder of the context's GPU, whichever vendor it is (`on`): to try
+    /// one before its hardware run.
     On,
 }
 
@@ -85,18 +99,24 @@ impl Policy {
     /// unknown value keeps the default, so the caller can warn about it.
     pub(crate) fn named(value: Option<&str>) -> (Self, bool) {
         let Some(value) = value.map(str::trim) else {
-            return (Self::On, true);
+            return (Self::Auto, true);
         };
         match value.to_ascii_lowercase().as_str() {
-            "" | "on" | "1" | "true" | "auto" => (Self::On, true),
+            "" | "auto" => (Self::Auto, true),
+            "on" | "1" | "true" => (Self::On, true),
             "off" | "0" | "false" | "mf" => (Self::Off, true),
-            _ => (Self::On, false),
+            _ => (Self::Auto, false),
         }
     }
 
     /// Whether to try `vendor`'s direct encoder.
     pub(crate) fn tries(self, vendor: Vendor) -> bool {
-        self == Self::On && vendor.encoder().is_some()
+        vendor.encoder().is_some()
+            && match self {
+                Self::Off => false,
+                Self::Auto => vendor.proven(),
+                Self::On => true,
+            }
     }
 }
 
@@ -212,7 +232,7 @@ mod open {
             tracing::warn!(
                 variable = VARIABLE,
                 value = value.as_deref().unwrap_or_default(),
-                "not a value this variable takes (on or off); trying direct encoders"
+                "not a value this variable takes (auto, on or off); keeping auto"
             );
         }
         policy
@@ -260,12 +280,17 @@ mod tests {
 
     #[test]
     fn the_variable_turns_direct_encoders_off() {
-        assert_eq!(Policy::named(None), (Policy::On, true));
+        assert_eq!(Policy::named(None), (Policy::Auto, true));
+        assert_eq!(Policy::named(Some("auto")), (Policy::Auto, true));
         assert_eq!(Policy::named(Some("on")), (Policy::On, true));
         assert_eq!(Policy::named(Some(" OFF ")), (Policy::Off, true));
         assert_eq!(Policy::named(Some("0")), (Policy::Off, true));
         assert_eq!(Policy::named(Some("mf")), (Policy::Off, true));
-        assert_eq!(Policy::named(Some("sometimes")), (Policy::On, false));
+        assert_eq!(Policy::named(Some("sometimes")), (Policy::Auto, false));
+        // Unproven vendors stay on the MFT by default, and `on` tries them anyway.
+        for vendor in [Vendor::Nvidia, Vendor::Amd, Vendor::Other] {
+            assert_eq!(Policy::Auto.tries(vendor), vendor.proven());
+        }
         assert!(Policy::On.tries(Vendor::Nvidia));
         assert!(Policy::On.tries(Vendor::Amd));
         assert!(!Policy::On.tries(Vendor::Other));
