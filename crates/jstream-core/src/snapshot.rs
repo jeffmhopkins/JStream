@@ -1467,10 +1467,26 @@ impl Shot {
         )
     }
 
-    /// The value `item`'s modifier `modifier` adds at `at`, alone, as a source setting's
-    /// drive reads it (ADR-0171 decision 4).
-    fn source_value(&self, item: &ItemId, modifier: &jstream_anim::Modifier, at: MediaTime) -> f64 {
-        f64::from(self.motion_at(item, std::slice::from_ref(modifier), at).x)
+    /// What `item`'s modifier `modifier` makes of a setting's `own` value at `at`, alone,
+    /// as an effect's or a source setting's drive reads it (ADR-0138, ADR-0171 decision
+    /// 4): `own` plus its value, or for a `replace` modifier the value it sets, pulled
+    /// toward `own` by its amount (ADR-0203).
+    fn source_value(
+        &self,
+        item: &ItemId,
+        modifier: &jstream_anim::Modifier,
+        at: MediaTime,
+        own: f64,
+    ) -> f64 {
+        let by = self.motion_at(item, std::slice::from_ref(modifier), at);
+        let x = jstream_anim::Property::X;
+        if modifier.replace {
+            let own32 = own as f32;
+            let set = by.base(x, own32);
+            if set == own32 { own } else { f64::from(set) }
+        } else {
+            own + f64::from(by.x)
+        }
     }
 
     /// Whether `item`'s modifier `modifier` paints a colour setting, with the colour it
@@ -1501,11 +1517,8 @@ impl Shot {
             let Some(chain) = self.chains.get(owner) else {
                 continue;
             };
-            let value = |modifier: &jstream_anim::Modifier| {
-                f64::from(
-                    self.motion_at(&driven.item, std::slice::from_ref(modifier), at)
-                        .x,
-                )
+            let value = |modifier: &jstream_anim::Modifier, own: f64| {
+                self.source_value(&driven.item, modifier, at, own)
             };
             let tint = |modifier: &jstream_anim::Modifier| self.tint(&driven.item, modifier);
             match blended.iter_mut().find(|(o, _)| *o == owner) {
@@ -7543,7 +7556,7 @@ fn draw_model(
     // Its materials as its item's modifiers drive them (ADR-0171 decision 4).
     let (drives, driving) = crate::sourced::materials(
         shot.source_drives(&boxed.item),
-        |m| shot.source_value(&boxed.item, m, at),
+        |m, own| shot.source_value(&boxed.item, m, at, own),
         |m| shot.tint(&boxed.item, m),
     );
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
@@ -8100,7 +8113,7 @@ fn draw_reflection(
         pose(compositor, shown.model, shown.shown);
         let (drives, driving) = crate::sourced::materials(
             shot.source_drives(shown.item),
-            |m| shot.source_value(shown.item, m, at),
+            |m, own| shot.source_value(shown.item, m, at, own),
             |m| shot.tint(shown.item, m),
         );
         let reflected = GpuKey::ReflectedModel(shown.scene.clone(), shown.item.clone());
@@ -8373,7 +8386,7 @@ fn scene_lights(
         let look = crate::sourced::light(
             light,
             shot.source_drives(&placed.item),
-            |m| shot.source_value(&placed.item, m, at),
+            |m, own| shot.source_value(&placed.item, m, at, own),
             |m| shot.tint(&placed.item, m),
         );
         let [r, g, b] = look.color;
@@ -8518,7 +8531,7 @@ fn environment_at<'c>(
         light.intensity,
         sky,
         shot.source_drives(&placed.item),
-        |m| shot.source_value(&placed.item, m, at),
+        |m, own| shot.source_value(&placed.item, m, at, own),
         |m| shot.tint(&placed.item, m),
     );
     let environment = jstream_render::Environment {
@@ -9410,7 +9423,7 @@ fn draw_surface(
         let (drives, driving) = match shot.boxes.get(&owner) {
             Some(boxed) => crate::sourced::materials(
                 shot.source_drives(&boxed.item),
-                |m| shot.source_value(&boxed.item, m, at),
+                |m, own| shot.source_value(&boxed.item, m, at, own),
                 |m| shot.tint(&boxed.item, m),
             ),
             None => Default::default(),

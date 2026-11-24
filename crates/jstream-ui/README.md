@@ -210,7 +210,8 @@ Contents ([Design](#design) explains the choices):
   `TriggerList`, the rows with a chip per action; `ActionPicker`, which adds an action
   to a `When`; and `MidiTriggerForm`, a typed trigger or one Learn fills from
   `midi.last_controls`. Each is public so another panel can show the same list.
-- **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
+- **Menus, dialogs and icons**: `chrome.rs` (the browser's own right-click menu and text
+  selection, kept to text fields and readable text), `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
@@ -278,8 +279,12 @@ Contents ([Design](#design) explains the choices):
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
   natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
-  `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
-  modifier tested natively), the Filters
+  `CameraMoves`, with the followable items, the Follow pointer note, adding a camera
+  modifier and the MIDI, DAW data and Channel kinds it offers tested natively), the
+  fields that say which live data a reader reads (`data_read.rs`: `DataReads`, shared by
+  the channel card and Camera motion, with a JTunnel sender's Mod slots and their names
+  tested natively), the audio fields beside them (`audio_read.rs`: `AudioReads`, what an
+  `audio` input hears and follows, with its names and fields tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
   Properties dialogs' list and pane, and `FilterUndo`, what the Properties dialogs
   opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
@@ -707,6 +712,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does. While it lists any kinds, a Shader type under Generated writes a custom
   shader source first and opens its Properties with the shader editor (ADR-0135, under
   Filters below), and each custom shader source's kind is listed after it.
+- **The browser's own menu and selection** (`chrome.rs`, [CM-09](../../docs/UI-FEATURES.md#menus)).
+  A window listener swallows every right-click no menu answered, so the browser's
+  generic menu never opens over the app, and an element that keeps a right-click from
+  the menu behind it (a dialog, a panel's tool bar) swallows it with `chrome::swallow`.
+  Text keeps the browser's menu and its selection: `chrome::TEXT` lists text fields,
+  code, errors, the connection details and the agent's activity log, the style sheet
+  turns `user-select` off elsewhere, and `Menus::open` leaves a right-click in a text
+  field to the browser. A `selectstart` outside text is cancelled, and a press on the
+  chrome clears a stray selection, captured so a drag that stops its press still does.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
   and on a nested scene's item), any other single object's (Source in a window or full
@@ -993,7 +1007,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`Studio::channel`): its name, switch (`channel.switch`), a meter that also sets the value
   (`channel.set_value`), what drives it now (`channel.values`' driver), its inputs (Learn
   MIDI reads `midi.last_controls` as the control button does and adds a `midi` input over
-  0 to 1; "+ Channel" adds a `channel` input; each input that reads something shows its
+  0 to 1; "+ Channel" adds a `channel` input; "+ Data" opens `DataReads` on a `data`
+  input of the first Mod no channel reads yet (`next_mod`), and "+ Audio" `AudioReads` on
+  an `audio` input of the program mix's level (ADR-0206), each added on Add input; each input that reads something shows its
   `smoothing_ms`, set with `learn::set_smoothing`), its shaping, the value bindings that follow
   it with their range, the keys that switch it (the Inspector's `HotkeyRow` on
   `channel.switch` `toggle`), and the sequences with a lane on it. Each change is one

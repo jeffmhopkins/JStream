@@ -14,7 +14,10 @@
 //!
 //! **Channels** (`channels.rs`, ADR-0183): a channel starts at its `default` and its
 //! `on`. An input takes part once it first reads something other than it read when the
-//! engine started following it, as a value binding does. Each tick the moved inputs and
+//! engine started following it, as a value binding does. An `audio` input (ADR-0206)
+//! measures the program mix, a bus or a source on each tick and follows the level with
+//! its attack and release, as an item's audio modifier does; it reads silence until the
+//! engine keeps a scope for what it hears. Each tick the moved inputs and
 //! the action value are combined (`latest` takes whichever changed last), replaced by
 //! `off_value` while switched off, averaged over `average_ms`, ramped toward at no more
 //! than `rise_ms` and `fall_ms` allow, and bent by the curve. A channel input reads the
@@ -46,9 +49,11 @@ use jstream_protocol::{
     Finite32, MotionClock, MotionCurve, MotionKind, MotionModifier, MotionProperty, SceneId,
     TimelineId, TimelineInfo, TimelineLane,
 };
-use jstream_sources::{ChannelCell, ChannelLevels, DataCell, LiveData, MidiInputs, MidiState};
+use jstream_sources::{
+    AudioMeter, AudioScope, ChannelCell, ChannelLevels, DataCell, LiveData, MidiInputs, MidiState,
+};
 
-use crate::reactive::{Control, DataMap};
+use crate::reactive::{Control, DataMap, HeardScopes};
 
 /// What one input reads.
 #[derive(Debug)]
@@ -64,15 +69,54 @@ enum Reader {
     Channel {
         cell: Arc<ChannelCell>,
     },
+    /// An audio level (ADR-0206): its scope measured on each tick, then followed by the
+    /// attack and release envelope.
+    Audio(Box<Heard>),
+}
+
+/// An `audio` input as the `jstream-values` thread follows it (ADR-0206).
+#[derive(Debug)]
+struct Heard {
+    scope: Arc<AudioScope>,
+    meter: AudioMeter,
+    audio: jstream_anim::Audio,
+    envelope: jstream_anim::Envelope,
+    /// The meter's millisecond clock starts here.
+    start: Instant,
+}
+
+impl Heard {
+    /// Measures the scope at `now` and follows the measure for `dt_s` seconds.
+    fn sample(&mut self, dt_s: f32, now: Instant) {
+        let ms = now.saturating_duration_since(self.start).as_millis() as u64;
+        let measured = match self.audio.measure {
+            jstream_anim::Measure::Band { low_hz, high_hz } => {
+                self.meter.measure(&self.scope, ms);
+                self.meter.band(low_hz, high_hz)
+            }
+            measure => {
+                self.meter.measure_levels(&self.scope, ms);
+                let raw = self.meter.raw();
+                match measure {
+                    jstream_anim::Measure::Peak => raw.peak,
+                    jstream_anim::Measure::Onset => raw.onset,
+                    _ => raw.level,
+                }
+            }
+        };
+        self.envelope.advance(&self.audio, measured, dt_s);
+    }
 }
 
 impl Reader {
-    /// What it reads now, as `0..=1`: atomics only. A channel that doesn't exist reads 0.
+    /// What it reads now, as `0..=1`: atomics only, or an audio input's envelope as its
+    /// last [`sample`](ReaderOf::sample) left it. A channel that doesn't exist reads 0.
     fn read(&self) -> f32 {
         match self {
             Reader::Midi { state, control } => control.read(state),
             Reader::Data { cell, map } => map.read(cell.read()),
             Reader::Channel { cell } => cell.read().unwrap_or(0.0),
+            Reader::Audio(heard) => heard.envelope.level(),
         }
     }
 }
@@ -80,6 +124,7 @@ impl Reader {
 /// `kind` as a modifier, so the reactive readers and `jstream-anim` take it.
 fn as_modifier(id: &str, kind: &MotionKind) -> MotionModifier {
     MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: id.to_owned(),
         property: MotionProperty::X,
         effect: None,
@@ -91,7 +136,9 @@ fn as_modifier(id: &str, kind: &MotionKind) -> MotionModifier {
     }
 }
 
-/// The smoothing, curve and range `kind` maps a reading with, when it is a reader.
+/// The smoothing, curve and range `kind` maps a reading with, when it is a reader. An
+/// `audio` reader's attack and release are its envelope's, so it maps with no smoothing
+/// of its own.
 pub(crate) fn mapping(kind: &MotionKind) -> Option<Midi> {
     let modifier = as_modifier("m", kind);
     match jstream_graph::anim_modifiers(std::slice::from_ref(&modifier))
@@ -99,17 +146,37 @@ pub(crate) fn mapping(kind: &MotionKind) -> Option<Midi> {
         .kind
     {
         jstream_anim::Kind::Midi(params) => Some(params),
+        jstream_anim::Kind::Audio(audio) => Some(Midi {
+            smoothing_ms: 0.0,
+            curve: audio.curve,
+            from: audio.from,
+            to: audio.to,
+        }),
+        _ => None,
+    }
+}
+
+/// The envelope parameters of an `audio` kind.
+fn audio_of(kind: &MotionKind) -> Option<jstream_anim::Audio> {
+    let modifier = as_modifier("m", kind);
+    match jstream_graph::anim_modifiers(std::slice::from_ref(&modifier))
+        .pop()?
+        .kind
+    {
+        jstream_anim::Kind::Audio(audio) => Some(audio),
         _ => None,
     }
 }
 
 /// What `kind` reads, or `None` when it reads MIDI and the engine has no MIDI inputs, or
 /// is something no channel reads. The flag says it names a MIDI input the engine doesn't
-/// track yet, so it is looked up again each tick.
+/// track yet, or audio whose scope `heard` doesn't hold yet, so it is looked up again
+/// each tick.
 pub(crate) fn reader(
     kind: &MotionKind,
     midi: Option<&MidiInputs>,
     data: &LiveData,
+    heard: &HeardScopes,
 ) -> Option<(ReaderOf, bool)> {
     let modifier = as_modifier("m", kind);
     let mut unresolved = false;
@@ -136,6 +203,24 @@ pub(crate) fn reader(
         MotionKind::Channel { channel_id, .. } => Reader::Channel {
             cell: data.channels().cell(channel_id),
         },
+        MotionKind::Audio { .. } => {
+            let audio = audio_of(kind)?;
+            let hearing = crate::reactive::hearing_of(kind)?;
+            let scope = heard.get(&hearing).map_or_else(
+                || {
+                    unresolved = true;
+                    Arc::new(AudioScope::new())
+                },
+                Arc::clone,
+            );
+            Reader::Audio(Box::new(Heard {
+                scope,
+                meter: AudioMeter::new(),
+                audio,
+                envelope: jstream_anim::Envelope::default(),
+                start: Instant::now(),
+            }))
+        }
         _ => return None,
     };
     Some((ReaderOf(reader), unresolved))
@@ -147,9 +232,28 @@ pub(crate) fn reader(
 pub(crate) struct ReaderOf(Reader);
 
 impl ReaderOf {
-    /// What it reads now, as `0..=1`: atomics only.
+    /// What it reads now, as `0..=1`.
     pub(crate) fn read(&self) -> f32 {
         self.0.read()
+    }
+
+    /// Advances an `audio` reader by `dt_s` seconds to `now`: measures its scope and
+    /// follows the measure with its attack and release. Does nothing for any other.
+    pub(crate) fn sample(&mut self, dt_s: f32, now: Instant) {
+        if let Reader::Audio(heard) = &mut self.0 {
+            heard.sample(dt_s, now);
+        }
+    }
+
+    /// Whether it still hears the scope `heard` holds for what it hears: false for an
+    /// audio reader whose scope the collection replaced, so it is made again.
+    pub(crate) fn hears_current(&self, kind: &MotionKind, heard: &HeardScopes) -> bool {
+        match &self.0 {
+            Reader::Audio(held) => crate::reactive::hearing_of(kind)
+                .and_then(|hearing| heard.get(&hearing))
+                .is_some_and(|scope| Arc::ptr_eq(scope, &held.scope)),
+            _ => true,
+        }
     }
 }
 
@@ -311,13 +415,14 @@ impl ChannelDriver {
         graph: &Graph,
         midi: Option<&MidiInputs>,
         data: &LiveData,
+        heard: &HeardScopes,
         now: Instant,
     ) -> bool {
         let dt_ms = self.last.map_or(0.0, |last| {
             now.saturating_duration_since(last).as_secs_f32() * 1000.0
         });
         self.last = Some(now);
-        self.keep(graph, midi, data);
+        self.keep(graph, midi, data, heard);
         let mut moved = false;
         for id in &self.order {
             let Some(followed) = self.followed.get_mut(id) else {
@@ -332,7 +437,13 @@ impl ChannelDriver {
 
     /// Follows each of `graph`'s channels it doesn't yet, takes a changed definition,
     /// and lets go of the ones `graph` no longer holds.
-    pub(crate) fn keep(&mut self, graph: &Graph, midi: Option<&MidiInputs>, data: &LiveData) {
+    pub(crate) fn keep(
+        &mut self,
+        graph: &Graph,
+        midi: Option<&MidiInputs>,
+        data: &LiveData,
+        heard: &HeardScopes,
+    ) {
         let levels: &ChannelLevels = data.channels();
         let mut changed = false;
         self.followed.retain(|id, followed| {
@@ -361,7 +472,7 @@ impl ChannelDriver {
                 followed.curve = curve_of(info.curve);
                 followed.info = info.clone();
             }
-            keep_inputs(followed, midi, data);
+            keep_inputs(followed, midi, data, heard);
         }
         if changed || self.order.len() != self.followed.len() {
             self.order = order(&self.followed);
@@ -545,14 +656,17 @@ pub(crate) fn same_but_smoothing(a: &MotionKind, b: &MotionKind) -> bool {
 /// Brings `followed`'s inputs in line with its definition: an input whose kind changed
 /// starts afresh, one the same keeps its smoothing and whether it moved, and one that
 /// changed only its smoothing time keeps following with the new time.
-fn keep_inputs(followed: &mut Followed, midi: Option<&MidiInputs>, data: &LiveData) {
+fn keep_inputs(
+    followed: &mut Followed,
+    midi: Option<&MidiInputs>,
+    data: &LiveData,
+    heard: &HeardScopes,
+) {
     let kinds = &followed.info.inputs;
     let same = followed.inputs.len() == kinds.len()
-        && followed
-            .inputs
-            .iter()
-            .zip(kinds)
-            .all(|(input, kind)| input.kind == *kind && !input.unresolved);
+        && followed.inputs.iter().zip(kinds).all(|(input, kind)| {
+            input.kind == *kind && !input.unresolved && input.reader.hears_current(kind, heard)
+        });
     if same {
         return;
     }
@@ -564,8 +678,11 @@ fn keep_inputs(followed: &mut Followed, midi: Option<&MidiInputs>, data: &LiveDa
         let kept = old
             .iter_mut()
             .find(|i| {
-                i.as_ref()
-                    .is_some_and(|i| same_but_smoothing(&i.kind, kind) && !i.unresolved)
+                i.as_ref().is_some_and(|i| {
+                    same_but_smoothing(&i.kind, kind)
+                        && !i.unresolved
+                        && i.reader.hears_current(kind, heard)
+                })
             })
             .and_then(Option::take)
             .map(|mut i| {
@@ -576,7 +693,7 @@ fn keep_inputs(followed: &mut Followed, midi: Option<&MidiInputs>, data: &LiveDa
                 i
             });
         let input = kept.or_else(|| {
-            let (reader, unresolved) = reader(kind, midi, data)?;
+            let (reader, unresolved) = reader(kind, midi, data, heard)?;
             let midi = mapping(kind)?;
             let rest = reader.read();
             Some(Input {
@@ -672,6 +789,7 @@ fn step(
             *held = state;
             input.unresolved = false;
         }
+        input.reader.sample(dt_s, now);
         let raw = input.reader.read();
         if raw != input.last {
             input.last = raw;
@@ -836,6 +954,7 @@ mod tests {
         graph: Graph,
         midi: MidiInputs,
         data: LiveData,
+        heard: crate::reactive::HeardScopes,
         driver: ChannelDriver,
         t0: Instant,
     }
@@ -846,6 +965,7 @@ mod tests {
                 graph: Graph::new(),
                 midi: MidiInputs::new(),
                 data: LiveData::new(),
+                heard: crate::reactive::HeardScopes::default(),
                 driver: ChannelDriver::default(),
                 t0: Instant::now(),
             }
@@ -859,7 +979,7 @@ mod tests {
         fn tick(&mut self, ms: u64) -> bool {
             let now = self.at(ms);
             self.driver
-                .tick(&self.graph, Some(&self.midi), &self.data, now)
+                .tick(&self.graph, Some(&self.midi), &self.data, &self.heard, now)
         }
 
         fn value(&self, id: &str) -> Option<f32> {
@@ -1289,5 +1409,95 @@ mod tests {
             (rig.value("c").unwrap_or(0.0) - 0.25).abs() < 1e-5,
             "seeking to 0 leaves only the action"
         );
+    }
+
+    /// A full-scale 1 kHz sine, stereo, one scope window long.
+    fn tone(scope: &jstream_sources::AudioScope, gain: f32) {
+        let samples: Vec<f32> = (0..2048)
+            .flat_map(|n| {
+                let s = gain * (std::f32::consts::TAU * 1000.0 * n as f32 / 48_000.0).sin();
+                [s, s]
+            })
+            .collect();
+        scope.push(48_000, &samples);
+    }
+
+    fn program_level(attack_ms: u32, release_ms: u32) -> MotionKind {
+        MotionKind::Audio {
+            audio: None,
+            audio_source: None,
+            measure: jstream_protocol::MotionMeasure::Level,
+            low_hz: None,
+            high_hz: None,
+            floor_db: f(-60.0),
+            ceiling_db: Finite32::ZERO,
+            attack_ms,
+            release_ms,
+            curve: MotionCurve::Linear,
+            from: Finite32::ZERO,
+            to: Finite32::ONE,
+        }
+    }
+
+    /// ADR-0206: a channel follows the program mix's level with its attack and release,
+    /// and an input whose scope arrives late is found on a later tick.
+    #[test]
+    fn a_channel_follows_an_audio_level_with_its_attack_and_release() {
+        use crate::reactive::Hearing;
+        let mut rig = Rig::new();
+        set(
+            &mut rig.graph,
+            ChannelInfo {
+                inputs: vec![program_level(0, 200)],
+                ..ChannelInfo::new("beat")
+            },
+        );
+        // No scope yet: nothing is heard, and the channel rests.
+        rig.tick(0);
+        assert_eq!(rig.value("beat"), Some(0.0));
+        let scope = std::sync::Arc::new(jstream_sources::AudioScope::new());
+        rig.heard = std::sync::Arc::new(
+            [(Hearing::Program, std::sync::Arc::clone(&scope))]
+                .into_iter()
+                .collect(),
+        );
+        tone(&scope, 1.0);
+        assert!(rig.tick(33), "a loud tone moves it");
+        let loud = rig.value("beat").expect("a value");
+        assert!(loud > 0.9, "an attack of 0 lands at once: {loud}");
+        // Silence: the release lets it down over about 200 ms, not at once.
+        tone(&scope, 0.0);
+        rig.tick(66);
+        let falling = rig.value("beat").expect("a value");
+        assert!(
+            falling < loud && falling > 0.5,
+            "released slowly: {falling}"
+        );
+        for n in 3..40 {
+            tone(&scope, 0.0);
+            rig.tick(n * 33);
+        }
+        assert!(
+            rig.value("beat").expect("a value") < 0.05,
+            "and lands at silence"
+        );
+    }
+
+    /// ADR-0206: a channel takes an `audio` input, and still refuses an item's kinds.
+    #[test]
+    fn a_channel_and_a_binding_take_an_audio_input() {
+        let channel = ChannelInfo {
+            inputs: vec![program_level(10, 250)],
+            ..ChannelInfo::new("beat")
+        };
+        assert_eq!(channel.problem(), None);
+        let wiggle = ChannelInfo {
+            inputs: vec![MotionKind::Drift {
+                rate_per_s: f(1.0),
+                wrap: None,
+            }],
+            ..ChannelInfo::new("beat")
+        };
+        assert!(wiggle.problem().is_some());
     }
 }

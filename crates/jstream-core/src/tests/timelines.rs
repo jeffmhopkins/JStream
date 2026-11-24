@@ -921,3 +921,41 @@ fn a_clock_step_past_a_cue_fires_it_before_it_returns() {
     assert!(cued(&control), "2013 ms: fired by the step that passed it");
     act(&control, Action::ClockRelease).expect("release");
 }
+
+/// A timeline played while the live ticker waits for a later cue of another wakes it:
+/// its own early cue is not held back until the other's (#1713 N5).
+#[test]
+fn a_timeline_played_while_the_ticker_waits_for_a_later_cue_fires_on_time() {
+    let (_engine, control) = engine_with_scenes();
+    apply(
+        &control,
+        vec![
+            timeline(
+                "late",
+                10_000,
+                TimelineLoop::Once,
+                vec![cue(9_000, value("late", 1))],
+            ),
+            timeline(
+                "soon",
+                1000,
+                TimelineLoop::Once,
+                vec![cue(50, value("soon", 1))],
+            ),
+        ],
+    );
+    act(&control, play("late")).expect("play");
+    std::thread::sleep(Duration::from_millis(100));
+    let started = Instant::now();
+    act(&control, play("soon")).expect("play");
+    let soon = |control: &dyn Control| match query(control, Query::ValuesList { prefix: None }) {
+        Ok(QueryResult::ValuesList { values }) => values.iter().any(|v| v.name == "soon"),
+        other => panic!("not values.list: {other:?}"),
+    };
+    assert!(eventually(|| soon(&control)), "the cue never fired");
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "the cue at 50 ms fired after {elapsed:?}"
+    );
+}
