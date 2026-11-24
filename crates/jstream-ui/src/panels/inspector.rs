@@ -1300,8 +1300,8 @@ fn Placement(
             "Face the camera"
         </label>
     };
-    // The card's surface (ADR-0151 decision 10): lit by a 3D scene's lights, and its
-    // back hidden. Its numbers are for agents and the API.
+    // The card's surface (ADR-0151 decision 10): lit by a 3D scene's lights, its back
+    // hidden, and once lit its shadows, roughness, metalness and glow (A17).
     let surface = Memo::new(move |_| geometry.get().map(|g| g.surface.unwrap_or_default()));
     let set_surface = move |change: fn(&mut jstream_protocol::Surface, bool), on: bool| {
         let Some(g) = geometry.get_untracked() else {
@@ -1321,6 +1321,44 @@ fn Placement(
                 ..g
             },
         });
+    };
+    // A lit card's numbers; the fields are off while the card is unlit, where they
+    // change nothing.
+    let surface_number = move |which: SurfaceNumber| {
+        let value = Signal::derive(move || {
+            surface
+                .get()
+                .filter(|s| s.lit)
+                .map(|s| f64::from(which.get(&s)))
+        });
+        let commit = move |v: f64| {
+            let Some(g) = geometry.get_untracked() else {
+                return false;
+            };
+            let before = g.surface.unwrap_or_default();
+            let Some(next) = which.with(before, v) else {
+                return false;
+            };
+            if next == before {
+                return false;
+            }
+            let (item_id, scene) = ids.get_value();
+            send(Edit::ItemSetGeometry {
+                item_id,
+                scene_id: Some(scene),
+                geometry: ItemGeometry {
+                    surface: (next != jstream_protocol::Surface::DEFAULT).then_some(next),
+                    ..g
+                },
+            });
+            true
+        };
+        let (label, max, title) = which.facts();
+        view! {
+            <span title=title>
+                <NumberField label value step=0.05 decimals=2 min=0.0 max send=commit />
+            </span>
+        }
     };
     let surface_fields = view! {
         <label class="check" title="In a 3D scene, the scene's lights, their shadows and its environment light the card, as a flat 3D surface">
@@ -1358,6 +1396,23 @@ fn Placement(
             />
             "Hide the back"
         </label>
+        <label class="check" title="A lit card darkens where the scene's lights cast a shadow on it">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || !surface.get().is_some_and(|s| s.lit)
+                prop:checked=move || surface.get().is_some_and(|s| s.shadows)
+                on:change=move |event| {
+                    set_surface(|s, on| s.shadows = on, event_target_checked(&event));
+                }
+            />
+            "Receives shadows"
+        </label>
+        <div class="field-grid">
+            {surface_number(SurfaceNumber::Roughness)}
+            {surface_number(SurfaceNumber::Metalness)}
+            {surface_number(SurfaceNumber::Glow)}
+        </div>
     };
     let depth_hint = Signal::derive(move || {
         if geometry.get().is_some_and(|g| in_3d(&g) || g.billboard) {
@@ -1996,10 +2051,88 @@ pub(crate) fn HotkeyRow(
     }
 }
 
+/// One of a lit card's surface numbers in the Inspector's 3D fold (A17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SurfaceNumber {
+    /// 0 is a mirror-like sheen, 1 fully matte.
+    Roughness,
+    /// 0 is paint or paper, 1 metal.
+    Metalness,
+    /// How much of its picture a lit card adds back unlit (`emissive`), 0 to 4.
+    Glow,
+}
+
+impl SurfaceNumber {
+    /// The field's label, its largest value and its tooltip.
+    pub fn facts(self) -> (&'static str, f64, &'static str) {
+        match self {
+            SurfaceNumber::Roughness => (
+                "Roughness",
+                1.0,
+                "How matte the lit card is: 0 shines like glass, 1 is fully matte",
+            ),
+            SurfaceNumber::Metalness => (
+                "Metalness",
+                1.0,
+                "How metallic the lit card is: 0 is paint or paper, 1 metal",
+            ),
+            SurfaceNumber::Glow => (
+                "Glow",
+                4.0,
+                "How much of its own picture the lit card adds back unlit, so a screen still glows in a dark set",
+            ),
+        }
+    }
+
+    /// The number in `surface`.
+    pub fn get(self, surface: &jstream_protocol::Surface) -> f32 {
+        match self {
+            SurfaceNumber::Roughness => surface.roughness.get(),
+            SurfaceNumber::Metalness => surface.metalness.get(),
+            SurfaceNumber::Glow => surface.emissive.get(),
+        }
+    }
+
+    /// `surface` with the number set to `value`, kept to its range; `None` for a value
+    /// that isn't finite.
+    pub fn with(
+        self,
+        mut surface: jstream_protocol::Surface,
+        value: f64,
+    ) -> Option<jstream_protocol::Surface> {
+        let (_, max, _) = self.facts();
+        let kept = Finite32::new(value.clamp(0.0, max) as f32)?;
+        match self {
+            SurfaceNumber::Roughness => surface.roughness = kept,
+            SurfaceNumber::Metalness => surface.metalness = kept,
+            SurfaceNumber::Glow => surface.emissive = kept,
+        }
+        Some(surface)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use jstream_control::protocol::{Size, Vec2};
+
+    #[test]
+    fn a_surface_number_is_kept_to_its_range() {
+        let base = jstream_protocol::Surface::DEFAULT;
+        let rough = SurfaceNumber::Roughness.with(base, 0.25).expect("finite");
+        assert_eq!(SurfaceNumber::Roughness.get(&rough), 0.25);
+        let metal = SurfaceNumber::Metalness.with(base, 3.0).expect("finite");
+        assert_eq!(
+            SurfaceNumber::Metalness.get(&metal),
+            1.0,
+            "metalness tops at 1"
+        );
+        let glow = SurfaceNumber::Glow.with(base, 3.0).expect("finite");
+        assert_eq!(SurfaceNumber::Glow.get(&glow), 3.0, "glow goes to 4");
+        let low = SurfaceNumber::Glow.with(base, -1.0).expect("finite");
+        assert_eq!(SurfaceNumber::Glow.get(&low), 0.0);
+        assert!(SurfaceNumber::Glow.with(base, f64::NAN).is_none());
+    }
 
     fn geometry(cx: f32, cy: f32, w: f32, h: f32) -> ItemGeometry {
         ItemGeometry::try_new(
