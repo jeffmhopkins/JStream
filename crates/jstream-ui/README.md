@@ -84,7 +84,9 @@ Contents ([Design](#design) explains the choices):
   `save_as_new`, `apply`, `reset`), and it reads and writes itself as JSON. Tested
   natively.
 - **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas
-  (in studio mode, the canvas beside the studio controls and the program monitor),
+  (in studio mode, the canvas beside the studio controls and the program monitor, or
+  over them for a portrait canvas when that shows the pictures larger, `stacks`, tested
+  natively),
   with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
