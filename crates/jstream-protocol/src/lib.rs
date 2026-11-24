@@ -128,6 +128,7 @@ pub use kind::{
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
+    live_problem,
 };
 pub use mix::{
     DEFAULT_BASE_FPS, FAST_BASE_FPS, MixInput, MixResolution, VideoMix, VideoMixInfo,

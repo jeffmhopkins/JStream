@@ -14,16 +14,18 @@
 //! A whole or decimal number is the shared click-drag [`NumberField`], with the
 //! descriptor's range, step and unit (#1734). A form whose changes go to a draft (the
 //! Properties dialog, whose live settings show at once, ADR-0091) takes a drag's value
-//! as it goes, once per animation frame, and a slider's as it moves; any other form (a
-//! filter's settings, where each change is an undo step and no live value yet, #1739)
-//! takes it once, on release.
+//! as it goes, once per animation frame, and a slider's as it moves. A form given `live`
+//! (a filter's settings, where each change is an undo step) hands a drag's or a slider's
+//! values of a parameter its kind marks `live` to it as they go, for a gesture's
+//! `live.set`, and commits once, on release, which ends the gesture (ADR-0213, #1739);
+//! any other number is committed once, on release.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::panels::learn::{Learn, LearnOwner, param_range};
-use crate::panels::number::{NumberField, Scrubbing, number_spec};
+use crate::panels::number::{NumberField, Scrubbing, number_or_default, number_spec};
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
     AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
@@ -222,6 +224,11 @@ fn root_from(name: &str) -> AssetRoot {
     }
 }
 
+/// What a form's `live` gets while a live parameter's number or slider is dragged
+/// (ADR-0213): the parameter and the checked value to show, or `None` when the drag
+/// ended, which ends a gesture the release's `commit` didn't.
+pub type LiveField = (String, Option<Value>);
+
 /// The fields for one kind's parameters, showing `settings`: a draft in the Properties
 /// dialog, the stored ones in a filter's settings. `commit` gets each checked change, with
 /// `null` for the default.
@@ -248,7 +255,12 @@ pub fn Form(
     /// settings are, where every change is an undo step.
     #[prop(optional)]
     follows_drags: bool,
+    /// Takes a drag's values of each parameter the kind marks `live`, to show them live
+    /// before the release's `commit` (ADR-0213). Ignored when `follows_drags`.
+    #[prop(optional, into)]
+    live: Option<Callback<LiveField>>,
 ) -> impl IntoView {
+    let live = live.filter(|_| !follows_drags);
     // One `capture.targets` answer for every capture field of this form.
     provide_context(CaptureListing::for_kind(&kind));
     let sections = sections(&kind);
@@ -268,7 +280,7 @@ pub fn Form(
                     let learn = learn.clone();
                     view! {
                         <Show when=visible>
-                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn.clone() follows_drags=follows_drags />
+                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn.clone() follows_drags=follows_drags live=live />
                         </Show>
                     }
                 })
@@ -304,8 +316,14 @@ fn Field(
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
     learn: Option<LearnOwner>,
     follows_drags: bool,
+    live: Option<Callback<LiveField>>,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
+    // Only a parameter its kind marks `live` is shown live; any other is committed once.
+    let live = live.filter(|_| param.live).map(|live| {
+        let id = id_of(&param);
+        Callback::new(move |value: Option<Value>| live.run((id.clone(), value)))
+    });
     let id = param.id.clone();
     let learn = learn.zip(param_range(&param)).map(|(owner, range)| {
         let current = {
@@ -339,7 +357,10 @@ fn Field(
         studio,
         &source_id,
         settings,
-        follows_drags,
+        Drags {
+            follows: follows_drags,
+            live,
+        },
     );
     let reset = {
         let source_id = source_id.clone();
@@ -387,9 +408,25 @@ fn Field(
     }
 }
 
+/// How a number field hands on a drag: each value to `send` as it goes (`follows`, a
+/// draft), or to `live` as it goes and to `send` once on release (ADR-0213), or to
+/// `send` once on release only.
+#[derive(Clone, Copy)]
+struct Drags {
+    follows: bool,
+    /// Takes each checked value a drag shows, then `None` when it ends.
+    live: Option<Callback<Option<Value>>>,
+}
+
+/// The parameter's ID, for the closures that name it.
+fn id_of(param: &ParamDescriptor) -> String {
+    param.id.clone()
+}
+
 /// The input for one parameter type. Each sends a checked value when it is changed
 /// (a text field when it loses focus or Enter is pressed). A number sends a drag's or a
-/// slider's values as they go when `follows_drags`, else once, on release.
+/// slider's values as they go when `drags.follows`, shows them through `drags.live`
+/// while they go and sends once on release when it has one, else sends once, on release.
 fn input_for(
     param: &ParamDescriptor,
     value: impl Fn() -> Value + Clone + Send + Sync + 'static,
@@ -397,7 +434,7 @@ fn input_for(
     studio: Studio,
     source_id: &SourceId,
     settings: Signal<Settings>,
-    follows_drags: bool,
+    drags: Drags,
 ) -> AnyView {
     let p = param.clone();
     let text = {
@@ -420,15 +457,33 @@ fn input_for(
             }
             .into_any()
         }
-        ParamType::Int { .. } => number_input(param, value, send, follows_drags),
+        ParamType::Int { .. } => number_input(param, value, send, drags),
         ParamType::Float { min, max, step, .. } => {
             // A range with both ends gets a slider beside the number. In a form that
-            // follows drags it sends as it moves, else on release.
+            // follows drags it sends as it moves; with a live gesture it shows each value
+            // through it and sends on release; else it sends on release.
             let slider = min.zip(*max).map(|(lo, hi)| {
                 let on_text = on_text.clone();
                 let text = text.clone();
                 let step = step.map_or_else(|| "any".to_owned(), |n| n.to_string());
-                if follows_drags {
+                if let (false, Some(live)) = (drags.follows, drags.live) {
+                    let p = param.clone();
+                    let shown = move |event: leptos::ev::Event| {
+                        if let Ok(v) = parse(&p, &event_target_value(&event)) {
+                            live.run(Some(v));
+                        }
+                    };
+                    let changed = move |event: leptos::ev::Event| {
+                        on_text(event);
+                        // A release `send` refused or didn't commit ends the gesture.
+                        live.run(None);
+                    };
+                    view! {
+                        <input type="range" min=lo.to_string() max=hi.to_string() step=step
+                            prop:value=text on:input=shown on:change=changed />
+                    }
+                    .into_any()
+                } else if drags.follows {
                     view! {
                         <input type="range" min=lo.to_string() max=hi.to_string() step=step
                             prop:value=text on:input=on_text />
@@ -444,7 +499,7 @@ fn input_for(
             });
             view! {
                 {slider}
-                {number_input(param, value, send, follows_drags)}
+                {number_input(param, value, send, drags)}
             }
             .into_any()
         }
@@ -1082,13 +1137,14 @@ fn capture_format_input(
 
 /// A whole or decimal number's field: the shared [`NumberField`] with the parameter's
 /// step, range and unit (#1734). Its values go through [`parse`], so the descriptor's
-/// check refuses what it would refuse typed. With `follows_drags`, a drag sends each
-/// frame's value, and a lost drag its start again.
+/// check refuses what it would refuse typed. With `drags.follows`, a drag sends each
+/// frame's value, and a lost drag its start again; with `drags.live`, each frame's value
+/// goes to it, and the drag's end after the release's send.
 fn number_input(
     param: &ParamDescriptor,
     value: impl Fn() -> Value + Clone + Send + Sync + 'static,
     send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
-    follows_drags: bool,
+    drags: Drags,
 ) -> AnyView {
     let Some(spec) = number_spec(&param.ty) else {
         return ().into_any();
@@ -1098,23 +1154,35 @@ fn number_input(
         _ => None,
     };
     let whole = matches!(param.ty, ParamType::Int { .. });
-    let shown = Signal::derive(move || value().as_f64());
+    // A setting that is absent or null still shows a number to start from: its
+    // default, else the field's least (#1740's review, N1).
+    let default = param.default.clone();
+    let shown = Signal::derive(move || Some(number_or_default(value().as_f64(), &default, spec)));
     let p = StoredValue::new(param.clone());
-    let put = Callback::new(move |v: f64| {
+    let check = move |v: f64| {
         let text = if whole {
             format!("{}", v.round() as i64)
         } else {
             format!("{:.*}", spec.decimals, v)
         };
-        let checked = p.with_value(|p| parse(p, &text));
+        p.with_value(|p| parse(p, &text))
+    };
+    let put = Callback::new(move |v: f64| {
+        let checked = check(v);
         let ok = checked.is_ok();
         send(checked);
         ok
     });
-    let live = move |scrubbing: Scrubbing| match scrubbing {
-        Scrubbing::Moved(v) | Scrubbing::Cancelled(v) if follows_drags => {
+    let live = move |scrubbing: Scrubbing| match (scrubbing, drags.live) {
+        (Scrubbing::Moved(v) | Scrubbing::Cancelled(v), _) if drags.follows => {
             put.run(v);
         }
+        (Scrubbing::Moved(v), Some(live)) => {
+            if let Ok(value) = check(v) {
+                live.run(Some(value));
+            }
+        }
+        (Scrubbing::Ended | Scrubbing::Cancelled(_), Some(live)) => live.run(None),
         _ => {}
     };
     view! {

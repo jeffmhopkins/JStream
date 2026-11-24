@@ -630,3 +630,225 @@ fn deleting_a_source_drops_its_live_settings() {
     assert!(live_list(&control)[0].values.is_empty());
     assert_eq!(engine.drawn_setting("fill", "color"), None);
 }
+
+/// A scene `main` placing the webcam as item `a`, a microphone `mic` sending into the
+/// master and into bus `vod`, and a limiter `lim` on the master stage (ADR-0213).
+fn mix(control: &dyn Control) {
+    let more: Vec<Edit> = serde_json::from_value(serde_json::json!([
+        {"type": "source.create", "source_id": "mic", "name": "Mic",
+         "kind": {"type": "builtin", "kind": "audio_input"}},
+        {"type": "bus.create", "bus_id": "vod", "name": "VOD"},
+        {"type": "send.set", "source_id": "mic", "bus_id": "vod", "gain_db": 0.0},
+        {"type": "filter.add", "owner": {"type": "master"}, "chain": "audio",
+         "filter_id": "lim", "kind": "limiter"},
+    ]))
+    .expect("edits");
+    let mut all = vec![create("main"), webcam(), add("main", "a", "webcam")];
+    all.extend(more);
+    batch(control, edits(all)).expect("mix");
+}
+
+fn value(json: serde_json::Value) -> Edit {
+    serde_json::from_value(json).expect("an edit")
+}
+
+fn ceiling(db: f64) -> Edit {
+    value(
+        serde_json::json!({"type": "filter.set_settings", "owner": {"type": "master"},
+        "filter_id": "lim", "patch": {"ceiling_db": db}}),
+    )
+}
+
+fn opacity(of: f32) -> Edit {
+    value(serde_json::json!({"type": "item.set_opacity", "item_id": "a", "opacity": of}))
+}
+
+fn mic_gain(db: f32) -> Edit {
+    value(serde_json::json!({"type": "source.set_audio", "source_id": "mic", "gain_db": db}))
+}
+
+fn vod_send(db: f32) -> Edit {
+    value(
+        serde_json::json!({"type": "send.set", "source_id": "mic", "bus_id": "vod",
+        "gain_db": db}),
+    )
+}
+
+fn master_fader(db: f32) -> Edit {
+    value(serde_json::json!({"type": "bus.set_fader", "bus_id": "master", "gain_db": db}))
+}
+
+/// What the engine draws and hears for each of [`mix`]'s live parameters: the limiter's
+/// ceiling, item `a`'s opacity, the mic's fader, its send into `vod` and the master's
+/// fader.
+fn drawn_mix(engine: &Engine) -> (Option<serde_json::Value>, f32, f32, f32, f32) {
+    engine.drawn(|state| {
+        let owner = jstream_protocol::FilterOwner::Master;
+        let lim = jstream_protocol::FilterId::new("lim");
+        let mic = jstream_protocol::SourceId::new("mic");
+        (
+            state
+                .filter(&owner, &lim)
+                .and_then(|f| f.settings().get("ceiling_db").cloned()),
+            state
+                .item(&ItemId::new("a"))
+                .map_or(-1.0, |(_, item)| item.opacity().get()),
+            state
+                .source(&mic)
+                .and_then(|s| s.audio())
+                .map_or(-1.0, |a| a.gain_db.get()),
+            state
+                .send(&mic, &jstream_protocol::BusId::new("vod"))
+                .map_or(-1.0, |g| g.get()),
+            state
+                .bus(&jstream_protocol::BusId::master())
+                .map_or(-1.0, |b| b.gain_db().get()),
+        )
+    })
+}
+
+/// ADR-0213: a filter's live setting, an item's opacity and the gains are live values.
+/// The engine draws and hears them at once, the collection doesn't change, the commit
+/// is one rev and one undo step, and a cancel leaves nothing.
+#[test]
+fn filter_settings_opacity_and_gains_are_drawn_until_committed_or_cancelled() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    mix(&control);
+    let before = engine.rev();
+    let stored = drawn_mix(&engine);
+    let values = |c: f64, o: f32, g: f32| {
+        vec![
+            ceiling(c),
+            opacity(o),
+            mic_gain(g),
+            vod_send(g),
+            master_fader(g),
+        ]
+    };
+
+    live_set(&control, "drag", values(-3.0, 0.25, -12.0)).expect("live.set");
+    assert_eq!(engine.rev(), before, "a live value is not collection state");
+    assert_eq!(
+        drawn_mix(&engine),
+        (Some(serde_json::json!(-3.0)), 0.25, -12.0, -12.0, -12.0)
+    );
+    live_set(&control, "drag", values(-4.0, 0.5, -6.0)).expect("again");
+    assert_eq!(
+        drawn_mix(&engine),
+        (Some(serde_json::json!(-4.0)), 0.5, -6.0, -6.0, -6.0)
+    );
+    assert_eq!(
+        live_list(&control)[0].values.len(),
+        5,
+        "each is a parameter of its own"
+    );
+
+    // Cancel: drawn and heard from the collection again, nothing stored.
+    live_cancel(&control, "drag").expect("cancel");
+    assert_eq!(drawn_mix(&engine), stored);
+    assert_eq!(engine.rev(), before);
+
+    // Commit: one rev, one undo step that restores every value from before.
+    live_set(&control, "drag", values(-3.0, 0.25, -12.0)).expect("live.set");
+    live_set(&control, "drag", values(-4.0, 0.5, -6.0)).expect("again");
+    let commit = Batch {
+        edits: values(-4.0, 0.5, -6.0),
+        expected_rev: None,
+        idempotency_key: None,
+        ends_gesture: Some(gesture("drag")),
+    };
+    let rev = batch(&control, commit).expect("commit");
+    assert_eq!(rev.0, before.0 + 1, "the drag is one rev");
+    assert!(live_list(&control).is_empty());
+    assert_eq!(
+        drawn_mix(&engine),
+        (Some(serde_json::json!(-4.0)), 0.5, -6.0, -6.0, -6.0)
+    );
+    block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
+    assert_eq!(drawn_mix(&engine), stored, "one undo step puts it all back");
+}
+
+/// ADR-0213: a filter setting its kind doesn't mark live, and a fader value that sets
+/// more than its gain, are refused, and nothing in the message applies.
+#[test]
+fn only_live_filter_settings_and_gains_alone_are_live_values() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    mix(&control);
+    let stored = drawn_mix(&engine);
+    let lookahead = value(serde_json::json!({"type": "filter.set_settings",
+        "owner": {"type": "master"}, "filter_id": "lim", "patch": {"lookahead_ms": 2.0}}));
+    let error = live_set(&control, "drag", vec![opacity(0.5), lookahead])
+        .expect_err("the look-ahead is not live");
+    assert_eq!(invalid_field(&error), "values.1.patch.lookahead_ms");
+    let muting = value(
+        serde_json::json!({"type": "source.set_audio", "source_id": "mic",
+        "gain_db": -6.0, "muted": true}),
+    );
+    let error =
+        live_set(&control, "drag", vec![opacity(0.5), muting]).expect_err("muting is an edit");
+    assert_eq!(invalid_field(&error), "values.1.muted");
+    let unmuting = value(
+        serde_json::json!({"type": "bus.set_fader", "bus_id": "master",
+        "muted": false}),
+    );
+    let error = live_set(&control, "drag", vec![unmuting]).expect_err("no gain");
+    assert_eq!(invalid_field(&error), "values.0.muted");
+    assert_eq!(drawn_mix(&engine), stored);
+    assert!(live_list(&control).is_empty());
+}
+
+/// ADR-0213: removing a filter, a send or a bus drops the live values addressed to it.
+#[test]
+fn removing_a_filter_or_send_drops_its_live_values() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    mix(&control);
+    live_set(
+        &control,
+        "drag",
+        vec![ceiling(-3.0), vod_send(-6.0), opacity(0.5)],
+    )
+    .expect("live.set");
+    batch(
+        &control,
+        edits(vec![
+            value(
+                serde_json::json!({"type": "filter.remove", "owner": {"type": "master"},
+                "filter_id": "lim"}),
+            ),
+            value(
+                serde_json::json!({"type": "send.remove", "source_id": "mic",
+                "bus_id": "vod"}),
+            ),
+        ]),
+    )
+    .expect("remove");
+    assert_eq!(live_list(&control)[0].values, [opacity(0.5)]);
+}
+
+/// ADR-0213 decision 1: a live `send.set` changes an existing send's gain, and never
+/// adds one, which would route the source into a new bus with no undo step.
+#[test]
+fn a_live_send_to_a_missing_send_is_refused() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    mix(&control);
+    batch(
+        &control,
+        edits(vec![value(
+            serde_json::json!({"type": "bus.create", "bus_id": "stream", "name": "Stream"}),
+        )]),
+    )
+    .expect("bus.create");
+    let stream = || jstream_protocol::BusId::new("stream");
+    let mic = jstream_protocol::SourceId::new("mic");
+    let new_send = value(serde_json::json!({"type": "send.set", "source_id": "mic",
+        "bus_id": "stream", "gain_db": -6.0}));
+    let error = live_set(&control, "drag", vec![opacity(0.5), new_send])
+        .expect_err("a live value adds no send");
+    assert_eq!(invalid_field(&error), "values.1.bus_id");
+    assert!(engine.drawn(|state| state.send(&mic, &stream()).is_none()));
+    assert!(live_list(&control).is_empty());
+}
