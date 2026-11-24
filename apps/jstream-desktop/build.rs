@@ -32,11 +32,11 @@ fn main() {
     ))]
     {
         // Declares `pick_path`, `set_network`, `set_jtunnel`, `set_ptz_controllers` and
-        // the screenshot commands so tauri-build writes `allow-pick-path`,
+        // the screenshot and zoom commands so tauri-build writes `allow-pick-path`,
         // `allow-set-network`, `allow-set-jtunnel`, `allow-set-ptz-controllers`,
-        // `allow-save-screenshot`, `allow-open-saved` and `allow-show-saved` (the
-        // `browse`, `network`, `jtunnel`, `ptz` and `screenshots` capabilities grant those
-        // and no other). Without this the Windows build rejects
+        // `allow-save-screenshot`, `allow-open-saved`, `allow-show-saved` and
+        // `allow-set-zoom` (the `browse`, `network`, `jtunnel`, `ptz`, `screenshots` and
+        // `zoom` capabilities grant those and no other). Without this the Windows build rejects
         // the capabilities as unknown permissions.
         let built = tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
             tauri_build::AppManifest::new().commands(&[
@@ -47,6 +47,7 @@ fn main() {
                 "save_screenshot",
                 "open_saved",
                 "show_saved",
+                "set_zoom",
             ]),
         ));
         if let Err(error) = built {

@@ -624,10 +624,10 @@ pub fn Learn(
         // under the button.
         let (x, y) = match opener.get_untracked() {
             Some(button) if e.detail() == 0 => {
-                let rect = button.get_bounding_client_rect();
+                let rect = crate::ui_scale::rect(&button);
                 (rect.left() + rect.width() / 2.0, rect.bottom() - 12.0)
             }
-            _ => (f64::from(e.client_x()), f64::from(e.client_y())),
+            _ => crate::ui_scale::pointer(&e),
         };
         menu.set(Some(Menu::Open(x, y)));
     };
@@ -661,18 +661,10 @@ pub fn Learn(
     };
     // Below the button, kept inside the window.
     let place = |x: f64, y: f64| {
-        let (w, h) = web_sys::window()
-            .map(|w| {
-                let n = |v: Result<
-                    leptos::wasm_bindgen::JsValue,
-                    leptos::wasm_bindgen::JsValue,
-                >| v.ok().and_then(|v| v.as_f64());
-                (
-                    n(w.inner_width()).unwrap_or(1600.0),
-                    n(w.inner_height()).unwrap_or(1000.0),
-                )
-            })
-            .unwrap_or((1600.0, 1000.0));
+        let (w, h) = match crate::ui_scale::window_size() {
+            (0.0, _) | (_, 0.0) => (1600.0, 1000.0),
+            size => size,
+        };
         let left = (x - 200.0).min(w - 296.0).max(4.0);
         let top = if y + 330.0 > h {
             (y - 330.0).max(4.0)
