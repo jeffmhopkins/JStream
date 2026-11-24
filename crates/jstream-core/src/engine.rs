@@ -432,6 +432,17 @@ impl Engine {
                 ),
             )));
         }
+        if let Some(percent) = change.model_resolution
+            && !jstream_protocol::MODEL_RESOLUTIONS.contains(&percent)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "model_resolution",
+                format!(
+                    "3D models are drawn at one of {:?} percent (0 chooses), not {percent}",
+                    jstream_protocol::MODEL_RESOLUTIONS
+                ),
+            )));
+        }
         if let Some(size) = change.max_probe_resolution
             && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
         {

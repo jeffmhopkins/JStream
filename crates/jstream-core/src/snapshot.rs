@@ -1169,6 +1169,14 @@ impl Default for Shot {
 }
 
 impl Shot {
+    /// How many pixels the rendering switches ask 3D models to be drawn with
+    /// (`RenderFeatures::model_resolution`, ADR-0197): 0 for the render thread to choose.
+    pub(crate) fn model_resolution(&self) -> u32 {
+        self.features.model_resolution
+    }
+}
+
+impl Shot {
     /// Whether the shot draws on the engine's MIDI clock (ADR-0148).
     #[cfg(test)]
     pub(crate) fn follows_tempo(&self) -> bool {
@@ -7176,6 +7184,7 @@ fn draw_box(
     let [width, height] = boxed.boxed.pixels(chains.model_percent.get());
     cache.layer(compositor, &key, width, height)?;
     if boxed.boxed.model {
+        chains.model_drawn = true;
         // Its layer stands for the canvas, however many pixels it has (ADR-0197).
         if let Some(extent) = boxed.boxed.extent() {
             cache.set_extent(&key, extent);

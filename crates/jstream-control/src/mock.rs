@@ -1282,6 +1282,17 @@ impl State {
                 return Ok(CallResult::action());
             }
             Action::StudioSetRendering { change } => {
+                if let Some(percent) = change.model_resolution
+                    && !jstream_protocol::MODEL_RESOLUTIONS.contains(&percent)
+                {
+                    return Err(ProtocolError::invalid_argument(
+                        "model_resolution",
+                        format!(
+                            "3D models are drawn at one of {:?} percent (0 chooses), not {percent}",
+                            jstream_protocol::MODEL_RESOLUTIONS
+                        ),
+                    ));
+                }
                 if let Some(steps) = change.screen_space_steps
                     && !jstream_protocol::SCREEN_SPACE_STEPS.contains(&steps)
                 {
@@ -6156,8 +6167,8 @@ mod tests {
     }
 
     /// A keyframe scene can't turn its own reflections on (ADR-0170 decision 2), and
-    /// `studio.set_rendering` takes only a probe size of `PROBE_RESOLUTIONS` and steps of
-    /// `SCREEN_SPACE_STEPS`, as the engine does.
+    /// `studio.set_rendering` takes only a probe size of `PROBE_RESOLUTIONS`, steps of
+    /// `SCREEN_SPACE_STEPS` and a model size of `MODEL_RESOLUTIONS`, as the engine does.
     #[test]
     fn reflections_and_the_probe_cap_are_refused_as_the_engine_does() {
         let engine = MockEngine::new();
@@ -6207,6 +6218,16 @@ mod tests {
         let refused = action(&*control, steps(20)).expect_err("not a step count");
         assert_eq!(code(&refused), Some("invalid_argument"));
         assert!(action(&*control, steps(64)).is_ok());
+        let models = |percent: u32| Action::StudioSetRendering {
+            change: jstream_protocol::RenderFeaturesChange {
+                model_resolution: Some(percent),
+                ..jstream_protocol::RenderFeaturesChange::default()
+            },
+        };
+        let refused = action(&*control, models(80)).expect_err("not a size");
+        assert_eq!(code(&refused), Some("invalid_argument"));
+        assert!(action(&*control, models(75)).is_ok());
+        assert!(action(&*control, models(0)).is_ok());
     }
 
     #[test]

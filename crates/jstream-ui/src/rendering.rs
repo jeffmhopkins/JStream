@@ -4,10 +4,11 @@
 //! `studio.set_rendering`; the engine keeps them on its machine, whatever collection is
 //! open. Since 0.165 it also has the reflection probes' switch and the face size they
 //! capture at, at most (ADR-0170 decision 3), and since 0.172 the screen-space
-//! reflections' switch and the steps their rays take (decision 4). An engine older than
+//! reflections' switch and the steps their rays take (decision 4), and since 0.180 how
+//! many pixels 3D models are drawn with (ADR-0197). An engine older than
 //! the version that added one reports it as on (screen-space reflections as off,
-//! ADR-0185), at the largest size or the fewest steps, and changing it does nothing
-//! there. An engine older than 0.147 reports no switches,
+//! ADR-0185), at the largest size or the fewest steps (models as Automatic, where it
+//! draws them in full), and changing it does nothing there. An engine older than 0.147 reports no switches,
 //! and the page says it has none.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
@@ -16,8 +17,8 @@ use crate::app::SessionContext;
 use crate::dialog::Info;
 use jstream_control::Control;
 use jstream_protocol::{
-    Action, Call, CallResult, PROBE_RESOLUTIONS, Query, QueryResult, RenderFeatures,
-    RenderFeaturesChange, SCREEN_SPACE_STEPS,
+    Action, Call, CallResult, MODEL_RESOLUTIONS, PROBE_RESOLUTIONS, Query, QueryResult,
+    RenderFeatures, RenderFeaturesChange, SCREEN_SPACE_STEPS,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -154,6 +155,24 @@ pub fn reflection_steps(steps: u32) -> RenderFeaturesChange {
     }
 }
 
+/// The change that sets how many pixels 3D models are drawn with (0 lets the engine
+/// choose) and leaves the switches.
+pub fn model_resolution(percent: u32) -> RenderFeaturesChange {
+    RenderFeaturesChange {
+        model_resolution: Some(percent),
+        ..RenderFeaturesChange::default()
+    }
+}
+
+/// What a model resolution's option reads.
+fn model_resolution_label(percent: u32) -> String {
+    match percent {
+        0 => "Automatic".into(),
+        100 => "Full".into(),
+        percent => format!("{percent}%"),
+    }
+}
+
 /// What the steps option reads.
 fn steps_label(steps: u32) -> &'static str {
     match SCREEN_SPACE_STEPS.iter().position(|&n| n == steps) {
@@ -276,6 +295,24 @@ pub fn RenderingSettings() -> impl IntoView {
             }
         });
     };
+    let models = move |chosen: u32| {
+        let Some(was) = features.get_untracked().map(|now| now.model_resolution) else {
+            return;
+        };
+        let change = model_resolution(chosen);
+        features.update(|now| *now = now.map(|now| now.with(&change)));
+        error.set(None);
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(message) = set(&*control, change).await {
+                let back = model_resolution(was);
+                features.try_update(|now| *now = now.map(|now| now.with(&back)));
+                error.try_set(Some(message));
+            }
+        });
+    };
     view! {
         <Show when=move || features.get().is_some()>
             <section class="prop-section">
@@ -342,6 +379,29 @@ pub fn RenderingSettings() -> impl IntoView {
                                 }).collect_view()}
                             </select>
                             <p class="help">"How closely a screen-space reflection looks."</p>
+                        </div>
+                    </div>
+                    <div class="prop-row rendering-model-resolution">
+                        <label class="prop-label" for="setting-rendering-model-resolution">
+                            "3D model resolution"
+                            <Info text="How many pixels 3D models are drawn with, across and down. Automatic draws them in full and with fewer only while the GPU can't keep up, so the outputs keep their frames; a size always draws them at that. Everything else keeps its pixels." />
+                        </label>
+                        <div class="prop-control">
+                            <select
+                                id="setting-rendering-model-resolution"
+                                aria-label="3D model resolution"
+                                prop:value=move || features.get().map(|now| now.model_resolution.to_string()).unwrap_or_default()
+                                on:change=move |event| {
+                                    if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
+                                        models(chosen);
+                                    }
+                                }
+                            >
+                                {MODEL_RESOLUTIONS.into_iter().map(|percent| view! {
+                                    <option value=percent.to_string()>{model_resolution_label(percent)}</option>
+                                }).collect_view()}
+                            </select>
+                            <p class="help">"Fewer pixels draw faster and look softer."</p>
                         </div>
                     </div>
                 </div>
@@ -436,5 +496,23 @@ mod tests {
         assert!(now(set(&control, super::reflection_steps(20))).is_err());
         assert_eq!(super::steps_label(16), "Low");
         assert_eq!(super::steps_label(64), "High");
+    }
+
+    #[test]
+    fn the_model_resolution_is_the_engines_choice_or_one_of_the_sizes() {
+        let control = MockEngine::new().connect();
+        now(control.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("hello");
+        let read_now = || now(read(&control)).expect("read").expect("reported");
+        assert_eq!(read_now().model_resolution, 0, "the engine chooses");
+        now(set(&control, super::model_resolution(75))).expect("set");
+        assert_eq!(read_now().model_resolution, 75);
+        assert!(now(set(&control, super::model_resolution(80))).is_err());
+        assert_eq!(super::model_resolution_label(0), "Automatic");
+        assert_eq!(super::model_resolution_label(100), "Full");
+        assert_eq!(super::model_resolution_label(67), "67%");
     }
 }
