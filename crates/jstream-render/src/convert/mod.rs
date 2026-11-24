@@ -1,9 +1,10 @@
 //! Composite to NV12 on the GPU (ARCH › GPU pipeline step 4): two render passes read
 //! the compositor's straight-alpha sRGB output and write a Y plane (`R8Unorm`) and an
 //! interleaved CbCr plane (`Rg8Unorm`, half size). The planes are either two textures
-//! this module allocates ([`Nv12Planes`], the path every adapter has) or the plane views
-//! of a native `NV12` texture ([`Nv12Target::nv12_texture`], such as the platform's
-//! encode target).
+//! this module allocates ([`Nv12Planes`], the path every adapter has), the plane views
+//! of a native `NV12` texture ([`Nv12Target::nv12_texture`]), or two plane textures the
+//! platform made over one surface ([`Nv12Target::plane_textures`]). The platform's
+//! encode target is one of the last two ([`Nv12Target::gpu_frame`]).
 
 use jstream_media::{ColorInfo, ColorRange, ColorSpace, FrameSize};
 
@@ -211,7 +212,8 @@ impl Nv12Converter {
     }
 
     /// Converts into a platform frame in a submit of its own, on `compositor`'s queue:
-    /// `pass`, bound to `frame`'s texture, then the texture handed back to the platform
+    /// `pass`, bound to `frame`'s target ([`Nv12Target::gpu_frame`]), then its textures
+    /// (both planes of a two-plane frame) handed back to the platform
     /// (`TextureUses::PRESENT`, as the compositor does with the source frames it
     /// samples), with `frame`'s sync staged around the submit. This is the encode
     /// tick's step: the platform's encoder reads the frame once its fence is signalled.
@@ -237,13 +239,20 @@ impl Nv12Converter {
                 label: Some("jstream-render nv12"),
             });
         pass.encode(&mut encoder);
+        let textures = match frame.planes() {
+            Some((y, uv)) => [Some(y), Some(uv)],
+            None => [Some(frame.texture()), None],
+        };
         encoder.transition_resources(
             std::iter::empty(),
-            std::iter::once(wgpu::TextureTransition {
-                texture: frame.texture(),
-                selector: None,
-                state: wgpu::TextureUses::PRESENT,
-            }),
+            textures
+                .into_iter()
+                .flatten()
+                .map(|texture| wgpu::TextureTransition {
+                    texture,
+                    selector: None,
+                    state: wgpu::TextureUses::PRESENT,
+                }),
         );
         // Through the compositor, so a drawer timing a unit times the conversion in it.
         compositor.submit_work(encoder.finish());
@@ -345,6 +354,74 @@ impl Nv12Target {
             width: texture.width(),
             height: texture.height(),
         })
+    }
+
+    /// Two plane textures over one platform surface, such as a two-plane encode target
+    /// (`GpuFrame::planar`, on a backend with no NV12 texture format): `y` is `R8Unorm`
+    /// of the frame's even size, and `uv` is `Rg8Unorm` of half that size on each side.
+    /// Both need `RENDER_ATTACHMENT`.
+    ///
+    /// # Errors
+    /// [`RenderError::UnsupportedFormat`] for a plane of another format,
+    /// [`RenderError::UnsupportedTexture`] for a plane that is not a single 2D render
+    /// target, and [`RenderError::Invalid`] for an odd size or a CbCr plane that is not
+    /// half the Y plane's.
+    pub fn plane_textures(y: &wgpu::Texture, uv: &wgpu::Texture) -> Result<Self, RenderError> {
+        for (texture, format, what) in [
+            (y, Y_FORMAT, "nv12 y plane"),
+            (uv, UV_FORMAT, "nv12 cbcr plane"),
+        ] {
+            if texture.format() != format {
+                return Err(RenderError::UnsupportedFormat {
+                    format: texture.format(),
+                });
+            }
+            check_shape(texture, what)?;
+            if !texture
+                .usage()
+                .contains(wgpu::TextureUsages::RENDER_ATTACHMENT)
+            {
+                return Err(RenderError::UnsupportedTexture {
+                    detail: format!("the {what} lacks RENDER_ATTACHMENT usage"),
+                });
+            }
+        }
+        let (width, height) = (y.width(), y.height());
+        if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
+            return Err(RenderError::Invalid {
+                what: "nv12 target",
+                detail: format!("{width}x{height} is odd; NV12 needs even dimensions"),
+            });
+        }
+        if (uv.width(), uv.height()) != (width / 2, height / 2) {
+            return Err(RenderError::Invalid {
+                what: "nv12 target",
+                detail: format!(
+                    "the cbcr plane is {}x{}, not half the {width}x{height} y plane",
+                    uv.width(),
+                    uv.height()
+                ),
+            });
+        }
+        Ok(Self {
+            y: y.create_view(&wgpu::TextureViewDescriptor::default()),
+            uv: uv.create_view(&wgpu::TextureViewDescriptor::default()),
+            width,
+            height,
+        })
+    }
+
+    /// The target of a platform encode target (`GpuInterop::encode_target`): its two
+    /// plane textures for a two-plane frame ([`Self::plane_textures`]), else the plane
+    /// views of its native `NV12` texture ([`Self::nv12_texture`]).
+    ///
+    /// # Errors
+    /// As for the constructor it picks.
+    pub fn gpu_frame(frame: &jstream_platform::GpuFrame) -> Result<Self, RenderError> {
+        match frame.planes() {
+            Some((y, uv)) => Self::plane_textures(y, uv),
+            None => Self::nv12_texture(frame.texture()),
+        }
     }
 
     /// Luma width in pixels.

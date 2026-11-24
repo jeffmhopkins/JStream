@@ -1,18 +1,18 @@
-//! The stand-in for the backend macOS doesn't have yet (ADR-0063), so a host can build a
-//! complete `Backends` from what exists: the IOSurface and Metal interop (§8) follows as
-//! a later part.
+//! A stand-in GPU interop with no device, for a host that wants the engine on a device of
+//! its own and the CPU frame paths. The daemon and the desktop app use `MetalGpu`
+//! (ADR-0063 §8).
 
 use jstream_platform::media::FrameSize;
 use jstream_platform::{GpuContext, GpuFrame, GpuInterop, PlatformError};
 
-/// GPU interop until the Metal spike lands: `open_device` is `Unsupported`, so the engine
-/// opens a device of its own and takes the CPU frame paths.
+/// GPU interop with no device: `open_device` is `Unsupported`, so the engine opens a
+/// device of its own and takes the CPU frame paths.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoGpuInterop;
 
 fn no_interop() -> PlatformError {
     PlatformError::Unsupported {
-        what: "GPU interop on macOS (IOSurface and Metal, not built yet)".into(),
+        what: "GPU interop (this host uses none)".into(),
     }
 }
 

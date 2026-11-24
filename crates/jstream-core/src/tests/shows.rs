@@ -377,6 +377,18 @@ fn an_overlay_clip_puts_its_scene_over_program_for_its_span() {
     );
     step(&control, 300);
     assert!(overlays(&control).is_empty(), "down at the clip's end");
+
+    // Deleting the running show takes its overlays down with it.
+    act(&control, Action::ShowSeek { at_ms: 250 }).expect("seek");
+    assert_eq!(overlays(&control), ["logo"]);
+    apply(
+        &control,
+        vec![Edit::ShowDelete {
+            show_id: ShowId::new("s"),
+        }],
+    );
+    assert!(studio(&control).1.is_none(), "stopped");
+    assert!(overlays(&control).is_empty(), "and its overlay is down");
 }
 
 /// The overlay-removed report: an overlay clip taken out of the running show comes
@@ -753,5 +765,37 @@ fn a_rehearsal_runs_the_show_on_preview_and_leaves_program_alone() {
         program(&control).as_deref(),
         Some("a"),
         "program as the hand left it"
+    );
+}
+
+/// At a loop's last clip the wrap runs back to the clip at the loop's start, so that
+/// clip is the upcoming scene, not the one after the loop.
+#[test]
+fn at_a_loops_last_clip_its_first_clip_is_upcoming() {
+    let (engine, control) = engine_with_show();
+    let mut show = ShowInfo::new("s");
+    show.program = vec![
+        clip("ca", "a", 1000),
+        clip("cb", "b", 1000),
+        clip("cc", "c", 1000),
+    ];
+    show.loops = vec![jstream_protocol::ShowLoop {
+        loop_id: "l".into(),
+        name: String::new(),
+        start_ms: 0,
+        end_ms: 2000,
+        preset_id: None,
+        leave: jstream_protocol::LoopLeave::default(),
+    }];
+    apply(&control, vec![Edit::ShowSet { show }]);
+    act(&control, play()).expect("play");
+    step(&control, 100);
+    assert_eq!(engine.upcoming().as_deref(), Some("b"));
+    step(&control, 1000);
+    assert_eq!(program(&control).as_deref(), Some("b"));
+    assert_eq!(
+        engine.upcoming().as_deref(),
+        Some("a"),
+        "the loop runs back to a"
     );
 }

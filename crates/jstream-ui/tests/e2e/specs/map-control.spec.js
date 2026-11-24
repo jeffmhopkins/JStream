@@ -27,6 +27,13 @@ test('a right-click on a setting maps it to a Mod from the Map control dialog', 
   const { button, x, y } = await fader(page);
   const before = await rev(page);
 
+  // A right-click on the fader's number opens the setting's menu, not the browser's.
+  await page.locator('.mix-row').getByRole('textbox').first().click({ button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Control' });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+
   await page.mouse.click(x, y, { button: 'right' });
   await page.getByRole('menuitem', { name: 'Map control…' }).click();
   const dialog = page.getByRole('dialog', { name: /^Map control/ });
@@ -44,6 +51,27 @@ test('a right-click on a setting maps it to a Mod from the Map control dialog', 
   await expect.poll(() => rev(page)).toBe(before + 1);
   await expect(button).toHaveClass(/bound/);
   await expect(button).toContainText('Mod 20');
+});
+
+test('at a UI scale of 150% a setting\'s right-click menu opens at the pointer', async ({ page, daemon }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await connect(page, daemon);
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('Control+Equal');
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('1.5');
+  await fader(page);
+  const number = page.locator('.mix-row').getByRole('textbox').first();
+  await number.scrollIntoViewIfNeeded();
+  const box = await number.boundingBox();
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.click(x, y, { button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Control' });
+  await expect(menu).toBeVisible();
+  // 12 px under the pointer, or 330 px above it when it wouldn't fit below, in the
+  // page's own pixels: 18 and 495 on the screen.
+  const placed = await menu.boundingBox();
+  const off = Math.min(Math.abs(placed.y - (y + 18)), Math.abs(placed.y - (y - 495)));
+  expect(off).toBeLessThan(3);
+  expect(placed.y).toBeGreaterThanOrEqual(0);
 });
 
 test('Cancel in the Map control dialog changes nothing', async ({ page, daemon }) => {
@@ -122,9 +150,66 @@ test('mapping mode maps the armed source by the amount dragged on a setting', as
   await expect.poll(() => rev(page)).toBe(before + 2);
   await expect(button).toHaveText('+5 %');
 
+  // Escape closes a menu in front before it leaves mapping mode.
+  await page.mouse.click(x, y, { button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Control' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu', { name: 'Control' })).toBeHidden();
+  await expect(bar).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(bar).toBeHidden();
   await expect(button).toContainText('Mod 20');
+
+  const number = page.locator('.mix-row').getByRole('textbox').first();
+  // A drag makes an offset: the Mod adds to the fader. The dialog lists it, and can
+  // bypass it without removing it.
+  await number.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Edit mapping…' }).click();
+  const row = dialog.locator('.map-row');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('Offset');
+  await row.getByRole('button', { name: 'Bypass' }).click();
+  await expect.poll(() => rev(page)).toBe(before + 3);
+  await expect(row).toHaveClass(/bypassed/);
+  await expect(button).toHaveClass(/bypassed/);
+  await row.getByRole('button', { name: 'Bypass' }).click();
+  await expect.poll(() => rev(page)).toBe(before + 4);
+  await expect(row).not.toHaveClass(/bypassed/);
+
+  // A second source overrides the fader; the offset stays on top of it.
+  await dialog.getByRole('button', { name: /^Mod 3/ }).first().click();
+  await dialog.getByRole('radio', { name: 'Override' }).click();
+  await dialog.locator('button[data-primary]').click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(before + 5);
+  await expect(button).toContainText('Mod 3');
+  await number.click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Control' })).toContainText('Mapped to Mod 3 · Bitwig and 1 more');
+  await page.getByRole('menuitem', { name: 'Edit mapping…' }).click();
+  await expect(row).toHaveCount(2);
+  await expect(row.filter({ hasText: 'Override' })).toContainText('Mod 3');
+  await expect(row.filter({ hasText: 'Offset' })).toContainText('Mod 20');
+});
+
+test('the Audio tab maps a level of the sound onto a setting', async ({ page, daemon }) => {
+  await liveSources(page);
+  await connect(page, daemon);
+  const { button, x, y } = await fader(page);
+  const before = await rev(page);
+
+  await page.mouse.click(x, y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Map control…' }).click();
+  const dialog = page.getByRole('dialog', { name: /^Map control/ });
+  await dialog.getByRole('tab', { name: 'Audio' }).click();
+  const use = dialog.locator('button[data-primary]');
+  await expect(use).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Follow the program mix' }).click();
+  await expect(dialog.getByRole('combobox', { name: 'What it hears' })).toBeVisible();
+  await expect(dialog.locator('.map-chosen')).toContainText('Audio · Program mix · Level');
+  await use.click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  await expect(button).toHaveText('Audio');
 });
 
 test('an item property is mapped by offsets, one per source, from the Inspector', async ({ page, daemon }) => {
@@ -171,9 +256,15 @@ test('an item property is mapped by offsets, one per source, from the Inspector'
   await page.keyboard.press('Escape');
   await expect(tag('rotation')).toHaveAttribute('data-map-amount', '+90°');
 
-  // The property's menu removes a mapping.
+  // The property's menu bypasses a mapping, and removes it.
   await rotation.click({ button: 'right' });
-  await page.getByRole('menuitem', { name: /^Remove Mod 20/ }).click();
+  const menu = page.getByRole('menu', { name: 'Control' });
+  await expect(menu).toContainText('Mod 20 · Bitwig · +90°');
+  await menu.getByRole('menuitemcheckbox', { name: 'Bypass' }).click();
   await expect.poll(() => rev(page)).toBe(before + 3);
+  await rotation.click({ button: 'right' });
+  await expect(menu.getByRole('menuitemcheckbox', { name: 'Bypass' })).toHaveAttribute('aria-checked', 'true');
+  await menu.getByRole('menuitem', { name: 'Remove' }).click();
+  await expect.poll(() => rev(page)).toBe(before + 4);
   await expect(tag('rotation')).not.toHaveAttribute('data-map-amount');
 });

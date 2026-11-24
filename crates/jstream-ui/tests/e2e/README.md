@@ -235,7 +235,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   closes on a second click of its ×, and the Inspector doesn't collapse once it is alone
   in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live, with Stream stats, Outputs and Agent activity as
-  tabs on the right, and resets to Editing.
+  tabs on the right, and resets to Editing. A drop past the bottom's row adds a second
+  full-width row under it, with its splitter, and a third past that; the outer left
+  stacks full-height columns outwards the same way; all of it survives a reload, and
+  moving the second row's panel out removes that row, the third moving in.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
   and shows the size readout, a click on empty canvas clears both, and selecting another
@@ -265,10 +268,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **The browser's menu and selection** (`chrome.spec.js`): a right-click on the header's
   brand, readout and menu button, a dock tab, a panel heading and the canvas tools is
   swallowed, while the Sources panel's search field keeps the browser's menu and opens no
-  panel menu; in Connection details the header swallows and a value doesn't. A drag from
+  panel menu; in Connection details the header swallows and a value doesn't, and in About
+  a version value and a link don't. A drag from
   a dock tab across the panels, and a double-click on a tab or a caption, select no text,
-  while a double-click in the search field selects its word. File, Edit and View hang
-  flush under the header.
+  while a double-click in the search field selects its word. File, Edit and View drop
+  straight from their buttons, each open button the same colour as its menu.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off, Select all, and New group, which
   groups the selection into "Group 1") and on the margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
@@ -515,16 +519,22 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
 - **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
-  fader's row opening its menu, Map control… opening the dialog, a Mod picked there
+  fader's number or anywhere on its row opening its menu, Map control… opening the dialog, a Mod picked there
   changing nothing until Use, which is one edit and names the Mod on the control button;
-  Cancel changing nothing; the menu's Learn taking the one MIDI control that moves
+  Cancel changing nothing; at a UI scale of 150% the row's menu opening at the pointer;
+  the menu's Learn taking the one MIDI control that moves
   after it opened, as one edit; and mapping mode from the dialog's "Map by dragging":
   the bar naming the armed Mod, a click on a setting mapping nothing, a 20 px drag up
   showing "+10 %" and sending one edit when let go, a second drag moving the far end
-  as one more edit, and Escape leaving the mode; and an item's properties from the
+  as one more edit, and Escape closing a menu in front first and then leaving the mode, then the dialog listing that mapping as
+  an Offset, Bypass striking it through and back as an edit each, and a second Mod used
+  as Override sitting beside it, named on the button with "and 1 more" in the menu; the
+  Audio tab's "Follow the program mix" mapping the level as one edit, named Audio on the
+  button; and an item's properties from the
   Inspector: the crop edges marked as targets, a right-click on Rotation opening its menu and the dialog on it, a 50 px
   drag tagging the field "+90°" and sending one edit while the field keeps its stored
-  value, the same armed Mod mapping X as one more edit, and the menu's Remove taking the
+  value, the same armed Mod mapping X as one more edit, and the menu naming the mapping by its
+  source and offset, its Bypass ticked after one edit, and its Remove taking the
   rotation mapping off.
 - **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
   is mapped, then listing a channel made in the Channels panel as a group with
@@ -555,7 +565,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   with the drop slot showing during the drag and a pausing bookmark at each end; a
   bookmark (B), a loop drawn on the ruler (L) and a trim of Main's right end, each one
   `show.set`, and Edit › Undo taking them back one at a time; the cut badge's transition
-  menu; an audio track and an audio clip from its menu, removed with Delete; a video
+  menu; an audio track and a source's audio from its menu's Add source audio at m:ss, with default fades, removed with Delete; a video
   file dropped as a browser URI list, made into a source and scene in the same batch
   as the show; the lock refusing Delete; a trim held mid-drag and let go with Escape,
   sending nothing; and the picker's menu duplicating, renaming and deleting a show.
@@ -660,12 +670,25 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
   readout, sends live values, and commits one `scene.set_camera` with a moved camera as
-  one revision, which one undo puts back. With a window capture in the scene, the
+  one revision, which one undo puts back. In camera mode the live aim's buttons send no
+  `scene.drive_camera` while the pointer only passes over them; a press on Pan right
+  sends pan 12 once, nothing more while the held pointer wanders off the button, and pan
+  0 once on release; Space on a focused Tilt up drives tilt once whatever its repeats and
+  stops on keyup, and Shift+Enter on Zoom in drives zoom 2 and stops once when the focus
+  moves away. With a window capture in the scene, the
   camera and Depth of field on, Follow pointer offering Add Follow pointer… (a filter on
   the capture, ADR-0120), and a camera-motion row added, the settings column's
   `scrollWidth` stays within its `clientWidth` at the dialog's width and when a
   720-wide viewport clamps the dialog; the Nearest on top check sits in front of its
   text, and the Roll field keeps room for its number.
+- **Fly mode** (`fly.spec.js`): in a scene given a camera, F turns on camera mode and
+  fly mode and the pill reads "fly ×1.00"; W held sends live values and then one
+  `scene.set_camera` with the camera and its target moved together toward the canvas;
+  Space with D raises it and moves it right while E rolls it (D stays a fly key, not the
+  Depth tool); Shift lowers it and R levels the roll (not the Turn tool); a left drag
+  turns it where it stands; Shift+wheel sets "fly ×1.49" and the plain wheel then widens
+  its field of view from the same position; Esc leaves fly mode, then camera mode; and
+  one undo takes back the last commit.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the

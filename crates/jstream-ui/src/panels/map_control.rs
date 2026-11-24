@@ -6,9 +6,11 @@
 //! Learn takes whichever MIDI control or Mod moves first. The foot sets the range the
 //! source maps onto, its smoothing and its curve.
 //!
-//! Map writes one value binding named after the setting ([`learn_id`]), so mapping again
-//! replaces it. A source is never refused for being in use: any number of settings read
-//! one control, Mod or channel. A key runs one action, so a key maps through a channel
+//! A mapping is an offset, added to the setting's own value, or an override, which is
+//! the value ([`MapTarget`]). A setting takes one mapping per source and keeps one
+//! override, so Use rewrites the mapping from that source or replaces the override.
+//! Each mapping can be bypassed. A source is never refused for being in use: any
+//! number of settings read one control, Mod, channel or audio level. A key runs one action, so a key maps through a channel
 //! it switches ([`key_edits`]): a second setting mapped to that key follows the same
 //! channel.
 //!
@@ -19,14 +21,15 @@ use crate::dialog::Modal;
 use crate::live_sources::{
     self, MOD_COUNT, MODS_KEY, Moved, live_sources, mod_drives, mod_of, mod_reader, reader_name,
 };
+use crate::panels::audio_read::{AudioReads, audio_reader};
 use crate::panels::channels::{ChannelSearch, live_values, new_channel};
-use crate::panels::learn::{KeyCapture, fraction, learn_id, set_smoothing, smoothing_of};
-use crate::panels::map_target::MapTarget;
+use crate::panels::learn::{KeyCapture, fraction, set_smoothing, smoothing_of};
+use crate::panels::map_target::{MapTarget, Mapping, mode_name};
 use crate::panels::number::NumberField;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    Action, ChannelInfo, ChannelSwitch, Chord, Edit, Finite32, MotionCurve, MotionKind,
-    MotionMidiControl, SceneId, ValueBinding, ValueTarget,
+    Action, ChannelInfo, ChannelSwitch, Chord, Edit, Finite32, MappingMode, MotionCurve,
+    MotionKind, MotionMidiControl, SceneId,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -79,15 +82,17 @@ enum Tab {
     Jtunnel,
     Midi,
     Channel,
+    Audio,
     Data,
 }
 
 impl Tab {
-    const ALL: [(Tab, &'static str); 5] = [
+    const ALL: [(Tab, &'static str); 6] = [
         (Tab::Key, "Hotkey"),
         (Tab::Jtunnel, "JTunnel"),
         (Tab::Midi, "MIDI"),
         (Tab::Channel, "Channel"),
+        (Tab::Audio, "Audio"),
         (Tab::Data, "Other data"),
     ];
 
@@ -96,6 +101,7 @@ impl Tab {
         match reader {
             MotionKind::Midi { .. } => Tab::Midi,
             MotionKind::Channel { .. } => Tab::Channel,
+            MotionKind::Audio { .. } => Tab::Audio,
             MotionKind::Data { .. } if mod_of(reader).is_none() => Tab::Data,
             _ => Tab::Jtunnel,
         }
@@ -107,7 +113,8 @@ pub fn ends(kind: &MotionKind) -> Option<(f32, f32)> {
     match kind {
         MotionKind::Midi { from, to, .. }
         | MotionKind::Data { from, to, .. }
-        | MotionKind::Channel { from, to, .. } => Some((from.get(), to.get())),
+        | MotionKind::Channel { from, to, .. }
+        | MotionKind::Audio { from, to, .. } => Some((from.get(), to.get())),
         _ => None,
     }
 }
@@ -117,7 +124,8 @@ pub fn with_ends(mut kind: MotionKind, low: f32, high: f32) -> MotionKind {
     let end = |v: f32| Finite32::new(v).unwrap_or(Finite32::ZERO);
     if let MotionKind::Midi { from, to, .. }
     | MotionKind::Data { from, to, .. }
-    | MotionKind::Channel { from, to, .. } = &mut kind
+    | MotionKind::Channel { from, to, .. }
+    | MotionKind::Audio { from, to, .. } = &mut kind
     {
         *from = end(low);
         *to = end(high);
@@ -130,7 +138,8 @@ pub fn curve_of(kind: &MotionKind) -> Option<MotionCurve> {
     match kind {
         MotionKind::Midi { curve, .. }
         | MotionKind::Data { curve, .. }
-        | MotionKind::Channel { curve, .. } => Some(*curve),
+        | MotionKind::Channel { curve, .. }
+        | MotionKind::Audio { curve, .. } => Some(*curve),
         _ => None,
     }
 }
@@ -139,7 +148,8 @@ pub fn curve_of(kind: &MotionKind) -> Option<MotionCurve> {
 pub fn with_curve(mut kind: MotionKind, next: MotionCurve) -> MotionKind {
     if let MotionKind::Midi { curve, .. }
     | MotionKind::Data { curve, .. }
-    | MotionKind::Channel { curve, .. } = &mut kind
+    | MotionKind::Channel { curve, .. }
+    | MotionKind::Audio { curve, .. } = &mut kind
     {
         *curve = next;
     }
@@ -183,6 +193,26 @@ pub fn same_source(a: &MotionKind, b: &MotionKind) -> bool {
         (MotionKind::Channel { channel_id: a, .. }, MotionKind::Channel { channel_id: b, .. }) => {
             a == b
         }
+        // One level: what it hears and what it follows. Its floor, ceiling, attack and
+        // release are shape.
+        (
+            MotionKind::Audio {
+                audio: a1,
+                audio_source: s1,
+                measure: m1,
+                low_hz: l1,
+                high_hz: h1,
+                ..
+            },
+            MotionKind::Audio {
+                audio: a2,
+                audio_source: s2,
+                measure: m2,
+                low_hz: l2,
+                high_hz: h2,
+                ..
+            },
+        ) => a1 == a2 && s1 == s2 && m1 == m2 && l1 == l2 && h1 == h2,
         _ => false,
     }
 }
@@ -204,23 +234,6 @@ pub fn picked(reader: MotionKind, previous: Option<&MotionKind>, range: (f64, f6
         }
     }
     next
-}
-
-/// The binding that maps `input` onto `target`, named [`learn_id`], keeping the
-/// `amount` of the binding it replaces.
-pub fn binding_for(
-    target: &ValueTarget,
-    input: MotionKind,
-    amount: Option<String>,
-) -> ValueBinding {
-    ValueBinding {
-        binding_id: learn_id(target),
-        input,
-        target: target.clone(),
-        amount,
-        enabled: true,
-        mode: jstream_control::protocol::MappingMode::Replace,
-    }
 }
 
 /// A MIDI reader typed by hand: `number` is the controller or the note, unused for a
@@ -315,6 +328,7 @@ pub fn key_edits(collection: &Collection, map: &KeyMapping<'_>) -> Vec<Edit> {
             collection,
             channel_reader(&channel_id, map.ends),
             None,
+            map.target.first_mode(),
             None,
         );
     }
@@ -330,6 +344,7 @@ pub fn key_edits(collection: &Collection, map: &KeyMapping<'_>) -> Vec<Edit> {
         collection,
         channel_reader(&channel.channel_id, map.ends),
         None,
+        map.target.first_mode(),
         None,
     );
     let mut edits = vec![Edit::ChannelSet { channel }];
@@ -541,11 +556,9 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
     let request = StoredValue::new(request);
     let range = request.with_value(|r| r.range);
     let limits = request.with_value(|r| r.limits);
-    let adds = request.with_value(|r| r.target.adds());
     let close = move || dialog.0.set(None);
 
-    // Every mapping onto the setting: one for a setting a binding takes over, any
-    // number for a property mappings add to.
+    // Every mapping onto the setting: one per source, each an offset or an override.
     let mapped = move || {
         studio.collection.with(|c| {
             c.as_ref()
@@ -553,10 +566,23 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                 .unwrap_or_default()
         })
     };
-    let bound = move || mapped().into_iter().next();
+    // The one the dialog opens on: the override, or else the first.
+    let bound = move || {
+        let all = mapped();
+        all.iter().find(|m| m.overrides()).or(all.first()).cloned()
+    };
     let existing = untrack(bound);
-    // The mapping as it would be written: the source with its range, smoothing and curve.
+    // The mapping as it would be written: the source with its range, smoothing and
+    // curve, and whether it offsets the setting or overrides it.
     let draft = RwSignal::new(existing.as_ref().map(|b| b.input.clone()));
+    let mode = RwSignal::new(
+        existing
+            .as_ref()
+            .map_or_else(|| request.with_value(|r| r.target.first_mode()), |b| b.mode),
+    );
+    // The ends a new mapping gets and the limits of its ends, for the mode chosen.
+    let shape_of =
+        move |mode: MappingMode| request.with_value(|r| r.target.shape(mode, range, limits));
     let tab = RwSignal::new(
         existing
             .as_ref()
@@ -567,7 +593,28 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
     let live = live_sources();
     let values = live_values();
     let pick = move |reader: MotionKind| {
-        draft.update(|d| *d = Some(picked(reader, d.as_ref(), range)));
+        let first = shape_of(mode.get_untracked()).0;
+        draft.update(|d| *d = Some(picked(reader, d.as_ref(), first)));
+    };
+    // Offset or Override: the ends start over, since one is a distance and the other a
+    // value.
+    let set_mode = move |next: MappingMode| {
+        if mode.get_untracked() == next {
+            return;
+        }
+        mode.set(next);
+        let (low, high) = shape_of(next).0;
+        draft.update(|d| {
+            if let Some(kind) = d.take() {
+                *d = Some(with_ends(kind, low as f32, high as f32));
+            }
+        });
+    };
+    // Opens a mapping the setting has, to change it.
+    let load = move |mapping: &Mapping| {
+        mode.set(mapping.mode);
+        tab.set(Tab::of(&mapping.input));
+        draft.set(Some(mapping.input.clone()));
     };
     let chosen = move |reader: &MotionKind| {
         draft.with(|d| d.as_ref().is_some_and(|d| same_source(d, reader)))
@@ -1014,7 +1061,7 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                     Some(request.with_value(|r| {
                         // A mapping from the same source keeps the channel scaling it.
                         let amount = r.target.mapping_from(c, &input).and_then(|m| m.amount);
-                        r.target.set(c, input, amount, None)
+                        r.target.set(c, input, amount, mode.get_untracked(), None)
                     }))
                 });
                 edits.extend(set.unwrap_or_default());
@@ -1026,17 +1073,28 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
             close();
         }
     };
-    let remove = move |key: String| {
+    let remove = move |mapping: Mapping| {
         let edits = studio.collection.with_untracked(|c| {
             c.as_ref()
-                .map(|c| request.with_value(|r| r.target.clear(c, &key)))
+                .map(|c| request.with_value(|r| r.target.clear(c, &mapping.key)))
                 .unwrap_or_default()
         });
         if let (false, Some(s)) = (edits.is_empty(), session.0.get_value()) {
             studio.apply(&s, edits);
         }
-        if !adds {
+        // The draft was that mapping: nothing is chosen any more.
+        if draft.with_untracked(|d| d.as_ref().is_some_and(|d| same_source(d, &mapping.input))) {
             draft.set(None);
+        }
+    };
+    let bypass = move |key: String, enabled: bool| {
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| request.with_value(|r| r.target.set_enabled(c, &key, enabled)))
+                .unwrap_or_default()
+        });
+        if let (false, Some(s)) = (edits.is_empty(), session.0.get_value()) {
+            studio.apply(&s, edits);
         }
     };
     let value_line = request.with_value(|r| match r.current {
@@ -1062,14 +1120,23 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                     let n = |v: f32| crate::panels::number::format_number(f64::from(v), 2, false);
                     format!("{} → {}", n(low), n(high))
                 });
-                let key = mapping.key;
+                let (key, enabled, kind) = (mapping.key.clone(), mapping.enabled, mode_name(mapping.mode));
+                let (opened, removed) = (mapping.clone(), mapping);
                 view! {
-                    <li class="chan-row">
-                        <span class="chan-row-name">{name}</span>
+                    <li class="chan-row map-row" class:bypassed=!enabled>
+                        <button type="button" class="map-row-name" title="Change this mapping"
+                            on:click=move |_| load(&opened)>
+                            {name}
+                        </button>
                         <span class="hint mono">{onto}</span>
-                        <span class="hint">{if adds { "Offset" } else { "Override" }}</span>
+                        <span class="hint">{kind}</span>
+                        <button type="button" class="map-bypass" class:on=!enabled aria-pressed=(!enabled).to_string()
+                            title="Bypass this mapping without removing it: the setting ignores it until it is switched back"
+                            on:click=move |_| bypass(key.clone(), !enabled)>
+                            "Bypass"
+                        </button>
                         <button type="button" class="chan-x" title="Remove this mapping" aria-label="Remove this mapping"
-                            on:click=move |_| remove(key.clone())>
+                            on:click=move |_| remove(removed.clone())>
                             "×"
                         </button>
                     </li>
@@ -1083,21 +1150,48 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
     };
     // What Use does, in words, when the draft isn't the mapping the setting has.
     let replaces = move || {
-        if adds {
-            return None;
-        }
-        let binding = bound()?;
+        let binding = mapped().into_iter().find(Mapping::overrides)?;
         let same = match tab.get() {
-            Tab::Key => chord.with(Option::is_none),
-            _ => draft.with(|d| d.as_ref().is_none_or(|d| same_source(d, &binding.input))),
+            Tab::Key => {
+                chord.with(Option::is_none)
+                    || request.with_value(|r| r.target.first_mode()) != MappingMode::Replace
+            }
+            _ => {
+                mode.get() != MappingMode::Replace
+                    || draft.with(|d| d.as_ref().is_none_or(|d| same_source(d, &binding.input)))
+            }
         };
         (!same).then(|| {
             let name = studio
                 .collection
                 .with(|c| reader_name(c.as_ref(), &binding.input));
-            format!("A setting takes one source that overrides it: Use replaces {name}.")
+            format!("A setting takes one override: Use replaces {name}. Offsets stay.")
         })
     };
+    // Offset or Override, for the mapping being made.
+    let modes = move || {
+        [MappingMode::Add, MappingMode::Replace]
+        .into_iter()
+        .map(|m| {
+            let title = match m {
+                MappingMode::Replace => "The source is the setting's value: it takes the setting over, between From and To",
+                _ => "The source is added to the setting's own value, by up to the distance from From to To: the stored value, keyframes and other mappings still count",
+            };
+            view! {
+                <button type="button" role="radio" title=title class:on=move || mode.get() == m
+                    aria-checked=move || (mode.get() == m).to_string()
+                    on:click=move |_| set_mode(m)>
+                    {mode_name(m)}
+                </button>
+            }
+        })
+        .collect_view()
+    };
+    let audio_draft = Signal::derive(move || {
+        draft
+            .get()
+            .filter(|d| matches!(d, MotionKind::Audio { .. }))
+    });
     let draft_line = move || {
         draft.with(|d| {
             d.as_ref().map(|d| {
@@ -1185,6 +1279,17 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                         Tab::Channel => view! {
                             <ChannelSearch placeholder="Follow a channel" pick=pick_channel make=make_channel values=values />
                         }.into_any(),
+                        Tab::Audio => view! {
+                            <p class="hint map-help">"A level of the sound: the program mix, a bus or one source. The setting follows its loudness, its peaks, each beat or one band of frequencies."</p>
+                            {move || audio_draft.with(Option::is_none).then(|| view! {
+                                <button type="button" class="secondary map-audio-start" on:click=move |_| pick(audio_reader())>
+                                    "Follow the program mix"
+                                </button>
+                            })}
+                            <div class="map-fields map-audio" class:idle=move || audio_draft.with(Option::is_none)>
+                                <AudioReads kind=audio_draft send=move |k| draft.set(Some(k)) />
+                            </div>
+                        }.into_any(),
                         Tab::Key => view! {
                             <div class="map-key-row">
                                 {move || if capturing.get() {
@@ -1204,18 +1309,24 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                     }}
                 </div>
                 <div class="map-foot">
-                    <p class="map-chosen">
-                        {move || match tab.get() {
-                            Tab::Key => chord.get().map_or("No key yet".to_owned(), |c| format!("Key {}", crate::hotkeys::label(&c))),
-                            _ => draft_line().unwrap_or_else(|| "No source chosen".to_owned()),
-                        }}
-                    </p>
+                    <div class="map-foot-head">
+                        <p class="map-chosen">
+                            {move || match tab.get() {
+                                Tab::Key => chord.get().map_or("No key yet".to_owned(), |c| format!("Key {}", crate::hotkeys::label(&c))),
+                                _ => draft_line().unwrap_or_else(|| "No source chosen".to_owned()),
+                            }}
+                        </p>
+                        {move || (tab.get() != Tab::Key).then(|| view! {
+                            <div class="segmented map-modes" role="radiogroup" aria-label="How it meets the setting">{modes()}</div>
+                        })}
+                    </div>
                     {move || if tab.get() == Tab::Key {
                         view! {
                             <ReaderFields kind=key_reader limits=limits names=("Off", "On")
                                 send=move |k| { if let Some((off, on)) = ends(&k) { key_ends.set((f64::from(off), f64::from(on))); } } />
                         }.into_any()
                     } else {
+                        let limits = shape_of(mode.get()).1;
                         view! { <ReaderFields kind=draft limits=limits send=move |k| draft.set(Some(k)) /> }.into_any()
                     }}
                 </div>
@@ -1243,7 +1354,26 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::{BusId, HotkeyBinding, SourceId};
+    use crate::panels::learn::learn_id;
+    use jstream_control::protocol::{BusId, HotkeyBinding, SourceId, ValueBinding, ValueTarget};
+
+    fn binding_for(
+        target: &ValueTarget,
+        input: MotionKind,
+        amount: Option<String>,
+    ) -> ValueBinding {
+        let edits = MapTarget::Value(target.clone()).set(
+            &Collection::default(),
+            input,
+            amount,
+            MappingMode::Replace,
+            None,
+        );
+        match edits.into_iter().next_back() {
+            Some(Edit::BindingSetValue { binding }) => binding,
+            other => panic!("a binding.set_value, got {other:?}"),
+        }
+    }
 
     fn target() -> ValueTarget {
         ValueTarget::BusGain {
@@ -1285,6 +1415,21 @@ mod tests {
         assert!(same_source(&a, &b));
         assert!(!same_source(&a, &mod_reader(Some("Bitwig"), 4)));
         assert!(!same_source(&a, &mod_reader(None, 3)));
+        // An audio level is one source whatever its floor and its range; another
+        // measure of it is another.
+        let level = audio_reader();
+        let mut quieter = with_ends(audio_reader(), 0.0, 40.0);
+        if let MotionKind::Audio { floor_db, .. } = &mut quieter {
+            *floor_db = Finite32::new(-30.0).unwrap_or(Finite32::ZERO);
+        }
+        assert!(same_source(&level, &quieter));
+        assert_eq!(ends(&quieter), Some((0.0, 40.0)));
+        let mut peak = audio_reader();
+        if let MotionKind::Audio { measure, .. } = &mut peak {
+            *measure = jstream_control::protocol::MotionMeasure::Peak;
+        }
+        assert!(!same_source(&level, &peak));
+        assert_eq!(Tab::of(&level), Tab::Audio);
         let cc = midi_reader(MotionMidiControl::Cc, 7, 1, "Pads");
         assert!(same_source(
             &cc,

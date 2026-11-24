@@ -29,7 +29,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   (`Server::handle`), with `MODERN_VERSION` and `LEGACY_VERSIONS`, the MCP revisions it
   serves. `serverInfo.version` is the workspace release version (`build.rs` reads
   `[workspace.package] version`; this crate stays at `0.0.0`), not `0.0.0` (#1189).
-  Its instructions end with the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
+  Its instructions end with how to run a show (`SHOWS`: the `show` actions, binding
+  `show.continue` and `show.go_to_number` to keys or MIDI, and rehearsing before playing one
+  live), then the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
   an image content block, the only place its PNG appears (`IMAGE_RESULTS`).
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   less the people-only `youtube.*`, `plugin.*`, `effect.*`, `codec.*` and `agent.*` ops
@@ -38,7 +40,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output`, `ptz` and `source`;
   `batch`, which carries their edits, is open-world too; `REVERSIBLE_ACTIONS` names the
   actions that don't make a tool destructive), and the decoding of tool arguments into
-  protocol calls, which refuses an output edit with a `youtube` target, and in `batch` the
+  protocol calls, which refuses an output edit with a `youtube` target, a people-only or
+  deprecated op nested anywhere in the arguments, and in `batch` the
   `OUTPUT_ONLY_EDITS` that can remove a stream key. The tools carry the command unions
   (`SHARED_UNIONS`, `Action` and `Edit`) as stubs, and `Tools::describe` answers
   `describe_api`, whole or for one `name` (#1718).
@@ -98,7 +101,11 @@ or a status line.
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
-target stays open to agents), and the `events` feed drops `youtube.*` and `plugin.*` events. `describe_api` still returns the whole schema, YouTube and plugins included.
+target stays open to agents), and the `events` feed drops `youtube.*` and `plugin.*` events.
+Nor can an agent put one of these ops, or a deprecated one, where a person would run it
+later: a hotkey's or binding's `action`, a timeline's or show's cue, or an edit in
+`batch`. Any object in a tool's arguments whose `type` names such an op is refused with
+`invalid_argument` at its path, before anything is sent (#1758). `describe_api` still returns the whole schema, YouTube and plugins included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
@@ -212,6 +219,14 @@ U1). Tested by `annotations_follow_what_each_tool_can_do`,
 `output_tool_marks_remote_rejection_text`, `capture_tool_marks_window_titles_as_remote_text` and
 `instructions_mark_remote_text_and_tools_carry_annotations`.
 
+Before the design guidance, a paragraph on shows (`SHOWS`,
+[ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)) says what `show.set`
+writes, which `show` actions run a show and where `studio.get` and `show.changed` report
+it, how a person drives one from keys or MIDI (`show.continue`, and `show.go_to_number` 1
+to 8 for a row of pads), that the `overlay` actions work with or without a show, and that
+a show is rehearsed and played live only when the person says so, since playing one
+switches program.
+
 The server instructions end with design guidance (`design.rs`), because an agent that can
 build any graphic still tends to build poor ones: flat full-saturation colours, thin
 type, boxes that don't fit their text. It says what a broadcast designer would: the
@@ -304,7 +319,7 @@ changed together in one batch
 ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
-must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
+must be renamed here too. Both are tested by `instructions_carry_the_design_guidance`.
 
 The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
 `jstream-server` hands this crate answers them

@@ -1817,6 +1817,28 @@ impl Engine {
             .is_some_and(|host| lock(&host.gate).program().is_some())
     }
 
+    /// How many encoder sessions the stage's preview streams hold between them, for
+    /// tests of what they share.
+    #[cfg(test)]
+    pub(crate) fn preview_encodes_open(&self) -> usize {
+        self.media.as_ref().map_or(0, |host| {
+            lock(&host.gate)
+                .program()
+                .map_or(0, |program| program.preview_encodes().open())
+        })
+    }
+
+    /// Each encoder session the stage's preview streams hold, by identity, and the scene
+    /// it shows, for tests of `preview.show`.
+    #[cfg(test)]
+    pub(crate) fn preview_encodes_shown(&self) -> Vec<(u64, Option<SceneId>)> {
+        self.media.as_ref().map_or_else(Vec::new, |host| {
+            lock(&host.gate)
+                .program()
+                .map_or_else(Vec::new, |program| program.preview_encodes().shown())
+        })
+    }
+
     /// Encoder and subscriber counters for `output_id`, if it is running.
     pub fn output_stats_of(&self, output_id: &OutputId) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
@@ -2566,7 +2588,11 @@ impl Engine {
                 },
             })
         } else if let Call::Action {
-            action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
+            action:
+                action @ (Action::PreviewSubscribe { .. }
+                | Action::PreviewUnsubscribe { .. }
+                | Action::PreviewShow { .. }
+                | Action::PreviewRequestKeyframe { .. }),
         } = call
         {
             self.preview_action(previews, action)
@@ -2873,6 +2899,30 @@ impl Engine {
                 }
                 Ok(CallResult::Action { result: None })
             }
+            Action::PreviewShow { channel, scene_id } => {
+                if let Some(scene_id) = &scene_id
+                    && lock(&self.shared.state)
+                        .graph
+                        .state()
+                        .scene(scene_id)
+                        .is_none()
+                {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Scene,
+                        id: scene_id.as_str().to_owned(),
+                    });
+                }
+                if previews.show(&self.shared.previews, channel, scene_id)? {
+                    // Plans the new scene, which the stream waits for, and stops planning
+                    // the old one unless another stream shows it.
+                    self.shared.replan_and_sync();
+                }
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewRequestKeyframe { channel } => {
+                previews.keyframe(&self.shared.previews, channel);
+                Ok(CallResult::Action { result: None })
+            }
             other => Err(not_implemented(other.name())),
         }
     }
@@ -3028,12 +3078,11 @@ impl Engine {
             }
         }
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        // A preview stream's hardware session counts too (#1691): it is one of the
+        // The preview streams' hardware sessions count too (#1691): they are among the
         // sessions a capped encoder has given out.
-        let preview = usize::from(
-            gate.program()
-                .is_some_and(|program| program.preview_hardware().taken()),
-        );
+        let preview = gate
+            .program()
+            .map_or(0, |program| program.preview_hardware().taken());
         let hardware = count(sessions.iter().filter(|e| e.hardware()).count() + preview);
         let encoder = gate
             .running

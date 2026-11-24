@@ -152,7 +152,8 @@ mod backend {
 
     use jstream_platform::{
         Capture, CaptureCursor, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget,
-        CaptureTargetInfo, CursorCapture, DeviceId, GpuContext, PlatformError, VideoSurface,
+        CaptureTargetInfo, CursorCapture, DeviceId, GpuContext, PlatformError, PointerPosition,
+        VideoSurface,
     };
 
     use super::PortalPick;
@@ -161,7 +162,7 @@ mod backend {
     };
     use crate::dbus::bus::{BUS, Bus};
     use crate::dbus::{add_match, match_rule};
-    use crate::pipewire::stream::{Shared, VideoStream};
+    use crate::pipewire::stream::{CursorMetadata, Shared, VideoStream};
     use crate::{PipeWire, Session, SessionKind, gpu};
 
     /// The portal's restore tokens, one per grant: in memory, and in files in a folder
@@ -485,7 +486,9 @@ mod backend {
             } else if options.cursor == CursorCapture::Hidden {
                 h = h.with_cursor_hidden();
             }
-            let cursor_metadata = h.sends_cursor_metadata();
+            // A pointer left out is asked for as metadata where the portal offers it,
+            // and only its position is read; drawn in, the portal says nothing of it.
+            let metadata = CursorMetadata::for_capture(h.sends_cursor_metadata(), options.cursor);
             let (granted, fd) = match run(&mut bus, &mut h) {
                 Ok(done) => done,
                 Err(e) => {
@@ -504,7 +507,7 @@ mod backend {
                 node,
                 Arc::clone(&shared),
                 self.gpu.clone(),
-                cursor_metadata,
+                metadata,
             ) {
                 Ok(v) => v,
                 Err(e) => {
@@ -518,7 +521,7 @@ mod backend {
                 watcher: Some(watcher),
                 shared,
                 pick,
-                cursor: if cursor_metadata {
+                cursor: if metadata == CursorMetadata::Picture {
                     CaptureCursor::Hidden
                 } else {
                     CaptureCursor::NotSent
@@ -692,7 +695,8 @@ mod backend {
         watcher: Option<Watcher>,
         shared: Arc<Shared>,
         pick: PortalPick,
-        /// The pointer as of the last `latest`; `NotSent` without cursor metadata.
+        /// The pointer as of the last `latest`; `NotSent` unless the capture asked for it
+        /// as metadata and the portal sends it.
         cursor: CaptureCursor,
         _pw: PipeWire,
     }
@@ -724,6 +728,15 @@ mod backend {
 
         fn cursor(&self) -> CaptureCursor {
             self.cursor.clone()
+        }
+
+        /// From the cursor metadata, which the portal sends to a capture that asked for
+        /// the pointer as metadata or left out, where it offers that mode. `None` for a
+        /// pointer drawn in (the portal's embedded mode says nothing of where it is),
+        /// without the metadata, before the first buffer that carries it, and while the
+        /// pointer is off the stream: the metadata doesn't say where it is then.
+        fn pointer(&self) -> Option<PointerPosition> {
+            self.shared.pointer.get()
         }
     }
 
@@ -1071,6 +1084,31 @@ mod hw_tests {
                 "this portal doesn't offer cursor metadata"
             );
             assert!(Instant::now() < deadline, "no pointer within 10 s");
+            std::thread::sleep(Duration::from_millis(16));
+        }
+    }
+
+    /// Move the pointer over the picked screen while this runs, on a portal that offers
+    /// the metadata cursor mode: the pointer stays out of the capture, but its position
+    /// is known.
+    #[test]
+    #[ignore = "needs a desktop session with the ScreenCast portal and PipeWire"]
+    fn a_hidden_pointer_still_gives_its_position() {
+        let capture = PortalCapture::new(Session::from_env());
+        let target = CaptureTarget::Display(DeviceId::new("portal:display"));
+        let options = CaptureOptions::default().with_cursor(CursorCapture::Hidden);
+        let mut stream = capture
+            .start_with(&target, &options)
+            .expect("pick a screen in the dialog");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let _ = stream.latest().expect("capturing");
+            assert_eq!(stream.cursor(), CaptureCursor::NotSent, "left out");
+            if let Some(p) = stream.pointer() {
+                assert!(p.x.is_finite() && p.y.is_finite());
+                break;
+            }
+            assert!(Instant::now() < deadline, "no pointer position within 10 s");
             std::thread::sleep(Duration::from_millis(16));
         }
     }

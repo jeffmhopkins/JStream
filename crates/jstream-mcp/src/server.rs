@@ -530,11 +530,30 @@ impl Server {
              `pairing` and `ui_settings`; every other edit, a delete included, is undone with \
              `history`. `openWorldHint` is on \
              `output`, on `ptz`, on `source`, whose `browser` kind loads any http or https page, or \
-             HTML, it is given, and on `batch`, which carries `source` edits.\n\n{DESIGN}",
+             HTML, it is given, and on `batch`, which carries `source` edits.\n\n{SHOWS}\n\n{DESIGN}",
             groups.join(", ")
         )
     }
 }
+
+/// Guidance for running a show (ADR-0210), a paragraph of the server instructions:
+/// what a show is, the actions that run it, how a person drives it from keys and pads,
+/// and that playing one changes program, so it waits for the person's go.
+const SHOWS: &str = "\
+Shows: a show is a running order of scenes on the `show` tool. `show.set` writes the \
+whole show: the program track of scene clips end to end, overlay tracks of scenes drawn \
+over program, a keyframe track, sequence tracks of cues, audio tracks whose clips bring a \
+source up with fades, bookmarks (pausing by default, each with Markdown show notes), loops \
+and what happens at the end. Run it with the `show` actions: `show.play` from its start \
+or a bookmark (`rehearse` runs it on preview and leaves program alone), `show.continue` at \
+each pausing bookmark, `show.pause`, `show.go_to` a bookmark or `show.go_to_number` 1 to 8 \
+by order, `show.back`, `show.skip`, `show.seek`, `show.arm` and `show.stop`. `studio.get`'s \
+`show` says where it is and what is next, and `show.changed` events say what it did. A \
+jump lands what playing there would, without replaying one-off cues. For a person to drive \
+it, bind `show.continue`, and `show.go_to_number` 1 to 8 for a row of pads, to keys \
+(`hotkey.set`) or MIDI (`binding.set`). `overlay.show`, `overlay.hide` and \
+`overlay.toggle` put a scene over program, with or without a show. Playing a show switches \
+program and moves faders, so rehearse it, and play it live only when the person says so.";
 
 /// Runs `future` for at most `limit`: its output, or `None` if the time ran out first
 /// (the future is then dropped). It needs no async runtime: a timer thread, started only

@@ -1,11 +1,15 @@
 //! The parts of the AVFoundation webcam backend that make no system call, so they are
-//! tested on every platform: which formats a camera is listed with, the colour its
-//! frames are labelled with, and which audio input belongs to it.
+//! tested on every platform: which formats a camera is listed with, how a stream's
+//! frames are delivered (NV12 on the CPU path, BGRA on the GPU path) and the colour they
+//! are labelled with, which formats the GPU path opens, and which audio input belongs to
+//! a camera.
 
 use jstream_platform::media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, PixelFormat, Timebase,
 };
 use jstream_platform::{CaptureEncoding, DeviceId, VideoDeviceFormat};
+
+use crate::fourcc::{CV_420V, CV_BGRA};
 
 /// One of a camera's `AVCaptureDeviceFormat`s, as read: its dimensions and the shortest
 /// frame duration of each of its frame-rate ranges (`minFrameDuration`, a `CMTime`).
@@ -86,6 +90,63 @@ pub(crate) fn color(height: u32) -> ColorInfo {
         },
         range: ColorRange::Limited,
     }
+}
+
+/// How an open camera's frames are delivered: what its `AVCaptureVideoDataOutput` asks
+/// AVFoundation for, and how the frames are labelled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Delivery {
+    /// The CPU path: NV12 in video range, copied out of each pixel buffer.
+    Nv12,
+    /// The GPU path (`VideoDevices::on_context`): BGRA pixel buffers, which AVFoundation
+    /// converts the camera's YCbCr to, wrapped as textures over their own IOSurfaces with
+    /// no copy. The engine takes only RGBA and BGRA GPU frames, and wgpu has no NV12
+    /// textures on Metal, so the conversion is AVFoundation's.
+    GpuBgra,
+}
+
+impl Delivery {
+    /// The Core Video pixel format the output asks for (`kCVPixelBufferPixelFormatTypeKey`).
+    pub(crate) fn pixel_format_type(self) -> u32 {
+        match self {
+            Self::Nv12 => CV_420V,
+            Self::GpuBgra => CV_BGRA,
+        }
+    }
+
+    /// The frames' pixel format.
+    pub(crate) fn pixel_format(self) -> PixelFormat {
+        match self {
+            Self::Nv12 => PixelFormat::Nv12,
+            Self::GpuBgra => PixelFormat::Bgra8,
+        }
+    }
+
+    /// The colour frames of `height` lines are labelled with. NV12 is [`color`]'s. BGRA
+    /// is the R'G'B' AVFoundation converts that YCbCr to, with the matrix of the camera's
+    /// own tags or, untagged, the same convention: so the same space, in full range, as
+    /// RGB always is. Its code values keep the camera's transfer (gamma-encoded, close to
+    /// sRGB's), which is why the GPU path's textures are sRGB ones: sampling decodes them
+    /// to linear light, as the CPU path's NV12 is decoded after its conversion.
+    pub(crate) fn color(self, height: u32) -> ColorInfo {
+        let yuv = color(height);
+        match self {
+            Self::Nv12 => yuv,
+            Self::GpuBgra => ColorInfo {
+                space: yuv.space,
+                range: ColorRange::Full,
+            },
+        }
+    }
+}
+
+/// Whether the GPU path opens `format`, on a device whose 2D textures are at most
+/// `max_side` pixels on a side: every format [`formats`] lists, since AVFoundation
+/// converts each to BGRA, that fits in one texture. Nothing else, as on the CPU path.
+pub(crate) fn opens_on_gpu(format: &VideoDeviceFormat, max_side: u32) -> bool {
+    format.encoding == CaptureEncoding::Raw(PixelFormat::Nv12)
+        && format.size.width() <= max_side
+        && format.size.height() <= max_side
 }
 
 /// The audio input that belongs to a camera with `model` (`AVCaptureDevice`'s `modelID`):
@@ -172,6 +233,38 @@ mod tests {
         assert_eq!(color(480).space, ColorSpace::Bt601);
         assert_eq!(color(720).space, ColorSpace::Bt709);
         assert_eq!(color(1080).range, ColorRange::Limited);
+    }
+
+    #[test]
+    fn each_path_asks_for_its_pixel_format_and_labels_its_colour() {
+        assert_eq!(Delivery::Nv12.pixel_format_type(), CV_420V);
+        assert_eq!(Delivery::Nv12.pixel_format(), PixelFormat::Nv12);
+        assert_eq!(Delivery::Nv12.color(1080), color(1080));
+        assert_eq!(Delivery::GpuBgra.pixel_format_type(), CV_BGRA);
+        assert_eq!(Delivery::GpuBgra.pixel_format(), PixelFormat::Bgra8);
+        for height in [480, 720, 1080] {
+            let rgb = Delivery::GpuBgra.color(height);
+            assert_eq!(rgb.space, color(height).space, "{height}");
+            assert_eq!(rgb.range, ColorRange::Full, "{height}");
+        }
+    }
+
+    #[test]
+    fn the_gpu_path_opens_listed_formats_that_fit_a_texture() {
+        let listed = formats(&[raw(1920, 1080, &[(1, 30)]), raw(4096, 2160, &[(1, 30)])]);
+        assert!(opens_on_gpu(&listed[0], 8192));
+        assert!(opens_on_gpu(&listed[1], 4096));
+        assert!(!opens_on_gpu(&listed[1], 2048), "wider than a texture");
+        let mjpeg = VideoDeviceFormat {
+            encoding: CaptureEncoding::Mjpeg,
+            ..listed[0]
+        };
+        assert!(!opens_on_gpu(&mjpeg, 8192));
+        let yuy2 = VideoDeviceFormat {
+            encoding: CaptureEncoding::Yuy2,
+            ..listed[0]
+        };
+        assert!(!opens_on_gpu(&yuy2, 8192));
     }
 
     #[test]

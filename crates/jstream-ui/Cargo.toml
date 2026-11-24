@@ -27,8 +27,9 @@ leptos.workspace = true
 serde_json.workspace = true
 # The browser's storage for the dock, finding where a dragged panel would land, and
 # moving the focus through a right-click menu; the wheel chords' non-passive listener;
-# the lines pasted into a Mod's name box; clearing a stray text selection (`chrome.rs`).
-web-sys = { workspace = true, features = ["AddEventListenerOptions", "ClipboardEvent", "DataTransfer", "Document", "DomRect", "Element", "Event", "HtmlElement", "Node", "NodeList", "Performance", "PointerEvent", "Selection", "Storage", "SvgElement", "WheelEvent", "Window"] }
+# the lines pasted into a Mod's name box; clearing a stray text selection (`chrome.rs`);
+# watching the studio stage's size.
+web-sys = { workspace = true, features = ["AddEventListenerOptions", "ClipboardEvent", "DataTransfer", "Document", "DomRect", "Element", "Event", "HtmlElement", "MouseEvent", "Node", "NodeList", "Performance", "PointerEvent", "ResizeObserver", "Selection", "Storage", "SvgElement", "WheelEvent", "Window"] }
 # Awaits a JavaScript promise: the update check's `fetch`, and the desktop file dialog.
 wasm-bindgen-futures.workspace = true
 

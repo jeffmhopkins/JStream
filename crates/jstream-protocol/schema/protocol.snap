@@ -379,6 +379,57 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Changes what one of this session's open preview streams of the program or of a\nscene shows (since 0.188): `scene_id`'s scene, or the program mix when it is\nomitted. The stream keeps its channel, size, rate and codec, and where nothing\nelse shares its encoder, the encoder itself, so a client's decoder goes on and\na view switching scenes shows the last picture of the old one until the first of\nthe new one, which is a keyframe, with no new stream to open. Pictures of the old\nscene may still arrive before it. Showing what it shows already succeeds and\nchanges nothing. Fails with `invalid_argument` on `channel` for a channel this\nsession doesn't have open or a stream of a source, and with `not_found` for a\n`scene_id` the collection doesn't have.",
+          "properties": {
+            "channel": {
+              "description": "The channel the stream was opened on.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene to show. Omitted for the program mix."
+            },
+            "type": {
+              "const": "preview.show",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Asks one of this session's open preview streams for a keyframe as its next\npicture (since 0.188): a client whose decoder fell behind and dropped pictures\nresumes from it rather than waiting for the stream's next regular keyframe, up to\ntwo seconds later. Succeeds for a channel that is not open.",
+          "properties": {
+            "channel": {
+              "description": "The channel the stream was opened on.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "preview.request_keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
           "properties": {
             "counts": {
@@ -17939,7 +17990,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "paints": {
           "default": 0,
-          "description": "How many times the `jstream-sources` thread painted it: a source that draws its\nown frames as they come due (`waveform`, `spectrum`, `timer`).",
+          "description": "How many times it painted: the `jstream-sources` thread's paints of a source that\ndraws its own frames as they come due (`waveform`, `spectrum`, `timer`), and each\nnew frame a `browser` page painted on the GPU that a plan took (#1556).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -18080,7 +18131,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "StreamProfile": {
-      "description": "One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached\nits encoder, what left it, and what was lost or late on the way.\n\nAn output's frames are its program feed's, from the video encoder to the muxer or\npublish target; a preview stream's go from its encoder to the client's socket. An\nencoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and\n`encode_ms` repeat; what each sends and loses after it is its own.",
+      "description": "One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached\nits encoder, what left it, and what was lost or late on the way.\n\nAn output's frames are its program feed's, from the video encoder to the muxer or\npublish target; a preview stream's go from its encoder to the client's socket. An\nencoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and\n`encode_ms` repeat; what each sends and loses after it is its own. So does one\nthat preview streams of the same picture share.",
       "properties": {
         "dropped": {
           "default": 0,
@@ -20266,5 +20317,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.186"
+  "title": "JStream protocol 0.188"
 }

@@ -384,10 +384,12 @@ impl State {
     /// Stops the running show, if any: the sequences it started stop and its overlays
     /// go, program keeps its scene. Emits `show.changed` with `change`.
     pub(super) fn show_stop(&mut self, change: ShowChange, wake: &mut Vec<Waker>) {
-        let Some(plan) = self.show_plan() else {
-            if let Some(run) = self.show.take() {
-                self.emit_stopped(&run, change, wake);
-            }
+        // A deleted show has no plan in the collection any more: stop it by the plan it
+        // ran, so its overlays and sequences still go.
+        let Some(plan) = self
+            .show_plan()
+            .or_else(|| self.show.as_ref().map(|run| run.plan.clone()))
+        else {
             return;
         };
         let now = self.show_now();
@@ -483,10 +485,21 @@ impl State {
                 return None;
             }
             let at = run.runner.position_ms(now);
-            let current = (0..plan.program.len())
-                .find(|&i| at < plan.program_start(i + 1))
-                .unwrap_or(plan.program.len());
-            plan.program.get(current + 1).map(|clip| clip.scene.clone())
+            let clip_at = |t: u32| {
+                (0..plan.program.len())
+                    .find(|&i| t < plan.program_start(i + 1))
+                    .unwrap_or(plan.program.len())
+            };
+            let current = clip_at(at);
+            // At a loop's last clip, the wrap runs to the clip at the loop's start.
+            let wraps = run.runner.looping().and_then(|(region, _)| {
+                let region = plan.loops.get(region)?;
+                let ends_in_clip = region.to_ms <= plan.program_start(current + 1);
+                (!run.runner.leaving() && ends_in_clip).then(|| clip_at(region.from_ms))
+            });
+            plan.program
+                .get(wraps.unwrap_or(current + 1))
+                .map(|clip| clip.scene.clone())
         });
         let next = next.filter(|scene| self.graph.state().scene(scene).is_some());
         if self.studio.upcoming() != next.as_ref() {
@@ -852,9 +865,8 @@ impl State {
             }
         };
         let made_scene = self.graph.state().show_scene().is_none();
-        if made_scene && !self.graph.set_show_scene(Some(show_scene)) {
-            return None;
-        }
+        // The edits applied either way, so they are logged and announced either way.
+        let marked = !made_scene || self.graph.set_show_scene(Some(show_scene));
         self.history.record_engine(applied.rev, applied.touched);
         let engine = ClientId::new(crate::history::ENGINE_CLIENT);
         self.changed(
@@ -866,7 +878,7 @@ impl State {
             wake,
         );
         self.save_pending = true;
-        Some(item_id)
+        marked.then_some(item_id)
     }
 
     /// The scenes up as overlays now, bottom first, as `studio.get` reports them.

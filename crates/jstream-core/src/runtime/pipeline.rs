@@ -1073,9 +1073,12 @@ pub(crate) struct Program {
     /// render thread once it leaves it (#699), and claimed by each session that opens on
     /// the GPU path until the thread has its tap (#733).
     gpu_gate: Arc<GpuGate>,
-    /// The one hardware encoder session this stage's preview streams may hold, which
-    /// an output takes back when its own open got no hardware encoder.
+    /// The hardware encoder sessions this stage's preview streams may hold (up to
+    /// `PREVIEW_HARDWARE_SESSIONS`), which an output takes back when its own open got no
+    /// hardware encoder.
     preview_hardware: crate::preview::HardwareSlot,
+    /// The encoder sessions this stage's preview streams share, one per picture.
+    preview_encodes: crate::preview::SharedEncodes,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -1107,6 +1110,11 @@ impl Program {
     /// The hardware encoder slot this stage's preview streams share.
     pub(crate) fn preview_hardware(&self) -> &crate::preview::HardwareSlot {
         &self.preview_hardware
+    }
+
+    /// The encoder sessions this stage's preview streams share.
+    pub(crate) fn preview_encodes(&self) -> &crate::preview::SharedEncodes {
+        &self.preview_encodes
     }
 
     /// The encoder sessions for `key`: the open ones, or new ones not yet fed. Call
@@ -1274,6 +1282,7 @@ impl Program {
             probe: Some(Arc::clone(&encoders.probe)),
             local: false,
             targets: std::mem::take(&mut *lock(&encoders.targets)),
+            cut: None,
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
     }
@@ -1284,18 +1293,31 @@ impl Program {
     /// until the session closes. At the stage's size the program is its own frame,
     /// drawn once for every consumer; a scene is drawn once per tick for every stream of
     /// it at that size, after the mixes, and skipped when the tick has no time left.
+    ///
+    /// Returns the tap's cut: set, the thread lets go of the tap before it pushes
+    /// another frame, though the session stays open, so the session can be fed another
+    /// picture by a new tap (`preview.show`).
     pub(crate) fn attach_preview(
         &self,
         size: FrameSize,
         divisor: u32,
         scene: Option<SceneId>,
         input: VideoInput,
-    ) {
-        self.attach_tap(size, divisor, scene, input.into());
+    ) -> Arc<AtomicBool> {
+        let cut = Arc::new(AtomicBool::new(false));
+        self.attach_tap(size, divisor, scene, input.into(), Some(Arc::clone(&cut)));
+        cut
     }
 
     /// Hands the render thread a preview stream's tap of the program or `scene`.
-    fn attach_tap(&self, size: FrameSize, divisor: u32, scene: Option<SceneId>, input: TapInput) {
+    fn attach_tap(
+        &self,
+        size: FrameSize,
+        divisor: u32,
+        scene: Option<SceneId>,
+        input: TapInput,
+        cut: Option<Arc<AtomicBool>>,
+    ) {
         let feed = Feed {
             mix: None,
             size,
@@ -1310,6 +1332,7 @@ impl Program {
             probe: None,
             local: true,
             targets: Vec::new(),
+            cut,
         };
         let _ = self.video_taps.send((feed, tap));
     }
@@ -1325,7 +1348,7 @@ impl Program {
         scene: Option<SceneId>,
         pictures: PictureInput,
     ) {
-        self.attach_tap(size, divisor, scene, TapInput::Pictures(pictures));
+        self.attach_tap(size, divisor, scene, TapInput::Pictures(pictures), None);
     }
 
     /// The size the stage composites the program at: the canvas when it opened.
@@ -2567,11 +2590,8 @@ impl Nv12Passes {
             found => {
                 // In the target's own colour: the platform's is the engine's default,
                 // BT.709 limited range.
-                let pass = converter.bind(
-                    output,
-                    &Nv12Target::nv12_texture(frame.texture())?,
-                    frame.info().color,
-                )?;
+                let pass =
+                    converter.bind(output, &Nv12Target::gpu_frame(frame)?, frame.info().color)?;
                 let entry = (Arc::downgrade(sync), output.clone(), pass);
                 match found {
                     Some(at) => {
@@ -2925,6 +2945,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         format,
         latency,
         preview_hardware: crate::preview::HardwareSlot::default(),
+        preview_encodes: crate::preview::SharedEncodes::default(),
         video_taps,
         audio_taps,
         vcam_taps,
@@ -3539,12 +3560,22 @@ pub(crate) struct VideoTap {
     /// render thread does not stall on them (#1689): they become its mix's ring when
     /// that has none yet ([`Frames::add`]). Empty for any other tap.
     targets: Vec<GpuFrame>,
+    /// A preview's tap whose session moved to another picture once this is set
+    /// ([`Program::attach_preview`]): it takes no more frames, and goes.
+    cut: Option<Arc<AtomicBool>>,
 }
 
 impl VideoTap {
     /// Whether a probe is armed on the session, so its frames are copied.
     fn probed(&self) -> bool {
         self.probe.as_ref().is_some_and(|probe| probe.armed())
+    }
+
+    /// Whether its session moved to another picture, so it takes no more frames.
+    fn is_cut(&self) -> bool {
+        self.cut
+            .as_ref()
+            .is_some_and(|cut| cut.load(Ordering::Acquire))
     }
 }
 
@@ -3887,6 +3918,14 @@ impl Frames {
     /// Stops drawing the mixes that feed no session any more, handing their buffers to
     /// `free` so the render thread frees nothing (R-RT-003).
     fn prune(&mut self, mut free: impl FnMut(Garbage)) {
+        // A tap whose session moved to another picture goes even if its mix isn't due.
+        for targets in &mut self.targets {
+            if targets.iter().any(VideoTap::is_cut) {
+                free(Garbage::Inputs(
+                    targets.extract_if(.., |tap| tap.is_cut()).collect(),
+                ));
+            }
+        }
         let mut at = 0;
         while at < self.targets.len() {
             let held = self.holds(&self.mixes[at], self.mixes[at].size);
@@ -4590,6 +4629,9 @@ fn render_loop(job: RenderJob) {
                 push_each(
                     targets,
                     |tap| {
+                        if tap.is_cut() {
+                            return false;
+                        }
                         // A probe's reference: the frame a CPU session is pushed, or
                         // for a GPU one the frame newly read back, at the time it was
                         // drawn for, which the GPU frame of that draw went out with.
@@ -6169,6 +6211,7 @@ mod tests {
             probe: None,
             local: false,
             targets: Vec::new(),
+            cut: None,
         }
     }
 
@@ -6348,6 +6391,53 @@ mod tests {
         assert_eq!(frames.shown.len(), 1);
     }
 
+    /// A preview's tap whose session moved to another picture (`preview.show`) goes at
+    /// the next prune, though its mix isn't due and its session is open; the mix it
+    /// leaves with no session stops being drawn, and the tap of the new picture stays.
+    #[test]
+    fn a_cut_preview_tap_goes_and_its_new_tap_stays() {
+        use crate::runtime::render::Garbage;
+        use jstream_protocol::SceneId;
+        let size = FrameSize::new(64, 36).expect("size");
+        let feed = |scene: Option<&str>| Feed {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            scene: scene.map(SceneId::new),
+        };
+        let mut frames = no_frames();
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            None,
+            &feed(None),
+            &EncoderProfile::DEFAULT,
+            FRAME_DEN,
+        )
+        .expect("fake session");
+        let tap = |cut: &Arc<AtomicBool>| VideoTap {
+            local: true,
+            cut: Some(Arc::clone(cut)),
+            ..cpu_tap(session.input())
+        };
+        let old = Arc::new(AtomicBool::new(false));
+        frames.add(feed(Some("a")), tap(&old), drop);
+        let mut freed = 0;
+        frames.prune(|_| freed += 1);
+        assert_eq!((freed, frames.mixes.len()), (0, 1), "an uncut tap stays");
+
+        old.store(true, Ordering::Release);
+        let new = Arc::new(AtomicBool::new(false));
+        frames.add(feed(Some("b")), tap(&new), drop);
+        let mut inputs = 0;
+        frames.prune(|garbage| inputs += usize::from(matches!(garbage, Garbage::Inputs(_))));
+        assert!(inputs >= 1, "the cut tap went to the collector");
+        assert_eq!(frames.mixes.len(), 1, "the old scene's mix stopped");
+        assert_eq!(frames.mixes[0].scene, Some(SceneId::new("b")));
+        assert_eq!(frames.targets[0].len(), 1);
+        assert!(!frames.targets[0][0].is_cut());
+    }
+
     /// An output with its own video chain gets its own drawn frame even when another
     /// session shows the same mix at the same size and rate (ADR-0080 §3).
     #[test]
@@ -6414,6 +6504,7 @@ mod tests {
                 probe: None,
                 local: false,
                 targets: Vec::new(),
+                cut: None,
             },
             drop,
         );
@@ -6462,6 +6553,7 @@ mod tests {
                 probe: None,
                 local: false,
                 targets: Vec::new(),
+                cut: None,
             },
             drop,
         );

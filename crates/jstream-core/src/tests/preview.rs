@@ -17,6 +17,7 @@ use jstream_protocol::{
     Query, QueryResult, Rev, SceneId, Settings, SourceId, SourceKind, WireError,
 };
 use jstream_sources::{CaptureSpec, DeviceFormatWant};
+use std::collections::BTreeMap;
 use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
@@ -1180,6 +1181,115 @@ fn the_program_stage_draws_an_h264_scene_stream() {
     pump.join().expect("pump");
 }
 
+/// Streams that show the same picture, the same scene or the program at one size and
+/// rate, share one encoder session: three views of the program and one of a scene are
+/// two encodes, not four. Each stream starts on a keyframe of its own asking, keeps its
+/// own times, and goes on when the stream that opened the session leaves.
+#[test]
+fn streams_of_the_same_picture_share_one_encoder_session() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        // A preview thread that drew would fail the stream.
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    };
+    // Reads until each of `channels` has sent `each` more pictures, checking that
+    // none ended and that each channel's times go forward.
+    let mut last_pts: BTreeMap<u32, i64> = BTreeMap::new();
+    let mut read = |frames: &mut BinaryStream, channels: &[u32], each: usize| {
+        let mut got: BTreeMap<u32, Vec<BinaryFrame>> = BTreeMap::new();
+        let deadline = Instant::now() + WAIT;
+        while channels
+            .iter()
+            .any(|channel| got.get(channel).map_or(0, Vec::len) < each)
+        {
+            assert!(Instant::now() < deadline, "pictures missing: {got:?}");
+            let picture = frame(frames);
+            assert!(!picture.header.end, "a stream ended: {picture:?}");
+            let channel = picture.header.channel;
+            if let Some(before) = last_pts.insert(channel, picture.header.pts_us) {
+                assert!(
+                    before < picture.header.pts_us,
+                    "channel {channel} went back"
+                );
+            }
+            got.entry(channel).or_default().push(picture);
+        }
+        got
+    };
+
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("the first view");
+    let got = read(&mut frames, &[1], 2);
+    assert!(got[&1][0].header.keyframe);
+    assert_eq!(engine.preview_encodes_open(), 1);
+
+    // Two more views of the program and one of a scene, while the first is mid-stream.
+    act(&control, subscribe(2, Some(30), Vec::new())).expect("a second view");
+    act(&control, subscribe(3, Some(30), Vec::new())).expect("a third view");
+    act(&control, subscribe_scene(4, "other")).expect("a scene's view");
+    let got = read(&mut frames, &[1, 2, 3, 4], 3);
+    for channel in [2, 3, 4] {
+        let first = &got[&channel][0].header;
+        assert!(first.keyframe, "channel {channel} starts on a keyframe");
+        assert_eq!(first.codec, Some(PreviewCodec::H264));
+        assert_eq!((first.width, first.height), (640, 360));
+    }
+    assert_eq!(
+        engine.preview_encodes_open(),
+        2,
+        "one session for the program's three views, one for the scene's"
+    );
+
+    // The stream that opened the program's session leaves: the others keep it.
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 1 },
+        },
+    )
+    .expect("unsubscribed");
+    // Whatever channel 1 had queued is read past.
+    read(&mut frames, &[2, 3], 6);
+    assert_eq!(engine.preview_encodes_open(), 2);
+
+    // A view at another rate is another picture, so another session.
+    act(&control, subscribe(5, Some(15), Vec::new())).expect("a slower view");
+    let got = read(&mut frames, &[5], 2);
+    assert!(got[&5][0].header.keyframe);
+    assert_eq!(engine.preview_encodes_open(), 3);
+
+    for channel in [2, 3, 4, 5] {
+        act(
+            &control,
+            Call::Action {
+                action: Action::PreviewUnsubscribe { channel },
+            },
+        )
+        .expect("unsubscribed");
+    }
+    let deadline = Instant::now() + WAIT;
+    while engine.stage_running() {
+        assert!(Instant::now() < deadline, "the stage outlives the streams");
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(ticking);
+    pump.join().expect("pump");
+}
+
 /// JPEG and PNG streams of the program and of a scene are drawn by the program stage
 /// too (ADR-0117 §6): the stage reads each back, and the stream's own thread encodes
 /// it, so the preview thread draws nothing.
@@ -1305,4 +1415,206 @@ fn a_staged_picture_stream_answers_a_keyframe_request_at_once() {
     assert!(again.header.pts_us > first.header.pts_us);
     drop(ticking);
     pump.join().expect("pump");
+}
+
+fn show(channel: u32, scene: Option<&str>) -> Call {
+    Call::Action {
+        action: Action::PreviewShow {
+            channel,
+            scene_id: scene.map(SceneId::new),
+        },
+    }
+}
+
+/// Waits until the stage's preview sessions are `want`, as (session, scene) with the
+/// sessions numbered in the order `ids` first saw them, reading `frames` meanwhile so the
+/// streams never stall.
+fn until_encodes(engine: &Engine, frames: &mut BinaryStream, want: &[Option<&str>]) -> Vec<u64> {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let shown = engine.preview_encodes_shown();
+        let mut scenes: Vec<Option<String>> = shown
+            .iter()
+            .map(|(_, scene)| scene.as_ref().map(|s| s.as_str().to_owned()))
+            .collect();
+        scenes.sort();
+        let mut wanted: Vec<Option<String>> = want.iter().map(|s| s.map(str::to_owned)).collect();
+        wanted.sort();
+        if scenes == wanted {
+            return shown.into_iter().map(|(id, _)| id).collect();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the sessions show {scenes:?}, not {wanted:?}"
+        );
+        let _ = next(frames, Duration::from_millis(20));
+    }
+}
+
+/// `preview.show` moves an open stream to another scene and back to the program on the
+/// same channel: a stream that has its encoder session alone keeps it (no new session
+/// opens, which is what makes a view's scene switch seamless), its next picture is a
+/// keyframe, its times go on forward and it never ends. A stream whose new picture
+/// another stream already encodes joins that session instead.
+#[test]
+fn preview_show_moves_a_stream_to_another_scene_on_its_encoder() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        // A preview thread that drew would fail the stream.
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    };
+    let mut last_pts = i64::MIN;
+    // The next keyframe on `channel` within the wait, checking that nothing ended and
+    // the times go forward.
+    let mut keyframe = |frames: &mut BinaryStream, channel: u32| {
+        let deadline = Instant::now() + KEYFRAME_EVERY / 2;
+        loop {
+            assert!(
+                Instant::now() < deadline,
+                "no keyframe on channel {channel}"
+            );
+            let picture = frame(frames);
+            assert!(!picture.header.end, "a stream ended: {picture:?}");
+            if picture.header.channel != channel {
+                continue;
+            }
+            assert!(picture.header.pts_us > last_pts, "the times went back");
+            last_pts = picture.header.pts_us;
+            if picture.header.keyframe {
+                return picture;
+            }
+        }
+    };
+
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("subscribed");
+    keyframe(&mut frames, 1);
+    let program = until_encodes(&engine, &mut frames, &[None]);
+
+    // To a scene: the same session, now showing it.
+    act(&control, show(1, Some("other"))).expect("shown");
+    let moved = until_encodes(&engine, &mut frames, &[Some("other")]);
+    assert_eq!(moved, program, "the stream kept its encoder session");
+    let first = keyframe(&mut frames, 1);
+    assert_eq!(first.header.codec, Some(PreviewCodec::H264));
+    // Showing what it shows changes nothing.
+    act(&control, show(1, Some("other"))).expect("shown again");
+
+    // Back to the program, still on the same session.
+    act(&control, show(1, None)).expect("program");
+    let back = until_encodes(&engine, &mut frames, &[None]);
+    assert_eq!(back, program, "the stream kept its encoder session");
+    keyframe(&mut frames, 1);
+
+    // A second view of the scene has its own session; the first view moving to that
+    // scene joins it, and the program's session closes.
+    act(&control, subscribe_scene(2, "other")).expect("a scene's view");
+    until_encodes(&engine, &mut frames, &[None, Some("other")]);
+    act(&control, show(1, Some("other"))).expect("joins");
+    until_encodes(&engine, &mut frames, &[Some("other")]);
+    keyframe(&mut frames, 1);
+
+    for channel in [1, 2] {
+        act(
+            &control,
+            Call::Action {
+                action: Action::PreviewUnsubscribe { channel },
+            },
+        )
+        .expect("unsubscribed");
+    }
+    let deadline = Instant::now() + WAIT;
+    while engine.stage_running() {
+        assert!(Instant::now() < deadline, "the stage outlives the streams");
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(ticking);
+    pump.join().expect("pump");
+}
+
+/// On the preview thread's own streams (an engine without a program stage), a
+/// stream shown another scene goes on, its next picture a keyframe.
+#[test]
+fn preview_show_moves_a_hub_stream_to_another_scene() {
+    let engine = with_h264();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("subscribed");
+    let first = frame(&mut frames);
+    assert!(first.header.keyframe);
+    // Until the picture holds still.
+    while let Next::Frame(later) = next(&mut frames, Duration::from_millis(300)) {
+        assert!(!later.header.end);
+    }
+    act(&control, show(1, Some("other"))).expect("shown");
+    let asked = Instant::now();
+    let again = frame(&mut frames);
+    assert!(asked.elapsed() < KEYFRAME_EVERY / 2);
+    assert_eq!(again.header.channel, 1);
+    assert!(again.header.keyframe && !again.header.end);
+    assert!(again.header.pts_us > first.header.pts_us);
+}
+
+/// `preview.request_keyframe` gets a still stream a keyframe at once, rather than at its next
+/// regular one, and succeeds for a channel not open.
+#[test]
+fn preview_keyframe_asks_for_a_keyframe_at_once() {
+    let engine = with_h264();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    act(&control, subscribe(3, Some(30), Vec::new())).expect("subscribed");
+    let first = frame(&mut frames);
+    while let Next::Frame(later) = next(&mut frames, Duration::from_millis(300)) {
+        assert!(!later.header.end);
+    }
+    let keyframe = |channel| Call::Action {
+        action: Action::PreviewRequestKeyframe { channel },
+    };
+    act(&control, keyframe(3)).expect("asked");
+    let asked = Instant::now();
+    let again = frame(&mut frames);
+    assert!(asked.elapsed() < KEYFRAME_EVERY / 2);
+    assert!(again.header.keyframe && !again.header.end);
+    assert!(again.header.pts_us > first.header.pts_us);
+    act(&control, keyframe(9)).expect("not open succeeds");
+}
+
+/// `preview.show` names what it can't do: a channel not open, a scene the collection
+/// doesn't have, and a stream of a source.
+#[test]
+fn preview_show_is_checked() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let _frames = control.binary();
+    batch(&control, edits(vec![create("main"), webcam()])).expect("scene");
+    let field = |error: ControlError| match error {
+        ControlError::Protocol(WireError {
+            error: ProtocolError::InvalidArgument { field, .. },
+            ..
+        }) => field,
+        other => panic!("expected invalid_argument, got {other:?}"),
+    };
+    let closed = act(&control, show(1, None)).expect_err("not open");
+    assert_eq!(field(closed), "channel");
+    act(&control, subscribe(1, Some(1), Vec::new())).expect("subscribed");
+    let missing = act(&control, show(1, Some("nope"))).expect_err("no such scene");
+    assert_eq!(code(&missing), Some("not_found"));
+    act(&control, subscribe_source(2, "webcam")).expect("a source's stream");
+    let source = act(&control, show(2, Some("main"))).expect_err("a source's stream");
+    assert_eq!(field(source), "channel");
 }

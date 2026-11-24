@@ -1,7 +1,7 @@
 // The browser's own behaviour kept off the chrome (chrome.rs): a right-click that no
 // element answers with a menu is swallowed, a text field keeps the browser's text menu
 // even inside a panel that has one, a click or a drag across panels selects no text while
-// a text field still selects, and the header's dropdowns hang flush under the bar.
+// a text field still selects, and the header's dropdowns drop straight from their buttons.
 import { test, expect, connect } from '../fixtures.js';
 
 /** Right-clicks `locator` at its centre with a cancelable event; whether the browser's
@@ -47,6 +47,14 @@ test('a right-click on the chrome never reaches the browser, and a text field ke
   const dialog = page.getByRole('dialog', { name: 'Connection details' });
   expect(await swallowed(dialog.locator('.modal-header'))).toBe(true);
   expect(await swallowed(dialog.locator('dl.connection dd').first())).toBe(false);
+  await page.keyboard.press('Escape');
+
+  // About's version and links keep the browser's menu (Copy, Copy link).
+  await page.locator('header.app-header .top-menu[data-menu="help"] > .menu-button').click();
+  await page.getByRole('menuitem', { name: /About/ }).click();
+  const about = page.getByRole('dialog', { name: 'About JStream' });
+  expect(await swallowed(about.locator('dl.about-facts dd').first())).toBe(false);
+  expect(await swallowed(about.locator('a[href]').first())).toBe(false);
 });
 
 test('a drag across panels or a double-click selects no text, but a text field still does', async ({ page, daemon }) => {
@@ -74,13 +82,21 @@ test('a drag across panels or a double-click selects no text, but a text field s
   await search.fill('');
 });
 
-test('the header dropdowns hang flush under the bar', async ({ page, daemon }) => {
+test('the header dropdowns drop straight from their button, joined to it', async ({ page, daemon }) => {
   await connect(page, daemon);
-  const bar = await page.locator('header.app-header').boundingBox();
   for (const name of ['file', 'edit', 'view']) {
-    await page.locator(`header.app-header .top-menu[data-menu="${name}"] > .menu-button`).click();
+    const button = page.locator(`header.app-header .top-menu[data-menu="${name}"] > .menu-button`);
+    await button.click();
+    const foot = await button.boundingBox();
     const dropdown = await page.locator(`header.app-header .top-menu[data-menu="${name}"] .dropdown`).boundingBox();
-    expect(Math.abs(dropdown.y - (bar.y + bar.height))).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(dropdown.y - (foot.y + foot.height))).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(dropdown.x - foot.x)).toBeLessThanOrEqual(0.5);
+    // The open button is the dropdown's colour, so the two read as one shape.
+    const colours = await page.locator(`header.app-header .top-menu[data-menu="${name}"]`).evaluate((menu) => [
+      getComputedStyle(menu.querySelector('.menu-button')).backgroundColor,
+      getComputedStyle(menu.querySelector('.dropdown')).backgroundColor,
+    ]);
+    expect(colours[0]).toBe(colours[1]);
     await page.keyboard.press('Escape');
   }
 });
