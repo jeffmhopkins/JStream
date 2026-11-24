@@ -146,3 +146,39 @@ fn the_reflection_steps_are_one_of_the_counts() {
     );
     assert_eq!(rendering(&control), Some(set_to), "nothing changed");
 }
+
+/// How many pixels 3D models are drawn with (ADR-0197) is the engine's choice, 0, or one
+/// of the sizes: another is refused and changes nothing.
+#[test]
+fn the_model_resolution_is_the_engines_choice_or_one_of_the_sizes() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    assert_eq!(
+        rendering(&control).map(|now| now.model_resolution),
+        Some(0),
+        "the engine chooses until it is set"
+    );
+    set(
+        &control,
+        RenderFeaturesChange {
+            model_resolution: Some(75),
+            ..RenderFeaturesChange::default()
+        },
+    );
+    let set_to = rendering(&control).expect("reported");
+    assert_eq!(set_to.model_resolution, 75);
+    let refused = block_on(control.call(Call::Action {
+        action: Action::StudioSetRendering {
+            change: RenderFeaturesChange {
+                model_resolution: Some(80),
+                shadows: Some(false),
+                ..RenderFeaturesChange::default()
+            },
+        },
+    }));
+    assert!(
+        matches!(&refused, Err(error) if error.to_string().contains("model_resolution")),
+        "{refused:?}"
+    );
+    assert_eq!(rendering(&control), Some(set_to), "nothing changed");
+}

@@ -92,13 +92,14 @@ pub(crate) fn cursor_mode_for_cpu_frames(available: CursorModes) -> CursorModes 
 }
 
 /// The cursor mode to ask for when the pointer is to be left out
-/// ([`CursorCapture::Hidden`](jstream_platform::CursorCapture::Hidden)): hidden where the
-/// portal offers it, else as metadata, which the stream then doesn't ask PipeWire for,
-/// else drawn in, the one mode left.
+/// ([`CursorCapture::Hidden`](jstream_platform::CursorCapture::Hidden)): as metadata
+/// where the portal offers it, which leaves it out of the frames too and tells the stream
+/// where it is (only its position is read, never its picture), else hidden, else drawn
+/// in, the one mode left.
 pub(crate) fn cursor_mode_for_hidden(available: CursorModes) -> CursorModes {
     [
-        CursorModes::HIDDEN,
         CursorModes::METADATA,
+        CursorModes::HIDDEN,
         CursorModes::EMBEDDED,
     ]
     .into_iter()
@@ -237,8 +238,8 @@ impl Handshake {
         })
     }
 
-    /// This handshake asking for the pointer to be left out, in the first mode the
-    /// portal offers that does ([`cursor_mode_for_hidden`]).
+    /// This handshake asking for the pointer to be left out of the frames, in the first
+    /// mode the portal offers that does ([`cursor_mode_for_hidden`]).
     pub(crate) fn with_cursor_hidden(mut self) -> Self {
         self.cursor_hidden = true;
         self
@@ -251,12 +252,29 @@ impl Handshake {
         self
     }
 
-    /// Whether `SelectSources` asks for the pointer as metadata: it was wanted, and the
-    /// portal (version 2 or later) offers the mode.
+    /// The `cursor_mode` `SelectSources` asks for: metadata where it was wanted and the
+    /// portal offers it, else the mode for a pointer left out or drawn in. `None` before
+    /// version 2, which has no cursor modes.
+    pub(crate) fn cursor_mode(&self) -> Option<CursorModes> {
+        if self.info.version < CURSOR_VERSION {
+            return None;
+        }
+        let available = self.info.cursor_modes;
+        Some(
+            if self.cursor_metadata && available.0 & CursorModes::METADATA.0 != 0 {
+                CursorModes::METADATA
+            } else if self.cursor_hidden {
+                cursor_mode_for_hidden(available)
+            } else {
+                cursor_mode_for_cpu_frames(available)
+            },
+        )
+    }
+
+    /// Whether `SelectSources` asks for the pointer as metadata, so the stream's buffers
+    /// carry it: wanted as metadata, or to be left out, and offered by the portal.
     pub(crate) fn sends_cursor_metadata(&self) -> bool {
-        self.cursor_metadata
-            && self.info.version >= CURSOR_VERSION
-            && self.info.cursor_modes.0 & CursorModes::METADATA.0 != 0
+        self.cursor_mode() == Some(CursorModes::METADATA)
     }
 
     /// The session's path, once `CreateSession` has answered, so a failed handshake can
@@ -312,14 +330,7 @@ impl Handshake {
                     ("types", Value::U32(self.pick.source_types().0)),
                     ("multiple", Value::Bool(false)),
                 ];
-                if self.info.version >= CURSOR_VERSION {
-                    let mode = if self.sends_cursor_metadata() {
-                        CursorModes::METADATA
-                    } else if self.cursor_hidden {
-                        cursor_mode_for_hidden(self.info.cursor_modes)
-                    } else {
-                        cursor_mode_for_cpu_frames(self.info.cursor_modes)
-                    };
+                if let Some(mode) = self.cursor_mode() {
                     options.push(("cursor_mode", Value::U32(mode.0)));
                 }
                 if self.info.version >= PERSIST_VERSION {
@@ -783,6 +794,19 @@ mod tests {
         let mut hidden = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None)
             .expect("new")
             .with_cursor_hidden();
+        assert!(
+            hidden.sends_cursor_metadata(),
+            "left out of the frames, read for its position"
+        );
+        assert_eq!(cursor_mode(&mut hidden), Some(Value::U32(4)), "metadata");
+
+        let hidden_only = PortalInfo {
+            cursor_modes: CursorModes(3),
+            ..info(5)
+        };
+        let mut hidden = Handshake::new(PortalPick::Display, hidden_only, ME, PORTAL, None)
+            .expect("new")
+            .with_cursor_hidden();
         assert!(!hidden.sends_cursor_metadata(), "no metadata to read");
         assert_eq!(cursor_mode(&mut hidden), Some(Value::U32(1)), "left out");
     }
@@ -880,11 +904,15 @@ mod tests {
             cursor_mode_for_cpu_frames(CursorModes(7)),
             CursorModes::EMBEDDED
         );
-        assert_eq!(cursor_mode_for_hidden(CursorModes(7)), CursorModes::HIDDEN);
+        assert_eq!(
+            cursor_mode_for_hidden(CursorModes(7)),
+            CursorModes::METADATA,
+            "metadata leaves it out too, and says where it is"
+        );
+        assert_eq!(cursor_mode_for_hidden(CursorModes(3)), CursorModes::HIDDEN);
         assert_eq!(
             cursor_mode_for_hidden(CursorModes(6)),
-            CursorModes::METADATA,
-            "metadata the stream doesn't read leaves it out too"
+            CursorModes::METADATA
         );
         assert_eq!(
             cursor_mode_for_hidden(CursorModes(2)),

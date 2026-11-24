@@ -12,7 +12,7 @@
 use crate::app::SessionContext;
 use crate::canvas::Canvas;
 use crate::canvas::monitor::ProgramMonitor;
-use crate::dock::{Dock, PanelId, Target, Zone};
+use crate::dock::{Dock, Edge, PanelId, Target, Zone};
 use crate::icons::Icon;
 use crate::panels::mixer::MixerFlip;
 use crate::panels::{
@@ -235,6 +235,9 @@ fn panel_view(panel: PanelId) -> AnyView {
         PanelId::Agent => view! { <AgentActivity /> }.into_any(),
         PanelId::Channels => view! { <crate::panels::channels::Channels /> }.into_any(),
         PanelId::Sequence => view! { <crate::panels::sequence::Sequence /> }.into_any(),
+        PanelId::Mappings => view! { <crate::panels::mappings::Mappings /> }.into_any(),
+        PanelId::Ptz => view! { <crate::panels::ptz::Ptz /> }.into_any(),
+        PanelId::Show => view! { <crate::panels::show::Show /> }.into_any(),
     }
 }
 
@@ -287,10 +290,7 @@ fn target_at(x: f64, y: f64) -> Option<Target> {
         }
         "zone" => {
             let key = area.get_attribute("data-zone")?;
-            Zone::ALL
-                .into_iter()
-                .find(|zone| zone.key() == key)
-                .map(Target::End)
+            Zone::from_key(&key).map(Target::End)
         }
         _ => None,
     }
@@ -327,11 +327,66 @@ pub fn Workspace() -> impl IntoView {
     // studio controls between them; the canvas re-fits to its half.
     let studio = expect_context::<Studio>();
     let studio_mode = move || studio.studio_mode.get();
+    // A portrait canvas stacks them instead (preview over the controls over program)
+    // when that shows both pictures larger, in a stage much taller than wide. The stage
+    // is measured at each resize, which every dock and studio change also sends
+    // (`nudge_canvas`), and whenever the row itself changes size.
+    let stage_row = NodeRef::<html::Div>::new();
+    let stage = RwSignal::new((0.0_f64, 0.0_f64));
+    let measure = move || {
+        if let Some(row) = stage_row.get_untracked() {
+            let size = (
+                f64::from(row.client_width()),
+                f64::from(row.client_height()),
+            );
+            if stage.get_untracked() != size {
+                stage.set(size);
+            }
+        }
+    };
+    let resized = window_event_listener(leptos::ev::resize, move |_| measure());
+    // The row itself too, so a change no `resize` follows (a band collapsing, a panel
+    // growing) still re-decides.
+    let observer = StoredValue::new_local(None::<web_sys::ResizeObserver>);
+    Effect::new(move |_| {
+        use leptos::wasm_bindgen::{JsCast, closure::Closure};
+        let Some(row) = stage_row.get() else {
+            return;
+        };
+        let callback = Closure::<dyn FnMut()>::new(measure).into_js_value();
+        if let Ok(watch) = web_sys::ResizeObserver::new(callback.unchecked_ref()) {
+            watch.observe(&row);
+            if let Some(old) = observer.get_value() {
+                old.disconnect();
+            }
+            observer.set_value(Some(watch));
+        }
+    });
+    on_cleanup(move || {
+        resized.remove();
+        if let Some(watch) = observer.try_get_value().flatten() {
+            watch.disconnect();
+        }
+    });
+    let stacked = Memo::new(move |_| {
+        let stage = stage.get();
+        studio
+            .collection
+            .with(|c| c.as_ref().is_some_and(|c| stacks(c.canvas, stage)))
+    });
     Effect::new(move |_| {
         studio.studio_mode.track();
+        stacked.track();
         nudge_canvas();
     });
     share(dock);
+    // The Show panel's Next monitor sits beside the canvas while its show runs in the Run
+    // view, unless studio mode already puts a monitor there.
+    let next_monitor = crate::panels::show::next_monitor_shown(studio);
+    Effect::new(move |_| {
+        next_monitor.track();
+        nudge_canvas();
+    });
 
     let end_drag = move |drop: bool| {
         let panel = ui.dragging.get_untracked();
@@ -380,22 +435,26 @@ pub fn Workspace() -> impl IntoView {
     });
 
     let zone = move |zone: Zone| view! { <ZoneView ui=ui zone=zone /> };
+    let edge = move |edge: Edge| view! { <EdgeView ui=ui edge=edge /> };
     view! {
         <div class="workspace" class:dragging=move || ui.dragging.get().is_some()>
-            {zone(Zone::OuterLeft)}
+            {edge(Edge::OuterLeft)}
             <div class="ws-middle">
-                {zone(Zone::Top)}
+                {edge(Edge::Top)}
                 <div class="ws-row">
                     {zone(Zone::Left)}
                     <div class="ws-centre">
                         {zone(Zone::CanvasTop)}
-                        <div class="stage-row" class:two-up=studio_mode>
+                        <div class="stage-row" node_ref=stage_row class:two-up=move || studio_mode() || next_monitor.get().is_some() class:stacked=move || stacked.get()>
                             <div class="stage-pane">
                                 <Show when=studio_mode>
                                     <StageLabel side=Side::Preview />
                                 </Show>
                                 <section class="region canvas" aria-label="Canvas"><Canvas /></section>
                             </div>
+                            <Show when=move || next_monitor.get().is_some()>
+                                <crate::panels::show::NextPane />
+                            </Show>
                             <Show when=studio_mode>
                                 <StudioControls />
                                 <div class="stage-pane">
@@ -410,11 +469,68 @@ pub fn Workspace() -> impl IntoView {
                     </div>
                     {zone(Zone::Right)}
                 </div>
-                {zone(Zone::Bottom)}
+                {edge(Edge::Bottom)}
             </div>
-            {zone(Zone::OuterRight)}
+            {edge(Edge::OuterRight)}
         </div>
     }
+}
+
+/// An outer edge's bands, from the canvas outwards, and past the last one, while a panel
+/// is dragged, the place to drop it in a new band. An edge whose only band is empty
+/// offers that band instead.
+#[component]
+fn EdgeView(ui: Ui, edge: Edge) -> impl IntoView {
+    let dock = ui.dock;
+    let bands = Memo::new(move |_| {
+        dock.with(|d| {
+            let n = d.bands(edge);
+            let last_used = !d.groups(edge.zone(n - 1)).is_empty();
+            let shown = if last_used { n + 1 } else { n };
+            let mut bands: Vec<usize> = (0..shown).collect();
+            if edge.outermost_first() {
+                bands.reverse();
+            }
+            bands
+        })
+    });
+    view! {
+        <For each=move || bands.get() key=|band| *band let:band>
+            <ZoneView ui=ui zone=edge.zone(band) />
+        </For>
+    }
+}
+
+/// The studio controls' width between preview and program side by side (style.css).
+const SIDE_CONTROLS: f64 = 168.0;
+/// Their height as one row between stacked pictures, about.
+const STACKED_CONTROLS: f64 = 64.0;
+/// A picture's label over it.
+const LABEL: f64 = 24.0;
+/// The margin round each picture, across and down (the monitor's padding).
+const PAD: (f64, f64) = (56.0, 48.0);
+/// How much larger stacked pictures must come out before the stage stacks, so a stage
+/// near the turning point stays side by side, the familiar layout.
+const STACK_GAIN: f64 = 1.1;
+
+/// Whether studio mode stacks preview over program rather than putting them side by
+/// side, in a stage of `stage` CSS pixels (width, height): for a portrait canvas
+/// (taller than wide), when stacked pictures come out larger, which takes a stage much
+/// taller than wide, such as a window on a portrait monitor. A landscape or square
+/// canvas stays side by side, as before. Side by side while the stage is unmeasured.
+pub fn stacks(canvas: jstream_control::protocol::Canvas, stage: (f64, f64)) -> bool {
+    let (width, height) = stage;
+    if canvas.height <= canvas.width || width <= 0.0 || height <= 0.0 {
+        return false;
+    }
+    let fit = |w: f64, h: f64| {
+        ((w - PAD.0) / f64::from(canvas.width))
+            .min((h - LABEL - PAD.1) / f64::from(canvas.height))
+            .max(0.0)
+    };
+    let side = fit((width - SIDE_CONTROLS) / 2.0, height);
+    let stacked = fit(width, (height - STACKED_CONTROLS) / 2.0);
+    stacked > side * STACK_GAIN
 }
 
 /// One zone with its splitter, on the canvas side.
@@ -424,6 +540,18 @@ fn ZoneView(ui: Ui, zone: Zone) -> impl IntoView {
     let ids =
         Memo::new(move |_| dock.with(|d| d.groups(zone).iter().map(|g| g.id).collect::<Vec<_>>()));
     let empty = move || ids.with(Vec::is_empty);
+    // A band past its edge's last one: the place a drag offers for a new band. It lies
+    // over the edge rather than beside it, so nothing moves under the pointer.
+    let extra = move || {
+        zone.band()
+            .is_some_and(|(edge, band)| band > 0 && dock.with(|d| band >= d.bands(edge)))
+    };
+    let edge = zone.band().map(|(edge, _)| match edge {
+        Edge::OuterLeft => "left",
+        Edge::Top => "top",
+        Edge::Bottom => "bottom",
+        Edge::OuterRight => "right",
+    });
     let zone_ref = NodeRef::<html::Section>::new();
     let size = move || {
         if empty() {
@@ -443,6 +571,8 @@ fn ZoneView(ui: Ui, zone: Zone) -> impl IntoView {
             class:vertical=zone.vertical()
             class:horizontal=!zone.vertical()
             class:drop-zone=move || ui.over.get() == Some(Target::End(zone))
+            class:new-band=extra
+            data-edge=edge
             aria-label=zone.label()
             data-drop="zone"
             data-zone=zone.key()
@@ -501,7 +631,9 @@ fn Splitter(ui: Ui, zone: Zone, hidden: Signal<bool>) -> impl IntoView {
                     let _captured = bar.set_pointer_capture(event.pointer_id());
                 }
                 let from = dock.with_untracked(|d| d.size(zone));
-                start.set_value(Some((f64::from(event.client_x()), f64::from(event.client_y()), from)));
+                // In the page's CSS pixels, as the zone's size is (`ui_scale.rs`).
+                let (x, y) = crate::ui_scale::pointer(&event);
+                start.set_value(Some((x, y, from)));
             }
             on:pointermove=move |event| {
                 let Some((x, y, from)) = start.get_value() else {
@@ -512,7 +644,8 @@ fn Splitter(ui: Ui, zone: Zone, hidden: Signal<bool>) -> impl IntoView {
                     return;
                 }
                 moved.set_value(true);
-                let (dx, dy) = (f64::from(event.client_x()) - x, f64::from(event.client_y()) - y);
+                let (now_x, now_y) = crate::ui_scale::pointer(&event);
+                let (dx, dy) = (now_x - x, now_y - y);
                 dock.update(|d| d.resize_zone(zone, from, dx, dy));
             }
             on:pointerup=move |_| end()
@@ -734,5 +867,31 @@ fn Divider(ui: Ui, zone: Zone, id: u32, zone_ref: NodeRef<html::Section>) -> imp
             on:pointercancel=move |_| end()
             on:lostpointercapture=move |_| end()
         ></button>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stacks;
+    use jstream_control::protocol::Canvas;
+
+    #[test]
+    fn studio_mode_stacks_when_the_pictures_come_out_larger() {
+        let canvas = |width, height| Canvas { width, height };
+        let portrait = canvas(1080, 1920);
+        let landscape = canvas(1920, 1080);
+        // A widescreen stage: side by side, whatever the canvas's shape.
+        assert!(!stacks(landscape, (1300.0, 700.0)));
+        assert!(!stacks(portrait, (1300.0, 700.0)));
+        // A portrait canvas stays side by side in a stage a little taller than wide, where
+        // two tall pictures still fit larger beside each other, and stacks in a tall one.
+        assert!(!stacks(portrait, (900.0, 1100.0)));
+        assert!(stacks(portrait, (700.0, 1800.0)));
+        // A landscape canvas stays side by side, as before, whatever the stage.
+        assert!(!stacks(landscape, (1000.0, 900.0)));
+        assert!(!stacks(landscape, (700.0, 1800.0)));
+        assert!(!stacks(canvas(1080, 1080), (700.0, 1800.0)));
+        // Unmeasured, side by side.
+        assert!(!stacks(portrait, (0.0, 0.0)));
     }
 }

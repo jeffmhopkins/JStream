@@ -3,7 +3,8 @@
 //! localhost WebSocket API, the one a remote client uses (ADR-0045, ADR-0066). The window
 //! (`shell`) runs on Windows (WebView2) and on Linux with the `webkitgtk` feature
 //! (WebKitGTK, ADR-0141); its commands open the Browse dialogs (`pick`) and save the
-//! network, JTunnel and PTZ controller settings (`network`, `jtunnel`, `ptz`) and the
+//! network, JTunnel, PTZ controller and PTZ camera settings (`network`, `jtunnel`, `ptz`,
+//! `ptz_cameras`) and the
 //! screenshots, in the person's own folders (`folders`). The rest builds and is tested everywhere.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-desktop/README.md#purpose, apps/jstream-desktop/README.md#usage, apps/jstream-desktop/README.md#design, docs/adr/0045-leptos-web-ui.md, docs/adr/0066-portable-windows-distribution-v2.md, docs/adr/0141-desktop-app-on-linux.md
@@ -31,9 +32,11 @@ pub mod network;
 #[cfg(webview)]
 pub mod pick;
 pub mod ptz;
+pub mod ptz_cameras;
 #[cfg(webview)]
 pub mod screenshots;
 #[cfg(webview)]
 pub mod shell;
 pub mod ui;
 pub mod updates;
+pub mod zoom;

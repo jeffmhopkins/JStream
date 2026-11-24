@@ -84,6 +84,8 @@ fn default_engine_url() -> String {
 /// The app: a connect form until a session is open, then the shell.
 #[component]
 pub fn App() -> impl IntoView {
+    // No browser right-click menu or stray text selection on the chrome.
+    crate::chrome::install();
     let status = RwSignal::new(Status::Disconnected(None));
     let info = RwSignal::new(SessionInfo::default());
     let session = SessionContext(StoredValue::new_local(None));
@@ -146,6 +148,10 @@ pub fn App() -> impl IntoView {
 
     // A projector window (`projector.rs`) shows one picture instead of the workspace.
     let projector = crate::projector::page_request();
+    // Every other page is drawn at this machine's UI scale (`ui_scale.rs`).
+    if projector.is_none() {
+        crate::ui_scale::UiScale::provide();
+    }
     // In the desktop app, connect to its engine at once (`host.rs`). A projector in a
     // browser connects at once too, with the credentials the browser already sends,
     // and shows the connect form if they aren't enough.
@@ -307,6 +313,12 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(crate::clipboard::TransformClip(RwSignal::new(None)));
     provide_context(AddSourceDialog::new());
     provide_context(crate::project::OpenProject::new());
+    // The Show panel's state lives with the shell, so the Inspector reads what it
+    // selected and closing the panel keeps its view.
+    provide_context(crate::panels::show::ShowPanel::connected(
+        studio,
+        expect_context::<SessionContext>(),
+    ));
     provide_context(PropertiesDialog::new());
     provide_context(SceneDialog::new());
     provide_context(FilterDialogs::new());
@@ -320,8 +332,14 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     // Each dialog's place for this page. Not the engine's UI settings (ADR-0084).
     provide_context(crate::dialog::DialogPlaces::new());
     provide_context(crate::settings::SettingsDialog::new());
+    // A right-click on a setting opens its control menu, and the Map control dialog.
+    let control_menu = crate::panels::learn::ControlMenuAt::new();
+    provide_context(control_menu);
+    provide_context(crate::panels::map_control::MapControlDialog::new());
+    // Mapping mode: the armed source, and the drag on a setting that maps it.
+    provide_context(crate::panels::mapping_mode::MappingMode::new());
     view! {
-        <div class="shell">
+        <div class="shell" on:contextmenu=move |event| { crate::panels::learn::row_context(control_menu, &event); }>
             <Header info=info disconnect=disconnect />
             <crate::updates::LaunchNotice />
             {move || studio.problem.get().map(|problem| view! {
@@ -330,6 +348,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
                     <button on:click=move |_| studio.problem.set(None)>"Dismiss"</button>
                 </div>
             })}
+            <crate::panels::mapping_mode::MappingBar />
             <Workspace />
             <Toast />
             <Hotkeys />
@@ -340,6 +359,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <FilterSettings />
             <AddFilter />
             <crate::settings::Settings />
+            <crate::panels::map_control::MapControlHost />
             <crate::agents::AgentPrompt />
             <ContextMenu />
         </div>

@@ -832,6 +832,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("hotkey.clear", [chord]) => Edit::HotkeyClear {
             chord: Chord::new(*chord),
+            action: None,
         },
         _ => return Err(usage(format!("cannot parse `{name}`"))),
     };
@@ -854,13 +855,16 @@ fn hotkey_action(name: &str, id: &str) -> Result<Action, CliError> {
         "output.stop" => Action::OutputStop {
             output_id: output_id(),
         },
+        "output.toggle" => Action::OutputToggle {
+            output_id: output_id(),
+        },
         "output.clear_key" => Action::OutputClearKey {
             output_id: output_id(),
         },
         other => {
             return Err(usage(format!(
-                "`hotkey.set` binds scene.switch, output.start, output.stop or \
-                 output.clear_key, not `{other}`"
+                "`hotkey.set` binds scene.switch, output.start, output.stop, \
+                 output.toggle or output.clear_key, not `{other}`"
             )));
         }
     })
@@ -1762,8 +1766,8 @@ mod tests {
         );
         assert_eq!(
             err(&["edit", "hotkey.set", "F1", "output.set_key", "o"]),
-            "`hotkey.set` binds scene.switch, output.start, output.stop or output.clear_key, \
-             not `output.set_key`"
+            "`hotkey.set` binds scene.switch, output.start, output.stop, output.toggle or \
+             output.clear_key, not `output.set_key`"
         );
         assert_eq!(
             err(&["edit", "item.set_visible", "i", "yes"]),

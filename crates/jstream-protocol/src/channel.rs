@@ -88,8 +88,10 @@ pub struct ChannelInfo {
     /// sets it, 0 to 1. Default 0.
     #[serde(default)]
     pub default: Finite32,
-    /// What sets it: at most 8 readers, each a `midi`, `data` or `channel` modifier's kind
-    /// and parameters, whose `from` and `to` map the reading onto the channel's 0 to 1.
+    /// What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.186,
+    /// ADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the
+    /// reading onto the channel's 0 to 1. An `audio` reader's attack and release follow
+    /// its level, as on an item.
     /// A `channel` input can't lead back to this channel. Default none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inputs: Vec<MotionKind>,
@@ -176,11 +178,14 @@ impl ChannelInfo {
         for (n, input) in self.inputs.iter().enumerate() {
             if !matches!(
                 input,
-                MotionKind::Midi { .. } | MotionKind::Data { .. } | MotionKind::Channel { .. }
+                MotionKind::Midi { .. }
+                    | MotionKind::Data { .. }
+                    | MotionKind::Channel { .. }
+                    | MotionKind::Audio { .. }
             ) {
                 return Some((
                     format!("inputs.{n}.kind"),
-                    "a channel reads a `midi` control, a `data` field or another `channel`".into(),
+                    "a channel reads a `midi` control, a `data` field, another `channel` or an `audio` level".into(),
                 ));
             }
             if matches!(
@@ -237,11 +242,11 @@ pub enum ChannelSwitch {
     /// Switches it on if it is off, and off if it is on.
     Toggle,
     /// Switches it on while a key or note is held, and off on release (ADR-0207, since
-    /// 0.177; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with
+    /// 0.187; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with
     /// nothing held, it switches it on.
     HoldOn,
     /// Switches it off while a key or note is held, and on on release (ADR-0207, since
-    /// 0.177). Sent as a call, it switches it off.
+    /// 0.187). Sent as a call, it switches it off.
     HoldOff,
 }
 

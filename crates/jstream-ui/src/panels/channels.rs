@@ -113,7 +113,7 @@ pub fn new_channel(
 }
 
 /// A channel input as the card lists it: "MIDI CC 21 · any channel", "Note 36",
-/// "Data `x`", "Stage power".
+/// "Mod 20", "Data transport · playing", "Stage power".
 pub fn input_name(collection: &Collection, input: &MotionKind) -> String {
     match input {
         MotionKind::Midi {
@@ -132,7 +132,8 @@ pub fn input_name(collection: &Collection, input: &MotionKind) -> String {
             };
             format!("MIDI {what} · {on}")
         }
-        MotionKind::Data { key, field, .. } => format!("Data {key} · {field}"),
+        MotionKind::Data { .. } => crate::panels::data_read::data_name(input),
+        MotionKind::Audio { .. } => crate::panels::audio_read::audio_name(collection, input),
         MotionKind::Channel { channel_id, .. } => collection.channel_name(channel_id),
         _ => "Input".into(),
     }
@@ -526,6 +527,20 @@ fn ChannelCard(
     // Inputs.
     let learning = RwSignal::new(false);
     let reading = RwSignal::new(false);
+    // The data or audio input being set up, shown until it is added or dropped.
+    let data = RwSignal::new(None::<MotionKind>);
+    // Which popover shows: `Some(true)` for an audio input, `Some(false)` for data.
+    let adding = Memo::new(move |_| {
+        data.with(|d| d.as_ref().map(|k| matches!(k, MotionKind::Audio { .. })))
+    });
+    let add_data = move |_| {
+        let Some(input) = data.get_untracked() else {
+            return;
+        };
+        if set(&|c| c.inputs.push(input.clone())) {
+            data.set(None);
+        }
+    };
     let learn = move |_| {
         if learning.get_untracked() {
             learning.set(false);
@@ -836,8 +851,61 @@ fn ChannelCard(
                     <button type="button" class="chan-add" on:click=move |_| reading.update(|r| *r = !*r)>
                         "+ Channel"
                     </button>
+                    <button
+                        type="button"
+                        class="chan-add"
+                        title="Read live data from a DAW: one of a JTunnel sender's Mod params, or another field"
+                        on:click=move |_| data.update(|d| {
+                            *d = match d {
+                                Some(MotionKind::Data { .. }) => None,
+                                _ => Some(studio.collection.with_untracked(|c| {
+                                    next_mod(c.as_ref().map_or(&[][..], |c| &c.channels[..]))
+                                })),
+                            }
+                        })
+                    >
+                        "+ Data"
+                    </button>
+                    <button
+                        type="button"
+                        class="chan-add"
+                        title="Follow an audio level: the program mix, a bus or a source, with its attack and release"
+                        on:click=move |_| data.update(|d| {
+                            *d = match d {
+                                Some(MotionKind::Audio { .. }) => None,
+                                _ => Some(crate::panels::audio_read::audio_reader()),
+                            }
+                        })
+                    >
+                        "+ Audio"
+                    </button>
                 </span>
             </div>
+            {move || adding.get().map(|audio| view! {
+                <div class="chan-popover chan-data">
+                    {if audio {
+                        view! {
+                            <crate::panels::audio_read::AudioReads
+                                kind=data
+                                send=move |k| data.set(Some(k))
+                            />
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <crate::panels::data_read::DataReads
+                                kind=data
+                                send=move |k| data.set(Some(k))
+                            />
+                        }
+                        .into_any()
+                    }}
+                    <div class="chan-data-actions">
+                        <button type="button" class="motion-button" on:click=move |_| data.set(None)>"Cancel"</button>
+                        <button type="button" class="motion-button primary" on:click=add_data>"Add input"</button>
+                    </div>
+                </div>
+            })}
             {move || reading.get().then(|| view! {
                 <div class="chan-popover">
                     <ChannelSearch placeholder="Read another channel" pick=read_channel make=make_read values=values />
@@ -942,6 +1010,18 @@ fn listen(
     );
 }
 
+/// A new data input: the first Mod no channel's input reads yet (Mod 1 when all are),
+/// on any sender, over the channel's whole 0 to 1.
+pub fn next_mod(channels: &[ChannelInfo]) -> MotionKind {
+    use crate::panels::data_read::{MOD_SLOTS, mod_reader, mod_slot};
+    let taken: Vec<u8> = channels
+        .iter()
+        .flat_map(|c| c.inputs.iter().filter_map(mod_slot))
+        .collect();
+    let n = (1..=MOD_SLOTS).find(|n| !taken.contains(n)).unwrap_or(1);
+    mod_reader(n, 0.0, 1.0)
+}
+
 /// A channel input reading `control` over the channel's whole 0 to 1.
 pub fn midi_input(control: &MidiControlInfo) -> MotionKind {
     MotionKind::Midi {
@@ -998,5 +1078,24 @@ mod tests {
         let (here, rest) = search(&all, "", None);
         assert!(here.is_empty());
         assert_eq!(rest.len(), 3);
+    }
+
+    #[test]
+    fn a_new_data_input_reads_the_first_mod_no_channel_reads() {
+        use crate::panels::data_read::{mod_reader, mod_slot};
+        assert_eq!(mod_slot(&next_mod(&[])), Some(1));
+        let mut fov = ChannelInfo::new("fov");
+        fov.inputs = vec![mod_reader(1, 0.0, 1.0), mod_reader(2, 0.0, 1.0)];
+        let mut roll = ChannelInfo::new("roll");
+        roll.inputs = vec![mod_reader(4, 0.0, 1.0)];
+        assert_eq!(mod_slot(&next_mod(&[fov.clone(), roll])), Some(3));
+        fov.inputs = (1..=32).map(|n| mod_reader(n, 0.0, 1.0)).collect();
+        assert_eq!(mod_slot(&next_mod(&[fov])), Some(1));
+        let mut lights = ChannelInfo::new("lights");
+        lights.inputs = vec![mod_reader(20, 0.0, 1.0)];
+        assert_eq!(
+            input_name(&Collection::default(), &lights.inputs[0]),
+            "Mod 20"
+        );
     }
 }

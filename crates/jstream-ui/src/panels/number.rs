@@ -2,10 +2,15 @@
 //! takes typed text, arrow keys and a pointer drag across it or its caption; the mixer's
 //! gain fields add − and + steppers. It sends one value per change: on Enter or blur for
 //! typed text, per press for a stepper or an arrow key, and once on release for a drag,
-//! so each is one edit and one undo step.
+//! so each is one edit and one undo step. While a drag is under way, a field given
+//! `live` also hands it the dragged value at most once per animation frame (#1734), so
+//! the output or a dialog's draft can follow the drag before the release sends it: the
+//! Inspector sends those values as a gesture's `live.set` (ADR-0032), a dialog puts them
+//! in its draft.
 //!
 //! Docs: docs/UI-FEATURES.md#theme, crates/jstream-ui/README.md#design
 
+use jstream_control::protocol::ParamType;
 use leptos::ev;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
@@ -94,7 +99,142 @@ struct Scrub {
     pointer: i32,
     last: f64,
     started: bool,
+    /// The committed value the drag started from.
+    start: f64,
     value: f64,
+}
+
+/// What a field given `live` hands on while it is dragged (#1734).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Scrubbing {
+    /// The value the drag shows now, kept to the field's range and rounded: at most one
+    /// per animation frame, and none after the drag ends.
+    Moved(f64),
+    /// The drag was released, after its value went to `send`, which may have refused it
+    /// or found it unchanged. A gesture that `send` didn't end ends here.
+    Ended,
+    /// The drag stopped without a release (the pointer was lost); the value it started
+    /// from is given, to put back.
+    Cancelled(f64),
+}
+
+/// The newest dragged value waiting for its animation frame: offered on each pointer
+/// move, taken by the frame, and dropped when the drag ends, so at most one value goes
+/// out per frame and none after the release.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FrameQueue {
+    pending: Option<f64>,
+    scheduled: bool,
+}
+
+impl FrameQueue {
+    /// Holds `value` for the next frame, replacing one not yet taken. Returns whether a
+    /// frame must be asked for: none is while one is already on its way.
+    pub fn offer(&mut self, value: f64) -> bool {
+        self.pending = Some(value);
+        !std::mem::replace(&mut self.scheduled, true)
+    }
+
+    /// The frame's value, if one is still waiting.
+    pub fn take(&mut self) -> Option<f64> {
+        self.scheduled = false;
+        self.pending.take()
+    }
+
+    /// Drops the waiting value: the drag ended before its frame.
+    pub fn clear(&mut self) {
+        self.pending = None;
+    }
+}
+
+/// A field's `live` when its value is a dialog's draft, applied only on OK: each
+/// dragged value goes into the draft as it goes, with no engine call, and a drag lost
+/// before its release puts the start back (#1734).
+pub fn into_draft(
+    set: impl Fn(f64) + Copy + Send + Sync + 'static,
+) -> impl Fn(Scrubbing) + Copy + Send + Sync + 'static {
+    move |scrubbing| match scrubbing {
+        Scrubbing::Moved(v) | Scrubbing::Cancelled(v) => set(v),
+        Scrubbing::Ended => {}
+    }
+}
+
+/// How a kind descriptor's number parameter (ADR-0025) is shown as a [`NumberField`]:
+/// its step, decimal places and range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumberSpec {
+    /// What an arrow key or [`SCRUB_PX`] of drag adds.
+    pub step: f64,
+    /// The decimal places the value is rounded to.
+    pub decimals: usize,
+    /// The smallest value.
+    pub min: f64,
+    /// The largest value.
+    pub max: f64,
+}
+
+/// The decimal places `step` is written with: 0 for 1, 2 for 0.05. At most 6.
+fn places(step: f64) -> usize {
+    (0..6)
+        .find(|&n| {
+            let scaled = step * 10_f64.powi(n);
+            (scaled - scaled.round()).abs() < 1e-9
+        })
+        .map_or(6, |n| n as usize)
+}
+
+/// A number parameter's field: a whole number steps by its step (1 by default); a
+/// decimal one by its step, or a hundredth of its range, or 0.01, and keeps two more
+/// places than its step, so a fine drag or a typed value isn't rounded off. A range
+/// the descriptor leaves open is the field's widest. `None` for any other type.
+pub fn number_spec(ty: &ParamType) -> Option<NumberSpec> {
+    const WIDEST: f64 = 1e9;
+    match ty {
+        ParamType::Int { min, max, step, .. } => Some(NumberSpec {
+            step: step.filter(|s| *s > 0).map_or(1.0, |s| s as f64),
+            decimals: 0,
+            min: min.map_or(-WIDEST, |n| n as f64),
+            max: max.map_or(WIDEST, |n| n as f64),
+        }),
+        ParamType::Float { min, max, step, .. } => {
+            let step = step
+                .filter(|s| *s > 0.0)
+                .unwrap_or_else(|| match (min, max) {
+                    (Some(lo), Some(hi)) if hi > lo => nice_step((hi - lo) / 100.0),
+                    _ => 0.01,
+                });
+            Some(NumberSpec {
+                step,
+                decimals: (places(step) + 2).min(6),
+                min: min.unwrap_or(-WIDEST),
+                max: max.unwrap_or(WIDEST),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// The number a descriptor's field starts from when its setting is absent or `null`
+/// (#1740's review, N1): the parameter's default, else 0 kept to the field's range, so
+/// the field stays enabled and a drag has somewhere to start.
+pub fn number_or_default(value: Option<f64>, default: &serde_json::Value, spec: NumberSpec) -> f64 {
+    value
+        .or_else(|| default.as_f64())
+        .unwrap_or_else(|| 0_f64.clamp(spec.min, spec.max))
+}
+
+/// The step of 1, 2 or 5 times a power of ten nearest under `raw`.
+fn nice_step(raw: f64) -> f64 {
+    let power = 10_f64.powf(raw.log10().floor());
+    let first = raw / power;
+    let lead = if first >= 5.0 {
+        5.0
+    } else if first >= 2.0 {
+        2.0
+    } else {
+        1.0
+    };
+    lead * power
 }
 
 /// A number field with a unit, and a label above it, or `named` in place of the label. `value` is the committed value, `None` to disable the field;
@@ -126,8 +266,8 @@ pub fn NumberField(
     #[prop(optional)]
     steppers: bool,
     /// The unit after the number, such as `px`.
-    #[prop(optional)]
-    unit: &'static str,
+    #[prop(optional, into)]
+    unit: String,
     /// The committed value; `None` disables the field.
     #[prop(into)]
     value: Signal<Option<f64>>,
@@ -149,15 +289,31 @@ pub fn NumberField(
     /// The largest value sent.
     #[prop(default = 100_000.0)]
     max: f64,
+    /// Marks the field as something a control can be mapped onto (UI-FEATURES VC-04):
+    /// a right-click or a mapping-mode drag on it names it by the mark's ID, and the
+    /// mark's amount shows as a tag on the field.
+    #[prop(optional, into)]
+    map: Option<crate::panels::map_target::MapMark>,
     /// Takes each new value, and says whether it sent an edit; when it didn't, the field
     /// shows the committed value again.
     send: impl Fn(f64) -> bool + Copy + Send + Sync + 'static,
+    /// Takes a drag's values while it is under way, at most one per animation frame, and
+    /// then how it ended (#1734). Without it, a drag only shows its value until the
+    /// release sends it.
+    #[prop(optional, into)]
+    live: Option<Callback<Scrubbing>>,
 ) -> AnyView {
+    let (map_id, map_amount) = match map {
+        Some(mark) => (Some(mark.id), Some(mark.amount)),
+        None => (None, None),
+    };
     // The value a drag shows before its release sends it.
     let dragged = RwSignal::new(None::<f64>);
     // Bumped to show the committed value again after cancelled or refused text.
     let again = RwSignal::new(0_u32);
     let scrub = StoredValue::new(None::<Scrub>);
+    // The dragged value waiting for its frame, for `live`.
+    let frames = StoredValue::new(FrameQueue::default());
     // Whether a drag just ended, until the click that follows it.
     let dropped = StoredValue::new(false);
     let input = NodeRef::<leptos::html::Input>::new();
@@ -178,6 +334,37 @@ pub fn NumberField(
         let v = settle(v, min, max, decimals);
         if value.get_untracked() == Some(v) || !send(v) {
             again.update(|n| *n += 1);
+        }
+    };
+    // Hands the dragged value to `live` on the next animation frame, unless the drag has
+    // ended by then.
+    let offer = move |v: f64| {
+        let Some(live) = live else { return };
+        if !frames.try_update_value(|f| f.offer(v)).unwrap_or(false) {
+            return;
+        }
+        request_animation_frame(move || {
+            let Some(Some(v)) = frames.try_update_value(FrameQueue::take) else {
+                return;
+            };
+            if scrub
+                .try_with_value(|s| s.is_some_and(|s| s.started))
+                .unwrap_or(false)
+            {
+                live.run(Scrubbing::Moved(v));
+            }
+        });
+    };
+    // Ends a drag that never reached its release: `live` puts its start back.
+    let drop_scrub = move || {
+        let Some(s) = scrub.get_value() else { return };
+        scrub.set_value(None);
+        dragged.set(None);
+        frames.update_value(FrameQueue::clear);
+        if s.started
+            && let Some(live) = live
+        {
+            live.run(Scrubbing::Cancelled(s.start));
         }
     };
     let nudge = move |by: f64| {
@@ -237,12 +424,10 @@ pub fn NumberField(
         })
     };
     // The pointer along the drag's axis: right, or up in a vertical field.
+    // In the page's CSS pixels, so a drag moves as far at every UI scale (`ui_scale.rs`).
     let along = move |event: &ev::PointerEvent| {
-        if vertical {
-            -f64::from(event.client_y())
-        } else {
-            f64::from(event.client_x())
-        }
+        let (x, y) = crate::ui_scale::pointer(event);
+        if vertical { -y } else { x }
     };
     let on_down = move |event: ev::PointerEvent| {
         if event.button() != 0 || focused() {
@@ -256,6 +441,7 @@ pub fn NumberField(
             pointer: event.pointer_id(),
             last: along(&event),
             started: false,
+            start: v,
             value: v,
         }));
     };
@@ -266,8 +452,7 @@ pub fn NumberField(
         // A release the field never saw (outside the window, before capture) leaves
         // no button held: drop the scrub rather than drag with nothing pressed.
         if event.buttons() == 0 {
-            scrub.set_value(None);
-            dragged.set(None);
+            drop_scrub();
             return;
         }
         let x = along(&event);
@@ -298,16 +483,24 @@ pub fn NumberField(
         s.value = (s.value + scrub_delta(x - s.last, step, keys)).clamp(min, max);
         s.last = x;
         scrub.set_value(Some(s));
-        dragged.set(Some(settle(s.value, min, max, decimals)));
+        let shown = settle(s.value, min, max, decimals);
+        if dragged.get_untracked() != Some(shown) {
+            dragged.set(Some(shown));
+            offer(shown);
+        }
     };
     let on_up = move |event: ev::PointerEvent| {
         let Some(s) = scrub.get_value() else { return };
         scrub.set_value(None);
+        frames.update_value(FrameQueue::clear);
         if s.started {
             event.prevent_default();
             dragged.set(None);
             dropped.set_value(true);
             put(s.value);
+            if let Some(live) = live {
+                live.run(Scrubbing::Ended);
+            }
         }
     };
     // The click a drag ends with would focus the input through its label: drop it.
@@ -317,10 +510,7 @@ pub fn NumberField(
             event.prevent_default();
         }
     };
-    let on_cancel = move |_: ev::PointerEvent| {
-        scrub.set_value(None);
-        dragged.set(None);
-    };
+    let on_cancel = move |_: ev::PointerEvent| drop_scrub();
 
     let name = move || named.map_or_else(|| label.to_owned(), |n| n.get());
     // A caption that differs from the label would give the input two names.
@@ -383,9 +573,10 @@ pub fn NumberField(
         view! { <span class="field-label" aria-hidden=caption_hidden>{shown}</span> }
     });
     view! {
-        <label class="number-field" class:inline=inline class:bare=!steppers on:click=on_click>
+        <label class="number-field" class:inline=inline class:bare=!steppers on:click=on_click
+            data-map=map_id>
             {above}
-            <span class="stepper">
+            <span class="stepper" data-map-amount=move || map_amount.and_then(|a| a.get())>
                 {steppers.then(decrease)}
                 {prefix}
                 {field()}
@@ -419,6 +610,30 @@ pub fn AxisRow(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #1740's review, N1: a setting that is absent or `null` still gives the field a
+    /// number, so it isn't disabled: the default, else 0 kept to the range.
+    #[test]
+    fn an_absent_setting_starts_from_its_default_or_the_range() {
+        let spec = |min: f64, max: f64| NumberSpec {
+            step: 1.0,
+            decimals: 0,
+            min,
+            max,
+        };
+        let null = serde_json::Value::Null;
+        assert_eq!(
+            number_or_default(Some(7.0), &serde_json::json!(3), spec(0.0, 10.0)),
+            7.0
+        );
+        assert_eq!(
+            number_or_default(None, &serde_json::json!(3), spec(0.0, 10.0)),
+            3.0
+        );
+        assert_eq!(number_or_default(None, &null, spec(-5.0, 5.0)), 0.0);
+        assert_eq!(number_or_default(None, &null, spec(2.0, 9.0)), 2.0);
+        assert_eq!(number_or_default(None, &null, spec(-9.0, -2.0)), -2.0);
+    }
 
     #[test]
     fn typed_text_takes_a_unicode_minus_and_a_comma() {
@@ -463,6 +678,73 @@ mod tests {
         assert_eq!(key_step(1.0, shift), 1.0);
         assert_eq!(key_step(0.5, shift), 0.05);
         assert_eq!(key_step(1.0, ctrl), 10.0);
+    }
+
+    #[test]
+    fn a_drag_hands_on_one_value_per_frame_and_none_after_it_ends() {
+        let mut frames = FrameQueue::default();
+        // The first move asks for a frame; the moves before it arrives only replace
+        // its value.
+        assert!(frames.offer(1.0));
+        assert!(!frames.offer(2.0));
+        assert!(!frames.offer(3.0));
+        assert_eq!(frames.take(), Some(3.0));
+        // The next move asks for the next frame.
+        assert!(frames.offer(4.0));
+        // A release before that frame drops its value: the frame finds nothing.
+        frames.clear();
+        assert_eq!(frames.take(), None);
+        assert!(frames.offer(5.0));
+    }
+
+    #[test]
+    fn descriptor_numbers_get_their_step_places_and_range() {
+        let int = ParamType::Int {
+            min: Some(1),
+            max: Some(64),
+            step: None,
+            unit: Some("px".into()),
+        };
+        assert_eq!(
+            number_spec(&int),
+            Some(NumberSpec {
+                step: 1.0,
+                decimals: 0,
+                min: 1.0,
+                max: 64.0
+            })
+        );
+        let stepped = ParamType::Float {
+            min: Some(0.0),
+            max: Some(1.0),
+            step: Some(0.05),
+            unit: None,
+        };
+        assert_eq!(
+            number_spec(&stepped).map(|s| (s.step, s.decimals)),
+            Some((0.05, 4))
+        );
+        // No step: a hundredth of the range, rounded down to 1, 2 or 5 of a power of ten.
+        let ranged = ParamType::Float {
+            min: Some(-24.0),
+            max: Some(24.0),
+            step: None,
+            unit: Some("dB".into()),
+        };
+        assert_eq!(
+            number_spec(&ranged).map(|s| (s.step, s.decimals)),
+            Some((0.2, 3))
+        );
+        let open = ParamType::Float {
+            min: None,
+            max: None,
+            step: None,
+            unit: None,
+        };
+        let spec = number_spec(&open).expect("a number");
+        assert_eq!((spec.step, spec.decimals), (0.01, 4));
+        assert!(spec.min < -1e6 && spec.max > 1e6);
+        assert_eq!(number_spec(&ParamType::Bool), None);
     }
 
     #[test]

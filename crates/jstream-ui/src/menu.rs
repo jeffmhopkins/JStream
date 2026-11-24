@@ -227,11 +227,16 @@ impl Menus {
     /// Opens `entries` at the pointer of `event`, in place of any open menu, and keeps the
     /// browser's own menu closed.
     pub fn open(&self, event: &ev::MouseEvent, entries: Vec<Entry>) {
+        // A right-click in a text field keeps the browser's Cut, Copy and Paste, even
+        // where the panel around it has a menu (`chrome.rs`).
+        if event.type_() == "contextmenu" && crate::chrome::in_text(event.target()) {
+            return;
+        }
         event.prevent_default();
         event.stop_propagation();
         self.0.set(Some(Open {
-            x: f64::from(event.client_x()),
-            y: f64::from(event.client_y()),
+            x: crate::ui_scale::pointer(event).0,
+            y: crate::ui_scale::pointer(event).1,
             entries: Rc::new(entries),
         }));
     }
@@ -255,17 +260,17 @@ impl Default for Menus {
     }
 }
 
-/// The window's size in CSS pixels.
+/// The window's size in the page's CSS pixels, at its UI scale (`ui_scale.rs`).
 fn window_size() -> (f64, f64) {
-    let size = |v: Result<leptos::wasm_bindgen::JsValue, _>| {
-        v.ok().and_then(|v| v.as_f64()).unwrap_or(0.0)
-    };
-    (size(window().inner_width()), size(window().inner_height()))
+    crate::ui_scale::window_size()
 }
 
 /// The enabled items of `menu`, in order.
 fn enabled_items(menu: &leptos::web_sys::Element) -> Vec<leptos::web_sys::HtmlElement> {
-    let Ok(list) = menu.query_selector_all(":scope > .menuitem:not(:disabled)") else {
+    // A row of items, as View › UI scale's, counts its items in order.
+    let Ok(list) = menu.query_selector_all(
+        ":scope > .menuitem:not(:disabled), :scope > .menu-scale > .menuitem:not(:disabled)",
+    ) else {
         return Vec::new();
     };
     (0..list.length())
@@ -378,12 +383,12 @@ pub fn ContextMenu() -> impl IntoView {
         let Some(menu) = root.get_untracked() else {
             return;
         };
-        let menu = menu.get_bounding_client_rect();
+        let menu = crate::ui_scale::rect(&menu);
         let (width, height) = window_size();
         let (left, top) = place_sub(
             menu.left(),
             menu.right(),
-            opener.get_bounding_client_rect().top(),
+            crate::ui_scale::rect(opener).top(),
             width,
             height,
             estimated_height(entries),

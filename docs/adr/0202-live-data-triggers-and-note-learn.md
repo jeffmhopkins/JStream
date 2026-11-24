@@ -26,7 +26,7 @@ and learning a note for the Triggers UI.
 <a id="decision"></a>
 ## Decision
 1. **A `data` trigger.** `Trigger::Data {input?, key, field, on}` is a fourth kind of
-   binding trigger, and a minor protocol version, 0.178
+   binding trigger, and a minor protocol version, 0.189
    ([R-API-001](../RULES.md#R-API-001)).
    - It reads a `data` motion modifier's path: the sender (`input`, missing for any), the
      message's `key` and a dotted `field` (empty for the whole message).

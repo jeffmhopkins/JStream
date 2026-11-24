@@ -11,7 +11,7 @@ use crate::events::{BUFFER_CAPACITY, CursorAhead, Feed};
 use crate::jsonrpc::{self, Incoming, RpcError};
 use crate::tools::{Invocation, REMOTE_PREFIX, Tools};
 use jstream_control::{Control, ControlError};
-use jstream_protocol::{Hello, PROTOCOL_VERSION, ProtocolError, WireError, json_schema};
+use jstream_protocol::{Hello, PROTOCOL_VERSION, ProtocolError, WireError};
 use serde_json::{Map, Value, json};
 use std::future::{Future, poll_fn};
 use std::pin::pin;
@@ -349,7 +349,9 @@ impl Server {
         };
         let invocation = match invocation {
             Err(error) => return Ok(protocol_error(error.into())),
-            Ok(Invocation::Describe) => return Ok(tool_result(json_schema(), false)),
+            Ok(Invocation::Describe { name }) => {
+                return Ok(tool_result(self.tools.describe(name.as_deref()), false));
+            }
             Ok(Invocation::Events { after }) if self.feed.get().is_some() => {
                 return Ok(self.events(after));
             }
@@ -389,7 +391,9 @@ impl Server {
             Invocation::Call(call) => call,
             // The first `events` call: the session is open now, and so is the feed.
             Invocation::Events { after } => return Ok(self.events(after)),
-            Invocation::Describe => return Ok(tool_result(json_schema(), false)),
+            Invocation::Describe { name } => {
+                return Ok(tool_result(self.tools.describe(name.as_deref()), false));
+            }
         };
         Ok(match self.control.call(call).await {
             Ok(response) => match serde_json::to_value(&response) {
@@ -496,7 +500,9 @@ impl Server {
              client and each applied batch raises the state `rev` by one; pass \
              `expected_rev` to make a read-modify-write safe. IDs of new objects are \
              chosen by you. `events` returns what changed since your last read, from \
-             every client. `describe_api` returns the full protocol schema. \
+             every client. `describe_api` returns the full protocol schema, or with `name` one definition \
+             or op of it: where a tool takes an action or edit inside its op, its schema \
+             lists only the `type` tags. \
              `video` with `op.type` `video.snapshot` returns the current program mix as \
              a PNG image content block; the JSON result's `png` field only names that \
              block and its size. To see motion, `video.frames` returns several pictures \
@@ -517,8 +523,8 @@ impl Server {
              its key and goes live, on `history`, whose undo can remove a stream key \
              redo doesn't restore, on `pack`, whose writes and deletes change files on \
              disk that undo doesn't reach, on `values`, whose shared values a browser \
-             source page given them may send off the machine, on `timeline`, whose \
-             cues may set those values, on `collection`, whose open and new stop every \
+             source page given them may send off the machine, on `timeline` and \
+             `show`, whose cues may set those values, on `collection`, whose open and new stop every \
              output and clear every client's undo, on `ptz`, which moves physical \
              cameras and can overwrite a camera's stored preset, and on `device`, \
              `pairing` and `ui_settings`; every other edit, a delete included, is undone with \

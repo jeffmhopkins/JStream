@@ -1,29 +1,23 @@
-//! Controller learn (ADR-0178): a button beside a live setting or a fader that binds the
-//! next MIDI control moved to it, as a value binding, and shows and forgets the one it
-//! has.
+//! The control button beside a live setting or a fader, and its menu (ADR-0178,
+//! ADR-0183, UI-FEATURES VC-03). A right-click on the setting opens the same menu
+//! ([`row_context`]). The menu offers Map control… (the dialog in `map_control.rs`),
+//! Learn, what the setting is mapped to already with its smoothing, Edit and Remove,
+//! and Add to sequence.
 //!
-//! Learning reads `midi.last_controls` once for a baseline, then about seven times a
-//! second for up to 15 s; the first input whose count of control changes grows is the
-//! control moved, and `binding.set_value` binds it over the setting's whole range (a
-//! fader's over -60 to +6 dB). A binding the button made is named after its target
-//! ([`learn_id`]), so learning again replaces it.
+//! Learn listens for the first MIDI control or JTunnel Mod that moves and binds it over
+//! the setting's whole range (a fader's over -60 to +6 dB) with `binding.set_value`. A
+//! binding the button made is named after its target ([`learn_id`]), so mapping again
+//! replaces it.
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
-    Action, ChannelSwitch, Chord, Edit, Finite32, MidiControlInfo, MotionCurve, MotionKind,
-    MotionMidiControl, ParamDescriptor, ParamType, Query, QueryResult, TimelineId, ValueBinding,
-    ValueTarget,
+    Chord, Edit, Finite32, MidiControlInfo, MotionCurve, MotionKind, MotionMidiControl,
+    ParamDescriptor, ParamType, Query, QueryResult, TimelineId, ValueBinding, ValueTarget,
 };
 use leptos::prelude::*;
-use leptos::task::spawn_local;
-use std::time::Duration;
 
-/// How often learning reads the inputs' latest controls.
-const POLL: Duration = Duration::from_millis(150);
-/// How many times learning reads the controls before it gives up: 15 s.
-const TRIES: u32 = 100;
 /// The throw a learned fader gets, in dB: wide enough to fade out, short of the top.
 pub const FADER_THROW: (f64, f64) = (-60.0, 6.0);
 /// The range of a switch (a `bool` setting, a mute, a placement's visibility): on at one
@@ -130,6 +124,8 @@ pub fn set_smoothing(input: &mut MotionKind, ms: u32) {
 pub fn learned(control: &MidiControlInfo, target: &ValueTarget, range: (f64, f64)) -> ValueBinding {
     let end = |v: f64| Finite32::new(v as f32).unwrap_or(Finite32::ZERO);
     ValueBinding {
+        enabled: true,
+        mode: jstream_control::protocol::MappingMode::Replace,
         binding_id: learn_id(target),
         input: MotionKind::Midi {
             control: MotionMidiControl::Cc,
@@ -159,7 +155,10 @@ pub fn short_name(binding: &ValueBinding) -> String {
             ..
         } => "Bend".into(),
         MotionKind::Midi { .. } => "Pressure".into(),
-        _ => "Data".into(),
+        other => match crate::live_sources::mod_of(other) {
+            Some((_, slot)) => format!("Mod {}", slot + 1),
+            None => "Data".into(),
+        },
     }
 }
 
@@ -172,6 +171,13 @@ pub fn long_name(binding: &ValueBinding) -> String {
             format!(
                 "{} on {on} from {from} drives this. Click to unbind it.",
                 short_name(binding)
+            )
+        }
+        kind @ MotionKind::Data { input, .. } if crate::live_sources::mod_of(kind).is_some() => {
+            format!(
+                "{} from {} drives this. Click to unbind it.",
+                short_name(binding),
+                input.as_deref().unwrap_or("any sender")
             )
         }
         MotionKind::Data {
@@ -192,59 +198,13 @@ pub(crate) async fn controls(session: &crate::session::Session) -> Option<Vec<Mi
     }
 }
 
-/// Reads the controls after [`POLL`] and binds the first that moved since `baseline`,
-/// or reads again, `tries` more times, while `learning` holds. The button's signals are
-/// read with `try_`: once its form closes they are gone, and the loop stops.
-fn watch(
-    session: crate::session::Session,
-    studio: Studio,
-    learning: RwSignal<bool>,
-    target: StoredValue<ValueTarget>,
-    range: (f64, f64),
-    baseline: Vec<MidiControlInfo>,
-    tries: u32,
-) {
-    set_timeout(
-        move || {
-            spawn_local(async move {
-                if learning.try_get_untracked() != Some(true) {
-                    return;
-                }
-                let now = controls(&session).await.unwrap_or_default();
-                if learning.try_get_untracked() != Some(true) {
-                    return;
-                }
-                if let Some(control) = moved(&baseline, &now) {
-                    let Some(binding) = target.try_with_value(|t| learned(&control, t, range))
-                    else {
-                        return;
-                    };
-                    studio.apply(&session, vec![Edit::BindingSetValue { binding }]);
-                    learning.try_set(false);
-                } else if tries == 0 {
-                    learning.try_set(false);
-                } else {
-                    watch(
-                        session,
-                        studio,
-                        learning,
-                        target,
-                        range,
-                        baseline,
-                        tries - 1,
-                    );
-                }
-            });
-        },
-        POLL,
-    );
-}
-
 /// The binding of channel `channel_id` to `target` over `range`, named [`learn_id`]
 /// (ADR-0183 decision 5): the setting follows the channel, mapped onto `range`.
 pub fn follows(channel_id: &str, target: &ValueTarget, range: (f64, f64)) -> ValueBinding {
     let end = |v: f64| Finite32::new(v as f32).unwrap_or(Finite32::ZERO);
     ValueBinding {
+        enabled: true,
+        mode: jstream_control::protocol::MappingMode::Replace,
         binding_id: learn_id(target),
         input: MotionKind::Channel {
             channel_id: channel_id.to_owned(),
@@ -341,17 +301,79 @@ pub fn KeyCapture(
     }
 }
 
+/// A right-click on a setting's row, for the control button of that row: the button's
+/// `data-learn` ID and where the pointer was. The shell provides it; each button opens
+/// its menu there when the ID is its own.
+#[derive(Clone, Copy)]
+pub struct ControlMenuAt(pub RwSignal<Option<(String, f64, f64)>>);
+
+impl ControlMenuAt {
+    /// No right-click waiting.
+    pub fn new() -> Self {
+        ControlMenuAt(RwSignal::new(None))
+    }
+}
+
+impl Default for ControlMenuAt {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Whether a right-click on an element with this tag and `type` keeps the browser's own
+/// menu: a field of free text, where copy and paste live.
+fn keeps_own_menu(tag: &str, ty: &str) -> bool {
+    match tag.to_ascii_lowercase().as_str() {
+        "textarea" => true,
+        "input" => matches!(ty, "" | "text" | "search" | "url" | "password" | "email"),
+        _ => false,
+    }
+}
+
+/// Hands a right-click to the control button of the setting it landed on, and says
+/// whether it did. The setting is the nearest element around the click that holds
+/// exactly one control button as its own child, looked for no further out than the
+/// panel or dialog. A right-click in a field of free text is left to the browser.
+pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
+    use leptos::wasm_bindgen::JsCast;
+    let Some(el) = event
+        .target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+    else {
+        return false;
+    };
+    // A field of free text keeps the browser's menu, unless it is itself a mapping
+    // target (a number field).
+    let marked = matches!(el.closest("[data-map]"), Ok(Some(_)));
+    if !marked
+        && keeps_own_menu(
+            &el.tag_name(),
+            &el.get_attribute("type").unwrap_or_default(),
+        )
+    {
+        return false;
+    }
+    let Some(id) = crate::panels::mapping_mode::setting_at(el) else {
+        return false;
+    };
+    event.prevent_default();
+    at.0.set(Some((
+        id,
+        f64::from(event.client_x()),
+        f64::from(event.client_y()),
+    )));
+    true
+}
+
 /// What the control menu shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Menu {
     /// The menu, at a point in the window.
     Open(f64, f64),
-    /// The channel search, at a point in the window.
-    Follow(f64, f64),
+    /// Learn, listening for what moves, at a point in the window.
+    Learn(f64, f64),
     /// The sequences to add a lane to, at a point in the window.
     Sequence(f64, f64),
-    /// Waiting for the key that switches the channel, at a point in the window.
-    Key(f64, f64),
 }
 
 /// The control button for `target`, mapping a controller or a channel onto `range`
@@ -376,6 +398,35 @@ pub fn Learn(
     let label = StoredValue::new(label.unwrap_or_else(|| "Control".into()));
     let learning = RwSignal::new(false);
     let menu = RwSignal::new(None::<Menu>);
+    let own_id = target.with_value(learn_id);
+    // A right-click on this setting's row opens the menu where the pointer was.
+    if let Some(at) = use_context::<ControlMenuAt>() {
+        let own_id = own_id.clone();
+        Effect::new(move |_| {
+            if let Some((id, x, y)) = at.0.get()
+                && id == own_id
+            {
+                at.0.set(None);
+                learning.set(false);
+                menu.set(Some(Menu::Open(x, y)));
+            }
+        });
+    }
+    let map_dialog = use_context::<crate::panels::map_control::MapControlDialog>();
+    let map_control = move || {
+        menu.set(None);
+        if let Some(dialog) = map_dialog {
+            dialog
+                .0
+                .set(Some(crate::panels::map_control::MapControlRequest {
+                    target: crate::panels::map_target::MapTarget::Value(target.get_value()),
+                    range,
+                    limits: range,
+                    label: label.get_value(),
+                    current: current.and_then(|c| c.get_untracked()),
+                }));
+        }
+    };
     // The control button, which the menus give the focus back to when the keyboard
     // closes them.
     let opener = NodeRef::<leptos::html::Button>::new();
@@ -399,32 +450,78 @@ pub fn Learn(
             _ => None,
         })
     };
-    let learn = move || {
-        let Some(s) = session.0.get_value() else {
-            return;
-        };
-        learning.set(true);
-        spawn_local(async move {
-            match controls(&s).await {
-                // The form closed while the baseline was read: nothing to learn for.
-                Some(_) if learning.try_get_untracked() != Some(true) => {}
-                Some(baseline) => watch(s, studio, learning, target, range, baseline, TRIES),
-                None => {
-                    // `try_set` hands the value back when the form has closed.
-                    if learning.try_set(false).is_some() {
-                        return;
-                    }
-                    studio
-                        .problem
-                        .set(Some("This engine reads no MIDI controls.".into()));
-                }
+    // Mapping mode: a drag on this setting's row maps the armed source onto it by an
+    // amount, shown while the drag is under way and written once when it ends.
+    let mode = use_context::<crate::panels::mapping_mode::MappingMode>();
+    let preview = RwSignal::new(None::<(f32, f32)>);
+    // The ends the armed source maps this setting onto already.
+    let armed_ends = move || {
+        let armed = mode?.armed.get()?;
+        let binding = bound()?;
+        crate::panels::map_control::same_source(&binding.input, &armed.reader)
+            .then(|| crate::panels::map_control::ends(&binding.input))
+            .flatten()
+    };
+    if let Some(mode) = mode {
+        let own_id = own_id.clone();
+        Effect::new(move |_| {
+            let drag = mode.drag.get();
+            let Some(drag) = drag.filter(|d| d.setting == own_id) else {
+                preview.set(None);
+                return;
+            };
+            let Some(armed) = mode.armed.get_untracked() else {
+                return;
+            };
+            let existing = untrack(armed_ends);
+            let ends = crate::panels::mapping_mode::ends_after(
+                existing,
+                current.and_then(|c| c.get_untracked()),
+                range,
+                drag.amount,
+            );
+            if !drag.done {
+                preview.set(Some(ends));
+                return;
+            }
+            mode.drag.set(None);
+            preview.set(None);
+            // A drag that ends where it began on an unmapped setting maps nothing.
+            if existing.is_none() && ends.0 == ends.1 {
+                return;
+            }
+            if let Some(s) = session.0.get_value() {
+                let previous = untrack(bound);
+                let kept = previous.as_ref().filter(|_| existing.is_some());
+                let input = crate::panels::map_control::with_ends(
+                    crate::panels::map_control::picked(armed.reader, kept.map(|b| &b.input), range),
+                    ends.0,
+                    ends.1,
+                );
+                let amount = kept.and_then(|b| b.amount.clone());
+                let binding = target
+                    .with_value(|t| crate::panels::map_control::binding_for(t, input, amount));
+                studio.apply(&s, vec![Edit::BindingSetValue { binding }]);
             }
         });
+    }
+    // How far the armed source moves this setting, while there is something to show.
+    let amount_text = move || {
+        preview
+            .get()
+            .or_else(armed_ends)
+            .map(|ends| crate::panels::mapping_mode::amount_label(ends, range))
     };
-    let follow = move |channel_id: String| {
+    // Binds what the Learn popover heard, over the setting's whole range: a learned
+    // control takes the setting over, as a knob mapped in a DAW does.
+    let learnt = move |reader: MotionKind| {
         menu.set(None);
+        learning.set(false);
         if let Some(s) = session.0.get_value() {
-            let binding = target.with_value(|t| follows(&channel_id, t, range));
+            let amount = untrack(bound).and_then(|b| b.amount);
+            let input = crate::panels::map_control::picked(reader, None, range);
+            let binding =
+                target.with_value(|t| crate::panels::map_control::binding_for(t, input, amount));
             studio.apply(&s, vec![Edit::BindingSetValue { binding }]);
         }
     };
@@ -459,17 +556,6 @@ pub fn Learn(
             ],
             id,
         )
-    };
-    let make = move |name: String| {
-        menu.set(None);
-        let Some(s) = session.0.get_value() else {
-            return;
-        };
-        let (edits, id) = ensure(&name);
-        if !edits.is_empty() {
-            studio.apply(&s, edits);
-        }
-        crate::panels::channels::open_channel(studio, id);
     };
     // The selected scene's family and its sequences, for Add to sequence.
     let sequences = move || {
@@ -525,26 +611,6 @@ pub fn Learn(
         }
         crate::panels::sequence::open_sequence(studio, timeline_id);
     };
-    // Binds `chord` to switch this setting's channel (made if need be) on and off.
-    let set_key = move |chord: Option<Chord>| {
-        menu.set(None);
-        let (Some(chord), Some(s)) = (chord, session.0.get_value()) else {
-            return;
-        };
-        let (mut edits, id) = ensure(&label.get_value());
-        let toggle = Action::ChannelSwitch {
-            channel_id: id,
-            to: ChannelSwitch::Toggle,
-        };
-        studio.collection.with_untracked(|c| {
-            if let Some(c) = c {
-                edits.extend(crate::hotkeys::bind_edits(c, &toggle, &chord));
-            }
-        });
-        if !edits.is_empty() {
-            studio.apply(&s, edits);
-        }
-    };
     let remove = move || {
         menu.set(None);
         if let (Some(binding), Some(s)) = (bound(), session.0.get_value()) {
@@ -565,15 +631,16 @@ pub fn Learn(
         // under the button.
         let (x, y) = match opener.get_untracked() {
             Some(button) if e.detail() == 0 => {
-                let rect = button.get_bounding_client_rect();
+                let rect = crate::ui_scale::rect(&button);
                 (rect.left() + rect.width() / 2.0, rect.bottom() - 12.0)
             }
-            _ => (f64::from(e.client_x()), f64::from(e.client_y())),
+            _ => crate::ui_scale::pointer(&e),
         };
         menu.set(Some(Menu::Open(x, y)));
     };
-    let title = move || match (learning.get(), bound()) {
-        (true, _) => "Move a fader, knob or button on a MIDI controller. Click to stop.".into(),
+    let title = move || {
+        match (learning.get(), bound()) {
+        (true, _) => "Move a fader, knob or button on a MIDI controller, or a Mod in the DAW. Click to stop.".into(),
         (false, Some(binding)) => match channel() {
             Some(id) => format!(
                 "Follows the channel “{}”. Click for its menu.",
@@ -584,10 +651,12 @@ pub fn Learn(
             None => long_name(&binding).replace("Click to unbind it.", "Click for its menu."),
         },
         (false, None) => {
-            "Control this setting: learn a MIDI control, or make or follow a channel.".to_owned()
+            "Map a control onto this setting: a MIDI control, a JTunnel Mod, a channel or a key. A right-click on the setting opens the same menu.".to_owned()
         }
+    }
     };
     let text = move || match (learning.get(), bound()) {
+        _ if amount_text().is_some() => amount_text().unwrap_or_default(),
         (true, _) => "Move…".to_owned(),
         (false, Some(binding)) => match channel() {
             Some(id) => studio
@@ -599,18 +668,10 @@ pub fn Learn(
     };
     // Below the button, kept inside the window.
     let place = |x: f64, y: f64| {
-        let (w, h) = web_sys::window()
-            .map(|w| {
-                let n = |v: Result<
-                    leptos::wasm_bindgen::JsValue,
-                    leptos::wasm_bindgen::JsValue,
-                >| v.ok().and_then(|v| v.as_f64());
-                (
-                    n(w.inner_width()).unwrap_or(1600.0),
-                    n(w.inner_height()).unwrap_or(1000.0),
-                )
-            })
-            .unwrap_or((1600.0, 1000.0));
+        let (w, h) = match crate::ui_scale::window_size() {
+            (0.0, _) | (_, 0.0) => (1600.0, 1000.0),
+            size => size,
+        };
         let left = (x - 200.0).min(w - 296.0).max(4.0);
         let top = if y + 330.0 > h {
             (y - 330.0).max(4.0)
@@ -625,7 +686,11 @@ pub fn Learn(
         };
         let name = label.get_value();
         let linked = channel();
-        let has = bound().is_some();
+        let mapped = bound().map(|b| {
+            studio
+                .collection
+                .with(|c| crate::live_sources::reader_name(c.as_ref(), &b.input))
+        });
         // A learned control (not a channel, which has its own Smooth) shows how long the
         // setting takes to follow it, which can be set here.
         let smoothing = (linked.is_none() && bound().as_ref().and_then(|b| smoothing_of(&b.input)).is_some()).then(|| {
@@ -658,70 +723,64 @@ pub fn Learn(
             <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
             <div class="context-menu control-menu" role="menu" aria-label="Control" node_ref=node on:keydown=menu_keys
                 style:left=place(x, y).0 style:top=place(x, y).1>
-                <div class="ctx-head">{format!("Control “{name}”")}</div>
-                {smoothing}
-                <button type="button" class="menuitem" role="menuitem" on:click=move |_| { menu.set(None); learn(); }>
+                <div class="ctx-head">{name}</div>
+                <button type="button" class="menuitem" role="menuitem" on:click=move |_| map_control()>
                     <span class="ctx-check"></span>
-                    <span class="ctx-label">"Learn MIDI control"</span>
-                    <span class="hint">"move a knob"</span>
+                    <span class="ctx-label">"Map control…"</span>
                 </button>
-                {match linked.clone() {
-                    Some(id) => view! {
+                <button type="button" class="menuitem" role="menuitem" on:click=move |_| { learning.set(true); menu.set(Some(Menu::Learn(x, y))); }>
+                    <span class="ctx-check"></span>
+                    <span class="ctx-label">"Learn"</span>
+                    <span class="hint">"move a knob or a Mod"</span>
+                </button>
+                {mapped.map(|mapped| view! {
+                    <div class="menu-sep"></div>
+                    <div class="ctx-head">{format!("Mapped to {mapped}")}</div>
+                    {smoothing}
+                    <button type="button" class="menuitem" role="menuitem" on:click=move |_| map_control()>
+                        <span class="ctx-check"></span>
+                        <span class="ctx-label">"Edit mapping…"</span>
+                    </button>
+                    {linked.clone().map(|id| view! {
                         <button type="button" class="menuitem" role="menuitem" on:click=move |_| { menu.set(None); crate::panels::channels::open_channel(studio, id.clone()); }>
                             <span class="ctx-check"></span>
                             <span class="ctx-label">"Open channel"</span>
                         </button>
-                    }.into_any(),
-                    None => {
-                        let named = name.clone();
-                        view! {
-                            <button type="button" class="menuitem" role="menuitem" on:click=move |_| make(named.clone())>
-                                <span class="ctx-check"></span>
-                                <span class="ctx-label">"Make channel"</span>
-                                <span class="hint">{name.clone()}</span>
-                            </button>
-                        }.into_any()
-                    }
-                }}
-                <button type="button" class="menuitem" role="menuitem" on:click=move |_| menu.set(Some(Menu::Follow(x, y)))>
-                    <span class="ctx-check"></span>
-                    <span class="ctx-label">"Follow channel…"</span>
-                </button>
+                    })}
+                    <button type="button" class="menuitem danger" role="menuitem" on:click=move |_| remove()>
+                        <span class="ctx-check"></span>
+                        <span class="ctx-label">"Remove mapping"</span>
+                    </button>
+                })}
+                <div class="menu-sep"></div>
                 <button type="button" class="menuitem" role="menuitem" on:click=move |_| menu.set(Some(Menu::Sequence(x, y)))>
                     <span class="ctx-check"></span>
                     <span class="ctx-label">"Add to sequence"</span>
                     <span class="hint">"›"</span>
                 </button>
-                <button type="button" class="menuitem" role="menuitem" on:click=move |_| menu.set(Some(Menu::Key(x, y)))>
-                    <span class="ctx-check"></span>
-                    <span class="ctx-label">"Set key…"</span>
-                    <span class="hint">"switches it"</span>
-                </button>
-                {has.then(|| view! {
-                    <div class="menu-sep"></div>
-                    <button type="button" class="menuitem danger" role="menuitem" on:click=move |_| remove()>
-                        <span class="ctx-check"></span>
-                        <span class="ctx-label">"Remove control"</span>
-                    </button>
-                })}
             </div>
         })
     };
-    let follow_menu = move || {
-        let Menu::Follow(x, y) = menu.get()? else {
+    let learn_menu = move || {
+        let Menu::Learn(x, y) = menu.get()? else {
             return None;
         };
+        let stop = move |_| {
+            learning.set(false);
+            menu.set(None);
+        };
         Some(view! {
-            <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
-            <div class="context-menu control-menu follow" style:left=place(x, y).0 style:top=place(x, y).1
+            <div class="ctx-catcher" on:pointerdown=stop></div>
+            <div class="context-menu control-menu" role="dialog" aria-label="Learn" style:left=place(x, y).0 style:top=place(x, y).1
                 on:keydown=move |e: leptos::ev::KeyboardEvent| {
                     if e.key() == "Escape" {
                         e.prevent_default();
                         e.stop_propagation();
+                        learning.set(false);
                         close();
                     }
                 }>
-                <crate::panels::channels::ChannelSearch placeholder="Follow a channel" pick=follow make=make />
+                <crate::panels::map_control::LearnPopover accept=learnt />
             </div>
         })
     };
@@ -762,19 +821,6 @@ pub fn Learn(
             </div>
         })
     };
-    let key_menu = move || {
-        let Menu::Key(x, y) = menu.get()? else {
-            return None;
-        };
-        Some(view! {
-            <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
-            <div class="context-menu control-menu" role="menu" style:left=place(x, y).0 style:top=place(x, y).1>
-                <div class="ctx-head">"Set key"</div>
-                <KeyCapture done=set_key />
-                <p class="hint control-menu-note">"The key switches the channel on and off, with its fades."</p>
-            </div>
-        })
-    };
     view! {
         <button
             type="button"
@@ -782,7 +828,9 @@ pub fn Learn(
             node_ref=opener
             class:learning=learning
             class:bound=move || bound().is_some()
+            class:amount=move || amount_text().is_some()
             class:chip=move || channel().is_some()
+            data-learn=own_id
             title=title
             aria-label=title
             aria-haspopup="menu"
@@ -792,9 +840,8 @@ pub fn Learn(
             {text}
         </button>
         {open_menu}
-        {follow_menu}
+        {learn_menu}
         {sequence_menu}
-        {key_menu}
     }
 }
 
@@ -811,6 +858,17 @@ mod tests {
             value: 64,
             count,
         }
+    }
+
+    #[test]
+    fn a_right_click_in_free_text_keeps_the_browsers_menu() {
+        assert!(keeps_own_menu("TEXTAREA", ""));
+        assert!(keeps_own_menu("INPUT", "text"));
+        assert!(keeps_own_menu("input", ""));
+        assert!(!keeps_own_menu("INPUT", "number"));
+        assert!(!keeps_own_menu("INPUT", "range"));
+        assert!(!keeps_own_menu("INPUT", "checkbox"));
+        assert!(!keeps_own_menu("LABEL", ""));
     }
 
     #[test]

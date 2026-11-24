@@ -21,6 +21,7 @@ pub mod camera;
 pub mod crop;
 pub mod group;
 pub mod live;
+pub mod live_aim;
 pub mod model;
 pub mod monitor;
 pub mod preview;
@@ -407,7 +408,7 @@ pub fn Canvas() -> impl IntoView {
             let (width, height) = stage.get_untracked().map_or((640.0, 360.0), |stage| {
                 (stage.client_width() as f32, stage.client_height() as f32)
             });
-            let ratio = window().device_pixel_ratio() as f32;
+            let ratio = crate::ui_scale::pixel_ratio() as f32;
             let mut first = preview::Stream::first(
                 preview::stage((width, height, ratio), own_engine()),
                 screen::Screen::supports_h264(),
@@ -518,7 +519,7 @@ pub fn Canvas() -> impl IntoView {
             (
                 element.client_width() as f32,
                 element.client_height() as f32,
-                window().device_pixel_ratio() as f32,
+                crate::ui_scale::pixel_ratio() as f32,
             ),
             own_engine(),
         );
@@ -729,10 +730,12 @@ pub fn Canvas() -> impl IntoView {
     };
     // The item under `point`: the topmost box, or in a 3D scene the one the engine
     // draws on top through the camera.
+    // A hidden item is hit only while selected (#1732).
     let hit = move |current: &Layout, point: Point| -> Option<ItemId> {
+        let selected = chosen.get_untracked();
         match seen_in(current) {
-            Some(view) => camera::topmost_at(current.shapes(), &view, point).cloned(),
-            None => transform::topmost_at(current.boxes(), point).cloned(),
+            Some(view) => camera::topmost_at(current.seen_shapes(&selected), &view, point).cloned(),
+            None => transform::topmost_at(current.seen_boxes(&selected), point).cloned(),
         }
     };
     // The handle of the one selected item under `point`: in crop mode the resize
@@ -786,12 +789,15 @@ pub fn Canvas() -> impl IntoView {
     let canvas_at = move |x: i32, y: i32| -> Option<(Viewport, Point)> {
         measure();
         let fit = viewport.get_untracked()?;
-        let frame = stage.get_untracked()?.get_bounding_client_rect();
+        // In the stage's CSS pixels, as the fit is, at every UI scale (`ui_scale.rs`).
+        let stage = stage.get_untracked()?;
+        let frame = crate::ui_scale::rect(&stage);
+        let css = crate::ui_scale::css;
         Some((
             fit,
             fit.to_canvas(
-                (f64::from(x) - frame.left()) as f32,
-                (f64::from(y) - frame.top()) as f32,
+                (css(f64::from(x)) - frame.left()) as f32,
+                (css(f64::from(y)) - frame.top()) as f32,
             ),
         ))
     };
@@ -827,10 +833,11 @@ pub fn Canvas() -> impl IntoView {
                 }
                 _ => None,
             };
+            let selected = chosen.get_untracked();
             let targets = SnapTargets::new(
                 current.canvas,
                 current
-                    .boxes()
+                    .seen_boxes(&selected)
                     .filter(|(id, _)| !moving.contains(id))
                     .map(|(_, geometry)| geometry),
             );
@@ -1167,6 +1174,7 @@ pub fn Canvas() -> impl IntoView {
             Action::Marquee { from, to, base } => {
                 *to = point;
                 marquee.set(Some((*from, *to)));
+                let selected = chosen.get_untracked();
                 let hits = layout.with_untracked(|l| {
                     let Some(l) = l.as_ref() else {
                         return Vec::new();
@@ -1175,14 +1183,14 @@ pub fn Canvas() -> impl IntoView {
                     match seen_in(l) {
                         Some(view) => {
                             let shown: Vec<(ItemId, ItemGeometry)> = l
-                                .shapes()
+                                .seen_shapes(&selected)
                                 .filter_map(|(id, g, shape)| {
                                     Some((id.clone(), camera::screen_box(g, shape, &view)?))
                                 })
                                 .collect();
                             group::marquee(shown.iter().map(|(id, g)| (id, g)), *from, *to)
                         }
-                        None => group::marquee(l.boxes(), *from, *to),
+                        None => group::marquee(l.seen_boxes(&selected), *from, *to),
                     }
                 });
                 studio.select_items(base.iter().cloned().chain(hits));
@@ -1817,8 +1825,9 @@ pub fn Canvas() -> impl IntoView {
     // Screen pixels in canvas units, for handle sizes and label text.
     let px = move |screen: f32| viewport.get().map_or(screen, |v| v.canvas_len(screen));
 
-    // Over the live picture only the selection, the box under the pointer and hidden
-    // items are drawn; without it every box is, faintly, with its name.
+    // Over the live picture only the selection and the box under the pointer are drawn;
+    // without it every visible box is, faintly, with its name. A hidden item shows only
+    // while selected, dashed (#1732).
     let boxes = move || {
         let picked = chosen.get();
         let under = hovered.get();
@@ -1828,6 +1837,10 @@ pub fn Canvas() -> impl IntoView {
             .into_iter()
             .filter_map(|(id, name, geometry, visible, shape)| {
                 let is_selected = picked.contains(&id);
+                // A hidden item draws nothing unless it is selected (#1732).
+                if !visible && !is_selected {
+                    return None;
+                }
                 let (stroke, width) = if is_selected {
                     (selection_colour(picked.len(), crop_mode.get()), "2")
                 } else {
@@ -2396,6 +2409,9 @@ pub fn Canvas() -> impl IntoView {
                             >
                                 "◆ Save view"
                             </button>
+                            <live_aim::LiveAim scene=Signal::derive(move || {
+                                layout.with(|l| l.as_ref().and_then(|l| shown_scene(l).cloned()))
+                            }) />
                         }
                     })}
                 })}
@@ -2455,12 +2471,14 @@ fn handle_cursor(handle: Handle) -> &'static str {
 
 /// The outline of an item that isn't selected: a light one under the pointer, a faint one
 /// while no live picture is under the boxes, else none, so a source over the picture
-/// shows no box until it is selected or pointed at. A hidden item isn't in the picture
-/// but still takes clicks, so it keeps its faint (dashed) outline.
+/// shows no box until it is selected or pointed at. A hidden item shows none: it is
+/// outlined, dashed, only while selected (#1732).
 fn unselected_outline(hovered: bool, pictured: bool, visible: bool) -> Option<&'static str> {
-    if hovered {
+    if !visible {
+        None
+    } else if hovered {
         Some(HOVER)
-    } else if pictured && visible {
+    } else if pictured {
         None
     } else {
         Some(IDLE)
@@ -2882,8 +2900,9 @@ mod tests {
         assert_eq!(unselected_outline(true, true, true), Some(HOVER));
         assert_eq!(unselected_outline(false, false, true), Some(IDLE));
         assert_eq!(unselected_outline(true, false, true), Some(HOVER));
-        // A hidden item still takes clicks, so it stays outlined over the picture.
-        assert_eq!(unselected_outline(false, true, false), Some(IDLE));
+        // A hidden item shows no box, over the picture or not, until it is selected (#1732).
+        assert_eq!(unselected_outline(false, true, false), None);
+        assert_eq!(unselected_outline(false, false, false), None);
     }
 
     #[test]
