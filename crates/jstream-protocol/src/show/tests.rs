@@ -246,3 +246,15 @@ fn show_actions_are_checked_as_the_call_would_be() {
     assert_eq!(Action::ShowContinue.bind_problem(), None);
     assert!(Action::ShowContinue.cue_problem().is_some());
 }
+
+#[test]
+fn a_bookmark_holds_up_to_16_kib_of_show_notes() {
+    let mut show = ShowInfo::new("s");
+    show.program = vec![clip("c", 10_000)];
+    let mut notes = bookmark("b", 0);
+    notes.note = "# Segment\n\n- greet\n".repeat(1000)[..MAX_SHOW_NOTE_LEN].to_owned();
+    show.bookmarks = vec![notes];
+    assert_eq!(field(&show), None);
+    show.bookmarks[0].note.push('x');
+    assert_eq!(field(&show).as_deref(), Some("bookmarks.0.note"));
+}

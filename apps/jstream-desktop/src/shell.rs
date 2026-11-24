@@ -268,7 +268,8 @@ pub fn run(
             crate::ptz::set_ptz_controllers,
             crate::screenshots::save_screenshot,
             crate::screenshots::open_saved,
-            crate::screenshots::show_saved
+            crate::screenshots::show_saved,
+            crate::zoom::set_zoom
         ])
         // Asynchronous so the update check's request to GitHub doesn't block the
         // window. File requests are answered on this call, as they were before.

@@ -1,5 +1,5 @@
 //! Shows ([ADR-0210](../../../docs/adr/0210-shows-a-run-order-with-bookmarks.md), since
-//! 0.177): a saved run order of scenes, laid out on tracks in show time, with bookmarks
+//! 0.178): a saved run order of scenes, laid out on tracks in show time, with bookmarks
 //! the show pauses at or jumps to, and loops.
 //!
 //! A show is a collection object (`show.set`, `show.delete`, listed in `state.get`'s
@@ -35,8 +35,9 @@ pub const MAX_SHOW_BOOKMARKS: usize = 256;
 pub const MAX_SHOW_LOOPS: usize = 64;
 /// The longest show name, and the longest name of a track, bookmark or loop, in bytes.
 pub const MAX_SHOW_NAME_LEN: usize = 256;
-/// The longest note on a bookmark, in bytes.
-pub const MAX_SHOW_NOTE_LEN: usize = 1024;
+/// The longest note on a bookmark, in bytes: 16 KiB of Markdown, room for a segment's
+/// show notes.
+pub const MAX_SHOW_NOTE_LEN: usize = 16_384;
 /// The longest fade an audio clip takes in or out, in milliseconds.
 pub const MAX_SHOW_FADE_MS: u32 = 60_000;
 /// The longest a pausing bookmark waits before it continues by itself, in milliseconds:
@@ -74,8 +75,8 @@ pub struct ShowInfo {
     /// program while they last. At most 8. Omitted for none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<OverlayTrack>,
-    /// The keyframe track (K): markers that load a keyframe of the scene on program, in
-    /// time order. At most 1024. Omitted for none.
+    /// The keyframe track (K): markers that switch program to a keyframe of the scene on
+    /// program, in time order. At most 1024. Omitted for none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keyframes: Vec<KeyframeMarker>,
     /// Sequence tracks (S): cues that play a sequence or run one event. At most 8.
@@ -181,8 +182,8 @@ fn is_zero(ms: &u32) -> bool {
     *ms == 0
 }
 
-/// A marker on the keyframe track: it loads a keyframe of the scene on program, as a
-/// Move, the way `scene.set_keyframe` does.
+/// A marker on the keyframe track: it switches program to a keyframe scene of the scene
+/// on program (or back to that scene's own values), as a Move with its preset's timing.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct KeyframeMarker {
     /// Its ID, unique within the show.
@@ -317,7 +318,8 @@ pub struct ShowBookmark {
     /// one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continue_after_ms: Option<u32>,
-    /// A note for the operator, at most 1024 bytes. Omitted means empty.
+    /// The bookmark's show notes for the operator, in Markdown (CommonMark), at most
+    /// 16 KiB, which the Run view shows in an expandable panel. Omitted means empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
 }
@@ -684,7 +686,7 @@ impl ShowInfo {
                 return Some((format!("{at}.name"), "must be at most 256 bytes".into()));
             }
             if bookmark.note.len() > MAX_SHOW_NOTE_LEN {
-                return Some((format!("{at}.note"), "must be at most 1024 bytes".into()));
+                return Some((format!("{at}.note"), "must be at most 16384 bytes".into()));
             }
             match bookmark.continue_after_ms {
                 Some(_) if !bookmark.pausing => {
@@ -877,7 +879,8 @@ pub struct RunningShow {
     pub at_ms: u32,
     /// Whether it plays, waits at a pausing bookmark, or was taken off script.
     pub state: ShowState,
-    /// The pausing bookmark it waits at. Omitted unless `state` is `paused`.
+    /// The pausing bookmark it waits at. Omitted unless `state` is `paused`, and when
+    /// `show.pause` paused it between bookmarks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bookmark_id: Option<String>,
     /// How long it has waited at `bookmark_id`, in milliseconds. Omitted unless `state`
@@ -910,7 +913,8 @@ pub struct RunningShow {
 pub enum ShowState {
     /// Its play head moves.
     Playing,
-    /// It waits at a pausing bookmark for `show.continue`. Program keeps running.
+    /// It waits for `show.continue`: at a pausing bookmark, or where `show.pause` held
+    /// it. Program keeps running.
     Paused,
     /// A scene was switched by hand while it ran: it waits where it was, and
     /// `show.continue` goes on to the next clip.
@@ -928,7 +932,7 @@ pub enum ShowState {
 pub enum ShowChange {
     /// `show.play` started it.
     Started,
-    /// It reached a pausing bookmark and waits.
+    /// It reached a pausing bookmark, or `show.pause` held it, and waits.
     Paused,
     /// It plays on from a pause, by `show.continue` or a bookmark's own wait.
     Continued,

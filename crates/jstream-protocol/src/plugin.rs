@@ -292,6 +292,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("show.delete", N),
     ("show.play", N),
     ("show.stop", N),
+    ("show.pause", N),
     ("show.continue", N),
     ("show.back", N),
     ("show.skip", N),
@@ -303,6 +304,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("overlay.show", Class(L)),
     ("overlay.hide", Class(L)),
     ("overlay.toggle", Class(L)),
+    ("source.seek", Class(L)),
     // Holding the media clock stops every animation for every client (ADR-0172); a
     // plugin never does.
     ("clock.hold", N),

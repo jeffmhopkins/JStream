@@ -55,7 +55,8 @@ no new way of doing anything, only a saved order of the actions that exist.
      and out; omitted, the usual order applies;
    - **overlay tracks** (V2 and up, at most 8): scene clips anywhere, gaps allowed, none
      overlapping on one track, drawn over program for their span with optional fades;
-   - the **keyframe track** (K): markers that load a keyframe of the scene on program;
+   - the **keyframe track** (K): markers that switch program to a keyframe scene of the
+     scene on program, as a Move with the marker's preset timing;
    - **sequence tracks** (S, at most 8): cues that run one action a timeline's cue may run
      (`Action::cue_problem`), except `scene.switch`, which only the program track does. A
      cue that runs `timeline.play` is drawn as a clip as wide as the sequence;
@@ -70,17 +71,20 @@ no new way of doing anything, only a saved order of the actions that exist.
    a show. `ShowInfo::problem` is the one shape check every implementation shares.
 
 4. **Bookmarks** are named points in show time, pausing (the default) or non-pausing, in
-   time order with no two at one time. A pausing bookmark stops the show until Continue,
-   and may continue by itself after `continue_after_ms`. Each has an "arrive with" preset
-   for jumps to it, a name and an operator's note. The show's own `preset_id` is the
+   time order with no two at one time. A pausing bookmark stops the show until Continue
+   (one at a clip's start puts that clip on program as it stops, so the operator waits on
+   what comes next), and may continue by itself after `continue_after_ms`. Each has an "arrive with" preset
+   for jumps to it, a name, and show notes for the operator: Markdown, up to 16 KiB, which
+   the Run view shows in an expandable panel. The show's own `preset_id` is the
    default for jumps and loop wraps.
 
-5. **Continue is one bindable action**, `show.continue`: waiting at a pausing bookmark it
+5. **Continue is one bindable action**, `show.continue`: waiting at a pausing bookmark, or where `show.pause` held it, it
    plays on; with a spot armed it jumps there; off script it goes to the next clip; in a
    loop it leaves as the loop says; playing, it jumps to the next pausing bookmark. It is
    ignored during a transition, so a double press can't skip a bookmark. Its siblings, all
    bindable to a key, a MIDI trigger or called over MCP, are `show.play` (from the start or
-   a bookmark, or rehearsed on preview), `show.stop`, `show.back`, `show.skip`,
+   a bookmark, or rehearsed on preview), `show.stop`, `show.pause` (hold the play head
+   where it is until Continue, or Play of the same show, plays on), `show.back`, `show.skip`,
    `show.go_to` (one bookmark of one show, acting only while that show runs),
    `show.go_to_number` (bookmark 1 to 8 of the running show, by order, so a pad row needs no
    rebinding), `show.seek` (jump the play head, for scrubbing and agents) and `show.arm`.

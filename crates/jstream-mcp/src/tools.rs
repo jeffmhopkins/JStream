@@ -116,7 +116,8 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// motion (#1107, which stills itself), a follow camera's zoom (ADR-0113: another zoom puts
 /// it back, and nothing stores it), a scene camera's live aim (ADR-0152: another aim puts
 /// it back, and nothing stores it), a source's restart (ADR-0115: a page or file starts
-/// again, as a switch to a scene with `restart_on_show` restarts it), the keyframe a
+/// again, as a switch to a scene with `restart_on_show` restarts it) or seek (a file
+/// plays on from another point, which another seek puts back), the keyframe a
 /// placed scene is drawn through (ADR-0116: another `scene.set_keyframe` puts it back,
 /// and nothing stores it), a preview stream (which MCP can't receive anyway), and a
 /// view's report (ADR-0132: it only replaces the session's own counts), and the warm
@@ -131,7 +132,7 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// here is not `destructiveHint`. Every other action is: going live or stopping, setting
 /// or clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 29] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 30] = [
     "audio.reset_loudness",
     "channel.nudge",
     "channel.set_value",
@@ -158,6 +159,7 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 29] = [
     "scene.switch_and_watch",
     "scene.zoom_camera",
     "source.restart",
+    "source.seek",
     "studio.set_preview",
     "studio.set_rendering",
     "studio.set_warm",
