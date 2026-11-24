@@ -1947,7 +1947,7 @@ pub(crate) fn actions() -> Vec<Action> {
             channel: 1,
             scene_id: None,
         },
-        Action::PreviewKeyframe { channel: 1 },
+        Action::PreviewRequestKeyframe { channel: 1 },
         Action::PreviewReport {
             view: "projector:program".into(),
             counts: crate::ViewCounts {

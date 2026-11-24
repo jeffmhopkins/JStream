@@ -87,7 +87,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `ptz.store`, `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.show`,
-  `preview.keyframe`, `preview.report`,
+  `preview.request_keyframe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
@@ -401,7 +401,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.188 because `preview.show` moves an open preview stream to
 another scene, or the program, on its channel, keeping its encoder where nothing else
-shares it, and `preview.keyframe` asks a stream for a keyframe at once; 0.186 because a value binding and a reader motion row (`midi`,
+shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.186 because a value binding and a reader motion row (`midi`,
 `data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
 `replace`; a value binding's target sums its `add` bindings onto the last moved
 `replace` binding's value or its stored value, a binding gains `enabled`, and a
@@ -3715,7 +3715,7 @@ the JSON text messages of the same connection (0.20,
   picture of the new scene is a keyframe, and pictures of the old one may arrive before
   it. A channel not open, or a stream of a source, fails with `invalid_argument` naming
   `channel`; a scene the collection doesn't have with `not_found`.
-  `preview.keyframe {channel}` (0.188) asks a stream for a keyframe as its next picture:
+  `preview.request_keyframe {channel}` (0.188) asks a stream for a keyframe as its next picture:
   a client whose decoder fell behind and dropped pictures resumes from it at once
   rather than at the stream's next regular keyframe, up to 2 s later. It succeeds for a
   channel that isn't open, and the activity log doesn't record it.

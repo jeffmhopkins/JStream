@@ -207,9 +207,9 @@ impl Stream {
         }
     }
 
-    /// Its `preview.keyframe`.
+    /// Its `preview.request_keyframe`.
     pub fn keyframe(&self) -> Action {
-        Action::PreviewKeyframe {
+        Action::PreviewRequestKeyframe {
             channel: self.channel,
         }
     }
@@ -277,7 +277,7 @@ pub enum Step {
 /// Feeds a decoder H.264 frames so that it only ever gets a stream it can decode: it
 /// starts at a keyframe, is reconfigured when the stream's profile or level changes,
 /// and, once its backlog grows past [`MAX_BACKLOG`], skips to the next keyframe, which
-/// it asks the engine for at once ([`H264Feed::take_keyframe_ask`], `preview.keyframe`)
+/// it asks the engine for at once ([`H264Feed::take_keyframe_ask`], `preview.request_keyframe`)
 /// so the skip lasts a frame or two rather than up to the stream's two seconds
 /// between keyframes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -550,7 +550,7 @@ mod tests {
         );
         assert_eq!(
             next.keyframe(),
-            Action::PreviewKeyframe { channel: CHANNEL }
+            Action::PreviewRequestKeyframe { channel: CHANNEL }
         );
         // When the engine can't move it, the same picture on a new stream.
         let reopened = next.on_next_channel();

@@ -149,7 +149,7 @@ covers = ["crates/jstream-core/src/activity_log.rs", "crates/jstream-core/src/au
   slows and then stops the audience reads as it runs low. A refresh token Google
   refuses signs the engine out.
 - **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action
-  (but `live.set`, `live.cancel`, `values.set`, `preview.report` and `preview.keyframe`),
+  (but `live.set`, `live.cancel`, `values.set`, `preview.report` and `preview.request_keyframe`),
   and one per gesture that ends without a commit, sent to
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
@@ -585,7 +585,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
 -->
 
 - **Preview** (`preview/`): `preview.subscribe`, `preview.unsubscribe`, `preview.show`
-  (another scene on an open stream) and `preview.keyframe`, the program
+  (another scene on an open stream) and `preview.request_keyframe`, the program
   mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a `jstream-encode` session (software, or for one stream the program stage draws the hardware encoder) when the
@@ -1031,7 +1031,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   back on the same encoder session, then into the session of another stream showing that
   scene, and a hub stream to another scene, each going on with a keyframe and its times,
   and refusing a channel not open, a source's stream and a missing scene;
-  `preview.keyframe` making the next picture a keyframe, and succeeding on a channel not
+  `preview.request_keyframe` making the next picture a keyframe, and succeeding on a channel not
   open), the
   collection file (`src/tests/collection.rs`: created when missing with the sample
   labels at `rev` 0, batches, an undo
@@ -3577,7 +3577,7 @@ picture, joining its session if one is open; a JPEG or PNG stream always does. T
 hub's own streams draw the new scene as a keyframe.
 `preview_show_moves_a_stream_to_another_scene_on_its_encoder`,
 `preview_show_moves_a_hub_stream_to_another_scene`, `preview_show_is_checked`,
-`a_cut_preview_tap_goes_and_its_new_tap_stays`. `preview.keyframe` sets a stream's
+`a_cut_preview_tap_goes_and_its_new_tap_stays`. `preview.request_keyframe` sets a stream's
 keyframe flag and wakes the hub (`preview_keyframe_asks_for_a_keyframe_at_once`); the
 audit log leaves it out, as it does `preview.report`.
 
@@ -4843,7 +4843,7 @@ for pages, not a change to the studio, and may be set many times a second (ADR-0
 decision 7, [Shared values](#shared-values)). Nor does `preview.report`: it carries
 a client view's counts once a second, and only `profile.get` reads them
 ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)). Nor does
-`preview.keyframe`, a client's decoder catching up, which changes nothing in the studio.
+`preview.request_keyframe`, a client's decoder catching up, which changes nothing in the studio.
 
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection

@@ -361,7 +361,7 @@ impl Audit {
     /// other than `live.set` and `live.cancel`, whose gestures are logged when they end,
     /// and `values.set`, which carries data, not a change to the studio, and may come
     /// many times a second (ADR-0102 decision 7), `preview.report`, a view's counts
-    /// once a second (ADR-0132), and `preview.keyframe`, a decoder catching up.
+    /// once a second (ADR-0132), and `preview.request_keyframe`, a decoder catching up.
     pub(crate) fn records(call: &Call) -> bool {
         match call {
             Call::Action {
@@ -369,7 +369,7 @@ impl Audit {
                     Action::LiveSet { .. }
                     | Action::LiveCancel { .. }
                     | Action::ValuesSet { .. }
-                    | Action::PreviewKeyframe { .. }
+                    | Action::PreviewRequestKeyframe { .. }
                     | Action::PreviewReport { .. },
             } => false,
             Call::Batch(_) | Call::History(_) | Call::Action { .. } => true,

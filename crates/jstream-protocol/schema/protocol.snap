@@ -419,7 +419,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "integer"
             },
             "type": {
-              "const": "preview.keyframe",
+              "const": "preview.request_keyframe",
               "type": "string"
             }
           },

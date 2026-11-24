@@ -1757,8 +1757,8 @@ pub enum Action {
     /// picture (since 0.188): a client whose decoder fell behind and dropped pictures
     /// resumes from it rather than waiting for the stream's next regular keyframe, up to
     /// two seconds later. Succeeds for a channel that is not open.
-    #[serde(rename = "preview.keyframe")]
-    PreviewKeyframe {
+    #[serde(rename = "preview.request_keyframe")]
+    PreviewRequestKeyframe {
         /// The channel the stream was opened on.
         channel: u32,
     },
@@ -2655,7 +2655,7 @@ impl Action {
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
             Action::PreviewShow { .. } => "preview.show",
-            Action::PreviewKeyframe { .. } => "preview.keyframe",
+            Action::PreviewRequestKeyframe { .. } => "preview.request_keyframe",
             Action::PreviewReport { .. } => "preview.report",
             Action::SceneSwitch { .. } => "scene.switch",
             Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
@@ -2818,7 +2818,7 @@ impl Action {
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
             | Action::PreviewShow { .. }
-            | Action::PreviewKeyframe { .. }
+            | Action::PreviewRequestKeyframe { .. }
             | Action::PreviewReport { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
@@ -2878,7 +2878,7 @@ impl Action {
             Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
             | Action::PreviewShow { .. }
-            | Action::PreviewKeyframe { .. }
+            | Action::PreviewRequestKeyframe { .. }
             | Action::PreviewReport { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
@@ -3088,7 +3088,7 @@ impl Action {
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
             | Action::PreviewShow { .. }
-            | Action::PreviewKeyframe { .. }
+            | Action::PreviewRequestKeyframe { .. }
             | Action::SceneSwitch { .. }
             | Action::SceneSwitchAndWatch { .. }
             | Action::StudioSetPreview { .. }

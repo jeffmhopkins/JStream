@@ -2592,7 +2592,7 @@ impl Engine {
                 action @ (Action::PreviewSubscribe { .. }
                 | Action::PreviewUnsubscribe { .. }
                 | Action::PreviewShow { .. }
-                | Action::PreviewKeyframe { .. }),
+                | Action::PreviewRequestKeyframe { .. }),
         } = call
         {
             self.preview_action(previews, action)
@@ -2919,7 +2919,7 @@ impl Engine {
                 }
                 Ok(CallResult::Action { result: None })
             }
-            Action::PreviewKeyframe { channel } => {
+            Action::PreviewRequestKeyframe { channel } => {
                 previews.keyframe(&self.shared.previews, channel);
                 Ok(CallResult::Action { result: None })
             }

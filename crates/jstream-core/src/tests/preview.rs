@@ -1570,7 +1570,7 @@ fn preview_show_moves_a_hub_stream_to_another_scene() {
     assert!(again.header.pts_us > first.header.pts_us);
 }
 
-/// `preview.keyframe` gets a still stream a keyframe at once, rather than at its next
+/// `preview.request_keyframe` gets a still stream a keyframe at once, rather than at its next
 /// regular one, and succeeds for a channel not open.
 #[test]
 fn preview_keyframe_asks_for_a_keyframe_at_once() {
@@ -1583,7 +1583,7 @@ fn preview_keyframe_asks_for_a_keyframe_at_once() {
         assert!(!later.header.end);
     }
     let keyframe = |channel| Call::Action {
-        action: Action::PreviewKeyframe { channel },
+        action: Action::PreviewRequestKeyframe { channel },
     };
     act(&control, keyframe(3)).expect("asked");
     let asked = Instant::now();

@@ -293,7 +293,7 @@ mod web {
             self.failed.get()
         }
 
-        /// Whether to ask the engine for a keyframe now (`preview.keyframe`): the
+        /// Whether to ask the engine for a keyframe now (`preview.request_keyframe`): the
         /// decoder fell behind and is skipping to the next one. True once per skip.
         pub fn wants_keyframe(&mut self) -> bool {
             self.feed.take_keyframe_ask()

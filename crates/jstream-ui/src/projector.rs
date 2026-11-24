@@ -453,11 +453,11 @@ fn Picture(
                     let mut screen = screen.borrow_mut();
                     let result = screen.show(&header, &frame.payload);
                     if screen.wants_keyframe() {
-                        // Behind: the next keyframe now (`preview.keyframe`), rather
+                        // Behind: the next keyframe now (`preview.request_keyframe`), rather
                         // than the stream's next regular one.
                         let control = control.clone();
                         spawn_local(async move {
-                            let ask = Action::PreviewKeyframe { channel };
+                            let ask = Action::PreviewRequestKeyframe { channel };
                             let _asked = act(&control, ask).await;
                         });
                     }

@@ -8,7 +8,7 @@
 //! ([`preview::Stream::at_fps`], [`preview::Stream::at_stage`]). A new scene moves the
 //! open stream there on its channel (`preview.show`), keeping the last picture until the
 //! new one's first; a decoder that falls behind asks for a keyframe
-//! (`preview.keyframe`).
+//! (`preview.request_keyframe`).
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
@@ -379,7 +379,7 @@ fn frames(
             // Behind: the next keyframe now, rather than the stream's next regular one.
             let control = control.clone();
             spawn_local(async move {
-                let _asked = act(&control, Action::PreviewKeyframe { channel }).await;
+                let _asked = act(&control, Action::PreviewRequestKeyframe { channel }).await;
             });
         }
         if let Err(reason) = result

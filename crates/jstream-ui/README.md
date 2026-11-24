@@ -1928,7 +1928,7 @@ each time its scene changes.
   decoder's queue passes 12 chunks (about a fifth of a second at 60 fps, so a busy
   main thread's short stall, which also holds chunks in that queue, doesn't freeze the
   picture until the next keyframe; #1556). That skip asks the engine for the keyframe at
-  once (`preview.keyframe`, sent without waiting for its answer), so it lasts a frame or
+  once (`preview.request_keyframe`, sent without waiting for its answer), so it lasts a frame or
   two rather than up to the stream's two seconds between keyframes; the monitors and
   projectors ask the same way. JPEG frames go through `createImageBitmap` one at a
   time, and while one decodes only the newest that arrives waits, so the last picture

@@ -308,7 +308,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "preview.subscribe",
                   "preview.unsubscribe",
                   "preview.show",
-                  "preview.keyframe",
+                  "preview.request_keyframe",
                   "preview.report",
                   "scene.switch",
                   "scene.switch_and_watch",
@@ -4363,7 +4363,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "preview.subscribe",
                   "preview.unsubscribe",
                   "preview.show",
-                  "preview.keyframe",
+                  "preview.request_keyframe",
                   "preview.report",
                   "scene.switch",
                   "scene.switch_and_watch",
@@ -7972,7 +7972,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `preview` operation: set `op.type` to one of `preview.subscribe` (action), `preview.unsubscribe` (action), `preview.show` (action), `preview.keyframe` (action), `preview.report` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `preview` operation: set `op.type` to one of `preview.subscribe` (action), `preview.unsubscribe` (action), `preview.show` (action), `preview.request_keyframe` (action), `preview.report` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "PreviewCodec": {
@@ -8234,7 +8234,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "integer"
                   },
                   "type": {
-                    "const": "preview.keyframe",
+                    "const": "preview.request_keyframe",
                     "type": "string"
                   }
                 },
@@ -10573,7 +10573,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "preview.subscribe",
                   "preview.unsubscribe",
                   "preview.show",
-                  "preview.keyframe",
+                  "preview.request_keyframe",
                   "preview.report",
                   "scene.switch",
                   "scene.switch_and_watch",
@@ -12147,7 +12147,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "preview.subscribe",
                   "preview.unsubscribe",
                   "preview.show",
-                  "preview.keyframe",
+                  "preview.request_keyframe",
                   "preview.report",
                   "scene.switch",
                   "scene.switch_and_watch",

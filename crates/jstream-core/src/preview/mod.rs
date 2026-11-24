@@ -16,7 +16,7 @@
 //! `Control::binary`) and its open streams by channel. `preview.subscribe` checks the
 //! request, picks the codec and registers the stream with the engine's [`PreviewHub`];
 //! `preview.unsubscribe` and the session's end drop it. `preview.show` changes the scene
-//! an open stream shows (**Moving a stream**), and `preview.keyframe` sets its keyframe
+//! an open stream shows (**Moving a stream**), and `preview.request_keyframe` sets its keyframe
 //! flag, so a client whose decoder fell behind resumes on the next picture.
 //!
 //! **Moving a stream.** A stream's scene is the one thing about it that changes while it
@@ -501,7 +501,7 @@ impl SessionPreviews {
         Ok(changed)
     }
 
-    /// `preview.keyframe`: the next picture on `channel` is a keyframe. Nothing for a
+    /// `preview.request_keyframe`: the next picture on `channel` is a keyframe. Nothing for a
     /// channel not open.
     pub(crate) fn keyframe(&self, hub: &PreviewHub, channel: u32) {
         if let Some(stream) = lock(&self.streams).get(&channel) {
