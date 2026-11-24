@@ -49,7 +49,7 @@ A source's kind has a mark too, a dot on its chip in the Mappings panel: MIDI
 `--warn`, only to tell the kinds apart.
 
 The Show panel's timeline is the other: its `--show-*` tokens tell its elements apart,
-each with one job. Bookmarks and Continue are yellow (`--show-bookmark`), loops and
+each with one job. Bookmarks are yellow (`--show-bookmark`), loops and
 keyframes violet (`--show-loop`, `--show-keyframe`), the armed spot light blue
 (`--show-armed`) and the play head white (`--show-head`); program clips take five dark
 colours in turn (`--show-clip-c0` to `c4`, and the Run view's strip `--show-seg-0` to

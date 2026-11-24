@@ -555,7 +555,7 @@ fn RunBar() -> impl IntoView {
     let pick = move |m: NextMonitor| move |_| panel.send(Command::NextMonitor(id(), m));
     let mon = move |m: NextMonitor, label: &'static str| {
         view! {
-            <button type="button" class:on=move || monitor() == m
+            <button type="button"
                 aria-pressed=move || (monitor() == m).to_string()
                 on:click=pick(m)>{label}</button>
         }
@@ -584,8 +584,8 @@ fn RunBar() -> impl IntoView {
                 on:click=move |_| panel.send(Command::Rehearse(!rehearsing()))>
                 {move || if rehearsing() { "Rehearse on preview: on" } else { "Rehearse on preview: off" }}
             </button>
-            <div class="show-seg" role="group" aria-label="Next monitor">
-                <span class="show-seg-label">"Next monitor"</span>
+            <span class="show-seg-label" aria-hidden="true">"Next monitor"</span>
+            <div class="segmented" role="group" aria-label="Next monitor">
                 {mon(NextMonitor::Live, "Live")}
                 {mon(NextMonitor::Still, "Still")}
                 {mon(NextMonitor::Off, "Off")}
@@ -626,17 +626,17 @@ fn NowNext() -> impl IntoView {
     view! {
         {move || cards().map(|(n, x)| view! {
             <div class="show-card">
-                <h6>"NOW"</h6>
+                <h6 class="eyebrow">"Now"</h6>
                 <div class="show-card-big">{n.title}</div>
                 <div class="show-card-sub">{n.line}</div>
             </div>
             <div class="show-card">
-                <h6>"NEXT ON CONTINUE"</h6>
+                <h6 class="eyebrow">"Next on Continue"</h6>
                 <div class="show-card-big">{x.title}</div>
                 <div class="show-card-sub">{x.line}</div>
             </div>
         })}
-        <button type="button" class="show-continue" class:busy=busy aria-disabled=move || busy().to_string()
+        <button type="button" class="primary show-continue" class:busy=busy aria-disabled=move || busy().to_string()
             on:click=move |_| if !busy() { panel.send(Command::Continue) }>"Continue ▸"</button>
         <div class="show-run-back">
             <button type="button" class="show-btn" on:click=move |_| panel.send(Command::Back)>"⏮ Back"</button>
@@ -659,7 +659,7 @@ fn Bookmarks() -> impl IntoView {
     };
     view! {
         <div class="show-run-marks">
-            <h6>"BOOKMARKS"<span>" · click or press the key to go there now"</span></h6>
+            <h6 class="eyebrow">"Bookmarks"<span>" · click or press the key to go there now"</span></h6>
             <div class="show-run-grid">
                 {move || list().into_iter().map(|c| {
                     let id = c.id.clone();
@@ -696,7 +696,7 @@ fn ClocksCard() -> impl IntoView {
     };
     view! {
         <div class="show-card">
-            <h6>"CLOCKS"</h6>
+            <h6 class="eyebrow">"Clocks"</h6>
             {move || read().map(|c| view! {
                 <div class="show-clocks">
                     <div><span>"Show time"</span><b>{c.show}</b></div>
@@ -722,7 +722,7 @@ fn UpNowCard() -> impl IntoView {
     };
     view! {
         <div class="show-card">
-            <h6>"UP RIGHT NOW"</h6>
+            <h6 class="eyebrow">"Up right now"</h6>
             <ul class="show-up">
                 {move || {
                     let rows = rows();
