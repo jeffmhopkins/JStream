@@ -102,6 +102,8 @@ pub(crate) struct LiveSources {
     /// The sources the warm scenes draw (ADR-0117 §7): they never rest, so showing one
     /// finds a page loaded and painting.
     warm: BTreeSet<SourceId>,
+    /// The stills those sources show, as [`Self::warm_stills`] found them last.
+    warm_stills: Arc<crate::runtime::WarmStills>,
     worker: Arc<Worker>,
     host: Weak<dyn LiveHost>,
     /// Whether the thread has been started.
@@ -299,6 +301,7 @@ impl LiveSources {
             tickets: 0,
             installs: 0,
             warm: BTreeSet::new(),
+            warm_stills: Arc::default(),
             worker: Arc::new(Worker::new(
                 Arc::clone(&clock) as Arc<dyn MediaClock>,
                 Arc::clone(&meters),
@@ -1232,6 +1235,66 @@ impl LiveSources {
         }
     }
 
+    /// The frame a still image source shows, the same one every plan shows until the
+    /// source is built again: `None` for a source that shows no still. Never decoded
+    /// here: the stills thread holds its pixels for the draws.
+    fn still_frame(running: &mut Running, versions: &mut u64, stills: &Stills) -> Option<Frame> {
+        let still = running.source.still()?;
+        let frame = match &running.shown_still {
+            Some((shown, frame)) if Arc::ptr_eq(shown, &still) => frame.clone(),
+            _ => {
+                *versions = versions.saturating_add(1);
+                let size = still.size();
+                let shown = stills.show(Arc::clone(&still));
+                let frame = Frame::from_still(shown, *versions);
+                let frame = match running.extent {
+                    Some(extent) => frame.placed_at(extent),
+                    None => frame,
+                };
+                running.size = Some(running.extent.unwrap_or(size));
+                running.shown_still = Some((still, frame.clone()));
+                frame
+            }
+        };
+        Some(frame)
+    }
+
+    /// The stills the warm scenes' sources show ([`Self::set_warm`]), for the program
+    /// stage to keep uploaded (ADR-0212), less those whose source shows a frame stored
+    /// in `stored` instead. A still no plan showed yet is shown now, as the plan that
+    /// shows it would, but reached by nothing. The same list while the stills are the
+    /// same, so publishing it again changes nothing.
+    pub(crate) fn warm_stills(
+        &mut self,
+        stored: &BTreeMap<SourceId, Frame>,
+        versions: &mut u64,
+    ) -> &Arc<crate::runtime::WarmStills> {
+        let mut stills = Vec::new();
+        for id in self.warm.iter().filter(|id| !stored.contains_key(*id)) {
+            let Some(running) = self
+                .entries
+                .get_mut(id)
+                .and_then(|entry| entry.running.as_mut())
+            else {
+                continue;
+            };
+            if let Some(frame) = Self::still_frame(running, versions, &self.stills) {
+                stills.push((crate::snapshot::GpuKey::Frame(id.clone()), frame));
+            }
+        }
+        let same = stills.len() == self.warm_stills.len()
+            && stills
+                .iter()
+                .zip(self.warm_stills.iter())
+                .all(|((key, frame), (was, before))| {
+                    key == was && frame.version() == before.version()
+                });
+        if !same {
+            self.warm_stills = Arc::new(stills);
+        }
+        &self.warm_stills
+    }
+
     fn cpu_frame(
         source_id: &SourceId,
         running: &mut Running,
@@ -1239,24 +1302,7 @@ impl LiveSources {
         versions: &mut u64,
         stills: &Stills,
     ) -> Option<(Frame, Option<MediaTime>)> {
-        if let Some(still) = running.source.still() {
-            // Never decoded here: the stills thread holds its pixels for the draws.
-            let frame = match &running.shown_still {
-                Some((shown, frame)) if Arc::ptr_eq(shown, &still) => frame.clone(),
-                _ => {
-                    *versions = versions.saturating_add(1);
-                    let size = still.size();
-                    let shown = stills.show(Arc::clone(&still));
-                    let frame = Frame::from_still(shown, *versions);
-                    let frame = match running.extent {
-                        Some(extent) => frame.placed_at(extent),
-                        None => frame,
-                    };
-                    running.size = Some(running.extent.unwrap_or(size));
-                    running.shown_still = Some((still, frame.clone()));
-                    frame
-                }
-            };
+        if let Some(frame) = Self::still_frame(running, versions, stills) {
             return Some((
                 frame
                     .with_model(running.source.model())
