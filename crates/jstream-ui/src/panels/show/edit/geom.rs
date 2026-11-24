@@ -322,10 +322,144 @@ pub fn fade_path(len_ms: u32, (fade_in, fade_out): (u32, u32), closed: bool) -> 
     if closed { format!("{path} Z") } else { path }
 }
 
+/// How near a clip's or a loop bar's end a press takes that end, in px.
+pub const EDGE_PX: f64 = 6.0;
+
+/// How tall the band along a clip's top is where its fade handles sit, in px.
+pub const FADE_BAND_PX: f64 = 12.0;
+
+/// How near a fade handle a press in the band takes it, in px.
+const FADE_GRAB_PX: f64 = 7.0;
+
+/// Which part of a clip or a loop bar a press takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Part {
+    /// The middle: a drag moves it.
+    Body,
+    /// Its left end: a drag moves its start.
+    Start,
+    /// Its right end: a drag moves its end.
+    End,
+    /// The handle at the end of its fade in.
+    FadeIn,
+    /// The handle at the start of its fade out.
+    FadeOut,
+}
+
+/// What a press `(x, y)` px into a clip `width` px wide takes. `fades` are where its fade
+/// handles sit, in px from its left, for a clip that has fades. A program clip has only a
+/// right end to drag: its left end is the clip before's right end.
+pub fn clip_part(x: f64, y: f64, width: f64, fades: Option<(f64, f64)>, program: bool) -> Part {
+    if let Some((fade_in, fade_out)) = fades
+        && y <= FADE_BAND_PX
+    {
+        let (din, dout) = ((x - fade_in).abs(), (x - fade_out).abs());
+        if din <= FADE_GRAB_PX || dout <= FADE_GRAB_PX {
+            return if din <= dout {
+                Part::FadeIn
+            } else {
+                Part::FadeOut
+            };
+        }
+    }
+    // A narrow clip keeps a middle to grab.
+    let edge = EDGE_PX.min(width / 4.0);
+    if x >= width - edge {
+        Part::End
+    } else if x <= edge && !program {
+        Part::Start
+    } else {
+        Part::Body
+    }
+}
+
+/// What a press `x` px along a loop's bar `width` px wide takes: an end, or the middle.
+pub fn loop_part(x: f64, width: f64) -> Part {
+    let edge = EDGE_PX.min(width / 4.0);
+    if x <= edge {
+        Part::Start
+    } else if x >= width - edge {
+        Part::End
+    } else {
+        Part::Body
+    }
+}
+
+/// Whether a press `x` px into a clip `width` px wide is nearer its right end than its
+/// left: which end the Trim tool takes.
+pub fn nearer_end(x: f64, width: f64) -> bool {
+    x * 2.0 >= width
+}
+
+/// Where the fade handles of a clip `len_ms` long and `width` px wide sit, in px from
+/// its left: at the end of its fade in and at the start of its fade out.
+pub fn fade_handles(len_ms: u32, (fade_in, fade_out): (u32, u32), width: f64) -> (f64, f64) {
+    let per = width / f64::from(len_ms.max(1));
+    let a = f64::from(fade_in) * per;
+    let b = (width - f64::from(fade_out) * per).max(a);
+    (a, b)
+}
+
+/// How long the Edit view takes a show `len_ms` long to be: the show and a tenth more
+/// (at least 10 s), so there is room after its end to drop the next clip.
+pub fn padded_len(len_ms: u32) -> u32 {
+    len_ms.saturating_add((len_ms / 10).max(10_000))
+}
+
+/// Where the "Drop a scene or a file" target sits along V1, as a percentage of the view:
+/// right after program's last clip, or at the view's right edge when that is out of
+/// view to the right. `None` when program ends left of the view.
+pub fn drop_slot_pct(view: Viewport, program_end_ms: u32) -> Option<f64> {
+    let end = f64::from(program_end_ms);
+    if end < view.start_ms {
+        return Some(0.0);
+    }
+    if end > view.end_ms() {
+        return None;
+    }
+    Some((end - view.start_ms) / view.span_ms * 100.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::model::{RunPhase, demo};
     use super::*;
+
+    #[test]
+    fn a_press_on_a_clip_takes_its_end_its_fade_or_its_middle() {
+        // An audio clip 200 px wide with handles at 20 and 160 px.
+        let fades = Some((20.0, 160.0));
+        assert_eq!(clip_part(198.0, 30.0, 200.0, fades, false), Part::End);
+        assert_eq!(clip_part(2.0, 30.0, 200.0, fades, false), Part::Start);
+        assert_eq!(clip_part(100.0, 30.0, 200.0, fades, false), Part::Body);
+        assert_eq!(clip_part(22.0, 4.0, 200.0, fades, false), Part::FadeIn);
+        assert_eq!(clip_part(157.0, 4.0, 200.0, fades, false), Part::FadeOut);
+        assert_eq!(clip_part(100.0, 4.0, 200.0, fades, false), Part::Body);
+        // A program clip has no left end to drag.
+        assert_eq!(clip_part(2.0, 30.0, 200.0, None, true), Part::Body);
+        assert_eq!(clip_part(197.0, 30.0, 200.0, None, true), Part::End);
+        // A clip 8 px wide still has a middle.
+        assert_eq!(clip_part(4.0, 30.0, 8.0, None, false), Part::Body);
+        assert_eq!(loop_part(3.0, 300.0), Part::Start);
+        assert_eq!(loop_part(298.0, 300.0), Part::End);
+        assert_eq!(loop_part(150.0, 300.0), Part::Body);
+        assert!(nearer_end(120.0, 200.0));
+        assert!(!nearer_end(40.0, 200.0));
+    }
+
+    #[test]
+    fn fade_handles_and_the_drop_slot_sit_in_time() {
+        assert_eq!(fade_handles(10_000, (1000, 2000), 1000.0), (100.0, 800.0));
+        assert_eq!(fade_handles(1000, (800, 800), 100.0), (80.0, 80.0));
+        let view = fit();
+        assert_eq!(drop_slot_pct(view, 330_000), Some(50.0));
+        let late = view.with_left(0.9);
+        assert_eq!(drop_slot_pct(late, 330_000), Some(0.0));
+        let early = view.with_right(0.1);
+        assert_eq!(drop_slot_pct(early, 330_000), None);
+        assert_eq!(padded_len(0), 10_000);
+        assert_eq!(padded_len(660_000), 726_000);
+    }
 
     fn fit() -> Viewport {
         Viewport::fit(demo::friday().length_ms())

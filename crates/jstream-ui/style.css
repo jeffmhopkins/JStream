@@ -2815,6 +2815,46 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-grip-l { left: 2px; }
 .show-grip-r { right: 2px; }
 .show-foot { flex: none; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Show panel: the Edit view's tools (panels/show/edit.rs). The selection outline, the
+   handles a drag takes (a program clip's right end, an audio clip's fades), the drop slot
+   at the end of V1, the tip that follows a drag, the name fields, and a locked show. */
+.show-edit:focus { outline: none; }
+/* The Run view's big Continue shares the class; in the Edit bar it is a bar button. */
+.show-edit-bar .show-continue { display: inline-block; width: auto; height: 34px; padding: 0 18px; border-radius: 6px; font-size: 14px; font-weight: 700; }
+.show-note { flex: none; text-align: right; font-size: 12px; color: var(--dim); padding: 2px 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.show-picker-menu { width: 30px; padding: 0; }
+.show-name { width: 14em; padding: 0 8px; border: 1px solid var(--accent); border-radius: 5px; background: var(--app); color: var(--text); }
+.show-new { margin-top: 12px; }
+.show-track-body { touch-action: none; }
+.show-clip, .show-seq, .show-au, .show-kf, .show-ev { cursor: grab; }
+.show-cut { cursor: pointer; }
+.show-cut:hover { border-color: var(--show-tag); }
+.show-sel { outline: 2px solid var(--show-tag); outline-offset: 1px; z-index: 4; }
+.show-kf.show-sel, .show-ev.show-sel { outline-offset: 3px; border-radius: 3px; }
+.show-loop.show-sel { box-shadow: 0 0 0 2px var(--show-tag); }
+.show-flag.show-sel { outline: 2px solid var(--text); outline-offset: 0; }
+.show-grab-r { position: absolute; right: -1px; top: 50%; width: 6px; height: 26px; margin-top: -13px; border-radius: 3px; background: var(--text); box-shadow: 0 0 0 1px var(--canvas-bg); cursor: ew-resize; }
+.show-fade-h { position: absolute; top: 1px; width: 9px; height: 9px; margin-left: -5px; border-radius: 50%; background: var(--text); border: 1px solid var(--show-audio-edge); cursor: ew-resize; z-index: 1; }
+.show-marks .show-bm, .show-marks .show-flag, .show-marks .show-loop em, .show-marks .show-rename { pointer-events: auto; }
+.show-marks .show-bm { cursor: ew-resize; }
+.show-marks .show-bm::before { content: ""; position: absolute; top: 0; bottom: 0; left: -4px; width: 7px; }
+.show-marks .show-flag { cursor: grab; }
+.show-marks .show-loop em { cursor: grab; }
+.show-slot { position: absolute; top: 24px; bottom: 5px; width: 110px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 8px; border: 1.5px dashed var(--show-tag); border-radius: 5px; color: var(--show-tag); font-size: 12px; background: rgba(106, 165, 255, 0.06); z-index: 5; }
+.show-track.drop-over .show-track-body { background: rgba(106, 165, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(106, 165, 255, 0.45); }
+.show-tip { position: fixed; z-index: 50; pointer-events: none; padding: 3px 8px; border-radius: 4px; background: var(--text); color: var(--canvas-bg); font: 700 11px "IBM Plex Mono", ui-monospace, monospace; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+.show-tip.refused { background: var(--danger-text); }
+.show-rename { position: absolute; bottom: calc(var(--loops-h) + 20px); z-index: 8; }
+.show-rename.on-loop { bottom: 22px; }
+.show-rename input { width: 12em; height: 24px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 4px; background: var(--app); color: var(--text); font-size: 12px; }
+.show-using-split .show-prog { cursor: crosshair; }
+.show-using-bookmark .show-track-body, .show-using-bookmark .show-ruler { cursor: copy; }
+.show-using-loop .show-ruler { cursor: col-resize; }
+.show-using-keyframe .show-track-keyframes .show-track-body { cursor: copy; }
+.show-using-trim .show-clip, .show-using-trim .show-au { cursor: ew-resize; }
+.show-edit.locked .show-track-body, .show-edit.locked .show-track-body *, .show-edit.locked .show-marks * { cursor: not-allowed; }
+.show-edit.locked .show-track-body { opacity: 0.7; }
+.show-edit.locked .show-tools { opacity: 0.45; }
 /* Show panel: Run view (panels/show/run.rs). Three columns over the folded strip: Now, Next
    and Continue; the bookmark buttons; the clocks and what is up now. */
 :root {

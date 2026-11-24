@@ -107,7 +107,10 @@ pub fn ZoomBar(
         })
     };
     let thumb = move || viewport.with(|v| v.thumb());
-    let label = move || format!("Whole show · {}", clock(viewport.with(|v| v.len_ms) as u32));
+    let label = move || {
+        let len = show.with(|s| s.as_ref().map_or(0, ShowView::length_ms));
+        format!("Whole show · {}", clock(len))
+    };
     view! {
         <div class="show-zoom-row">
             <span class="show-zoom-label">{label}</span>

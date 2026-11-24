@@ -20,7 +20,7 @@ pub mod time;
 pub mod wire;
 
 use crate::app::SessionContext;
-use crate::store::Studio;
+use crate::store::{Collection, Studio};
 use jstream_control::protocol::{Edit, NextMonitor as WireMonitor, ShowInfo};
 use leptos::prelude::*;
 use model::{RunPhase, RunView, ShowView};
@@ -90,6 +90,31 @@ pub struct ShowPanel {
     /// The element selected in the Edit view (a clip, marker, cue, bookmark or loop),
     /// by its ID within the open show: what the Inspector's Show page edits.
     pub selected: RwSignal<Option<String>>,
+    /// The open show as a drag in the Edit view would leave it, drawn in its place while
+    /// the drag lasts; sent as one `show.set` when the drag ends.
+    pub preview: RwSignal<Option<ShowView>>,
+    /// A scene dragged from the Scenes panel, while it is: where the pointer is, and
+    /// whether it was let go.
+    pub carry: RwSignal<Option<Carry>>,
+    /// Whether the show picker is a name field, renaming the open show.
+    pub renaming: RwSignal<bool>,
+}
+
+/// A scene dragged from the Scenes panel towards the Show panel's tracks. The Scenes
+/// panel sets it as the pointer moves and marks it dropped when the button comes up;
+/// the Edit view places the scene where it was let go and clears it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Carry {
+    /// The scene's ID.
+    pub scene: String,
+    /// Its name, for the pausing bookmark at its end.
+    pub name: String,
+    /// Where the pointer is, in the page's CSS pixels.
+    pub x: f64,
+    /// Where the pointer is, in CSS pixels from the viewport's top.
+    pub y: f64,
+    /// Whether the button came up: place it.
+    pub dropped: bool,
 }
 
 impl ShowPanel {
@@ -107,18 +132,26 @@ impl ShowPanel {
             clock: RwSignal::new(0.0),
             continue_key: RwSignal::new(None),
             selected: RwSignal::new(None),
+            preview: RwSignal::new(None),
+            carry: RwSignal::new(None),
+            renaming: RwSignal::new(false),
         }
     }
 
-    /// The open show: the one named, else the running one, else the first.
+    /// The open show: the one named, else the running one, else the first; drawn as a
+    /// drag would leave it while one lasts.
     pub fn show(&self) -> Option<ShowView> {
         let open = self.open.get();
         let running = self.run.with(|r| r.show.clone());
-        self.shows.with(|shows| {
+        let show = self.shows.with(|shows| {
             open.or(running)
                 .and_then(|id| shows.iter().find(|s| s.id == id).cloned())
                 .or_else(|| shows.first().cloned())
-        })
+        })?;
+        let preview = self
+            .preview
+            .with(|p| p.as_ref().filter(|p| p.id == show.id).cloned());
+        Some(preview.unwrap_or(show))
     }
 
     /// Whether the open show is the one running.
@@ -220,23 +253,116 @@ impl ShowPanel {
     /// Changes show `id` with `f` and sends it as one `show.set`, so one undo step. A
     /// change that changes nothing sends nothing.
     pub fn set_show(&self, id: &str, f: impl FnOnce(&mut ShowInfo)) {
+        let Some(mut show) = self.info(id) else {
+            return;
+        };
+        f(&mut show);
+        self.commit(show);
+    }
+
+    /// Show `id` as the engine has it, if the panel runs in the app.
+    pub fn info(&self, id: &str) -> Option<ShowInfo> {
+        self.collection(|c| c.shows.iter().find(|s| s.show_id.as_str() == id).cloned())
+            .flatten()
+    }
+
+    /// `f` of the collection, untracked, where the panel runs in the app.
+    pub fn collection<R>(&self, f: impl FnOnce(&Collection) -> R) -> Option<R> {
+        let (studio, _) = self.engine?;
+        studio.collection.with_untracked(|c| c.as_ref().map(f))
+    }
+
+    /// `show` as the panel draws it, with its lock.
+    pub fn view_of(&self, show: &ShowInfo) -> Option<ShowView> {
+        let locked = self
+            .locked
+            .with_untracked(|l| l.contains(show.show_id.as_str()));
+        self.collection(|c| {
+            let mut view = wire::view_of(show, c);
+            view.locked = locked;
+            view
+        })
+    }
+
+    /// Sends `show` as one `show.set`, unless it is the show the engine has.
+    pub fn commit(&self, show: ShowInfo) {
+        if self.info(show.show_id.as_str()).as_ref() == Some(&show) {
+            return;
+        }
+        self.apply(vec![Edit::ShowSet { show }]);
+    }
+
+    /// Sends `edits` as one batch, so one undo step.
+    pub fn apply(&self, edits: Vec<Edit>) {
         let Some((studio, session)) = self.engine else {
             return;
         };
-        let Some(before) = studio.collection.with_untracked(|c| {
-            c.as_ref()
-                .and_then(|c| c.shows.iter().find(|s| s.show_id.as_str() == id).cloned())
-        }) else {
+        if let Some(session) = session.get() {
+            studio.apply(&session, edits);
+        }
+    }
+
+    /// A new ID for something in the collection, with this prefix.
+    pub fn fresh_id(&self, prefix: &str) -> Option<String> {
+        let (studio, session) = self.engine?;
+        let session = session.get()?;
+        Some(studio.fresh_id(&session, prefix))
+    }
+
+    /// Shows `text` in the problem bar.
+    pub fn refuse(&self, text: impl Into<String>) {
+        self.problem.set(Some(text.into()));
+    }
+
+    /// The names of every show.
+    fn names(&self) -> Vec<String> {
+        self.collection(|c| c.shows.iter().map(|s| s.name.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Makes a new, empty show, "Show N", and opens it, with its name ready to type.
+    pub fn new_show(&self) {
+        let Some(id) = self.fresh_id("show") else {
             return;
         };
-        let mut show = before.clone();
-        f(&mut show);
-        if show == before {
+        let names = self.names();
+        let taken: Vec<&str> = names.iter().map(String::as_str).collect();
+        let show = edits::new_show(&id, &edits::new_show_name(&taken));
+        self.apply(vec![Edit::ShowSet { show }]);
+        self.open.set(Some(id));
+        self.mode.set(Mode::Edit);
+        self.renaming.set(true);
+    }
+
+    /// Copies show `id` as a new show, "… copy", and opens it.
+    pub fn duplicate_show(&self, id: &str) {
+        let (Some(show), Some(new_id)) = (self.info(id), self.fresh_id("show")) else {
+            return;
+        };
+        let names = self.names();
+        let taken: Vec<&str> = names.iter().map(String::as_str).collect();
+        let copy = edits::duplicate(&show, &new_id, &edits::copy_name(&show.name, &taken));
+        self.apply(vec![Edit::ShowSet { show: copy }]);
+        self.open.set(Some(new_id));
+    }
+
+    /// Deletes show `id` (`show.delete`, undoable); the picker falls back to another.
+    pub fn delete_show(&self, id: &str) {
+        if self.info(id).is_none() {
             return;
         }
-        if let Some(session) = session.get() {
-            studio.apply(&session, vec![Edit::ShowSet { show }]);
+        self.apply(vec![Edit::ShowDelete { show_id: id.into() }]);
+        self.open.set(None);
+        self.selected.set(None);
+    }
+
+    /// Renames show `id`; an empty name is no change.
+    pub fn rename_show(&self, id: &str, name: &str) {
+        let name = name.trim();
+        if name.is_empty() {
+            return;
         }
+        self.set_show(id, |s| name.clone_into(&mut s.name));
     }
 }
 
@@ -299,6 +425,8 @@ pub fn Show() -> impl IntoView {
                         <p class="show-empty-hint">
                             "A show puts scenes on program in order, with bookmarks that wait for Continue."
                         </p>
+                        <button type="button" class="show-btn show-new"
+                            on:click=move |_| panel.new_show()>"+ New show"</button>
                     </div>
                 }.into_any(),
                 true => match mode.get() {
@@ -310,15 +438,79 @@ pub fn Show() -> impl IntoView {
     }
 }
 
-/// The Edit / Run switch, at the left of either view's bar beside the show picker.
+/// The Edit / Run switch, at the left of either view's bar beside the show picker, and
+/// the picker's menu: New show…, Duplicate, Rename, Delete. Renaming turns the picker
+/// into a name field: Enter or leaving it keeps the name, Escape doesn't.
 #[component]
 pub fn ModeSwitch() -> impl IntoView {
     let panel = expect_context::<ShowPanel>();
+    let menus = use_context::<crate::menu::Menus>();
     let pick = move |m: Mode| move |_| panel.mode.set(m);
-    view! {
-        <div class="show-picker-group">
+    // The show named open, even before the engine's answer brings a new one in.
+    let open_id = move || {
+        panel
+            .open
+            .get_untracked()
+            .or_else(|| panel.show().map(|s| s.id))
+            .unwrap_or_default()
+    };
+    let show_menu = move |e: leptos::ev::MouseEvent| {
+        use crate::menu::Entry;
+        let Some(menus) = menus else { return };
+        let id = open_id();
+        let (dup, del) = (id.clone(), id);
+        menus.open(
+            &e,
+            vec![
+                Entry::item("New show…", move || panel.new_show()),
+                Entry::item("Duplicate", move || panel.duplicate_show(&dup)),
+                Entry::item("Rename", move || panel.renaming.set(true)),
+                Entry::Sep,
+                Entry::item("Delete", move || panel.delete_show(&del)).danger(),
+            ],
+        );
+    };
+    let field = NodeRef::<leptos::html::Input>::new();
+    Effect::new(move |_| {
+        if panel.renaming.get() {
+            request_animation_frame(move || {
+                if let Some(el) = field.get_untracked() {
+                    let _ = el.focus();
+                    el.select();
+                }
+            });
+        }
+    });
+    let finish = move |keep: bool| {
+        if !panel.renaming.get_untracked() {
+            return;
+        }
+        panel.renaming.set(false);
+        if keep && let Some(el) = field.get_untracked() {
+            panel.rename_show(&open_id(), &el.value());
+        }
+    };
+    let picker = move || {
+        if panel.renaming.get() {
+            let name = move || panel.show().map(|s| s.name).unwrap_or_default();
+            return view! {
+                <input class="show-picker show-name" aria-label="Show name" node_ref=field
+                    prop:value=name
+                    on:keydown=move |e| match e.key().as_str() {
+                        "Enter" => finish(true),
+                        "Escape" => finish(false),
+                        _ => {}
+                    }
+                    on:blur=move |_| finish(true) />
+            }
+            .into_any();
+        }
+        view! {
             <select class="show-picker" aria-label="Show"
-                on:change=move |ev| panel.open.set(Some(event_target_value(&ev)))>
+                on:change=move |ev| {
+                    panel.open.set(Some(event_target_value(&ev)));
+                    panel.selected.set(None);
+                }>
                 {move || {
                     let open = panel.show().map(|s| s.id);
                     panel.shows.get().into_iter().map(|s| {
@@ -327,6 +519,14 @@ pub fn ModeSwitch() -> impl IntoView {
                     }).collect_view()
                 }}
             </select>
+        }
+        .into_any()
+    };
+    view! {
+        <div class="show-picker-group">
+            {picker}
+            <button type="button" class="show-btn show-picker-menu" title="Shows: new, duplicate, rename, delete"
+                aria-label="Show menu" on:click=show_menu>"⋯"</button>
             <div class="show-mode" role="group" aria-label="View">
                 <button type="button" class:on=move || panel.mode.get() == Mode::Edit
                     aria-pressed=move || (panel.mode.get() == Mode::Edit).to_string()

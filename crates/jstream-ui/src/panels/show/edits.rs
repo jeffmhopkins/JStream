@@ -10,7 +10,7 @@
 
 use jstream_control::protocol::{
     AudioClip, AudioTrack, KeyframeMarker, MAX_SHOW_TRACKS, MIN_SHOW_LOOP_MS, OverlayClip,
-    OverlayTrack, ProgramClip, SceneId, ShowBookmark, ShowInfo, ShowLoop, SourceId,
+    OverlayTrack, ProgramClip, SceneId, ShowBookmark, ShowId, ShowInfo, ShowLoop, SourceId,
     TransitionPresetId,
 };
 
@@ -136,7 +136,23 @@ pub fn insert_program_clip(
         .get(index)
         .copied()
         .unwrap_or_else(|| show.length_ms());
-    shift_from(show, start, i64::from(length_ms));
+    // A bookmark right at the cut is the end of the clip before (its pausing bookmark):
+    // it stays between the two. A clip added after the last moves nothing at all.
+    if index < show.program.len() {
+        let at_cut: Vec<String> = show
+            .bookmarks
+            .iter()
+            .filter(|b| b.at_ms == start)
+            .map(|b| b.bookmark_id.clone())
+            .collect();
+        shift_from(show, start, i64::from(length_ms));
+        for b in &mut show.bookmarks {
+            if at_cut.contains(&b.bookmark_id) {
+                b.at_ms = start;
+            }
+        }
+        tidy_bookmarks(show);
+    }
     show.program.insert(
         index,
         ProgramClip {
@@ -162,12 +178,14 @@ pub fn insert_program_clip(
     id
 }
 
-/// Moves everything at or after `from` by `by` ms (never below `from`): bookmarks,
+/// Moves everything at or after `from` by `by` ms (never below `from + by`, where a
+/// shortened or removed clip now ends): bookmarks,
 /// loops, keyframes, cues, overlay and audio clips. Program clips move by themselves.
 fn shift_from(show: &mut ShowInfo, from: u32, by: i64) {
     let moved = |t: u32| {
         if t >= from {
-            u32::try_from((i64::from(t) + by).max(i64::from(from))).unwrap_or(u32::MAX)
+            let floor = (i64::from(from) + by.min(0)).max(0);
+            u32::try_from((i64::from(t) + by).max(floor)).unwrap_or(u32::MAX)
         } else {
             t
         }
@@ -639,6 +657,73 @@ pub fn split_program_clip(show: &mut ShowInfo, clip: &str, at_ms: u32) -> Option
     Some(id)
 }
 
+/// Where program clip `clip` goes among the others when dragged to `at_ms`: the place
+/// (0 first) after every other clip whose middle comes before `at_ms`, counted with
+/// `clip` taken out, as [`move_program_clip`] takes it.
+pub fn program_drop_index(show: &ShowInfo, clip: &str, at_ms: u32) -> usize {
+    let mut start = 0_u32;
+    let mut index = 0;
+    for c in show.program.iter().filter(|c| c.clip_id != clip) {
+        if start + c.length_ms / 2 <= at_ms {
+            index += 1;
+        }
+        start += c.length_ms;
+    }
+    index
+}
+
+/// Moves keyframe marker or cue `id` to `at_ms` (its marker dragged).
+pub fn move_marker(show: &mut ShowInfo, id: &str, at_ms: u32) -> bool {
+    if let Some(m) = show.keyframes.iter_mut().find(|m| m.marker_id == id) {
+        if m.at_ms == at_ms {
+            return false;
+        }
+        m.at_ms = at_ms;
+        show.keyframes.sort_by_key(|m| m.at_ms);
+        return true;
+    }
+    for t in &mut show.sequences {
+        if let Some(c) = t.cues.iter_mut().find(|c| c.cue_id == id) {
+            if c.at_ms == at_ms {
+                return false;
+            }
+            c.at_ms = at_ms;
+            t.cues.sort_by_key(|c| c.at_ms);
+            return true;
+        }
+    }
+    false
+}
+
+/// A copy of `show` as a new show `id` called `name`: the picker's Duplicate. Element
+/// IDs are per show, so they stay as they are.
+pub fn duplicate(show: &ShowInfo, id: &str, name: &str) -> ShowInfo {
+    let mut copy = show.clone();
+    copy.show_id = ShowId::new(id);
+    copy.name = name.to_owned();
+    copy
+}
+
+/// A name for a new show: "Show N", the first no show in `taken` has.
+pub fn new_show_name(taken: &[&str]) -> String {
+    (1..)
+        .map(|n| format!("Show {n}"))
+        .find(|name| !taken.contains(&name.as_str()))
+        .unwrap_or_else(|| "Show".to_owned())
+}
+
+/// What a copy of a show called `name` is called: "Friday show copy", then "… copy 2".
+pub fn copy_name(name: &str, taken: &[&str]) -> String {
+    let first = format!("{name} copy");
+    if !taken.contains(&first.as_str()) {
+        return first;
+    }
+    (2..)
+        .map(|n| format!("{name} copy {n}"))
+        .find(|n| !taken.contains(&n.as_str()))
+        .unwrap_or(first)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -796,5 +881,51 @@ mod tests {
         assert_eq!(snap(170_040.0, &points, 1000, false), 170_000);
         assert_eq!(snap(170_040.0, &points, 1000, true), 170_040);
         assert_eq!(snap_reach(100.0), 600);
+    }
+
+    #[test]
+    fn a_dragged_program_clip_lands_by_the_middles_it_passes() {
+        let mut s = show();
+        insert_program_clip(&mut s, "outro".into(), "Outro", u32::MAX, 60_000, false);
+        // Starting soon 0..3:00, Main 3:00..6:00, Outro 6:00..7:00.
+        assert_eq!(program_drop_index(&s, "clip1", 0), 0);
+        assert_eq!(program_drop_index(&s, "clip1", 100_000), 1);
+        assert_eq!(program_drop_index(&s, "clip1", 500_000), 2);
+        assert_eq!(program_drop_index(&s, "clip3", 10_000), 0);
+        assert!(move_program_clip(&mut s, "clip3", 0));
+        assert_eq!(s.program[0].scene_id.as_str(), "outro");
+    }
+
+    #[test]
+    fn a_clip_added_at_the_end_leaves_the_pause_before_it() {
+        let mut s = show();
+        insert_program_clip(&mut s, "outro".into(), "Outro", u32::MAX, 60_000, true);
+        let pauses: Vec<(u32, &str)> = s
+            .bookmarks
+            .iter()
+            .map(|b| (b.at_ms, b.name.as_str()))
+            .collect();
+        assert_eq!(pauses, [(360_000, "Main"), (420_000, "Outro")]);
+        // A clip put in between keeps Main's pause at Main's end.
+        insert_program_clip(&mut s, "break".into(), "Break", 361_000, 10_000, false);
+        let times: Vec<u32> = s.bookmarks.iter().map(|b| b.at_ms).collect();
+        assert_eq!(times, [360_000, 430_000]);
+        assert_eq!(s.program[2].scene_id.as_str(), "break");
+    }
+
+    #[test]
+    fn markers_move_and_shows_copy() {
+        let mut s = show();
+        let k = add_keyframe(&mut s, 10_000, None);
+        add_keyframe(&mut s, 20_000, None);
+        assert!(move_marker(&mut s, &k, 30_000));
+        assert_eq!(s.keyframes[1].marker_id, k);
+        assert!(!move_marker(&mut s, &k, 30_000));
+        assert!(!move_marker(&mut s, "nothing", 1));
+        let copy = duplicate(&s, "show2", "Friday show copy");
+        assert_eq!(copy.show_id.as_str(), "show2");
+        assert_eq!(copy.program, s.program);
+        assert_eq!(new_show_name(&["Show 1"]), "Show 2");
+        assert_eq!(copy_name("A", &["A copy"]), "A copy 2");
     }
 }
