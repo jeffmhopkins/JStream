@@ -59,6 +59,8 @@ pub enum Command {
     Rehearse(bool),
     /// What the Next monitor shows, for the show, by ID.
     NextMonitor(String, model::NextMonitor),
+    /// Add an overlay track to the show, by ID, above its other tracks.
+    AddOverlayTrack(String),
 }
 
 /// The panel's shared state, in context for its views.
@@ -83,6 +85,8 @@ pub struct ShowPanel {
     pub locked: RwSignal<std::collections::HashSet<String>>,
     /// The shared state and the open session, where the panel runs in the app.
     engine: Option<(Studio, SessionContext)>,
+    /// The key bound to Continue, as its key cap shows it ("Space"), if any.
+    pub continue_key: RwSignal<Option<String>>,
 }
 
 impl ShowPanel {
@@ -98,6 +102,7 @@ impl ShowPanel {
             mode: RwSignal::new(Mode::Edit),
             viewport: RwSignal::new(Viewport::fit(0)),
             clock: RwSignal::new(0.0),
+            continue_key: RwSignal::new(None),
         }
     }
 
@@ -167,6 +172,12 @@ impl ShowPanel {
                     } else {
                         l.remove(&id);
                     }
+                });
+                return;
+            }
+            Command::AddOverlayTrack(id) => {
+                self.set_show(id, |s| {
+                    edits::add_overlay_track(s);
                 });
                 return;
             }

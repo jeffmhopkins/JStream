@@ -482,6 +482,7 @@ pub fn plan_drop(
         timed: class.is_timed(),
         missing: false,
         fades,
+        curve: Vec::new(),
     };
     let length_pending = class.is_timed() && file.length_ms.is_none();
     match target.track {

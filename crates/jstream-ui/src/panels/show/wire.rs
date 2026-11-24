@@ -58,6 +58,26 @@ fn sequence(collection: &Collection, timeline: &TimelineId) -> (String, u32, boo
         )
 }
 
+/// The shape a sequence clip draws: its first lane's points, as (fraction of its length,
+/// value), or none for a sequence with no lanes.
+fn sequence_curve(collection: &Collection, timeline: &TimelineId) -> Vec<(f32, f32)> {
+    let Some(t) = collection
+        .scenes
+        .iter()
+        .flat_map(|s| &s.timelines)
+        .find(|t| &t.timeline_id == timeline)
+    else {
+        return Vec::new();
+    };
+    let length = t.duration_ms.max(1) as f32;
+    t.lanes.first().map_or_else(Vec::new, |lane| {
+        lane.points
+            .iter()
+            .map(|p| (p.at_ms as f32 / length, p.value.get()))
+            .collect()
+    })
+}
+
 /// A transition preset's badge text on a cut: "Fade 0.5 s", or "Default".
 pub fn preset_badge(collection: &Collection, preset: Option<&TransitionPresetId>) -> String {
     let Some(preset) = preset else {
@@ -140,6 +160,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
                     timed: is_timed(collection, &c.scene_id),
                     missing,
                     fades: Some((c.fade_in_ms, c.fade_out_ms)),
+                    curve: Vec::new(),
                 }
             })
             .collect();
@@ -169,6 +190,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
                 timed: is_timed(collection, &c.scene_id),
                 missing,
                 fades: None,
+                curve: Vec::new(),
             }
         })
         .collect();
@@ -203,6 +225,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
                 timed: false,
                 missing,
                 fades: None,
+                curve: Vec::new(),
             }
         })
         .collect();
@@ -231,6 +254,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
                         timed: false,
                         missing,
                         fades: None,
+                        curve: sequence_curve(collection, &timeline),
                     }
                 }
                 None => {
@@ -249,6 +273,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
                         timed: false,
                         missing: false,
                         fades: None,
+                        curve: Vec::new(),
                     }
                 }
             })
@@ -278,6 +303,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
                     timed: false,
                     missing,
                     fades: Some((c.fade_in_ms, c.fade_out_ms)),
+                    curve: Vec::new(),
                 }
             })
             .collect();
@@ -380,7 +406,8 @@ pub fn run_of(show: Option<&(RunningShow, f64)>) -> RunView {
 }
 
 /// The action a command runs on show `show` (the one open), or `None` for one that is
-/// the panel's own (Lock) or a show edit (the Next monitor, sent as `show.set`).
+/// the panel's own (Lock) or a show edit (the Next monitor and + Overlay track, sent as
+/// `show.set`).
 pub fn action_of(command: &Command, show: Option<&str>) -> Option<Action> {
     Some(match command {
         Command::Play(id) => Action::ShowPlay {
@@ -400,7 +427,9 @@ pub fn action_of(command: &Command, show: Option<&str>) -> Option<Action> {
             rehearse: true,
         },
         Command::Rehearse(false) => Action::ShowStop,
-        Command::Lock(..) | Command::NextMonitor(..) => return None,
+        Command::Lock(..) | Command::NextMonitor(..) | Command::AddOverlayTrack(_) => {
+            return None;
+        }
     })
 }
 
