@@ -2887,7 +2887,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
   --show-seg-4: #4a2330;
 }
 .dock-panel:not([hidden]):has(> .show-panel.run) { height: 100%; }
-.show-run { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.show-run { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow-y: auto; }
 .show-run-bar { min-height: 52px; padding: 8px 0; }
 .show-btn { height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); color: var(--text); font-size: 13px; white-space: nowrap; }
 .show-btn:hover { background: var(--button-hover); }
@@ -2897,7 +2897,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-seg button { padding: 0 14px; border: none; border-radius: 0; background: transparent; color: var(--muted); font-size: 13px; }
 .show-seg button.on { background: var(--selected); color: var(--text); font-weight: 600; }
 .show-run-status { margin-left: auto; color: var(--show-bookmark); font-weight: 600; white-space: nowrap; }
-.show-run-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 330px minmax(0, 1fr) 322px; gap: 14px; padding: 12px 0 8px; overflow: auto; align-items: start; }
+.show-run-body { flex: 1; min-height: 220px; display: grid; grid-template-columns: 330px minmax(0, 1fr) 322px; gap: 14px; padding: 12px 0 8px; overflow: auto; align-items: start; }
 .show-card { background: var(--show-card); border: 1px solid var(--show-card-line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
 .show-card h6, .show-run-marks h6 { margin: 0 0 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; color: var(--dim); }
 .show-run-marks h6 { font-weight: 400; margin-bottom: 8px; }
@@ -2966,7 +2966,7 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-notes-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; background: none; color: var(--text-soft); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-align: left; }
 .show-notes-head:hover { background: none; color: var(--text); }
 .show-notes-caret { width: 10px; color: var(--muted); }
-.show-notes-body { max-height: 180px; overflow: auto; padding: 0 12px 10px 30px; }
+.show-notes-body { max-height: 150px; overflow: auto; padding: 0 12px 10px 30px; }
 .show-notes-here { margin: 0; white-space: pre-wrap; line-height: 1.5; color: var(--text); }
 .show-notes-here.hint { color: var(--muted); }
 .show-notes-next { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
@@ -2979,6 +2979,6 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-notes-tools .show-btn { height: 26px; padding: 0 8px; }
 .show-notes-value { min-width: 64px; text-align: center; color: var(--text-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
 /* Teleprompter: large text that rolls; room below so the last line can reach the reading line. */
-.show-notes.prompter .show-notes-body { max-height: min(48vh, 420px); padding: 4px 24px 0; scroll-behavior: auto; }
+.show-notes.prompter .show-notes-body { max-height: min(34vh, 320px); padding: 4px 24px 0; scroll-behavior: auto; }
 .show-notes.prompter .show-notes-body::after { content: ""; display: block; height: min(36vh, 315px); }
 .show-notes.prompter .show-notes-here { line-height: 1.35; font-weight: 500; }
