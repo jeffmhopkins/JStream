@@ -110,8 +110,9 @@ body {
 /* The chrome selects no text, so a click or a drag across panels highlights nothing.
    Text fields and readable text keep it: the same list as `chrome::TEXT`. */
 body { -webkit-user-select: none; user-select: none; }
-input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, .problem,
-.problem-bar > span, .connection dd, .activity-log, .selectable { -webkit-user-select: text; user-select: text; }
+input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, a[href], .problem,
+.problem-bar > span, .settings-error, .toast-text, .connection dd, .about-facts dd, .activity-log,
+.selectable { -webkit-user-select: text; user-select: text; }
 input[type="checkbox"], input[type="radio"], input[type="range"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="color"], input[type="file"],
 input[type="image"] { -webkit-user-select: none; user-select: none; }
@@ -196,15 +197,17 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .app-header .brand-mark { width: 22px; height: 22px; border-radius: 5px; }
 .app-header .spacer { flex: 1 1 auto; }
 .app-header .readout { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
-/* Stretched to the bar's full height, so its dropdown can hang flush under it. */
-.top-menu { position: relative; align-self: stretch; display: flex; align-items: center; }
+.top-menu { position: relative; }
 .menu-button { position: relative; z-index: 2; padding: 6px 10px; border: none; border-radius: 5px; background: transparent; color: var(--muted); }
 .menu-button:hover:not(:disabled), .menu-button.open { background: var(--hover); color: var(--text); }
+/* An open menu's button joins its dropdown, which starts at the button's foot: the menu's
+   colour, square at the foot, so the two read as one shape, as a desktop menu bar's do. */
+.menu-button.open, .menu-button.open:hover:not(:disabled) { background: var(--menu); border-radius: 5px 5px 0 0; }
 .menu-catcher { position: fixed; inset: 0; z-index: 1; }
 .dropdown {
   position: absolute;
-  /* Flush under the bar: the header's bottom padding and border below the button. */
-  top: calc(100% + 9px);
+  /* Straight from the button's foot, its top-left corner square where the two meet. */
+  top: 100%;
   left: 0;
   z-index: 3;
   min-width: 240px;
@@ -212,7 +215,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   background: var(--menu);
   border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 8px 8px 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 .menu-head { margin: 4px 8px 6px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -267,7 +270,7 @@ a.menuitem:focus-visible { outline: none; }
 
 /* The workspace (workspace.rs): the dock zones around the canvas. Zone sizes and group
    weights are set through the CSS object model, which the page's policy allows. */
-.workspace { flex: 1 1 auto; display: flex; min-height: 0; }
+.workspace { position: relative; flex: 1 1 auto; display: flex; min-height: 0; }
 .workspace.dragging, .workspace.dragging * { user-select: none; cursor: grabbing; }
 .ws-middle, .ws-centre { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .ws-row { flex: 1 1 auto; display: flex; min-height: 0; }
@@ -389,6 +392,13 @@ a.menuitem:focus-visible { outline: none; }
 .zone[hidden] { display: none; }
 .zone.vertical { flex-direction: column; }
 .zone.drop-zone { outline: 2px dashed var(--accent); outline-offset: -2px; }
+/* The place a drag offers for a new band past an outer edge's last one (dock.rs): laid
+   over that edge, so the bands don't move under the pointer. */
+.zone.new-band { position: absolute; z-index: 5; }
+.zone.new-band[data-edge="bottom"] { left: 0; right: 0; bottom: 0; }
+.zone.new-band[data-edge="top"] { left: 0; right: 0; top: 0; }
+.zone.new-band[data-edge="left"] { top: 0; bottom: 0; left: 0; }
+.zone.new-band[data-edge="right"] { top: 0; bottom: 0; right: 0; }
 .zone-placeholder {
   flex: 1 1 auto;
   display: grid;

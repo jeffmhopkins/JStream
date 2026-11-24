@@ -398,8 +398,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (`LinuxBackends`, keys in the Secret Service or its `0600` file, the ScreenCast
   portal's restore tokens in the data folder's `capture-tokens`, and
   `LinuxProcessCpu` and `LinuxThreadCpu` for the readouts below), and on macOS too
-  (the daemon's `macos_backends`: no virtual camera, the engine's own GPU device until
-  the Metal interop, keys in the Keychain, `MacosProcessCpu` and `MacosThreadCpu`);
+  (the daemon's `macos_backends`: no virtual camera, the engine's device on Metal through
+  `MetalGpu`, keys in the Keychain, `MacosProcessCpu` and `MacosThreadCpu`);
   elsewhere it has no backends.
   Everywhere it watches the data folder's `effects` for effect packs
   (`Engine::watch_effect_packs`) and starts the engine's stats heartbeat, so the header's readout shows the

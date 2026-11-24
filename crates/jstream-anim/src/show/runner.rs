@@ -706,6 +706,12 @@ impl<T: Ord + Clone> Runner<T> {
         self.looping
     }
 
+    /// Whether the loop it is in will be left at the end of this pass
+    /// (`Leave::FinishPass`), so its end plays on instead of wrapping.
+    pub fn leaving(&self) -> bool {
+        self.leaving
+    }
+
     /// The armed spot, if any.
     pub fn armed_ms(&self) -> Option<u32> {
         self.armed_ms

@@ -1408,7 +1408,8 @@ means), and AAC audio
 at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
 is refused with `invalid_argument` naming the field. Whether the machine has an encoder
 for the codec is not checked there, since a profile is valid on any machine: an
-`output.start` on a machine with none fails. `encoder.delete` is refused while
+`output.start` on a machine with none fails. Every codec streams (HEVC and AV1 through
+enhanced RTMP) and records to MP4. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
 no `profile_id` back at the engine's default (H.264 CBR 8000 kbit/s, a keyframe every
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.

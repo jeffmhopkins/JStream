@@ -77,8 +77,9 @@ Contents ([Design](#design) explains the choices):
   opens and shows a dismissable notice only when a newer release exists. A failure is
   quiet there and reported by the menu. A page that isn't the desktop app says the
   check runs there. Nothing is downloaded. The comparison is tested natively.
-- **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
-  around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
+- **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: the `Zone`s
+  around the canvas, four inner ones and each outer `Edge`'s bands, as many as are in
+  use, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing, Live and Show built in; a stored dock
   that predates one gains it). Every change goes
   through it (`place`, `close`, `toggle`, `click_tab`, `resize_zone`, `resize_between`,
@@ -88,7 +89,9 @@ Contents ([Design](#design) explains the choices):
 - **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas
   (in studio mode, the canvas beside the studio controls and the program monitor, or
   over them for a portrait canvas when that shows the pictures larger, `stacks`, tested
-  natively; while a show runs in the Show panel's Run view, beside its Next monitor),
+  natively, decided again whenever the stage row changes size, which a
+  `ResizeObserver` follows; while a show runs in the Show panel's Run view, beside its
+  Next monitor),
   with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
@@ -720,7 +723,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   generic menu never opens over the app, and an element that keeps a right-click from
   the menu behind it (a dialog, a panel's tool bar) swallows it with `chrome::swallow`.
   Text keeps the browser's menu and its selection: `chrome::TEXT` lists text fields,
-  code, errors, the connection details and the agent's activity log, the style sheet
+  code, links, errors (a toast's text, not its buttons, and settings errors too), the connection details, About's
+  facts and the agent's activity log, the style sheet
   turns `user-select` off elsewhere, and `Menus::open` leaves a right-click in a text
   field to the browser. A `selectstart` outside text is cancelled, and a press on the
   chrome clears a stray selection, captured so a drag that stops its press still does.
@@ -1417,9 +1421,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
   `font-display: swap`, so the system font stands in until they load.
 - **The workspace** follows the prototype's dock
-  ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
+  ([UI features › docking](../../docs/UI-FEATURES.md#docking)): zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
-  the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
+  the canvas. Each outer edge holds bands (`dock::Edge`, `Zone::Bottom(n)` and so on, 0
+  nearest the canvas) as many as are in use: `EdgeView` draws them outwards and, while
+  a panel is dragged, one more past the last, laid over the edge (`.new-band`), whose
+  drop `Arrangement::state_mut` makes the next band; `Arrangement::tidy` removes an
+  emptied band after every change and moves the outer ones in. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
   Sources (`Sources`), the Inspector (`Inspector`), Arrange (the prototype's
   Transform), Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and

@@ -1943,12 +1943,15 @@ scene draws a `media` file is timed: a jump into it, or within it, seeks every s
 the scene's family draws to that spot (`source.seek`'s `LiveSources::seek`, as of the
 effect's time), and so does an overlay put up partway through its clip (ADR-0210
 decision 9). After each tick the scene of the program clip after the one under the play
-head is the upcoming scene (`State::set_upcoming`, see *Program scene*), so its file is
+head is the upcoming scene (`State::set_upcoming`, see *Program scene*), or at a loop's
+last clip, unless the runner is leaving it (`Runner::leaving`), the clip at the loop's
+start, which the wrap runs to; so its file is
 held at its first frame and the cut to it starts nothing; it clears when the show
 stops. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
-it. A show that starts on the scene already on program restarts every `timer` source
+it, taking its overlays down and stopping its sequences (a deleted show by the plan it
+ran, `Run::plan`). A show that starts on the scene already on program restarts every `timer` source
 that scene draws (`source.restart`), as the cut to it would have.
 `studio.get`'s `show` reports it, and `show.changed` says what it did. `show.play` with
 `rehearse` runs the show on preview instead (ADR-0210 decision 13, `rehearse` in the
@@ -1964,7 +1967,8 @@ a show running, put a scene over program through the internal show scene
 makes the show scene if the collection has none ("Show overlays"), a `scene` source of
 the overlay scene unless one exists ("Overlay: <name>"), and a hidden item of it in the
 show scene, as one engine change that is no client's undo step, and saves the
-collection. Showing or hiding it then goes through `State::set_show_scene_item_shown`,
+collection (if the show scene can't be marked, the change is still logged and announced,
+and no item is returned). Showing or hiding it then goes through `State::set_show_scene_item_shown`,
 so it fades over program on its own, apart from any scene switch: a clip's
 `fade_in_ms` or `fade_out_ms` is a plain fade of that length, and 0 uses the item's own
 show or hide transition. `studio.get`'s `overlays` lists the scenes shown over program.
@@ -1979,8 +1983,9 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 `show.pause` holding show time until `show.continue` or `show.play` plays on,
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
-span and taken down when an edit removes it, the overlay actions with no show, the
-show scene refusing a delete and being heard, the next program clip named upcoming, and
+span and taken down when an edit removes it or the show is deleted, the overlay actions with no show, the
+show scene refusing a delete and being heard, the next program clip named upcoming (the
+loop's first at its last clip), and
 a rehearsal on preview leaving program, its cues and off script alone.
 `src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
 seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
@@ -4241,9 +4246,10 @@ holding up a stream on the same session.
 
 **Video codecs.** The encoder profile's video codec picks the encoder and the FLV
 track (`video_codec` in `runtime/pipeline.rs`, `runtime/sink.rs`). H.264 goes in legacy
-FLV tags and HEVC and AV1 in enhanced RTMP tags, named by FourCC. For every codec the
-muxers take the decoder configuration (the AVC sequence header and MP4 `avcC`, the
-enhanced `SequenceStart`) from the first keyframe, which every real encoder sends with
+FLV tags and HEVC and AV1 in enhanced RTMP tags, named by FourCC. A recording takes all
+three, in MP4 under `avc1`, `hvc1` or `av01`. For every codec the muxers take the decoder
+configuration (the AVC sequence header, the enhanced `SequenceStart`, MP4's `avcC`,
+`hvcC` or `av1C`) from the first keyframe, which every real encoder sends with
 its parameter sets in-band. A configuration made up ahead of it would not match the
 stream: a stand-in Baseline 3.0 SPS with no frame size made Windows refuse the
 recordings and YouTube drop the publish. Only the fake encoder sends a bare first
@@ -4251,8 +4257,7 @@ H.264 keyframe; until the muxer has a decoder configuration, such a keyframe get
 stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
 is, since a stand-in SPS would replace the encoder's own, which shares its id. The
 protocol's `VideoCodec` names H.264, HEVC and AV1 (the last two since 0.41), and each
-maps to the platform codec of the same name. MP4 recording takes H.264 only: another
-codec fails the start with `recording … is not supported yet`. The open decides
+maps to the platform codec of the same name. The open decides
 whether a video encoder is there. When it fails (`video_open_failure`), a missing
 component keeps the platform's own error and its remedy: a VA-API driver package, or
 the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform-support.md) §6).
