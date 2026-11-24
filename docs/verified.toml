@@ -2118,7 +2118,7 @@ stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and
 stamp = { hash = "b3:113ee0e71733db16", by = "agent:release-alpha8", note = "live.rs now hands out each running source's probe (with_probe, #1609) and model (LiveSources::model, for model upload's warm models), and snapshot.rs gained #1609's probes, gpu-stack's priming, #1631's camera bindings and the hologram follow-up's 3D-family Moves; the Snapshot bullet points to snapshot/probes.rs and Priming and nothing it says is contradicted." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:f843049ec90ca202", by = "agent:st4-show-scene", note = "snapshot.rs still plans and composes the program mix and mixes as listed; the show scene is described in Snapshots, nothing here changed" }
+stamp = { hash = "b3:557031611a10828d", by = "agent:st4-show-scene", note = "snapshot.rs gained drawn_passes over program, mix and show passes; the entry's summary of plan and compose still holds" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2130,7 +2130,7 @@ stamp = { hash = "b3:54c776185e5d3074", by = "agent:claude-warp-aim", note = "pr
 stamp = { hash = "b3:04c978be23724359", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
 
 ["CRATE-jstream-core#contents-tests"."body"]
-stamp = { hash = "b3:4642f925a40fbf24", by = "agent:st4-show-scene", note = "Added src/tests/show_scene.rs to the list and what it checks: overlay over program and a fade, hidden, other output size, lists and refusals" }
+stamp = { hash = "b3:b4f989f7500d3330", by = "agent:st4-show-scene", note = "show_scene.rs gained the drawn items and motion test; added to the list's description" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/aim/tests.rs"]
 stamp = { hash = "b3:ed73b276a16e5ff2", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the controller emulator and live aim tests and their covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -2223,7 +2223,7 @@ stamp = { hash = "b3:cd17cec087f59b8f", by = "agent:claude", note = "Screen-spac
 stamp = { hash = "b3:7cf62c40f0622957", by = "agent:claude", note = "Re-read: tests/sequences.rs only changed how two tests wait (for a tick and for the value, not fixed sleeps); the list of test files is unchanged." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/show_scene.rs"]
-stamp = { hash = "b3:2b0098a2b30715cb", by = "agent:st4-show-scene", note = "Added src/tests/show_scene.rs to the list and what it checks: overlay over program and a fade, hidden, other output size, lists and refusals" }
+stamp = { hash = "b3:519611eb24540de8", by = "agent:st4-show-scene", note = "show_scene.rs gained the drawn items and motion test; added to the list's description" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/source_sizes.rs"]
 stamp = { hash = "b3:c269cab1b6da11ab", by = "agent:claude", note = "tests gain depth: None on size events and a_model_reports_its_depth_beside_its_size in source_sizes.rs; the tests list's description of source_sizes.rs still holds." }
@@ -2487,7 +2487,7 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:9bb3064a6b7b094a", by = "agent:st4-show-scene", note = "Added The show scene: planned only when its scene shows something, program root into GpuKey::UnderShow under its items wherever the program mix is drawn, not scene mixes or previews; rest re-read against the compose_metered and claim_layers change" }
+stamp = { hash = "b3:4b60ac24da8d3f85", by = "agent:st4-show-scene", note = "Round 1: show passes now count as drawn (Shot::drawn_passes: shown clock, motion redraws, decode and capture sizes), and a scene program nests at the same depth is drawn once; paragraph updated" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2526,7 +2526,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:f843049ec90ca202", by = "agent:st4-show-scene", note = "Added The show scene: planned only when its scene shows something, program root into GpuKey::UnderShow under its items wherever the program mix is drawn, not scene mixes or previews; rest re-read against the compose_metered and claim_layers change" }
+stamp = { hash = "b3:557031611a10828d", by = "agent:st4-show-scene", note = "Round 1: show passes now count as drawn (Shot::drawn_passes: shown clock, motion redraws, decode and capture sizes), and a scene program nests at the same depth is drawn once; paragraph updated" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:54c776185e5d3074", by = "agent:claude-warp-aim", note = "probe capture now pushes arrival_light after scene_lights, which the section's arrival sentence now names" }
@@ -2628,7 +2628,7 @@ stamp = { hash = "b3:027e29bed3a16896", by = "agent:channels", note = "Re-read a
 stamp = { hash = "b3:2729b9a5416da0b9", by = "agent:release-alpha11", note = "Re-read after jstream-core's Outputs gained the frame hand-back sentence: the daemon's design text doesn't describe the render thread's captures and holds. | merge: alpha.11: c5a6552 (reviewed in #1663 round 4) shares the mix's shown frame with its encoder sessions and picture streams (Plane::shared, MixFrame::retire, RETIRED_BUFFERS), merged beside alpha.10's #1666 preview yielding, #1668 way-out timing and #1660 frame recycling in the core outputs section; the daemon's design holds | kept from the merged side: jstream-core's outputs section changed only its per-tick allocation paragraph (a session's frame shares the mix's buffer); the daemon's wiring of backends, sessions and outputs says nothing about that (searched the section for copy, allocation, buffer and render-thread statements)" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:9bb3064a6b7b094a", by = "agent:st4-show-scene", note = "Re-read against the new show scene paragraph in core Snapshots: the daemon's program and virtual camera text still holds, the overlay sits inside the program mix" }
+stamp = { hash = "b3:4b60ac24da8d3f85", by = "agent:st4-show-scene", note = "Re-read against the round 1 show scene paragraph in core Snapshots; the daemon's program text still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:10c130fe918d94d6", by = "agent:plugin-uninstall", note = "re-read after review round 1: plugin.uninstall's doc now says a running plugin holds only read from removal and stops once its invocation returns (N2); nothing else in this section changed" }

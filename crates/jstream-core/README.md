@@ -769,7 +769,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   limits, takeover, a deleted item, coalesced `live.changed`, a source's live setting
   drawn until committed or cancelled, and dropped with its source) and a live value drawn
   over the shot in `snapshot.rs`, the internal show scene drawn over program and over a
-  fade, gone when its item is hidden, scaled into an output of another size, left out of
+  fade, gone when its item is hidden, its items counted as drawn and redrawn as they move, scaled into an output of another size, left out of
   `scene.list` and `state.get`, and refused as program, preview, a `scene` source or a
   mix's scene (`src/tests/show_scene.rs`), the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
@@ -1904,8 +1904,10 @@ the program mix is (`Shot::show_of`): every output, with or without an output st
 the program monitor, but not a `scene` mix or a scene's own preview. The program root,
 its scene's pass or a running transition's tracks, is drawn into the canvas-sized
 `GpuKey::UnderShow` layer, which is placed over the canvas under the show scene's own
-items; the scenes they nest are passes beside program's, and its background is never
-drawn. A show scene with no item shown is not planned at all, so a frame without
+items; the scenes they nest are passes beside program's (one that program nests at the
+same depth is drawn once), and its background is never drawn. Its items count as drawn
+items like any pass's (`Shot::drawn_passes`): their `shown` clock, their motion's redraws,
+and the sizes their sources are decoded and captured at. A show scene with no item shown is not planned at all, so a frame without
 overlays is drawn exactly as before, and one with overlays costs one more canvas-sized
 composite. Its nesting counts from it, as a program scene's does.
 

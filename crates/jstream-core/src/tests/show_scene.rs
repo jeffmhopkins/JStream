@@ -282,3 +282,43 @@ fn program_leaves_the_scene_that_becomes_the_show_scene() {
         Some(&SceneId::new("a"))
     );
 }
+
+/// The show scene's items are drawn items like any pass's: their `shown` clock starts
+/// when they first show, and an overlay that moves redraws a still program.
+#[test]
+fn the_show_scenes_items_are_drawn_items_with_their_own_motion() {
+    let (engine, _clock) = studio();
+    let control = connected(&engine);
+    let hub = engine.render_hub();
+    let overlay = jstream_protocol::ItemId::new("overlay");
+    assert!(hub.load().shot().drawn_items().contains(&overlay));
+    assert!(
+        !hub.load().shot().changes_with_time(),
+        "a still program with a still overlay"
+    );
+    batch(
+        &control,
+        edits(vec![Edit::ItemSetMotion {
+            item_id: overlay,
+            scene_id: None,
+            motion: vec![jstream_protocol::MotionModifier {
+                modifier_id: "drift".into(),
+                property: jstream_protocol::MotionProperty::X,
+                effect: None,
+                source: None,
+                kind: jstream_protocol::MotionKind::Drift {
+                    rate_per_s: jstream_protocol::Finite32::new(10.0).expect("finite"),
+                    wrap: None,
+                },
+                clock: jstream_protocol::MotionClock::Shown,
+                enabled: true,
+                amount: None,
+            }],
+        }]),
+    )
+    .expect("the overlay drifts");
+    assert!(
+        hub.load().shot().changes_with_time(),
+        "the moving overlay redraws"
+    );
+}

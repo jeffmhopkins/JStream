@@ -1194,6 +1194,15 @@ impl Shot {
             .unwrap_or(&self.passes)
     }
 
+    /// Every pass a frame of the shot may draw: the program's, each mix's and the show
+    /// scene's.
+    fn drawn_passes(&self) -> impl Iterator<Item = &Pass> {
+        self.passes
+            .iter()
+            .chain(self.mix_passes.values().flatten())
+            .chain(&self.show)
+    }
+
     /// Whether `mix` shows the program mix, and so a running transition.
     fn shows_program(&self, mix: Option<&VideoMixId>) -> bool {
         mix.and_then(|id| self.mixes.get(id))
@@ -1309,9 +1318,7 @@ impl Shot {
             ChainStep::Pass(pass) => Some(&**pass),
             ChainStep::Run(_) | ChainStep::Box(_) => None,
         });
-        self.passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
+        self.drawn_passes()
             .chain(chain_passes)
             .flat_map(|pass| &pass.layers)
             .any(|layer| !layer.motion.is_still() || links_move(layer.groups.as_deref()))
@@ -1361,9 +1368,7 @@ impl Shot {
             ChainStep::Run(_) | ChainStep::Box(_) => None,
         });
         let layers = self
-            .passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
+            .drawn_passes()
             .chain(chain_passes)
             .flat_map(|pass| &pass.layers)
             // A 3D group's item is drawn through its children (ADR-0164).
@@ -4429,9 +4434,7 @@ impl Shot {
         }
         let extent = [size.width(), size.height()];
         let layers = self
-            .passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
+            .drawn_passes()
             .flat_map(|pass| &pass.layers)
             .filter(|layer| layer.image == key)
             .map(|layer| magnification(layer.placement, layer.crop, extent));
@@ -4454,12 +4457,7 @@ impl Shot {
     /// [`legacy_quad`](jstream_protocol::legacy_quad) gives it no quad (#1168).
     pub(crate) fn scales(&self) -> BTreeMap<SourceId, f32> {
         let mut scales: BTreeMap<SourceId, f32> = BTreeMap::new();
-        for layer in self
-            .passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
-            .flat_map(|pass| &pass.layers)
-        {
+        for layer in self.drawn_passes().flat_map(|pass| &pass.layers) {
             let GpuKey::Frame(id) = &layer.image else {
                 continue;
             };
@@ -6555,6 +6553,11 @@ pub(crate) fn compose_metered(
         Some((root, nested)) => (Some(root), nested),
         None => (None, &[][..]),
     };
+    // A scene program nests at the same depth is drawn once, with program's.
+    let show_nested: Vec<&Pass> = show_nested
+        .iter()
+        .filter(|pass| !nested.iter().any(|drawn| drawn.key == pass.key))
+        .collect();
     claim_layers(compositor, (&mut *cache, &mut *chains), shot, view, output)?;
     // The sky backdrops of the 3D scenes this frame draws (ADR-0167), before their
     // items borrow the cache.
@@ -6565,7 +6568,7 @@ pub(crate) fn compose_metered(
     for pass in nested
         .iter()
         .chain(root_pass)
-        .chain(show_nested)
+        .chain(show_nested.iter().copied())
         .chain(show_root)
     {
         if !chains.holds_layer(&pass.key) {
@@ -6599,7 +6602,7 @@ pub(crate) fn compose_metered(
             })
         };
         let mut items: Vec<Item<'_>> = Vec::new();
-        for pass in nested.iter().chain(show_nested) {
+        for pass in nested.iter().chain(show_nested.iter().copied()) {
             // The chains drew this scene at this depth already this frame, for a
             // chain that reads it: the same pass, so its layer holds what this one
             // would draw (#1070).
@@ -8075,13 +8078,7 @@ fn scene_pass<'s>(shot: &'s Shot, id: &SceneId) -> Option<&'s Pass> {
             ChainStep::Pass(pass) if &pass.scene == id => Some(&**pass),
             _ => None,
         })
-        .or_else(|| shot.passes.iter().find(|pass| &pass.scene == id))
-        .or_else(|| {
-            shot.mix_passes
-                .values()
-                .flatten()
-                .find(|pass| &pass.scene == id)
-        })
+        .or_else(|| shot.drawn_passes().find(|pass| &pass.scene == id))
 }
 
 /// Whether `item` is drawn into a shadow map (ADR-0179): a model's layer, or a card
