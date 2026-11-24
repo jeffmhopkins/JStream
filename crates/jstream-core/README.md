@@ -1347,7 +1347,8 @@ outside it, taking only the audio sources' wanted-set mutex to clone the receive
 the live data's own lock. `midi.last_controls` (0.168, ADR-0178) is answered on the same
 path, before the queries the graph answers: it takes the collection lock only to reach
 the MIDI inputs, and reads each one's latest control change under `MidiInputs`' leaf
-lock.
+lock. `midi.last_notes` (ADR-0202) is answered the same way, reading each input's
+latest note-on.
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -4803,8 +4804,8 @@ the host's error) and an `info` with how many effects it found. A `tempo.*` valu
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
 `warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
 answers; only its event is missing). A `jstream-values` thread that can't start is a
-`warn`; the value bindings, channels and MIDI action bindings then wait for the next
-batch or channel action to start it. An action a MIDI binding runs logs as any call
+`warn`; the value bindings, channels, MIDI action bindings and data triggers then wait for the next
+batch or channel action to start it. An action a MIDI binding or a data trigger runs logs as any call
 does, its failure at `debug` with the error code (ADR-0207).
 
 <a id="audit-log"></a>

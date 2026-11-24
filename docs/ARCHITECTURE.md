@@ -785,6 +785,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   JTunnel sender with "Use this sender's MIDI" on, ADR-0123 §3), and a held note or
   control releases an action that has a release (`Action::on_release`), as a client
   does for a held key ([ADR-0207](adr/0207-mute-actions-and-held-triggers.md)).
+  Since 0.189 a trigger may also be one field of a JTunnel sender's live data meeting a
+  condition (`data`), which the engine fires from senders whose state is used
+  ([ADR-0202](adr/0202-live-data-triggers-and-note-learn.md)).
   A chord or trigger runs several actions in the order they were bound, and a clear can
   name the one action to unbind (protocol 0.181,
   [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
@@ -796,7 +799,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   switch (ADR-0207), drawn and heard without being stored, or since 0.182 one
   axis of a PTZ head, aimed rather than stored
   ([ADR-0209](adr/0209-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
-  reports each input's latest control change, for learning one.
+  reports each input's latest control change, for learning one, and `midi.last_notes`
+  (0.189, ADR-0202) each input's latest note-on.
   `channel.set` and `channel.delete` (protocol 0.169,
   [ADR-0183](adr/0183-virtual-control-channels.md)) set and remove a channel: up to eight
   `midi`, `data` or `channel` readings combined, averaged, faded, curved and switched
