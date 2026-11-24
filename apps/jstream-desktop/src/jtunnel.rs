@@ -3,7 +3,8 @@
 //! machine's accepted senders, as the daemon's `--jtunnel-accept` gives them.
 //!
 //! - **The setting** is `jtunnel.json` in the data folder, `{"on": true, "accepted":
-//!   [{"name": "Bitwig", "address": "192.168.1.5:9000", "state": true}]}`, user-only.
+//!   [{"name": "Bitwig", "address": "192.168.1.5:9000", "state": true}], "live":
+//!   "Bitwig"}`, user-only.
 //!   `state` is "Use this sender's state" (ADR-0171 decision 1), on when left out, as it is for a
 //!   newly accepted sender. Only the person
 //!   changes it, from the app's own window: the page calls `set_jtunnel` through
@@ -12,8 +13,12 @@
 //!   in the collection, so opening a collection never turns it on. A missing or
 //!   unreadable file means off. It takes effect at once: saving it starts, restarts or
 //!   stops the receiver ([`apply`]), with no restart of the app.
+//! - **One live sender.** Any number of senders may be accepted, but JStream receives
+//!   from one at a time: `live` names it, and the others stand by until the person makes
+//!   one live, which replaces it. A file with no `live`, or naming a sender no longer
+//!   accepted, has the first accepted sender live.
 //! - **On**, the app starts the engine's JTunnel receiver (`Engine::start_jtunnel`)
-//!   with the accepted senders, after the platform's backends, whose media clock stamps
+//!   with the live sender, after the platform's backends, whose media clock stamps
 //!   the arrivals. With none accepted it still runs, so it can find senders on the LAN
 //!   (`jtunnel.senders`) for the person to accept. Off, no JTunnel socket is open.
 //!
@@ -57,15 +62,29 @@ pub struct Setting {
     pub on: bool,
     /// The accepted senders, in the order the person added them.
     pub accepted: Vec<Entry>,
+    /// The accepted sender JStream receives from; the others stand by. `None`, or a name
+    /// not accepted, means the first accepted sender.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub live: Option<String>,
 }
 
 impl Setting {
-    /// The receiver's setup: `None` while off. On with no sender, it receives from
-    /// nobody and only finds senders on the LAN.
+    /// The sender JStream receives from: the one `live` names if it is accepted, else
+    /// the first accepted, else none.
+    pub fn live(&self) -> Option<&Entry> {
+        self.live
+            .as_deref()
+            .and_then(|name| self.accepted.iter().find(|entry| entry.name == name))
+            .or_else(|| self.accepted.first())
+    }
+
+    /// The receiver's setup: `None` while off. On, it receives from the live sender
+    /// alone ([`live`](Self::live)); with no sender, from nobody, and it only finds
+    /// senders on the LAN.
     ///
     /// # Errors
     /// A sender the engine refuses ([`AcceptedSender::new`], [`JtunnelSetup::new`]),
-    /// named in the message.
+    /// named in the message: every accepted sender is checked, standing by or not.
     pub fn setup(&self) -> Result<Option<JtunnelSetup>, String> {
         if !self.on {
             return Ok(None);
@@ -80,7 +99,14 @@ impl Setting {
                 AcceptedSender::new(&entry.name, addr).map(|s| s.with_state(entry.state))
             })
             .collect::<Result<Vec<_>, String>>()?;
-        JtunnelSetup::new(accepted).map(Some)
+        // The whole list is checked as the engine would take it, then one goes live.
+        JtunnelSetup::new(accepted.clone())?;
+        let live = self.live().map(|entry| entry.name.as_str());
+        let live = accepted
+            .into_iter()
+            .filter(|sender| Some(sender.name()) == live)
+            .collect();
+        JtunnelSetup::new(live).map(Some)
     }
 }
 
@@ -157,12 +183,10 @@ pub fn apply(engine: &Engine, setting: &Setting) -> bool {
     };
     match engine.start_jtunnel(&setup) {
         Ok(local) => {
-            let senders: Vec<String> = setting
-                .accepted
-                .iter()
-                .map(|entry| format!("{}@{}", entry.name, entry.address))
-                .collect();
-            tracing::info!(%local, senders = ?senders, "receiving from JTunnel senders");
+            let live = setting
+                .live()
+                .map(|entry| format!("{}@{}", entry.name, entry.address));
+            tracing::info!(%local, live = ?live, standing_by = setting.accepted.len().saturating_sub(1), "receiving from JTunnel senders");
             true
         }
         Err(error) => {
@@ -238,6 +262,7 @@ mod tests {
         let on = Setting {
             on: true,
             accepted: vec![entry("Bitwig", "192.168.1.5:9000")],
+            live: None,
         };
         write(&file, &on).expect("saved");
         assert_eq!(read(&file), on);
@@ -255,6 +280,7 @@ mod tests {
                 state: false,
                 ..entry("Bitwig", "192.168.1.5:9000")
             }],
+            live: None,
         };
         write(&file, &state).expect("saved");
         assert_eq!(read(&file), state);
@@ -282,6 +308,7 @@ mod tests {
         let empty = Setting {
             on: true,
             accepted: Vec::new(),
+            live: None,
         };
         assert!(
             empty
@@ -316,6 +343,53 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Any number of senders may be accepted, but one is live: the one `live` names, else
+    /// the first. Only it reaches the engine; the others stand by, still checked.
+    #[test]
+    fn one_accepted_sender_is_live_at_a_time() {
+        let two = Setting {
+            on: true,
+            accepted: vec![
+                entry("Bitwig", "192.168.1.57:47000"),
+                entry("Live", "192.168.1.58:47000"),
+            ],
+            live: Some("Live".into()),
+        };
+        let setup = two.setup().expect("valid").expect("a setup");
+        assert_eq!(setup.accepted.len(), 1, "one sender at a time");
+        assert_eq!(setup.accepted[0].name(), "Live");
+        let unnamed = Setting {
+            live: None,
+            ..two.clone()
+        };
+        assert_eq!(unnamed.live().map(|e| e.name.as_str()), Some("Bitwig"));
+        let gone = Setting {
+            live: Some("Removed".into()),
+            ..two.clone()
+        };
+        assert_eq!(
+            gone.live().map(|e| e.name.as_str()),
+            Some("Bitwig"),
+            "the first stands in"
+        );
+        assert_eq!(
+            gone.setup().expect("valid").expect("a setup").accepted[0].name(),
+            "Bitwig"
+        );
+        // A sender standing by is still checked.
+        let mut bad = two.clone();
+        bad.accepted.push(entry("Far", "8.8.8.8:9000"));
+        assert!(bad.setup().is_err());
+        // An older file has no `live`, and one is written only when named.
+        let text = serde_json::to_string(&unnamed).expect("json");
+        assert!(!text.contains("live"), "{text}");
+        let dir = folder("live");
+        let file = setting_file(&dir);
+        write(&file, &two).expect("saved");
+        assert_eq!(read(&file), two);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A sender the engine refuses is never saved, and a malformed file is off.
     #[test]
     fn a_refused_sender_isnt_saved_and_a_malformed_file_is_off() {
@@ -340,6 +414,7 @@ mod tests {
             let setting = Setting {
                 on: true,
                 accepted: bad,
+                live: None,
             };
             assert!(write(&file, &setting).is_err(), "{setting:?}");
         }

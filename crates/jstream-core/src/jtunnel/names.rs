@@ -197,15 +197,22 @@ pub(crate) fn param_names(graph: &Graph) -> ParamNames {
         .collect()
 }
 
-/// The names for the sender called `name`: its own readers' names, and for a slot none
-/// of them read, the name from readers that take any sender's key.
-pub(crate) fn for_sender(names: &ParamNames, name: &str) -> Vec<String> {
+/// The names for the sender called `name`, also known as `alias` (the live sender's
+/// `JTunnel`, ADR-0218): its own readers' names, then for a slot none of them read the
+/// names from readers of the alias, then from readers that take any sender's key.
+pub(crate) fn for_sender(names: &ParamNames, name: &str, alias: Option<&str>) -> Vec<String> {
     let own = names.get(&Some(name.to_owned()));
+    let aliased = alias.and_then(|alias| names.get(&Some(alias.to_owned())));
     let any = names.get(&None);
     (0..MOD_SLOTS)
         .map(|n| {
             own.map(|slots| &slots[n])
                 .filter(|slot| !slot.is_empty())
+                .or_else(|| {
+                    aliased
+                        .map(|slots| &slots[n])
+                        .filter(|slot| !slot.is_empty())
+                })
                 .or_else(|| any.map(|slots| &slots[n]))
                 .cloned()
                 .unwrap_or_default()
@@ -298,14 +305,41 @@ mod tests {
         own[1] = "Logo X".into();
         names.insert(None, any);
         names.insert(Some("Bitwig".into()), own);
-        let bitwig = for_sender(&names, "Bitwig");
+        let bitwig = for_sender(&names, "Bitwig", None);
         assert_eq!(&bitwig[..3], ["Cam Pan", "Logo X", ""]);
-        let other = for_sender(&names, "Laptop");
+        let other = for_sender(&names, "Laptop", None);
         assert_eq!(&other[..3], ["Cam Pan", "Master Volume", ""]);
         assert!(
-            for_sender(&ParamNames::new(), "Bitwig")
+            for_sender(&ParamNames::new(), "Bitwig", None)
                 .iter()
                 .all(String::is_empty)
+        );
+    }
+
+    /// ADR-0218: readers of `JTunnel` name the live sender's params, after its own
+    /// readers and before readers of any sender.
+    #[test]
+    fn the_live_senders_second_name_names_its_params() {
+        let mut names = ParamNames::new();
+        let mut any = vec![String::new(); MOD_SLOTS];
+        any[0] = "Cam Pan".into();
+        any[2] = "Fog".into();
+        let mut own = vec![String::new(); MOD_SLOTS];
+        own[1] = "Logo X".into();
+        let mut live = vec![String::new(); MOD_SLOTS];
+        live[1] = "Shadowed".into();
+        live[2] = "Warp".into();
+        names.insert(None, any);
+        names.insert(Some("Bitwig".into()), own);
+        names.insert(Some("JTunnel".into()), live);
+        assert_eq!(
+            &for_sender(&names, "Bitwig", Some("JTunnel"))[..4],
+            ["Cam Pan", "Logo X", "Warp", ""]
+        );
+        assert_eq!(
+            &for_sender(&names, "Bitwig", None)[..4],
+            ["Cam Pan", "Logo X", "Fog", ""],
+            "a sender without the second name"
         );
     }
 }

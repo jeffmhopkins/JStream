@@ -160,6 +160,8 @@ impl TempoCell {
 /// pushes every message through it, without a lock or an allocation.
 pub struct MidiFeed {
     own: Option<Arc<MidiState>>,
+    /// A second name's state the input also feeds ([`MidiInputs::feed_as`]).
+    also: Option<Arc<MidiState>>,
     any: Arc<MidiState>,
     tempo: Tempo,
     /// When the input's last timing clock came, in milliseconds.
@@ -205,11 +207,17 @@ impl MidiFeed {
             if let Some(own) = &self.own {
                 own.tempo.publish(self.id, &reading);
             }
+            if let Some(also) = &self.also {
+                also.tempo.publish(self.id, &reading);
+            }
             self.any.tempo.publish(self.id, &reading);
         }
         // After the tempo, so a source that sees the change count sees the tempo too.
         if let Some(own) = &self.own {
             own.push(at_ms, message);
+        }
+        if let Some(also) = &self.also {
+            also.push(at_ms, message);
         }
         self.any.push(at_ms, message);
     }
@@ -219,9 +227,19 @@ impl MidiInputs {
     /// The feed for input `name`. Past [`MAX_INPUTS`](super::MAX_INPUTS), or for a name
     /// [`input`](Self::input) refuses, it feeds only the every-input state.
     pub fn feed(&self, name: &str) -> MidiFeed {
+        self.feed_as(name, None)
+    }
+
+    /// The feed for input `name` that also feeds the input `also`, under a second name
+    /// (JStream's live JTunnel sender is also the input `JTunnel`). The every-input state
+    /// still gets each message once. An `also` equal to `name` feeds it once.
+    pub fn feed_as(&self, name: &str, also: Option<&str>) -> MidiFeed {
         static FEEDS: AtomicUsize = AtomicUsize::new(1);
         MidiFeed {
             own: self.input(name),
+            also: also
+                .filter(|also| *also != name)
+                .and_then(|also| self.input(also)),
             any: self.any(),
             tempo: Tempo::new(TRACKER_METER),
             clock_ms: None,

@@ -171,7 +171,8 @@ pub(crate) fn kinds() -> Vec<AudioKind> {
                 },
                 ParamDescriptor {
                     description: Some(
-                        "The sender's name, as its plugin shows it. JStream receives only \
+                        "`JTunnel` follows the live sender, whatever its name; or the \
+                         sender's own name, as its plugin shows it. JStream receives only \
                          from senders accepted on this machine."
                             .into(),
                     ),
@@ -179,7 +180,7 @@ pub(crate) fn kinds() -> Vec<AudioKind> {
                         "sender",
                         "Sender",
                         line(MAX_SENDER_NAME as u32),
-                        Value::from(""),
+                        Value::from("JTunnel"),
                     )
                 },
                 ParamDescriptor {

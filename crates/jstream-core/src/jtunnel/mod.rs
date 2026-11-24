@@ -13,14 +13,29 @@
 //!
 //! **Finding senders** (ADR-0123 §3). Every 10 s the thread asks the LAN for JTunnel
 //! senders: an mDNS PTR query for `_jtunnel._udp.local` sent to mDNS's group
-//! (224.0.0.251:5353) from the receive socket, so it is a legacy unicast query (RFC
-//! 6762 §6.7) and each sender answers that socket directly. No socket joins the group
-//! or binds port 5353. An answer from a LAN address's port 5353 goes to a
+//! (224.0.0.251:5353) from the receive socket, a legacy unicast query (RFC 6762 §6.7).
+//! JTunnel answers every query, and announces every 10 s, to the group rather than to
+//! the asker, so the thread also listens there: a second socket, the mDNS listener,
+//! shares port 5353 with the system's own responder (address reuse) and joins the group.
+//! It only reads: nothing is ever sent from it. Without it no JTunnel sender is ever
+//! heard; if it can't be opened (another program holds 5353 alone), the receiver runs
+//! on and hears only a sender that answers the asker directly. An answer from a LAN
+//! address's port 5353, on either socket, goes to a
 //! [`Directory`]: a sender is listed when it answers, dropped on its goodbye, and
 //! forgotten 35 s after it last answered, at most [`MAX_LISTED`] at a time. Listing a
 //! sender trusts it with nothing: only an accepted sender is subscribed to, and
 //! `jtunnel.senders` reports the list. Each change to it is sent on the host's
 //! `changed` channel, which the engine turns into `jtunnel.senders_changed`.
+//!
+//! **The live sender's second name** ([ADR-0218](../../../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)).
+//! The first accepted sender, which in the desktop app is the one live sender, is also
+//! the input [`LIVE_INPUT`] (`JTunnel`): its MIDI feeds both names' states, its state
+//! messages are put in the live data under both, a `network_audio` source may name it
+//! either way, and param names read by either name reach it. A binding, source or
+//! grant that names `JTunnel` follows whichever sender is live, whatever its tunnel
+//! name, so switching senders needs no edit; one that names the sender keeps working.
+//! When an accepted sender is itself called `JTunnel`, that name is its own and no
+//! other sender gets it.
 //!
 //! **Naming a sender's params** ([ADR-0181](../../../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md)).
 //! The engine hands the receiver what the collection calls each sender's 32 modulation
@@ -57,7 +72,7 @@
 pub(crate) mod names;
 
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver as Inbox, SyncSender, TryRecvError, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -73,6 +88,10 @@ use jstream_platform::{
     AudioInputHandler, AudioPacket, AudioPacketFlags, AudioStream, MediaClock, PlatformError,
 };
 use jstream_sources::{DataRefused, LiveData, MidiFeed, MidiInputs};
+
+/// The input name the first accepted sender (the desktop app's live sender) also goes by,
+/// so bindings, sources and grants need not name the sender itself (ADR-0218).
+pub const LIVE_INPUT: &str = "JTunnel";
 
 /// How often a sender is subscribed to again: JTunnel's keepalive.
 const SUBSCRIBE_EVERY: Duration = Duration::from_millis(500);
@@ -97,6 +116,9 @@ pub const MAX_LISTED_PER_HOST: usize = 8;
 /// The longest datagram read whole: mDNS's largest message (RFC 6762 §17), since an
 /// answer can be longer than a JTunnel packet may be.
 const MAX_DATAGRAM: usize = 9000;
+/// The most datagrams read from the mDNS listener each turn of the thread (at most every
+/// 5 ms), so mDNS chatter on a busy LAN can't hold up playout.
+const LISTEN_PER_TURN: usize = 16;
 /// mDNS's group and port, where the thread sends its queries.
 pub const MDNS: SocketAddr = SocketAddr::new(
     IpAddr::V4(Ipv4Addr::new(
@@ -216,7 +238,8 @@ pub struct JtunnelSetup {
     /// picks, unless the host names one.
     pub bind: SocketAddr,
     /// Where it asks for senders, the mDNS group (`MDNS`) unless the host names another (a test's
-    /// responder); `None` asks nobody. Answers are read from this port.
+    /// responder); `None` asks nobody. Answers are read from this port. A multicast
+    /// group is also listened to, on its port, by the mDNS listener ([`mdns_listener`]).
     pub discover: Option<SocketAddr>,
 }
 
@@ -298,6 +321,9 @@ struct JtunnelCounters {
 /// One accepted sender, as both sides see it.
 struct Sender {
     accepted: AcceptedSender,
+    /// Its second name, [`LIVE_INPUT`], for the first accepted sender unless another one
+    /// is called that.
+    alias: Option<&'static str>,
     /// What the collection calls its modulation params (ADR-0181).
     naming: Mutex<Naming>,
     /// Its stream's sample rate, from its latest audio packet; 0 before one.
@@ -414,11 +440,27 @@ impl Receiver {
         let socket = UdpSocket::bind(setup.bind)?;
         socket.set_read_timeout(Some(MAX_WAIT))?;
         let local = socket.local_addr()?;
+        // Senders answer and announce to the group, so discovery hears them only there.
+        let listener = match setup.discover {
+            Some(SocketAddr::V4(group)) if group.ip().is_multicast() => {
+                match mdns_listener(group) {
+                    Ok(listener) => Some(listener),
+                    Err(error) => {
+                        tracing::warn!(%group, %error, "could not listen for JTunnel senders on the mDNS group; only senders that answer directly are listed");
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+        let taken = setup.accepted.iter().any(|s| s.name == LIVE_INPUT);
         let senders: Arc<[Sender]> = setup
             .accepted
             .iter()
-            .map(|accepted| Sender {
+            .enumerate()
+            .map(|(n, accepted)| Sender {
                 accepted: accepted.clone(),
+                alias: (n == 0 && !taken).then_some(LIVE_INPUT),
                 naming: Mutex::new(Naming::default()),
                 rate: AtomicU32::new(0),
                 recorder: AtomicU64::new(0),
@@ -432,6 +474,7 @@ impl Receiver {
         let thread = {
             let mut run = Run {
                 socket,
+                listener,
                 senders: Arc::clone(&senders),
                 counters: Arc::clone(&counters),
                 clock,
@@ -443,7 +486,7 @@ impl Receiver {
                 stop: Arc::clone(&stop),
                 streams: senders
                     .iter()
-                    .map(|sender| Stream::new(midi.as_deref(), &sender.accepted.name))
+                    .map(|sender| Stream::new(midi.as_deref(), &sender.accepted.name, sender.alias))
                     .collect(),
             };
             thread::Builder::new()
@@ -468,7 +511,7 @@ impl Receiver {
     pub(crate) fn set_names(&self, names: &names::ParamNames) {
         for sender in self.senders.iter() {
             let wanted = if sender.accepted.uses_state() {
-                names::for_sender(names, &sender.accepted.name)
+                names::for_sender(names, &sender.accepted.name, sender.alias)
             } else {
                 Vec::new()
             };
@@ -579,9 +622,11 @@ impl Receiver {
         if name.is_empty() {
             return Err("no JTunnel sender is named".into());
         }
+        // Its own name first: an alias never shadows a sender of that name.
         self.senders
             .iter()
             .position(|s| s.accepted.name == name)
+            .or_else(|| self.senders.iter().position(|s| s.alias == Some(name)))
             .ok_or_else(|| format!("the JTunnel sender `{name}` is not accepted on this machine"))
     }
 
@@ -717,11 +762,11 @@ struct Handler {
 }
 
 impl Stream {
-    fn new(midi: Option<&MidiInputs>, name: &str) -> Self {
+    fn new(midi: Option<&MidiInputs>, name: &str, alias: Option<&str>) -> Self {
         Self {
             playout: Playout::new(u64::from(jstream_sources::LATENCY_MS.2) * 1_000_000),
             handler: None,
-            midi: midi.map(|inputs| inputs.feed(name)),
+            midi: midi.map(|inputs| inputs.feed_as(name, alias)),
             state: StateAssembler::new(),
             evicted: 0,
         }
@@ -731,6 +776,8 @@ impl Stream {
 /// The thread's state.
 struct Run {
     socket: UdpSocket,
+    /// The mDNS listener: the group's port, joined to the group, non-blocking. Read only.
+    listener: Option<UdpSocket>,
     senders: Arc<[Sender]>,
     counters: Arc<JtunnelCounters>,
     clock: Arc<dyn MediaClock>,
@@ -769,6 +816,7 @@ impl Run {
                 next_expire = Instant::now() + EXPIRE_EVERY;
             }
             self.commands();
+            self.listen(&mut datagram);
             let _ = self.socket.set_read_timeout(Some(self.wait()));
             // An error is a timeout, or an ICMP port-unreachable from a sender not
             // running yet, reported on the next receive on some systems.
@@ -786,6 +834,9 @@ impl Run {
         // What it no longer receives reads as absent at once, not after 3 s.
         for sender in self.senders.iter() {
             self.data.restart(&sender.accepted.name);
+            if let Some(alias) = sender.alias {
+                self.data.restart(alias);
+            }
         }
         // A receiver stopped or replaced (the host started JTunnel again) leaves no
         // source recording silently: each reopens on the receiver now running. Opens
@@ -797,6 +848,29 @@ impl Run {
                     what: format!("the JTunnel sender `{}`", self.senders[index].accepted.name),
                     reason: "the JTunnel receiver stopped".into(),
                 });
+            }
+        }
+    }
+
+    /// Reads what waits on the mDNS listener, a bounded number of datagrams per turn so
+    /// a busy LAN can't hold up playout: mDNS answers from a LAN address's port 5353 go
+    /// to the list like answers to the receive socket. Anything else there (a query,
+    /// ours included, or a host outside the LAN) is someone else's traffic, dropped
+    /// uncounted.
+    fn listen(&mut self, datagram: &mut [u8]) {
+        let Some(listener) = &self.listener else {
+            return;
+        };
+        let port = listener.local_addr().map_or(0, |local| local.port());
+        for _ in 0..LISTEN_PER_TURN {
+            let Ok((len, from)) = listener.recv_from(datagram) else {
+                return;
+            };
+            if len > MAX_DATAGRAM || !is_lan(from.ip()) || from.port() != port {
+                continue;
+            }
+            if let Some(ip) = ipv4(from.ip()) {
+                self.discovered(&datagram[..len], ip);
             }
         }
     }
@@ -1042,6 +1116,7 @@ impl Run {
     /// Takes one state piece from the sender at `index` (ADR-0171 decision 1).
     fn state(&mut self, index: usize, piece: &wire::StatePiece<'_>) {
         let counters = &self.counters;
+        let alias = self.senders[index].alias;
         let sender = &self.senders[index].accepted;
         if !sender.state {
             counters.state_off.fetch_add(1, Ordering::Relaxed);
@@ -1052,8 +1127,13 @@ impl Run {
         let mut pushed = stream.state.push(piece);
         if pushed.restarted {
             self.data.restart(&sender.name);
+            if let Some(alias) = alias {
+                self.data.restart(alias);
+            }
         }
-        if pushed.step == StateStep::Repeat && !self.data.touch(&sender.name, piece.key, now) {
+        // Both names must still hold it, or it is taken again for both.
+        let held = |name: &str| self.data.touch(name, piece.key, now);
+        if pushed.step == StateStep::Repeat && !(held(&sender.name) & alias.is_none_or(held)) {
             // A resend of a message the live data no longer has (it expired after a gap,
             // or a stopped receiver forgot it): take it again, at once for one piece and
             // from the next resend round for more (#1597 review B1).
@@ -1061,6 +1141,11 @@ impl Run {
             pushed = stream.state.push(piece);
         }
         if let StateStep::Whole(json) = pushed.step {
+            if let Some(alias) = alias {
+                // The same message under the second name; the sender's own name's
+                // result is the one counted.
+                let _ = self.data.put(alias, piece.key, &json, now);
+            }
             match self.data.put(&sender.name, piece.key, &json, now) {
                 Ok(()) => {
                     counters.state.fetch_add(1, Ordering::Relaxed);
@@ -1142,6 +1227,33 @@ impl Run {
             self.senders[index].seen.publish(stream, now);
         }
     }
+}
+
+/// The mDNS listener for `group` (ADR-0123 §3): a non-blocking UDP socket on any IPv4
+/// interface at the group's port, sharing it with the system's own mDNS responder
+/// (Bonjour, Avahi, Windows' DNS client), as every mDNS program does, and joined to the
+/// group on the default interface. A group that can't be joined (no multicast route)
+/// leaves a socket that hears only what is sent to this machine directly.
+///
+/// # Errors
+/// The socket could not be made, set up or bound.
+pub(crate) fn mdns_listener(group: SocketAddrV4) -> io::Result<UdpSocket> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+    socket.set_reuse_address(true)?;
+    // macOS's responder holds the port with SO_REUSEPORT, so a second socket needs it
+    // too; Linux shares it with either.
+    #[cfg(all(
+        unix,
+        not(any(target_os = "solaris", target_os = "illumos", target_os = "cygwin"))
+    ))]
+    socket.set_reuse_port(true)?;
+    socket.bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), group.port()).into())?;
+    if let Err(error) = socket.join_multicast_v4(group.ip(), &Ipv4Addr::UNSPECIFIED) {
+        tracing::warn!(%group, %error, "could not join the mDNS group; JTunnel senders may not be listed");
+    }
+    socket.set_nonblocking(true)?;
+    Ok(socket.into())
 }
 
 /// `ip` as IPv4, whether or not it came mapped into IPv6.

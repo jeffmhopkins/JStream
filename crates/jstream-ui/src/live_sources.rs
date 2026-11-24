@@ -440,10 +440,34 @@ pub async fn read(session: &Session) -> LiveSources {
     let controls = crate::panels::learn::controls(session)
         .await
         .unwrap_or_default();
-    LiveSources {
+    let mut sources = LiveSources {
         senders,
         controls,
         loaded: true,
+    };
+    prefer_live(&mut sources);
+    sources
+}
+
+/// Shows the live JTunnel sender once, as `JTunnel` (ADR-0218): the engine reports its
+/// data and MIDI under its own name too, so the copy under its own name is left out
+/// and what Learn and the Map dialog bind to follows whichever sender is live. A
+/// sender or MIDI input is a copy when it reads exactly as the `JTunnel` one does.
+pub fn prefer_live(sources: &mut LiveSources) {
+    let live = crate::jtunnel::LIVE_INPUT;
+    if let Some(of) = sources.senders.iter().find(|s| s.input == live).cloned() {
+        sources.senders.retain(|s| {
+            s.input == live || s.keys != of.keys || s.mods != of.mods || s.mod_names != of.mod_names
+        });
+    }
+    if let Some(of) = sources.controls.iter().find(|c| c.input == live).cloned() {
+        sources.controls.retain(|c| {
+            c.input == live
+                || c.count != of.count
+                || c.channel != of.channel
+                || c.controller != of.controller
+                || c.value != of.value
+        });
     }
 }
 
@@ -507,6 +531,53 @@ mod tests {
             value: 64,
             count,
         }
+    }
+
+    /// ADR-0218: the live sender shows once, as `JTunnel`; other senders and inputs stay.
+    #[test]
+    fn the_live_sender_shows_once_as_jtunnel() {
+        let mut sources = LiveSources {
+            senders: vec![
+                sender("Bitwig", &[0.5, 0.25]),
+                sender("JTunnel", &[0.5, 0.25]),
+                sender("Laptop", &[0.5, 0.25, 0.1]),
+            ],
+            controls: vec![
+                control("Bitwig", 7, 12),
+                control("JTunnel", 7, 12),
+                control("Pads", 7, 3),
+            ],
+            loaded: true,
+        };
+        prefer_live(&mut sources);
+        let names = |s: &LiveSources| {
+            (
+                s.senders
+                    .iter()
+                    .map(|s| s.input.clone())
+                    .collect::<Vec<_>>(),
+                s.controls
+                    .iter()
+                    .map(|c| c.input.clone())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            names(&sources),
+            (
+                vec!["JTunnel".to_owned(), "Laptop".to_owned()],
+                vec!["JTunnel".to_owned(), "Pads".to_owned()]
+            )
+        );
+        // Without a live sender nothing is left out.
+        let mut none = LiveSources {
+            senders: vec![sender("Bitwig", &[0.5])],
+            controls: vec![control("Bitwig", 7, 1)],
+            loaded: true,
+        };
+        let before = none.clone();
+        prefer_live(&mut none);
+        assert_eq!(none, before);
     }
 
     #[test]

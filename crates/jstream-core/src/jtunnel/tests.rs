@@ -218,6 +218,84 @@ fn answer(name: &str, port: u16, ttl: u32) -> Vec<u8> {
     m
 }
 
+/// A port no socket holds now, for a test's mDNS group.
+fn free_port() -> u16 {
+    UdpSocket::bind("127.0.0.1:0")
+        .and_then(|s| s.local_addr())
+        .expect("a port")
+        .port()
+}
+
+/// ADR-0123 §3: the mDNS listener shares its port, as the system's own responder holds
+/// 5353 beside it, and two receivers on one machine can both listen.
+#[test]
+fn the_mdns_listener_shares_its_port() {
+    let group = SocketAddrV4::new(Ipv4Addr::new(239, 255, 77, 11), free_port());
+    let first = mdns_listener(group).expect("a listener");
+    let second = mdns_listener(group).expect("a second listener on the same port");
+    assert_eq!(
+        first.local_addr().expect("bound").port(),
+        second.local_addr().expect("bound").port()
+    );
+}
+
+/// ADR-0123 §3: JTunnel answers a query, and announces, to the mDNS group rather than to
+/// the asker, so a receiver that discovers on a group lists what arrives on the group's
+/// port from a LAN address's mDNS port, and drops the rest uncounted. Linux only: the
+/// answer comes from 127.0.0.2 at the group's port, which only Linux sets up.
+#[cfg(target_os = "linux")]
+#[test]
+fn senders_announced_on_the_group_are_listed() {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let sender = FakeSender::new();
+    let port = free_port();
+    let mut setup = setup("Bitwig", &sender);
+    setup.discover = Some(SocketAddr::new(v4(239, 255, 77, 12), port));
+    let receiver = Receiver::start(
+        &setup,
+        Arc::new(Clock(Instant::now())),
+        None,
+        LiveData::new(),
+        None,
+    )
+    .expect("a receiver");
+    // A responder elsewhere on the LAN: its own address, the group's port.
+    let responder = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).expect("a socket");
+    responder.set_reuse_address(true).expect("reuse");
+    responder.set_reuse_port(true).expect("reuse");
+    responder
+        .bind(&SocketAddr::new(v4(127, 0, 0, 2), port).into())
+        .expect("bound beside the listener");
+    let responder: UdpSocket = responder.into();
+    let to = SocketAddr::new(v4(127, 0, 0, 1), port);
+    responder
+        .send_to(&answer("Bitwig", sender.addr().port(), 30), to)
+        .expect("sent");
+    assert!(
+        eventually(|| receiver.heard().len() == 1),
+        "listed from the group's port"
+    );
+    let heard = receiver.heard();
+    assert_eq!(heard[0].remote_name, "Bitwig");
+    assert_eq!(
+        heard[0].address,
+        SocketAddr::new(v4(127, 0, 0, 2), sender.addr().port()).to_string()
+    );
+    // From another port it is someone's query or stray traffic: not listed, not counted.
+    let stray = UdpSocket::bind("127.0.0.3:0").expect("a socket");
+    stray.send_to(&answer("Stray", 9000, 30), to).expect("sent");
+    stray.send_to(&[0, 0, 0x84, 0], to).expect("sent");
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(receiver.heard().len(), 1);
+    assert_eq!(receiver.stats().malformed, 0);
+    assert_eq!(receiver.stats().unaccepted, 0);
+    // Its goodbye on the group takes it off.
+    responder
+        .send_to(&answer("Bitwig", sender.addr().port(), 0), to)
+        .expect("sent");
+    assert!(eventually(|| receiver.heard().is_empty()));
+}
+
 /// ADR-0123 §3: the receiver asks for senders from its own socket (a legacy unicast
 /// query), lists those that answer with whether they are accepted, drops one on its
 /// goodbye, says when the list changed, and keeps the list bounded.
@@ -584,7 +662,13 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         || keys.held(0, 60) == 100 && keys.controller(3, 7) == 99
     ));
     assert_eq!(midi.any().held(0, 60), 100);
+    // The live sender is also the input `JTunnel` (ADR-0218); the every-input state
+    // still hears each message once.
+    let live = midi.drawn(LIVE_INPUT);
+    assert_eq!(live.held(0, 60), 100);
+    assert_eq!(live.controller(3, 7), 99);
     assert!(eventually(|| receiver.stats().midi == 4));
+    assert_eq!(midi.any().pushed(), keys.pushed());
     // Its clock runs the input's tempo (ADR-0142 §3).
     let tempo = keys.tempo().expect("a tempo from the sender's clock");
     assert!(tempo.playing);
@@ -723,6 +807,11 @@ fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
         data.get("Bitwig", "transport").as_deref(),
         Some(&serde_json::json!({"playing": true}))
     );
+    assert_eq!(
+        data.get(LIVE_INPUT, "transport"),
+        data.get("Bitwig", "transport"),
+        "the live sender's second name"
+    );
     sender.state(to, &piece(1, 3, 0, 1, "mixer", b"{not json"));
     assert!(eventually(|| receiver.stats().state_dropped == 1));
     assert_eq!(
@@ -732,9 +821,13 @@ fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
     // The sender starts again: what it sent before is gone.
     sender.state(to, &piece(2, 1, 0, 1, "clock", b"{\"tempo\":120}"));
     assert!(eventually(|| receiver.stats().state == 3));
+    // The live sender's state is also under `JTunnel` (ADR-0218).
     assert_eq!(
         data.list(),
-        vec![("Bitwig".to_owned(), vec!["clock".to_owned()])]
+        vec![
+            ("Bitwig".to_owned(), vec!["clock".to_owned()]),
+            (LIVE_INPUT.to_owned(), vec!["clock".to_owned()]),
+        ]
     );
     assert_eq!(volume.read(), jstream_sources::DataReading::Absent);
     drop(receiver);
@@ -783,4 +876,34 @@ fn an_expired_key_comes_back_with_its_next_resend() {
     sender.state(to, &track);
     assert!(eventually(|| data.get("Bitwig", "track/0").is_some()));
     assert_eq!(receiver.stats().state, 2);
+}
+
+/// ADR-0218: the first accepted sender is also `JTunnel`, so a source may name it
+/// either way; no other sender is, and a sender called `JTunnel` keeps its own name.
+#[test]
+fn the_first_sender_is_also_the_live_input() {
+    let accepted = |names: &[&str]| {
+        let mut setup = JtunnelSetup::new(
+            names
+                .iter()
+                .zip(9100_u16..)
+                .map(|(name, port)| {
+                    AcceptedSender::new(name, SocketAddr::new(v4(127, 0, 0, 1), port))
+                        .expect("accepted")
+                })
+                .collect(),
+        )
+        .expect("a setup");
+        setup.bind = "127.0.0.1:0".parse().expect("an address");
+        setup.discover = None;
+        start(&setup)
+    };
+    let two = accepted(&["Bitwig", "Laptop"]);
+    assert_eq!(two.sender(LIVE_INPUT), Ok(0));
+    assert_eq!(two.sender("Laptop"), Ok(1));
+    let named = accepted(&["Bitwig", LIVE_INPUT]);
+    assert_eq!(named.sender(LIVE_INPUT), Ok(1), "its own name wins");
+    assert!(named.senders[0].alias.is_none());
+    let none = accepted(&[]);
+    assert!(none.sender(LIVE_INPUT).is_err());
 }

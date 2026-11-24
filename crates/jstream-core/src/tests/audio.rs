@@ -1518,6 +1518,8 @@ fn a_network_audio_source_records_an_accepted_jtunnel_sender_once_it_is_heard() 
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);
@@ -1565,6 +1567,8 @@ fn a_jtunnel_senders_clock_publishes_the_tempo_values() {
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);
@@ -1810,10 +1814,17 @@ fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
     assert!(eventually(|| {
         super::query(&control, Query::DataList).ok()
             == Some(QueryResult::DataList {
-                inputs: vec![DataInputInfo {
-                    input: "Bitwig".into(),
-                    remote_keys: vec!["track/0".into()],
-                }],
+                inputs: vec![
+                    DataInputInfo {
+                        input: "Bitwig".into(),
+                        remote_keys: vec!["track/0".into()],
+                    },
+                    // The live sender's second name (ADR-0218).
+                    DataInputInfo {
+                        input: crate::LIVE_INPUT.into(),
+                        remote_keys: vec!["track/0".into()],
+                    },
+                ],
             })
     }));
     let get = |input: &str, key: &str| {
@@ -1832,6 +1843,7 @@ fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
             remote_value: Some(serde_json::json!({"name": "Drums", "volume": 0.8}))
         })
     );
+    assert_eq!(get(crate::LIVE_INPUT, "track/0"), get("Bitwig", "track/0"));
     assert_eq!(
         get("Bitwig", "clock"),
         Some(QueryResult::DataGet { remote_value: None })
