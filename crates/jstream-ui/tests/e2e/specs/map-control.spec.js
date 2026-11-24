@@ -58,7 +58,11 @@ test('at a UI scale of 150% a setting\'s right-click menu opens at the pointer',
   await connect(page, daemon);
   for (let i = 0; i < 4; i += 1) await page.keyboard.press('Control+Equal');
   await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('1.5');
-  const { x, y } = await fader(page);
+  await fader(page);
+  const number = page.locator('.mix-row').getByRole('textbox').first();
+  await number.scrollIntoViewIfNeeded();
+  const box = await number.boundingBox();
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
   await page.mouse.click(x, y, { button: 'right' });
   const menu = page.getByRole('menu', { name: 'Control' });
   await expect(menu).toBeVisible();
@@ -156,9 +160,10 @@ test('mapping mode maps the armed source by the amount dragged on a setting', as
   await expect(bar).toBeHidden();
   await expect(button).toContainText('Mod 20');
 
+  const number = page.locator('.mix-row').getByRole('textbox').first();
   // A drag makes an offset: the Mod adds to the fader. The dialog lists it, and can
   // bypass it without removing it.
-  await page.mouse.click(x, y, { button: 'right' });
+  await number.click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Edit mapping…' }).click();
   const row = dialog.locator('.map-row');
   await expect(row).toHaveCount(1);
@@ -178,7 +183,7 @@ test('mapping mode maps the armed source by the amount dragged on a setting', as
   await expect(dialog).toBeHidden();
   await expect.poll(() => rev(page)).toBe(before + 5);
   await expect(button).toContainText('Mod 3');
-  await page.mouse.click(x, y, { button: 'right' });
+  await number.click({ button: 'right' });
   await expect(page.getByRole('menu', { name: 'Control' })).toContainText('Mapped to Mod 3 · Bitwig and 1 more');
   await page.getByRole('menuitem', { name: 'Edit mapping…' }).click();
   await expect(row).toHaveCount(2);
