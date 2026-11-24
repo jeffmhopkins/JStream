@@ -5,8 +5,10 @@
 //! loops' bars under them, and the zoom bar over the whole show.
 //!
 //! Moving around: Ctrl+wheel zooms about the pointer, Shift+wheel scrolls, and the zoom
-//! bar does both ([`zoom`]). While the show runs, a click on the ruler arms that spot for
-//! the next Continue; it never jumps.
+//! bar does both ([`zoom`]). A click or a drag on the ruler, or a drag of the play head,
+//! moves the play head: while the show runs it seeks (`show.seek`), and while it doesn't
+//! it sets where Play starts. The Run view's strip arms a spot instead, so a click there
+//! never jumps program.
 //!
 //! Editing: a click selects a clip, marker, cue, bookmark or loop (Delete removes it,
 //! Escape lets go). With Select, a drag moves or trims what it takes ([`gesture`]); the
@@ -364,8 +366,6 @@ enum Click {
     Cut(String),
     /// Open the keyframe menu for a marker at a time.
     Keyframe(f64),
-    /// Arm a spot for the next Continue.
-    Arm(f64),
 }
 
 /// A press on the timeline, from the pointer down to its release.
@@ -465,13 +465,7 @@ pub fn EditView() -> impl IntoView {
     let paused = move || matches!(phase(), RunPhase::Paused { .. });
     let locked = move || show.with(|s| s.as_ref().is_some_and(|s| s.locked));
     let locked_now = move || show.with_untracked(|s| s.as_ref().is_some_and(|s| s.locked));
-    let continue_ = move |_| {
-        if running.get_untracked() {
-            send(Command::Continue);
-        } else {
-            send(Command::Play(show_id()));
-        }
-    };
+    let continue_ = move |_| send(Command::Continue);
     let next = move || {
         let head = panel.run.with(|r| r.at_ms);
         let at_too = !running.get() || paused();
@@ -518,11 +512,20 @@ pub fn EditView() -> impl IntoView {
             <button type="button" class="show-btn" disabled=move || !running.get()
                 title="Back to the previous pausing bookmark"
                 on:click=move |_| send(Command::Back)>"⏮ Back"</button>
-            <button type="button" class="show-continue"
-                disabled=move || matches!(phase(), RunPhase::Transition)
-                on:click=continue_>
-                {move || if running.get() { "Continue ▸" } else { "Play ▸" }}
+            <button type="button" class="show-btn show-play" class:on=move || running.get()
+                disabled=move || running.get()
+                title=move || if running.get() {
+                    "Playing. Pause anywhere comes with the engine's show.pause; Stop show stops it"
+                } else {
+                    "Play the show from the play head"
+                }
+                on:click=move |_| send(Command::Play(show_id()))>
+                {move || if running.get() { "❚❚ Pause" } else { "▶ Play" }}
             </button>
+            <button type="button" class="show-continue"
+                disabled=move || !running.get() || matches!(phase(), RunPhase::Transition)
+                title="Play on from a pause, or on to the next pausing bookmark"
+                on:click=continue_>"Continue ▸"</button>
             {move || panel.continue_key.get().map(|k| view! { <kbd class="show-keycap">{k}</kbd> })}
             {next}
             <span class="show-bar-gap"></span>
@@ -596,6 +599,23 @@ pub fn EditView() -> impl IntoView {
     let selected = panel.selected;
     let press = StoredValue::new(None::<Press>);
     let pending = StoredValue::new(None::<Click>);
+    // A scrub of the play head along the ruler, while it lasts: when it last sent a seek.
+    let scrub = StoredValue::new(None::<f64>);
+    let scrub_to = move |ms: f64, shift: bool, last: bool| {
+        let at = if shift {
+            ms.max(0.0) as u32
+        } else {
+            snap_now(ms)
+        };
+        let now = crate::store::now_ms();
+        let running = panel.run.with_untracked(|r| r.show.is_some());
+        // While a show runs each seek jumps program, so a drag sends at most ~12 a second.
+        let due = scrub.get_value().is_none_or(|sent| now - sent >= 80.0);
+        if !running || due || last {
+            panel.move_head(at);
+            scrub.set_value(Some(now));
+        }
+    };
     let tip = RwSignal::new(None::<Tip>);
     let renaming = RwSignal::new(None::<String>);
     let bookmark_menu = move |e: &leptos::ev::MouseEvent, id: String| {
@@ -817,6 +837,21 @@ pub fn EditView() -> impl IntoView {
         }
         let ms = ms_at(f64::from(e.client_x()));
         let tool = tool.get_untracked();
+        // The play head, or the ruler with a tool that doesn't draw on it, scrubs.
+        let on_ruler = closest(&target, ".show-ruler").is_some()
+            && !matches!(tool, Tool::Loop | Tool::Bookmark);
+        if on_ruler || closest(&target, ".show-head").is_some() {
+            e.prevent_default();
+            if let Some(el) = e
+                .current_target()
+                .and_then(|t| t.dyn_into::<Element>().ok())
+            {
+                let _ = el.set_pointer_capture(e.pointer_id());
+            }
+            scrub.set_value(None);
+            scrub_to(ms, e.shift_key(), true);
+            return;
+        }
         let base = base_now();
         let view = show.get_untracked();
         let clip_of = |id: &str| {
@@ -857,9 +892,6 @@ pub fn EditView() -> impl IntoView {
         } else if closest(&target, ".show-ruler").is_some() {
             if tool == Tool::Loop {
                 grab = Some(Grab::NewLoop);
-            }
-            if running.get_untracked() {
-                click = Click::Arm(ms);
             } else if tool == Tool::Bookmark {
                 click = Click::Bookmark(ms);
             }
@@ -932,10 +964,7 @@ pub fn EditView() -> impl IntoView {
         }
         if locked_now() {
             grab = None;
-            if !matches!(
-                click,
-                Click::Arm(_) | Click::Cut(_) | Click::BookmarkMenu(_)
-            ) {
+            if !matches!(click, Click::Cut(_) | Click::BookmarkMenu(_)) {
                 click = Click::Nothing;
             }
         }
@@ -959,6 +988,10 @@ pub fn EditView() -> impl IntoView {
         }));
     };
     let moving = move |e: leptos::ev::PointerEvent| {
+        if scrub.get_value().is_some() {
+            scrub_to(ms_at(f64::from(e.client_x())), e.shift_key(), false);
+            return;
+        }
         let Some(mut p) = press.get_value() else {
             return;
         };
@@ -984,7 +1017,12 @@ pub fn EditView() -> impl IntoView {
         p.last = Some(d);
         press.set_value(Some(p));
     };
-    let up = move |_: leptos::ev::PointerEvent| {
+    let up = move |e: leptos::ev::PointerEvent| {
+        if scrub.get_value().is_some() {
+            scrub_to(ms_at(f64::from(e.client_x())), e.shift_key(), true);
+            scrub.set_value(None);
+            return;
+        }
         let Some(p) = press.get_value() else {
             return;
         };
@@ -1021,6 +1059,7 @@ pub fn EditView() -> impl IntoView {
         }
     };
     let cancel = move || {
+        scrub.set_value(None);
         press.set_value(None);
         tip.set(None);
         panel.preview.set(None);
@@ -1055,7 +1094,6 @@ pub fn EditView() -> impl IntoView {
             Click::BookmarkMenu(id) => bookmark_menu(&e, id),
             Click::Cut(id) => cut_menu(&e, id),
             Click::Keyframe(ms) => keyframe_menu(&e, snap_now(ms)),
-            Click::Arm(ms) => send(Command::Arm(Some(ms.max(0.0) as u32))),
         }
     };
     let context = move |e: leptos::ev::MouseEvent| {
@@ -1449,15 +1487,20 @@ pub fn EditView() -> impl IntoView {
         })
     };
     let head = move || {
-        if !running.get() {
+        let cursor = panel.cursor.get();
+        if !running.get() && cursor.is_none() {
             return None;
         }
         let at = panel.head();
         let v = viewport.get();
         let played = ((f64::from(at) - v.start_ms) / v.span_ms * 100.0).clamp(0.0, 100.0);
-        let text = panel
-            .run
-            .with(|r| geom::head_text(r, at, panel.clock.get()));
+        let text = if running.get() {
+            panel
+                .run
+                .with(|r| geom::head_text(r, at, panel.clock.get()))
+        } else {
+            format!("{} · Play starts here", clock(at))
+        };
         let line = at_pct(v, at).map(|left| {
             // The flag hangs left of the line where it would run off the right edge.
             let flip =
@@ -1522,15 +1565,13 @@ pub fn EditView() -> impl IntoView {
                             on:dragover=drag_over on:drop=dropped>
                             <div class="show-ruler-row">
                                 <div class="show-corner"></div>
-                                <div class="show-ruler" class:armable=move || running.get()
-                                    title=move || {
-                                        if running.get() {
-                                            "Click to arm this spot for the next Continue"
-                                        } else if tool.get() == Tool::Loop {
-                                            "Drag along the ruler to make a loop"
-                                        } else {
-                                            ""
-                                        }
+                                <div class="show-ruler"
+                                    class:scrubs=move || !matches!(tool.get(), Tool::Loop | Tool::Bookmark)
+                                    title=move || match tool.get() {
+                                        Tool::Loop => "Drag along the ruler to make a loop",
+                                        Tool::Bookmark => "Click to add a bookmark",
+                                        _ if running.get() => "Click or drag to move the play head (Shift: no snapping)",
+                                        _ => "Click or drag to set where Play starts (Shift: no snapping)",
                                     }>{ticks}</div>
                             </div>
                             {rows}

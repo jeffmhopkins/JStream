@@ -53,9 +53,12 @@ pub enum Command {
     Back,
     /// Jump to a bookmark, by ID, at once.
     GoTo(String),
-    /// Arm a spot, in show time, for the next Continue (a ruler or strip click while the
-    /// show runs). `None` disarms.
+    /// Arm a spot, in show time, for the next Continue (a click on the Run view's strip
+    /// while the show runs). `None` disarms.
     Arm(Option<u32>),
+    /// Move the running show's play head to a spot, in show time, at once (a click or a
+    /// drag on the Edit view's ruler).
+    Seek(u32),
     /// Lock or unlock editing of the show, by ID.
     Lock(String, bool),
     /// Run on preview, leaving program alone, or not.
@@ -101,6 +104,9 @@ pub struct ShowPanel {
     pub carry: RwSignal<Option<Carry>>,
     /// Whether the show picker is a name field, renaming the open show.
     pub renaming: RwSignal<bool>,
+    /// Where Play starts the open show, while none runs: set by a click or a drag on the
+    /// ruler, `None` for its start.
+    pub cursor: RwSignal<Option<u32>>,
     /// Whether the Run view's bookmark notes are unfolded: the panel's own state, never
     /// saved.
     pub notes_open: RwSignal<bool>,
@@ -125,6 +131,18 @@ pub struct Carry {
     pub dropped: bool,
 }
 
+/// Where the browser keeps the show last opened.
+const OPEN_KEY: &str = "jstream.show.open";
+
+/// The show last opened in this browser, if any.
+fn remembered_show() -> Option<String> {
+    window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .and_then(|s| s.get_item(OPEN_KEY).ok().flatten())
+}
+
 impl ShowPanel {
     /// A panel with no shows, reporting problems to `problem`.
     pub fn new(problem: RwSignal<Option<String>>) -> ShowPanel {
@@ -144,6 +162,7 @@ impl ShowPanel {
             carry: RwSignal::new(None),
             renaming: RwSignal::new(false),
             notes_open: RwSignal::new(true),
+            cursor: RwSignal::new(None),
             prompter: RwSignal::new(prompter::Prompter::default()),
         }
     }
@@ -173,7 +192,20 @@ impl ShowPanel {
     /// The play head now.
     pub fn head(&self) -> u32 {
         let now = self.clock.get();
-        self.run.with(|r| r.head_at(now))
+        self.run.with(|r| match r.show {
+            Some(_) => r.head_at(now),
+            None => self.cursor.get().unwrap_or(0),
+        })
+    }
+
+    /// Moves the play head to `at_ms`: a seek while the show runs, else where Play will
+    /// start it.
+    pub fn move_head(&self, at_ms: u32) {
+        if self.run.with_untracked(|r| r.show.is_some()) {
+            self.send(Command::Seek(at_ms));
+        } else {
+            self.cursor.set(Some(at_ms));
+        }
     }
 
     /// A panel that follows the studio's shows and running show, and sends its commands
@@ -182,8 +214,15 @@ impl ShowPanel {
         let panel = ShowPanel {
             engine: Some((studio, session)),
             prompter: RwSignal::new(prompter::Prompter::restore()),
+            open: RwSignal::new(remembered_show()),
             ..ShowPanel::new(studio.problem)
         };
+        // The show last opened in this browser opens again next time.
+        Effect::new(move |_| {
+            if let (Some(id), Ok(Some(storage))) = (panel.open.get(), window().local_storage()) {
+                let _ = storage.set_item(OPEN_KEY, &id);
+            }
+        });
         Effect::new(move |_| {
             let locked = panel.locked.get();
             let shows = studio.collection.with(|c| {
@@ -269,6 +308,19 @@ impl ShowPanel {
             (wire::action_of(&command, open.as_deref()), session.get())
         {
             studio.act(&session, action);
+        }
+        // Play starts from the start, then goes where the ruler put the play head.
+        if let Command::Play(_) = command
+            && let Some(at_ms) = self.cursor.get_untracked().filter(|at| *at > 0)
+            && let Some(session) = session.get()
+        {
+            studio.act(
+                &session,
+                jstream_control::protocol::Action::ShowSeek { at_ms },
+            );
+        }
+        if matches!(command, Command::Play(_) | Command::Stop) {
+            self.cursor.set(None);
         }
     }
 

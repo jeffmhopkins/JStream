@@ -422,6 +422,7 @@ pub fn action_of(command: &Command, show: Option<&str>) -> Option<Action> {
         Command::Back => Action::ShowBack,
         Command::GoTo(bookmark) => return go_to(show, bookmark),
         Command::Arm(at_ms) => Action::ShowArm { at_ms: *at_ms },
+        Command::Seek(at_ms) => Action::ShowSeek { at_ms: *at_ms },
         // Rehearsing starts the open show on preview; turning it off stops it.
         Command::Rehearse(true) => Action::ShowPlay {
             show_id: ShowId::new(show?.to_owned()),

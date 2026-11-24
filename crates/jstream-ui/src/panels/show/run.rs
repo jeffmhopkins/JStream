@@ -111,6 +111,35 @@ pub fn notes(show: &ShowView, run: &model::RunView, head: u32) -> Notes {
     }
 }
 
+/// A note's paragraphs (split at blank lines), each with whether it is a direction to the
+/// operator rather than words to say: a paragraph wrapped in single asterisks,
+/// `*Check the sound.*`, shown in italics without them.
+pub fn paragraphs(note: &str) -> Vec<(bool, String)> {
+    note.split("\n\n")
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let inner = p.strip_prefix('*').and_then(|p| p.strip_suffix('*'));
+            match inner {
+                Some(text)
+                    if !text.is_empty() && !text.starts_with('*') && !text.ends_with('*') =>
+                {
+                    (true, text.trim().to_owned())
+                }
+                _ => (false, p.to_owned()),
+            }
+        })
+        .collect()
+}
+
+/// A note drawn as its paragraphs, directions in italics.
+fn script(note: &str) -> impl IntoView + use<> {
+    paragraphs(note)
+        .into_iter()
+        .map(|(direction, text)| view! { <p class:direction=direction>{text}</p> })
+        .collect_view()
+}
+
 /// The NOW card: what is on program and what the runner is doing.
 pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
     let (clip, key) = on_program(show, head, settled(run));
@@ -854,14 +883,14 @@ fn NotesPanel() -> impl IntoView {
                 view! {
                     <div class="show-notes-next">
                         <h6>{format!("NEXT · {name}")}</h6>
-                        <p>{note}</p>
+                        <div class="show-notes-said">{script(&note)}</div>
                     </div>
                 }
             })
     };
     let note = move || match here.get() {
         Some((_, note)) if !note.is_empty() => {
-            view! { <p class="show-notes-here">{note}</p> }.into_any()
+            view! { <div class="show-notes-here">{script(&note)}</div> }.into_any()
         }
         Some(_) => {
             view! { <p class="show-notes-here hint">"No notes for this bookmark."</p> }.into_any()
@@ -1313,5 +1342,19 @@ mod tests {
         let n = notes(&show, &playing, 10_000);
         assert_eq!(n.here, None);
         assert_eq!(n.next, pair("Intro", ""));
+    }
+
+    #[test]
+    fn a_note_splits_into_lines_to_say_and_directions() {
+        let note = "*Holding slate.*\n\nHi everyone,\nwe start soon.\n\n**Bold** stays\n\n*";
+        assert_eq!(
+            paragraphs(note),
+            [
+                (true, "Holding slate.".to_owned()),
+                (false, "Hi everyone,\nwe start soon.".to_owned()),
+                (false, "**Bold** stays".to_owned()),
+                (false, "*".to_owned()),
+            ]
+        );
     }
 }
