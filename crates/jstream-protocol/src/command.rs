@@ -9,7 +9,7 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
-use crate::audio::{AudioFollow, BusMonitor};
+use crate::audio::{AudioFollow, BusMonitor, MuteTo};
 use crate::binding::{Trigger, ValueBinding};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::channel::{ChannelInfo, ChannelSwitch};
@@ -1861,7 +1861,7 @@ pub enum Action {
         /// The source.
         source_id: SourceId,
         /// What to do to its mute.
-        to: crate::MuteTo,
+        to: MuteTo,
     },
     /// Mutes or unmutes a bus, the master included (ADR-0207, since 0.177), as
     /// `bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with
@@ -1871,7 +1871,7 @@ pub enum Action {
         /// The bus.
         bus_id: BusId,
         /// What to do to its mute.
-        to: crate::MuteTo,
+        to: MuteTo,
     },
     /// Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in
     /// VISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24
