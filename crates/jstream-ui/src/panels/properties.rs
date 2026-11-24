@@ -11,12 +11,19 @@
 //! formats offer. Its `camera_controls` is a slider per control that device lists,
 //! with an Auto box where the device can set it itself. The fields of one form share
 //! one `capture.targets` answer.
+//! A whole or decimal number is the shared click-drag [`NumberField`], with the
+//! descriptor's range, step and unit (#1734). A form whose changes go to a draft (the
+//! Properties dialog, whose live settings show at once, ADR-0091) takes a drag's value
+//! as it goes, once per animation frame, and a slider's as it moves; any other form (a
+//! filter's settings, where each change is an undo step and no live value yet, #1739)
+//! takes it once, on release.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::panels::learn::{Learn, LearnOwner, param_range};
+use crate::panels::number::{NumberField, Scrubbing, number_spec};
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
     AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
@@ -236,6 +243,11 @@ pub fn Form(
     /// source's.
     #[prop(optional)]
     learn: Option<LearnOwner>,
+    /// Whether `commit` takes a number's value as a drag or a slider moves it, as a
+    /// draft does (#1734); otherwise each is committed once, on release, as a filter's
+    /// settings are, where every change is an undo step.
+    #[prop(optional)]
+    follows_drags: bool,
 ) -> impl IntoView {
     // One `capture.targets` answer for every capture field of this form.
     provide_context(CaptureListing::for_kind(&kind));
@@ -256,7 +268,7 @@ pub fn Form(
                     let learn = learn.clone();
                     view! {
                         <Show when=visible>
-                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn.clone() />
+                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit learn=learn.clone() follows_drags=follows_drags />
                         </Show>
                     }
                 })
@@ -291,6 +303,7 @@ fn Field(
     errors: RwSignal<HashMap<String, String>>,
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
     learn: Option<LearnOwner>,
+    follows_drags: bool,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let id = param.id.clone();
@@ -326,6 +339,7 @@ fn Field(
         studio,
         &source_id,
         settings,
+        follows_drags,
     );
     let reset = {
         let source_id = source_id.clone();
@@ -336,23 +350,32 @@ fn Field(
         let id = id.clone();
         move || errors.with(|e| e.get(&id).cloned())
     };
-    let unit = match &param.ty {
-        ParamType::Int { unit, .. } | ParamType::Float { unit, .. } => unit.clone(),
-        _ => None,
-    };
     let is_default = {
         let default = param.default.clone();
         move || value() == default
     };
-    view! {
-        <div class="field prop" title=param.description.clone().unwrap_or_default()>
+    // A number field labels its own input and shows its unit in its box, so its row is
+    // no label around it.
+    let row = if number_spec(&param.ty).is_some() {
+        view! {
+            <div class="label-row">
+                <span class="label">{param.label.clone()}</span>
+                <span class="control">{input}</span>
+            </div>
+        }
+        .into_any()
+    } else {
+        view! {
             <label>
                 <span class="label">{param.label.clone()}</span>
-                <span class="control">
-                    {input}
-                    {unit.map(|u| view! { <span class="unit">{u}</span> })}
-                </span>
+                <span class="control">{input}</span>
             </label>
+        }
+        .into_any()
+    };
+    view! {
+        <div class="field prop" title=param.description.clone().unwrap_or_default()>
+            {row}
             <button class="reset" title="Reset to the default" aria-label="Reset to the default"
                 disabled=is_default on:click=reset>
                 <Icon name="reset" size=13 />
@@ -365,7 +388,8 @@ fn Field(
 }
 
 /// The input for one parameter type. Each sends a checked value when it is changed
-/// (a text field when it loses focus or Enter is pressed).
+/// (a text field when it loses focus or Enter is pressed). A number sends a drag's or a
+/// slider's values as they go when `follows_drags`, else once, on release.
 fn input_for(
     param: &ParamDescriptor,
     value: impl Fn() -> Value + Clone + Send + Sync + 'static,
@@ -373,6 +397,7 @@ fn input_for(
     studio: Studio,
     source_id: &SourceId,
     settings: Signal<Settings>,
+    follows_drags: bool,
 ) -> AnyView {
     let p = param.clone();
     let text = {
@@ -395,38 +420,31 @@ fn input_for(
             }
             .into_any()
         }
-        ParamType::Int { min, max, step, .. } => view! {
-            <input
-                type="number"
-                min=min.map(|n| n.to_string())
-                max=max.map(|n| n.to_string())
-                step=step.map_or_else(|| "1".to_owned(), |n| n.to_string())
-                prop:value=text
-                on:change=on_text
-            />
-        }
-        .into_any(),
+        ParamType::Int { .. } => number_input(param, value, send, follows_drags),
         ParamType::Float { min, max, step, .. } => {
-            // A range with both ends gets a slider beside the number.
+            // A range with both ends gets a slider beside the number. In a form that
+            // follows drags it sends as it moves, else on release.
             let slider = min.zip(*max).map(|(lo, hi)| {
                 let on_text = on_text.clone();
                 let text = text.clone();
                 let step = step.map_or_else(|| "any".to_owned(), |n| n.to_string());
-                view! {
-                    <input type="range" min=lo.to_string() max=hi.to_string() step=step
-                        prop:value=text on:change=on_text />
+                if follows_drags {
+                    view! {
+                        <input type="range" min=lo.to_string() max=hi.to_string() step=step
+                            prop:value=text on:input=on_text />
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <input type="range" min=lo.to_string() max=hi.to_string() step=step
+                            prop:value=text on:change=on_text />
+                    }
+                    .into_any()
                 }
             });
             view! {
                 {slider}
-                <input
-                    type="number"
-                    min=min.map(|n| n.to_string())
-                    max=max.map(|n| n.to_string())
-                    step=step.map_or_else(|| "any".to_owned(), |n| n.to_string())
-                    prop:value=text
-                    on:change=on_text
-                />
+                {number_input(param, value, send, follows_drags)}
             }
             .into_any()
         }
@@ -1062,6 +1080,51 @@ fn capture_format_input(
     view! { {body} }.into_any()
 }
 
+/// A whole or decimal number's field: the shared [`NumberField`] with the parameter's
+/// step, range and unit (#1734). Its values go through [`parse`], so the descriptor's
+/// check refuses what it would refuse typed. With `follows_drags`, a drag sends each
+/// frame's value, and a lost drag its start again.
+fn number_input(
+    param: &ParamDescriptor,
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+    follows_drags: bool,
+) -> AnyView {
+    let Some(spec) = number_spec(&param.ty) else {
+        return ().into_any();
+    };
+    let unit = match &param.ty {
+        ParamType::Int { unit, .. } | ParamType::Float { unit, .. } => unit.clone(),
+        _ => None,
+    };
+    let whole = matches!(param.ty, ParamType::Int { .. });
+    let shown = Signal::derive(move || value().as_f64());
+    let p = StoredValue::new(param.clone());
+    let put = Callback::new(move |v: f64| {
+        let text = if whole {
+            format!("{}", v.round() as i64)
+        } else {
+            format!("{:.*}", spec.decimals, v)
+        };
+        let checked = p.with_value(|p| parse(p, &text));
+        let ok = checked.is_ok();
+        send(checked);
+        ok
+    });
+    let live = move |scrubbing: Scrubbing| match scrubbing {
+        Scrubbing::Moved(v) | Scrubbing::Cancelled(v) if follows_drags => {
+            put.run(v);
+        }
+        _ => {}
+    };
+    view! {
+        <NumberField named=Signal::stored(param.label.clone()) unit=unit.unwrap_or_default()
+            value=shown step=spec.step decimals=spec.decimals min=spec.min max=spec.max
+            send=move |v| put.run(v) live=live />
+    }
+    .into_any()
+}
+
 /// A webcam's camera controls: a slider and a number for each control the device that
 /// `target` picks lists in `capture.targets`, with an Auto box for one the device can
 /// set itself. Each change sends the whole object with that control's entry set.
@@ -1196,13 +1259,35 @@ fn camera_control_row(
         }
     });
     let (min, max, step) = (control.min, control.max, control.step.max(1));
+    // The shared click-drag field (#1734), sent once on release: each value is written
+    // to the camera itself, which is no place for one per frame.
+    let number_field = {
+        let (value, send, name) = (value.clone(), send.clone(), control.name.clone());
+        let shown = shown.clone();
+        let current = Signal::derive(move || {
+            let (auto, n) = shown();
+            (!auto).then_some(f64::from(n))
+        });
+        let put = Callback::new(move |v: f64| {
+            let n = v.round() as i32;
+            if !(min..=max).contains(&n) {
+                return false;
+            }
+            send(Ok(with_control(&value(), &name, Some(Value::from(n)))));
+            true
+        });
+        view! {
+            <NumberField named=Signal::stored(control_label(&control.name)) value=current
+                step=f64::from(step) decimals=0 min=f64::from(min) max=f64::from(max)
+                send=move |v| put.run(v) />
+        }
+    };
     view! {
         <div class="camera-control">
             <span class="camera-control-name">{control_label(&control.name)}</span>
             <input type="range" min=min.to_string() max=max.to_string() step=step.to_string()
                 prop:value=number.clone() prop:disabled=is_auto.clone() on:change=on_number.clone() />
-            <input type="number" min=min.to_string() max=max.to_string() step=step.to_string()
-                prop:value=number prop:disabled=is_auto on:change=on_number />
+            {number_field}
             {auto_box}
         </div>
     }

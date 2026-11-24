@@ -27,6 +27,16 @@ async function type(page, label, value) {
   await expect.poll(() => rev(page)).toBeGreaterThan(before);
 }
 
+/** The text frames the page sends and receives on its socket, as they go. */
+function socketFrames(page) {
+  const frames = { sent: [], received: [] };
+  page.on('websocket', (ws) => {
+    ws.on('framesent', ({ payload }) => typeof payload === 'string' && frames.sent.push(payload));
+    ws.on('framereceived', ({ payload }) => typeof payload === 'string' && frames.received.push(payload));
+  });
+  return frames;
+}
+
 async function selectBackdrop(page, daemon) {
   await connect(page, daemon);
   await page.locator('.sources-panel li.row .row-main').first().click();
@@ -210,4 +220,44 @@ test('the box and crop fields sit in rows, crop two by two, with no sideways scr
   await expect(field(page, 'Left')).toHaveValue('0');
   const body = inspector(page).locator('.tab-panel').first();
   expect(await body.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
+
+// #1734: a drag on a box field shows on output as it goes, as a canvas drag does: its
+// values reach the engine as a gesture's `live.set` before the release, which commits
+// the gesture in one batch, so one Ctrl+Z takes the whole drag back.
+test('dragging a box field shows it live before the release, and undoes in one step', async ({ page, daemon }) => {
+  const frames = socketFrames(page);
+  await selectBackdrop(page, daemon);
+  await expect(field(page, 'X')).toHaveValue('640');
+  const start = await rev(page);
+  const box = await field(page, 'X').boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + 20, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 50, y, { steps: 5 });
+  await expect(field(page, 'X')).toHaveValue('650');
+  // Before the release: live values went out and the engine took them, with no edit.
+  await expect.poll(() => frames.sent.filter((f) => f.includes('"live.set"')).length).toBeGreaterThan(0);
+  await expect.poll(() => frames.received.some((f) => f.includes('"live.changed"'))).toBe(true);
+  await page.mouse.move(box.x + 80, y, { steps: 5 });
+  await expect(field(page, 'X')).toHaveValue('660');
+  await expect.poll(() => frames.sent.filter((f) => f.includes('"live.set"')).length).toBeGreaterThan(1);
+  expect(frames.sent.some((f) => f.includes('"ends_gesture"'))).toBe(false);
+  expect(await rev(page)).toBe(start);
+  // The newest live value is the dragged box, its centre (from 960) 20 px right.
+  const live = frames.sent.filter((f) => f.includes('"live.set"')).at(-1);
+  expect(live).toContain('"item.set_geometry"');
+  expect(live).toMatch(/"center":\{"x":980(\.0)?,/);
+
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(start + 1);
+  expect(frames.sent.filter((f) => f.includes('"ends_gesture"'))).toHaveLength(1);
+  await expect(field(page, 'X')).toHaveValue('660');
+  await expect(readout(page)).toHaveText('640 × 360');
+
+  // One undo takes the whole drag back.
+  await page.locator('header.app-header .top-menu[data-menu="edit"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'Edit' }).getByRole('menuitem', { name: 'Undo' }).click();
+  await expect.poll(() => rev(page)).toBe(start + 2);
+  await expect(field(page, 'X')).toHaveValue('640');
 });

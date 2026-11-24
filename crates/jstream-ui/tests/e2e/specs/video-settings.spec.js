@@ -14,19 +14,21 @@ async function openVideoSettings(page) {
 test('video settings set the base resolution, frame rate and blending in one undo step', async ({ page, daemon }) => {
   await connect(page, daemon);
   let dialog = await openVideoSettings(page);
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1920');
-  await expect(dialog.getByRole('spinbutton', { name: 'Height' })).toHaveValue('1080');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1920');
+  await expect(dialog.getByRole('textbox', { name: 'Height' })).toHaveValue('1080');
   await expect(dialog.getByRole('radio', { name: '30 fps' })).toBeChecked();
   await expect(dialog.getByRole('combobox', { name: 'Blending' })).toHaveValue('srgb');
 
-  // A preset fills both sides; a typed side the engine can't take is refused here.
+  // A preset fills both sides; a typed side the engine can't take is kept to the range
+  // the engine takes (#1734: the sides are the shared number field).
   await dialog.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '1280 × 720 (16:9)' });
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1280');
-  await dialog.getByRole('spinbutton', { name: 'Height' }).fill('0');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1280');
+  await dialog.getByRole('textbox', { name: 'Height' }).fill('0');
+  await dialog.getByRole('textbox', { name: 'Height' }).press('Tab');
+  await expect(dialog.getByRole('textbox', { name: 'Height' })).toHaveValue('1');
   await expect(dialog.getByRole('combobox', { name: 'Base resolution' })).toHaveValue('custom');
-  await dialog.getByRole('button', { name: 'Save' }).click();
-  await expect(dialog.getByRole('alert')).toContainText('from 1 to 8192');
-  await dialog.getByRole('spinbutton', { name: 'Height' }).fill('720');
+  await dialog.getByRole('textbox', { name: 'Height' }).fill('720');
+  await dialog.getByRole('textbox', { name: 'Height' }).press('Tab');
   await dialog.getByRole('radiogroup', { name: 'Frame rate' }).getByText('60 fps').click();
   await dialog.getByRole('combobox', { name: 'Blending' }).selectOption({ label: 'Linear light' });
 
@@ -36,8 +38,8 @@ test('video settings set the base resolution, frame rate and blending in one und
   await expect.poll(() => rev(page)).toBe(before + 1);
 
   dialog = await openVideoSettings(page);
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1280');
-  await expect(dialog.getByRole('spinbutton', { name: 'Height' })).toHaveValue('720');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1280');
+  await expect(dialog.getByRole('textbox', { name: 'Height' })).toHaveValue('720');
   await expect(dialog.getByRole('combobox', { name: 'Base resolution' })).toHaveValue('0');
   await expect(dialog.getByRole('radio', { name: '60 fps' })).toBeChecked();
   await expect(dialog.getByRole('combobox', { name: 'Blending' })).toHaveValue('linear');
@@ -51,7 +53,7 @@ test('video settings set the base resolution, frame rate and blending in one und
   await page.getByRole('menu', { name: 'Edit' }).getByRole('menuitem', { name: 'Undo' }).click();
   await expect.poll(() => rev(page)).toBe(before + 2);
   dialog = await openVideoSettings(page);
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1920');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1920');
   await expect(dialog.getByRole('radio', { name: '30 fps' })).toBeChecked();
   await expect(dialog.getByRole('combobox', { name: 'Blending' })).toHaveValue('srgb');
 });
@@ -84,7 +86,7 @@ test('a new resolution scales the scenes with it, in the same undo step, unless 
 
   // Unchecked, the size changes alone.
   dialog = await openVideoSettings(page);
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1920');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1920');
   await dialog.getByRole('checkbox', { name: 'Scale existing scenes to fit' }).uncheck();
   await dialog.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '3840 × 2160 (16:9)' });
   const sent = calls.sent('item.set_geometry').length;
@@ -124,7 +126,7 @@ test('the Video page keeps its draft across pages, Cancel drops it, and other pa
   await dialog.getByRole('tab', { name: 'General' }).click();
   await expect(footer.getByRole('button')).toHaveText(['Cancel', 'Save']);
   await dialog.getByRole('tab', { name: 'Video' }).click();
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1280');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1280');
 
   // Cancel sends nothing; opened again, the page reads the collection.
   const before = await rev(page);
@@ -132,7 +134,7 @@ test('the Video page keeps its draft across pages, Cancel drops it, and other pa
   await expect(dialog).toHaveCount(0);
   expect(await rev(page)).toBe(before);
   await openVideoSettings(page);
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1920');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1920');
 
   // A page that applies at once, with no video change, has Close alone.
   await dialog.getByRole('tab', { name: 'General' }).click();
@@ -160,6 +162,6 @@ test('an untouched Video page follows a change made elsewhere and offers nothing
   await expect.poll(() => rev(page)).toBe(await rev(other));
   await expect(footer.getByRole('button')).toHaveText(['Close']);
   await dialog.getByRole('tab', { name: 'Video' }).click();
-  await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1280');
-  await expect(dialog.getByRole('spinbutton', { name: 'Height' })).toHaveValue('720');
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toHaveValue('1280');
+  await expect(dialog.getByRole('textbox', { name: 'Height' })).toHaveValue('720');
 });

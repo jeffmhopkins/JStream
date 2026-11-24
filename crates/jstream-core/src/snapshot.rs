@@ -8549,8 +8549,7 @@ fn draw_sky_of(
                 *slot = cache.get(&GpuKey::Frame(part.source.clone())).map(|image| {
                     jstream_render::SkyPicture {
                         image,
-                        direction: part_direction(arrival.direction, part.offset_deg)
-                            .map(|v| v as f32),
+                        direction: arrival.part(part.offset_deg).map(|v| v as f32),
                         width_deg: (sky.sky_picture_deg * part.scale).clamp(1.0, 120.0),
                         opacity: 1.0,
                     }
@@ -8652,7 +8651,7 @@ pub(crate) fn arrival_light(
     }
     // Where the backdrop shows it, in the scene; the light shines from there.
     let rotation = crate::warp_aim::from_angles(state.angles(warp_aiming(&environment, sky)));
-    let d = part_direction(arrival.direction, part.offset_deg);
+    let d = arrival.part(part.offset_deg);
     let from = [0, 1, 2].map(|r| (0..3).map(|k| rotation[r][k] * d[k]).sum::<f64>());
     // Its colour is taken in the frame after it is picked, while it is still faint.
     let [r, g, b] = chains.picture_means.get(source)?.1;

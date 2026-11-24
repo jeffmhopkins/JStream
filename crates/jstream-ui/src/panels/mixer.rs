@@ -1668,15 +1668,20 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
             Some(Finite32::ZERO)
         })
     };
-    let change_gain = move |event: leptos::ev::Event| match event_target_value(&event)
-        .trim()
-        .parse::<f32>()
-        .map_err(|_| "Type a number of dB.".to_owned())
-        .and_then(checked_gain)
-    {
-        Ok(gain_db) => set(Some(gain_db)),
-        Err(problem) => panel.problem.set(Some(problem)),
+    // The send's gain, sent once per change: on release for a drag (#1734), since a
+    // send's gain is no live value and each change is an undo step.
+    let change_gain = move |db: f64| match checked_gain(db as f32) {
+        Ok(gain_db) => {
+            set(Some(gain_db));
+            true
+        }
+        Err(problem) => {
+            panel.problem.set(Some(problem));
+            false
+        }
     };
+    let send_value = Signal::derive(move || gain().map(f64::from));
+    let send_name = Signal::derive(move || format!("Send to {} (dB)", bus_name()));
     view! {
         <li class="send">
             <label class="check">
@@ -1688,18 +1693,11 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
                 />
                 {bus_name}
             </label>
-            <input
-                type="number"
-                class="send-gain"
-                min=MIN_GAIN_DB.to_string()
-                max=MAX_GAIN_DB.to_string()
-                step="0.5"
-                aria-label=move || format!("Send to {} (dB)", bus_name())
-                disabled=move || gain().is_none()
-                prop:value=move || gain().map_or_else(String::new, |db| format!("{db:.1}"))
-                on:change=change_gain
-            />
-            " dB"
+            <span class="send-gain">
+                <NumberField named=send_name unit="dB" value=send_value step=0.5 decimals=1
+                    fixed=true min=f64::from(MIN_GAIN_DB) max=f64::from(MAX_GAIN_DB)
+                    send=change_gain />
+            </span>
             <Show when=move || gain().is_some()>
                 <Learn
                     target=ids.with_value(|(source_id, bus_id)| ValueTarget::SendGain {
