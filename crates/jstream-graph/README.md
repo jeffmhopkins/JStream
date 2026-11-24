@@ -801,6 +801,10 @@ reference may dangle, and each scene, source and encoder profile delete must be 
 exactly when something refers to it, a scene's or source's with the blockers the test
 works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
+The feature-tour demo project (`tests/feature_tour.rs`) must load from
+`examples/feature-tour/feature-tour.json` with the engine's kind descriptors (read from
+`jstream-core`'s kinds snapshot), save back byte for byte, and hold shows that name only
+scenes, keyframes, items, sequences, channels, sources and presets the project holds.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy items and a flipped geometry item, two encoder profiles that two outputs use,
 two video mixes that two outputs show, scene `b` made a group, a clone, a
