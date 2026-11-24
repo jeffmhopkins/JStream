@@ -2101,7 +2101,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
   other source. Since 0.177 a `media` file whose length is known also reports
   `duration_ms`, one play's length in milliseconds: from its container, or once a play
-  has reached its end. A file with only audio reports it with no `size`.
+  has reached its end (`source.size_changed` announces it when it becomes known). A file
+  with no video stream reports it beside the 1×1 `size` above. Omitted for every other
+  source and while the length isn't known.
 - `activity.list {after_seq?, limit?}`: the engine's recent activity, newest first
   ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)): one
   `ActivityEntry` for each batch, undo, redo and action the audit log records (not
@@ -2451,15 +2453,15 @@ After `welcome`, the server pushes every event to every client.
 - `privacy.changed {on, client_id, request_id?}`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so the engine never sends it. Added in 0.33.
-- `source.size_changed {source_id, size?, depth?}` says a source's size changed: it became
+- `source.size_changed {source_id, size?, depth?, duration_ms?}` says a source's size changed: it became
   known (the first frame), changed, or became unknown (`size` omitted: the source
   stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
   `depth`, as `source.sizes` reports it, since 0.157; `duration_ms`, likewise, since
-  0.177: a length becoming known is a change too, so a file with only audio announces
-  its length with no `size`.
+  0.177: a length becoming known (once a play reaches the end of a file whose container
+  didn't say) is a change too, even when the size stays the same.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -3233,7 +3235,7 @@ Since 0.87 a scene holds timelines
   kinds have nothing to restart. Plugins need the `live` class for it.
 - **`source.seek {source_id, at_ms}`** (since 0.177) plays a `media` file on from
   `at_ms` into its timeline: past the end of a looping file it lands where that many
-  plays would reach, and on one that doesn't loop on its last frame. A kind with nothing
+  plays would reach, and on one that doesn't loop, on its last frame. A kind with nothing
   to seek starts over as `source.restart` starts it, and others do nothing. A seek
   made before the program shows the source holds through the show, so the source isn't
   started again from its start by `restart_on_show`: a switch and a seek can come in

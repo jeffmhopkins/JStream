@@ -413,8 +413,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   receiver, so it never sends `jtunnel.senders_changed`;
 - `font.list`, answered with `MOCK_FONTS`, two made-up fonts of one family ("Mock Sans"
   Bold and Regular) whose files don't exist;
-- `source.sizes`, answered with every source and no size, since the mock makes no
-  frames, so it never sends `source.size_changed`;
+- `source.sizes`, answered with every source and no size, depth or `duration_ms`,
+  since the mock makes no frames and plays no files, so it never sends
+  `source.size_changed`;
 - `activity.list`, answered with no entries and the host's clock as `now_ms`: the mock
   keeps no activity log ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md));
 - the deprecated privacy calls, as from the engine
