@@ -684,6 +684,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 bindings: bindings(),
                 value_bindings: Vec::new(),
                 channels: Box::default(),
+                shows: Box::default(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.

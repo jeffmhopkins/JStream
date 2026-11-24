@@ -191,6 +191,7 @@ impl Graph {
                 .collect(),
             value_bindings: self.value_bindings().cloned().collect(),
             channels: Box::new(self.channels().cloned().collect()),
+            shows: Box::new(self.shows().cloned().collect()),
             folders: self.state.folders().iter().map(Folder::to_info).collect(),
             labels: self.state.labels().iter().map(Label::to_info).collect(),
         }
@@ -466,6 +467,7 @@ mod tests {
                 bindings: vec![],
                 value_bindings: vec![],
                 channels: Box::default(),
+                shows: Box::default(),
                 folders: Vec::new(),
                 labels: Vec::new(),
             }
