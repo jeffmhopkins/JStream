@@ -2,8 +2,10 @@
 //! canvas toolbar gains pan, tilt and zoom buttons that drive the camera while held
 //! (`scene.drive_camera`), Home (`scene.aim_camera` back to the stored camera) and a
 //! readout of the aim (`scene.camera_aim`, read about three times a second while it
-//! shows). A live aim is not an edit: nothing is stored or undone, as from a VISCA
-//! controller. Shift holds a button at a slow speed.
+//! shows). Space or Enter holds a focused button, and only a press a button started
+//! stops its axis, so a pointer passing over it leaves a controller's drive alone. A
+//! live aim is not an edit: nothing is stored or undone, as from a VISCA controller.
+//! Shift holds a button at a slow speed.
 
 use crate::app::SessionContext;
 use crate::store::{Studio, query};
@@ -65,6 +67,11 @@ pub fn home(scene_id: SceneId) -> Action {
     }
 }
 
+/// Whether `key` presses a held aim button: Space or Enter.
+pub fn is_press_key(key: &str) -> bool {
+    key == " " || key == "Enter"
+}
+
 /// The readout: "Pan 12° · Tilt -3° · ×1.4", or "Home" at the stored camera.
 pub fn aim_text(aim: &CameraAimInfo) -> String {
     let (pan, tilt, zoom) = (aim.pan_deg.get(), aim.tilt_deg.get(), aim.zoom.get());
@@ -109,17 +116,52 @@ pub fn LiveAim(
         }
     };
     let button = move |axis: Axis, sign: i8, label: &'static str, title: &'static str| {
-        let start = move |event: leptos::ev::PointerEvent| {
-            if event.button() != 0 {
+        // Whether this button holds its axis: only a press it started ends in a stop,
+        // so a pointer passing over it never stops a drive from a controller (#1707).
+        let held = StoredValue::new(false);
+        let begin = move |slow: bool| {
+            if held.get_value() {
                 return;
             }
             if let Some(scene_id) = scene.get_untracked() {
-                act(drive(scene_id, axis, speed(axis, sign, event.shift_key())));
+                held.set_value(true);
+                act(drive(scene_id, axis, speed(axis, sign, slow)));
             }
         };
-        let stop = move |_: leptos::ev::PointerEvent| {
+        let end = move || {
+            if !held.get_value() {
+                return;
+            }
+            held.set_value(false);
             if let Some(scene_id) = scene.get_untracked() {
                 act(drive(scene_id, axis, 0));
+            }
+        };
+        let press = move |event: leptos::ev::PointerEvent| {
+            if event.button() != 0 {
+                return;
+            }
+            // Kept while held, so the release reaches the button wherever it happens.
+            if let Some(el) = event.current_target().and_then(|t| {
+                leptos::wasm_bindgen::JsCast::dyn_into::<leptos::web_sys::Element>(t).ok()
+            }) {
+                _ = el.set_pointer_capture(event.pointer_id());
+            }
+            begin(event.shift_key());
+        };
+        // From the keyboard: Space or Enter drives while held.
+        let key_down = move |event: leptos::ev::KeyboardEvent| {
+            if is_press_key(&event.key()) {
+                event.prevent_default();
+                if !event.repeat() {
+                    begin(event.shift_key());
+                }
+            }
+        };
+        let key_up = move |event: leptos::ev::KeyboardEvent| {
+            if is_press_key(&event.key()) {
+                event.prevent_default();
+                end();
             }
         };
         view! {
@@ -127,10 +169,13 @@ pub fn LiveAim(
                 class="canvas-tool canvas-tool-text live-aim"
                 aria-label=title
                 title=format!("{title} while held (Shift: slowly) · live only, nothing is saved")
-                on:pointerdown=start
-                on:pointerup=stop
-                on:pointerleave=stop
-                on:pointercancel=stop
+                on:pointerdown=press
+                on:pointerup=move |_| end()
+                on:pointercancel=move |_| end()
+                on:lostpointercapture=move |_| end()
+                on:keydown=key_down
+                on:keyup=key_up
+                on:blur=move |_| end()
             >
                 {label}
             </button>
@@ -179,6 +224,8 @@ mod tests {
         );
         assert_eq!(speed(Axis::Zoom, 1, true), 2);
         assert_eq!(speed(Axis::Pan, 1, true), 3);
+        assert!(is_press_key(" ") && is_press_key("Enter"));
+        assert!(!is_press_key("Tab"));
         let Action::SceneAimCamera { aim, .. } = home(scene) else {
             panic!("an aim");
         };

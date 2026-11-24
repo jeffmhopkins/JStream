@@ -1779,7 +1779,9 @@ beside it ([Design › Studio mode](#design)).
   `localStorage` (`CameraControls::stored`). Save view batches `scene.create_variant`
   and `scene.set_camera` for a new keyframe scene with the shown camera. After it, the
   live aim (`live_aim.rs`, `LiveAim`): pan, tilt and zoom buttons send
-  `scene.drive_camera` for their axis alone while held and 0 on release, Home sends
+  `scene.drive_camera` for their axis alone while held and 0 on release (the pointer is
+  captured on press, and Space or Enter holds a focused button; only a press the button
+  started sends the 0, so passing over it leaves a controller's drive alone), Home sends
   `scene.aim_camera` to the stored camera, and a readout reads `scene.camera_aim` every
   300 ms while camera mode is on; none of it is an edit.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
