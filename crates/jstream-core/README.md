@@ -205,8 +205,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   an `fps` of 0, which follows it, is built again when `canvas.set_frame_rate` changes
   it (#1405). The program
   mix shows their frames and advances animations and videos on the media clock, and
-  tells a source when it shows it again. `media` sources play through the injected
-  backends' media files. A frame stored
+  tells a source when it shows it again, unless `source.seek` played it on from a point
+  since (`LiveSources::seek`, see *Timelines*). `media` sources play through the injected
+  backends' media files, and report their length when it is known
+  (`LiveSources::duration_ms`, `source.sizes`' `duration_ms`). A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
   draws nothing. `kind.describe` with a `source_id` adds what that source's running
   instance knows of its own settings to its kind's descriptor (`LiveSources::describe`,
@@ -512,13 +514,16 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
-  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), and the warm
-  scenes beside the program (ADR-0117 §7, see [Program scene](#program-scene)).
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), the warm
+  scenes beside the program (ADR-0117 §7, see [Program scene](#program-scene)), and the
+  scene a show runs to next (`Studio::upcoming`, set through `State::set_upcoming`),
+  warm right after Preview.
 - **Timelines** (`timelines.rs`,
   [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): the timelines playing,
   studio state beside the program scene, whose cues the live ticker fires on the
   animation clock as their actions' calls ([Timelines](#timelines)). `source.restart`
-  restarts a live source at the action's time (`LiveSources::restart`).
+  restarts a live source at the action's time (`LiveSources::restart`), and
+  `source.seek` plays it on from a point (`LiveSources::seek`); neither is a cue.
 - **Keyframe tracks** (`engine.rs`,
   [ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
   [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)): the keyframe each
@@ -1049,7 +1054,14 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
   starts again at its duration when its `restart` counter changes
-  (`a_timer_restarts_when_its_restart_counter_changes`, #1040). Effect packs over the
+  (`a_timer_restarts_when_its_restart_counter_changes`, #1040), and a `media` file's
+  `duration_ms` in `source.sizes` and a `source.seek` that holds whether it comes just
+  before or just after the switch that shows the file, also on a file held at its start
+  on the upcoming scene, and is `not_found` for a missing source
+  (`a_seek_holds_through_the_switch_that_shows_the_file`). The upcoming scene stays warm
+  past a budget of 0 and the GPU limit until cleared or deleted
+  (`src/tests/warm_scenes.rs`,
+  `the_upcoming_scene_is_warm_past_the_budget_and_the_gpu_limit`). Effect packs over the
   protocol (`src/tests/packs.rs`): a pack written, read, rewritten and deleted, with its
   activity entries, and a setting renamed by a pack's new version (#1353): a live
   filter's value moves to the new ID in one revision, is saved at the new version, and
@@ -1280,8 +1292,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md): no `rev`
   and no undo step; they move the family's live aim from now, checked as the mock checks
   them),
-  `timeline.play`, `timeline.seek`, `timeline.stop` and `source.restart` (see
-  [Timelines](#timelines)), `scene.set_keyframe` (see
+  `timeline.play`, `timeline.seek`, `timeline.stop`, `source.restart` and
+  `source.seek` (see [Timelines](#timelines)), `scene.set_keyframe` (see
   [Keyframe tracks](#keyframe-tracks)),
   and `item.show`, `item.hide` and `item.toggle`
   ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
@@ -1538,8 +1550,14 @@ studio also names the **warm scenes** (ADR-0117 §7 and
 reads the collection): the Preview scene, then the scenes whose `keep_warm` option is
 on, in display order, then the scenes a hotkey's or a trigger binding's `scene.switch`
 names, then the scenes most recently on program, never the program scene, each once,
-at most the warm budget in all. The Preview scene is warm even past the budget, so a budget of 0 keeps
-only it. A deleted scene is forgotten. The budget is `studio.set_warm`'s (0 to
+at most the warm budget in all. The Preview scene is warm even past the budget. Right
+after it comes the upcoming scene, the one a show runs to next (`Studio::upcoming`,
+named with `State::set_upcoming`, `not_found` for a scene the collection doesn't hold;
+`None` while no show runs, and until a show runner calls it only the tests do): unless
+it is on program or is the Preview scene, it is warm past the budget and the GPU limit
+too, so a media file on it is held at its first frame and the cut to it starts nothing.
+A budget of 0 keeps only those two. A deleted scene stops being upcoming, and is
+forgotten. The budget is `studio.set_warm`'s (0 to
 `MAX_WARM_SCENES`, `DEFAULT_WARM_SCENES` until set, `invalid_argument` past it), an
 application setting: it changes no `rev` and emits nothing, a newly opened collection's
 studio keeps it (`Studio::fresh`), and `studio.get` reports it. The engine answers it
@@ -1759,6 +1777,14 @@ preset changed in one batch that one undo takes back.
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
   an effect pack's stand-in starts its program again. A source with no running instance
   has nothing to restart.
+- **`source.seek`** (since 0.177; not a cue, so `action_now` is the clock's now) is
+  `not_found` for a source the collection doesn't hold, and otherwise calls
+  `LiveSources::seek`, which plays the running instance on from the point (`Source::seek`: a `media` file
+  restarts its timeline there; a kind with nothing to seek restarts) and marks it
+  sought. A sought source isn't started again by the next plan that shows it
+  (`Source::show`), nor cued at its start meanwhile, so a switch to its scene and the
+  seek may come in either order. Its length, when it has one (`Source::duration`), is
+  reported beside its size (`source.sizes`' `duration_ms`, `Engine::sync_sizes`).
 
 <a id="privacy"></a>
 ## No privacy screen
@@ -2789,7 +2815,11 @@ source is on program; a webcam's runs while any source showing that device is, s
 webcam source off program can have the shared device's size. A source that failed to
 build has no size, nor does an audio-only one or a deleted one. A source of a video kind with nothing to show (an `image` or `media` source
 with no file, or a `media` file with no video stream) shows one transparent pixel, and so
-reports 1×1.
+reports 1×1. A `media` file whose length is known also has a duration
+(`LiveSources::duration_ms`, from `Source::duration`: its container's length, else one
+play's once a play has reached its end), kept beside the size (`durations`) and sent
+with it as `duration_ms`, so a length becoming known is a size change too, even when the
+size stays the same; a file with no video stream sends its length beside its 1×1.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, and each running source's own
@@ -2990,12 +3020,14 @@ calls under the lock never draw or decode. A still `image` is planned by its `js
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
-the first time it is shown. Each source also remembers the last plan any mix looked at
+the first time it is shown, unless `source.seek` sought it since the program last
+reached it (`LiveSources::seek`'s `sought`): then it plays on from the seek, and the
+plan clears the mark. Each source also remembers the last plan any mix looked at
 it in (the program's, a video mix's, or a scene or source preview's, all drawn in the
 same re-plan): after that re-plan, one none of them looked at is told nothing draws it
 (`Source::set_drawn(false)`), and the next look at it tells it it is drawn again, before
 its frame is taken. A `browser` page rests while nothing draws it (#1071). A source a
-warm scene draws never rests, and is cued when nothing draws it (`LiveSources::set_warm`, ADR-0117 §7; see *Preview
+warm scene draws never rests, and is cued when nothing draws it and it wasn't sought (`LiveSources::set_warm`, ADR-0117 §7; see *Preview
 streams*). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
@@ -3272,7 +3304,8 @@ one, or a transition toward it, finds its webcam open and its display already
 capturing. The engine plans them (`WarmCaptures`, with a look-up that answers only
 captures, so it reaches no source) only when the collection's `rev`, its placed
 keyframes, the warm scenes or an installed source changed, and publishes the set
-(`RenderHub::publish_warm`) after each plan and after `studio.set_preview`. The render
+(`RenderHub::publish_warm`) after each plan, after `studio.set_preview` and after the
+upcoming scene changes (`State::set_upcoming`). The render
 thread adopts it with the program's snapshot, hands the replaced one to the collector,
 and adds it to the captures it runs (`Watched::of`). The same plan notes every source
 the warm scenes draw, and the live sources keep those from resting (#1071): one resting
@@ -3281,8 +3314,9 @@ and one whose scene stops being warm rests then, unless a mix drew it. One that 
 looked at and the program didn't reach is cued instead (`Source::cue`, once until it
 is looked at again): a `restart_on_show` media file goes to its start and holds its
 first frame, which the sources' thread takes once decoded, so the switch to its scene
-shows that frame in its first plan and plays on with no seek. A preview that looks at
-a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
+shows that frame in its first plan and plays on with no seek. A source `source.seek`
+sought since the program last reached it isn't cued: it plays on from the seek. A
+preview that looks at a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
 composited unless it is monitored. The 3D models the warm scenes' sources show are
 published beside the captures (`RenderHub::publish_warm_models`, a `WarmModels` map the
 plan replaces only when a model changed;
@@ -3298,7 +3332,8 @@ warm scene draws is estimated at one RGBA8 frame of its size (its stored frame's
 its live instance's, else the last size seen, else the canvas), counted once, and at
 nothing when a mix looked at it in the latest plan (`LiveSources::reached`). The
 scenes are walked in the warm order; the first that would take the total past the
-limit is left cold with every one after it, and the Preview scene never is. A cold
+limit is left cold with every one after it, and neither the Preview scene nor the
+upcoming scene ever is. A cold
 scene's captures aren't published and its sources may rest. `profile.get`'s `warm`
 reports each scene's estimate and whether it is cold (`WarmCaptures::report`, read
 under the collection lock after the profile is built).
@@ -4453,8 +4488,9 @@ entries with their sentences in memory (`activity_log.rs`), whether or not the h
 a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
 or action the sentence table doesn't name reads as its command name. A controller
 binding reads by its trigger ("Bound MIDI note 36 on channel 10 from Pads to scene
-switch"), and a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
-"Switched channel “Power” off"). A timeline's cues
+switch"), a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
+"Switched channel “Power” off"), and a `source.seek` by its source and its point in
+tenths of a second, cut rather than rounded ("Played “Clip” from 83.4 s"). A timeline's cues
 get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
 one, and `timeline.cue_fired` reports each cue
 ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)).

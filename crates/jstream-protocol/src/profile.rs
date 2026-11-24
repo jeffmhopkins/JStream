@@ -392,11 +392,11 @@ pub struct DrawerProfile {
     #[serde(default)]
     pub skipped: u64,
     /// The percentage of their canvas's width and of its height the drawer drew 3D
-    /// models with at the end of the window (ADR-0197, since 0.177): 100 unless the
+    /// models with at the end of the window (ADR-0197, since 0.178): 100 unless the
     /// program's render thread lowered it, or `RenderFeatures::model_resolution` set it.
     #[serde(default = "whole")]
     pub model_resolution: u32,
-    /// The frames of the window drawn with 3D models at less than 100 (since 0.177).
+    /// The frames of the window drawn with 3D models at less than 100 (since 0.178).
     #[serde(default)]
     pub model_frames_reduced: u64,
     /// The program's pictures that only preview streams take (a monitored scene, or the

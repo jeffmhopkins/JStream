@@ -139,6 +139,8 @@ pub(super) struct State {
     pub(super) video_over: bool,
     /// Why the decoder stopped, when it failed.
     pub(super) failure: Option<String>,
+    /// One play's length in microseconds, once a play has reached the end of the file.
+    pub(super) length: Option<i64>,
     /// Set when the source goes away; the thread and the feeder stop at their next
     /// check.
     pub(super) stop: bool,
@@ -193,6 +195,7 @@ impl Player {
                 looping: start.looping,
                 ended: false,
                 failure: None,
+                length: None,
                 stop: false,
             }),
             Condvar::new(),
@@ -658,6 +661,7 @@ impl Decode {
         };
         let length = last.max(1);
         self.length = Some(length);
+        lock(&shared.0).length = Some(length);
         if !looping {
             return self.stop(shared);
         }
@@ -877,6 +881,18 @@ mod tests {
             "the file's start, at the target"
         );
         assert_eq!(state.queue.get(1).map(|d| d.at), Some(1_040_000));
+    }
+
+    /// A file whose container doesn't say how long it is shares one play's length once
+    /// a play reaches the end, for `SourceSize`'s `duration_ms`.
+    #[test]
+    fn the_length_is_shared_once_a_play_ends() {
+        let mut clip = Clip::new(5, false, |_| 2);
+        clip.next = 1;
+        let player = start(clip, 8, false);
+        assert_eq!(player.state().length, None, "not known before the end");
+        wait(&player, "the end", |s| s.ended);
+        assert_eq!(player.state().length, Some(5 * PERIOD_US));
     }
 
     /// #445: a stream whose first frame comes late in the file (an MP4's B-frame delay,
