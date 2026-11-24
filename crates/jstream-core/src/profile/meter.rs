@@ -120,6 +120,11 @@ pub(crate) struct DrawerTotals {
     pub(crate) preview_skipped: u64,
     pub(crate) phases: [u64; PHASES],
     pub(crate) units: Vec<(UnitKey, UnitTotals)>,
+    /// The size 3D models were last drawn at, a percentage (ADR-0197); 0 before the
+    /// drawer said.
+    pub(crate) model_percent: u32,
+    /// The frames drawn with them at less than 100.
+    pub(crate) model_reduced: u64,
 }
 
 /// Where a drawer publishes, read by the control side.
@@ -314,6 +319,10 @@ pub(crate) struct DrawMeter {
     gpu_timed: bool,
     /// The GPU time of the latest timed frame that came back ([`Self::take_gpu_frame`]).
     gpu_frame: Option<Duration>,
+    /// The size 3D models are drawn at ([`Self::model_percent`]), and the frames drawn
+    /// with them at less than 100.
+    model_percent: u32,
+    model_reduced: u64,
     /// Each GPU id's unit, by id, and the generation they were given in.
     gpu_units: GpuIds,
 }
@@ -351,6 +360,8 @@ impl Default for DrawMeter {
             guard: None,
             gpu_timed: false,
             gpu_frame: None,
+            model_percent: 100,
+            model_reduced: 0,
             gpu_units: GpuIds::default(),
         }
     }
@@ -394,6 +405,15 @@ impl DrawMeter {
     /// called, all its units together: what the frame cost the GPU, a frame or two ago.
     pub(crate) fn take_gpu_frame(&mut self) -> Option<Duration> {
         self.gpu_frame.take()
+    }
+
+    /// Says the size this frame's 3D models are drawn at, a percentage of their canvas's
+    /// width and of its height (ADR-0197), for `profile.get` to report.
+    pub(crate) fn model_percent(&mut self, percent: u32) {
+        self.model_percent = percent;
+        if percent < 100 {
+            self.model_reduced = self.model_reduced.saturating_add(1);
+        }
     }
 
     /// What a frame may take: the budget the meter was made with.
@@ -658,6 +678,8 @@ impl DrawMeter {
             preview_skipped: self.preview_skipped,
             phases: self.phases,
             units,
+            model_percent: self.model_percent,
+            model_reduced: self.model_reduced,
         });
         if let Some(old) = slot.current.swap(Some(totals)) {
             retire(old);
