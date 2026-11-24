@@ -251,7 +251,7 @@ pub struct JtunnelSetup {
     pub bind: SocketAddr,
     /// Where it asks for senders, the mDNS group (`MDNS`) unless the host names another (a test's
     /// responder); `None` asks nobody. Answers are read from this port. A multicast
-    /// group is also listened to, on its port, by the mDNS listener ([`mdns_listener`]).
+    /// group is also listened to, on its port, by the mDNS listener (`mdns_listener`).
     pub discover: Option<SocketAddr>,
 }
 
