@@ -39,3 +39,4 @@ pub mod screenshots;
 pub mod shell;
 pub mod ui;
 pub mod updates;
+pub mod zoom;

@@ -2769,7 +2769,7 @@ stamp = { hash = "b3:fbab93da6f1f4bc6", by = "agent:ptz-builder", note = "#1181 
 stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "token.rs only moved its file logic to jstream_server::token_file with the same checks and messages; --token-file, reuse and output lines unchanged" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:39a0c23894d6c093", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
+stamp = { hash = "b3:5f199580bd8d2c58", by = "agent:claude", note = "Re-read with zoom.rs: the new UI scale bullet (set_zoom zooms the main webview, bounded 0.5 to 1.5, nothing kept by the app), setZoom in the global's list, and set_zoom and the zoom capability in the command and capability lists match build.rs, shell.rs, tauri.conf.json and capabilities/zoom.json." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
@@ -2790,7 +2790,7 @@ stamp = { hash = "b3:92af4dc02f396840", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:05014f2babcaf83f", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). Design's links paragraph now names /usr/bin/open on macOS beside Explorer and xdg-open, matching shell.rs; the rest (Info.plist, entitlements, cfg(webview), macos_backends, panels, Carbon and the tap) holds." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/build.rs"]
-stamp = { hash = "b3:d739e9f7676680a0", by = "agent:claude", note = "Added the PTZ cameras bullet (ptz_cameras.json, set_ptz_cameras through the ptz capability, applied at once with Engine::start_ptz) and the command in the list; build.rs and capabilities/ptz.json updated to match." }
+stamp = { hash = "b3:464c95d6b102c3de", by = "agent:claude", note = "Re-read with zoom.rs: the new UI scale bullet (set_zoom zooms the main webview, bounded 0.5 to 1.5, nothing kept by the app), setZoom in the global's list, and set_zoom and the zoom capability in the command and capability lists match build.rs, shell.rs, tauri.conf.json and capabilities/zoom.json." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/entitlements.plist"]
 stamp = { hash = "b3:b240d32317cce49a", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). Design's links paragraph now names /usr/bin/open on macOS beside Explorer and xdg-open, matching shell.rs; the rest (Info.plist, entitlements, cfg(webview), macos_backends, panels, Carbon and the tap) holds. | merge: The merge brought #1419's squash into wave/alpha5 (the same Linux window code this branch already carried) and the wave's other landings; this branch's macOS additions are re-applied unchanged, so the section still holds." }
@@ -2802,7 +2802,7 @@ stamp = { hash = "b3:e24d9e7516312d41", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:a4dc38f93e16cb59", by = "agent:claude", note = "Added the PTZ cameras bullet (ptz_cameras.json, set_ptz_cameras through the ptz capability, applied at once with Engine::start_ptz) and the command in the list; build.rs and capabilities/ptz.json updated to match." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
-stamp = { hash = "b3:a5428a38d08a62d5", by = "agent:claude", note = "Added the PTZ cameras bullet (ptz_cameras.json, set_ptz_cameras through the ptz capability, applied at once with Engine::start_ptz) and the command in the list; build.rs and capabilities/ptz.json updated to match." }
+stamp = { hash = "b3:d175a091277cdc07", by = "agent:claude", note = "Re-read with zoom.rs: the new UI scale bullet (set_zoom zooms the main webview, bounded 0.5 to 1.5, nothing kept by the app), setZoom in the global's list, and set_zoom and the zoom capability in the command and capability lists match build.rs, shell.rs, tauri.conf.json and capabilities/zoom.json." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/browser.rs"]
 stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "Browser sources behind cef: host.rs wires crate::browser::backend on Windows, macOS (#1522) and now 64-bit Linux, beside the Linux vcam (#1521, --no-vcam drops it), with Live::with_browser taking jstream_browser::BrowserBackend. bundle-app.sh still copies the licences into Contents/Resources before signing, alongside #1522's --browser-helper/--cef bundling. | kept from the merged side: Docs only: the backend is built on Windows and macOS with cef, and on macOS the helper is in the bundle. The Browser sources bullet of Design holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -2820,7 +2820,7 @@ stamp = { hash = "b3:79fa605c1a88dac5", by = "agent:smooth-paths", note = "Only 
 stamp = { hash = "b3:a6f6b4346c290040", by = "agent:release-alpha8", note = "checked the paragraph on jtunnel::apply (start, start again or stop_jtunnel), the File's weak engine handle from Host::engine and shell.rs managing it" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:d7afc6eb5aa464fd", by = "agent:claude", note = "Added the PTZ cameras bullet (ptz_cameras.json, set_ptz_cameras through the ptz capability, applied at once with Engine::start_ptz) and the command in the list; build.rs and capabilities/ptz.json updated to match." }
+stamp = { hash = "b3:b0fa91e5b212b12d", by = "agent:claude", note = "Re-read with zoom.rs: the new UI scale bullet (set_zoom zooms the main webview, bounded 0.5 to 1.5, nothing kept by the app), setZoom in the global's list, and set_zoom and the zoom capability in the command and capability lists match build.rs, shell.rs, tauri.conf.json and capabilities/zoom.json." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/links.rs"]
 stamp = { hash = "b3:cd890eebe65e25dd", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -2847,7 +2847,7 @@ stamp = { hash = "b3:75271bf5a2695ec8", by = "agent:claude", note = "Renumbered 
 stamp = { hash = "b3:010b0f3fda63fe9f", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:e59efa13dc168370", by = "agent:claude", note = "Added the PTZ cameras bullet (ptz_cameras.json, set_ptz_cameras through the ptz capability, applied at once with Engine::start_ptz) and the command in the list; build.rs and capabilities/ptz.json updated to match." }
+stamp = { hash = "b3:a048b61295895c53", by = "agent:claude", note = "Re-read with zoom.rs: the new UI scale bullet (set_zoom zooms the main webview, bounded 0.5 to 1.5, nothing kept by the app), setZoom in the global's list, and set_zoom and the zoom capability in the command and capability lists match build.rs, shell.rs, tauri.conf.json and capabilities/zoom.json." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
@@ -2855,8 +2855,11 @@ stamp = { hash = "b3:45624952598c1f3a" }
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/updates.rs"]
 stamp = { hash = "b3:82180f3a8382696f", by = "agent:cursor", note = "Re-read updates.rs against the scheme and window bullets: the path is still answered on another thread, the page still cannot choose the address, and connect-src is unchanged. The GitHub GET is now per_page=20." }
 
+["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/zoom.rs"]
+stamp = { hash = "b3:1343d3d79dfcc68c", by = "agent:claude", note = "Re-read with zoom.rs: the new UI scale bullet (set_zoom zooms the main webview, bounded 0.5 to 1.5, nothing kept by the app), setZoom in the global's list, and set_zoom and the zoom capability in the command and capability lists match build.rs, shell.rs, tauri.conf.json and capabilities/zoom.json." }
+
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/tauri.conf.json"]
-stamp = { hash = "b3:77effcc94d3889e4", by = "agent:claude", note = "Re-read: the bootstrap bullet now says collection is the default project's folder and documents saveScreenshot/openSaved/showSaved; the commands list now names every Tauri command and capability, screenshots included, matching shell.rs, build.rs and capabilities/." }
+stamp = { hash = "b3:5c8dea08b63613a9", by = "agent:claude", note = "Re-read with zoom.rs: the new UI scale bullet (set_zoom zooms the main webview, bounded 0.5 to 1.5, nothing kept by the app), setZoom in the global's list, and set_zoom and the zoom capability in the command and capability lists match build.rs, shell.rs, tauri.conf.json and capabilities/zoom.json." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/tests/delay_load.rs"]
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
@@ -2865,7 +2868,7 @@ stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:846f91394e995b68", by = "agent:claude", note = "bundle-app.sh now copies LICENSE-MIT and LICENSE-APACHE into Contents/Resources before signing; the macOS app bullet says so; rest unchanged | merge: #1522 (ADR-0157) brought bundle-app.sh's --browser-helper/--cef options, which bundle the helper, CEF's framework and helper apps and sign them inside out. This branch's licence copy into Contents/Resources still runs before any signing, so the app signature covers it; the bundle bullet still holds alongside main's browser text. | kept from the merged side: bundle-app.sh in this PR: new --browser-helper and --cef options (required together, refused with --sign), the browser() step copying the helper to Contents/MacOS and the framework to Contents/Frameworks, five helper apps with LSUIElement plists, CEF-CREDITS.html and CEF-VERSION.txt, ad-hoc signing inside out, and a --deep --strict verify. Latest change (N3): the plist helper is a top-level plist_key taking the plist path, same keys written, bash -n and shellcheck clean. Re-read Design's bundling paragraph; it still describes the layout and signing exactly." }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:927852f4488d55b1", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
+stamp = { hash = "b3:e4ff6fdd792145d2", by = "agent:claude", note = "Re-read with the UI scale: the Bootstrap script bullet now names setZoom; zoom.rs adds set_zoom and the zoom capability, nothing else in the crate's purpose changes." }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:4e90635d835b4a5c", by = "agent:claude", note = "The Browser sources bullet names Windows, macOS (helper in the bundle, ADR-0157) and 64-bit Linux (helper beside the app, ADR-0158), matching lib.rs's cfg for the browser module (windows, macos, or 64-bit linux, with cef), host.rs's with_browser cfg and its Linux branch, and browser.rs's module doc. | kept from the merged side: Purpose's Browser sources bullet now says Windows and macOS with cef, the macOS helper in the app bundle (ADR-0157); 'browser sources on macOS' left the Not here yet list. host.rs's macOS branch wires browser::backend and with_browser under cef, and browser.rs's docs match. The ARCH apps/* row change (helper executable on Linux and macOS) agrees. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -2874,7 +2877,7 @@ stamp = { hash = "b3:4e90635d835b4a5c", by = "agent:claude", note = "The Browser
 stamp = { hash = "b3:a4dc38f93e16cb59", by = "agent:claude", note = "Bootstrap bullet now names setPtz and setPtzCameras; module bullet for ptz_cameras.rs and the window's command list include the camera list." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
-stamp = { hash = "b3:a5428a38d08a62d5", by = "agent:claude", note = "Bootstrap bullet now names setPtz and setPtzCameras; module bullet for ptz_cameras.rs and the window's command list include the camera list." }
+stamp = { hash = "b3:d175a091277cdc07", by = "agent:claude", note = "Re-read with the UI scale: the Bootstrap script bullet now names setZoom; zoom.rs adds set_zoom and the zoom capability, nothing else in the crate's purpose changes." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/browser.rs"]
 stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "The Browser sources bullet names Windows, macOS (helper in the bundle, ADR-0157) and 64-bit Linux (helper beside the app, ADR-0158), matching lib.rs's cfg for the browser module (windows, macos, or 64-bit linux, with cef), host.rs's with_browser cfg and its Linux branch, and browser.rs's module doc. | kept from the merged side: Purpose's Browser sources bullet now says Windows and macOS with cef, the macOS helper in the app bundle (ADR-0157); 'browser sources on macOS' left the Not here yet list. host.rs's macOS branch wires browser::backend and with_browser under cef, and browser.rs's docs match. The ARCH apps/* row change (helper executable on Linux and macOS) agrees. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -2892,7 +2895,7 @@ stamp = { hash = "b3:79fa605c1a88dac5", by = "agent:smooth-paths", note = "Only 
 stamp = { hash = "b3:a6f6b4346c290040", by = "agent:release-alpha8", note = "JTunnel bullet now says a saved setting applies at once; checked against jtunnel::set_jtunnel calling apply on the live engine" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:d7afc6eb5aa464fd", by = "agent:claude", note = "Bootstrap bullet now names setPtz and setPtzCameras; module bullet for ptz_cameras.rs and the window's command list include the camera list." }
+stamp = { hash = "b3:b0fa91e5b212b12d", by = "agent:claude", note = "Re-read with the UI scale: the Bootstrap script bullet now names setZoom; zoom.rs adds set_zoom and the zoom capability, nothing else in the crate's purpose changes." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/links.rs"]
 stamp = { hash = "b3:cd890eebe65e25dd", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -2919,13 +2922,16 @@ stamp = { hash = "b3:75271bf5a2695ec8", by = "agent:claude", note = "Renumbered 
 stamp = { hash = "b3:010b0f3fda63fe9f", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:e59efa13dc168370", by = "agent:claude", note = "Bootstrap bullet now names setPtz and setPtzCameras; module bullet for ptz_cameras.rs and the window's command list include the camera list." }
+stamp = { hash = "b3:a048b61295895c53", by = "agent:claude", note = "Re-read with the UI scale: the Bootstrap script bullet now names setZoom; zoom.rs adds set_zoom and the zoom capability, nothing else in the crate's purpose changes." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/updates.rs"]
 stamp = { hash = "b3:82180f3a8382696f", by = "agent:cursor", note = "Re-read updates.rs against the contents bullet: GET /jstream-update-check still returns GitHub's releases list or an error and sends no version. The request is now per_page=20, the newest page, so the body stays under the 1 MiB cap." }
+
+["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/zoom.rs"]
+stamp = { hash = "b3:1343d3d79dfcc68c", by = "agent:claude", note = "Re-read with the UI scale: the Bootstrap script bullet now names setZoom; zoom.rs adds set_zoom and the zoom capability, nothing else in the crate's purpose changes." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/tests/delay_load.rs"]
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #327: covers now includes tests/**, and the Tests bullet names the new integration test tests/delay_load.rs (media_foundation_is_delay_loaded, Windows MSVC only), which reads the built jstream.exe's PE headers and requires each DLL in build.rs's delay-load list in the delay-import table and none in the import table; the unit-test list and the rest of the contents are unchanged" }
@@ -6783,16 +6789,16 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): new 3D scenes bullet: Layout.camera from camera_of, outlines through project_seen, the hit test nearest by depth_of with later items winning ties, a move on the item's depth plane through on_plane with no snapping or handles, the marquee on screen bounds, Alt-drag orbit (0.3°/px, elevation capped at 85°) and Alt+Shift-drag dolly (exp 0.005·dy, at least 10 px) shown live through live.set and committed as one scene.set_camera, and the camera pill; checked against camera.rs and its tests, mod.rs, live.rs and model.rs's an_orbit_commits_the_scene_s_camera." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Added the 3D group bullet text: hull of children placed through GroupPose, hit inside a child at its depth, drag moves the group item, what Layout::sized shares (once per scene, visible, geometry, no cycle, MAX_NESTING) and that keyframe overrides of children aren't applied; checked against camera.rs and model.rs" }
+stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with the UI scale: the canvas's picks now convert client coordinates to the stage's CSS pixels and its streams are sized by ui_scale::pixel_ratio (device ratio at least 1 times the CSS zoom), while preview::subscribe drops its own floor at 1 so a scale under 100% asks for fewer pixels; the section's sizing claims (as sharp as the stage, 320x180 to 1920x1080) still hold." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "Added the 3D group bullet text: hull of children placed through GroupPose, hit inside a child at its depth, drag moves the group item, what Layout::sized shares (once per scene, visible, geometry, no cycle, MAX_NESTING) and that keyframe overrides of children aren't applied; checked against camera.rs and model.rs" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/monitor.rs"]
-stamp = { hash = "b3:802d9970b3ba313b", by = "agent:studio-two-up", note = "monitor.rs named as studio mode's program monitor, and the taps list now includes it; mod.rs only gained the module line. | merge: #1567 sizes the canvas's stream at full resolution only on the desktop app's own engine (host::own_engine) and restages only on the newest resize; the merge gives the program monitor the same two rules, which the canvas section's description of its sizing covers. Studio mode text still holds." }
+stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with the UI scale: the canvas's picks now convert client coordinates to the stage's CSS pixels and its streams are sized by ui_scale::pixel_ratio (device ratio at least 1 times the CSS zoom), while preview::subscribe drops its own floor at 1 so a scale under 100% asks for fewer pixels; the section's sizing claims (as sharp as the stage, 320x180 to 1920x1080) still hold." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:6e6d926c9df3d961", by = "agent:claude", note = "#1556: the canvas paragraph now says the feed skips to the next keyframe once the decoder's queue passes 12 chunks (was 3), with why: a busy main thread holds chunks in that queue" }
+stamp = { hash = "b3:0a844618464561f6", by = "agent:claude", note = "Re-read with the UI scale: the canvas's picks now convert client coordinates to the stage's CSS pixels and its streams are sized by ui_scale::pixel_ratio (device ratio at least 1 times the CSS zoom), while preview::subscribe drops its own floor at 1 so a scale under 100% asks for fewer pixels; the section's sizing claims (as sharp as the stage, 320x180 to 1920x1080) still hold." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:cb9ccbe7df38b064", by = "agent:claude-perf-suite", note = "The preview bullet now points at the canvas's view report; screen.rs counts frames into a ViewTally, JpegSlot counts replaced pictures; the decode rules described are unchanged" }
@@ -6822,7 +6828,7 @@ stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: the store bullet names notify_with, and the shell bullet says a toast with buttons stays 10 s and a button hides it; matches store.rs, app.rs and style.css." }
+stamp = { hash = "b3:ce295f6fe0a2b7f7", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
@@ -6840,16 +6846,16 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): the Scene Properties paragraph gains the camera: the 3D camera check starting from SceneCamera::framing, position, target, FOV and roll fields, Nearest on top, scene.set_camera sent after validate, Own camera on a keyframe only while the parent has one, the has_3d_items note, Defaults keeping it, and Duplicate scene copying it (clipboard.rs). The Store bullet's camera_of (store.rs), the canvas files (camera.rs, live.rs, mod.rs, model.rs: see Canvas) and style.css's camera field classes hold. Checked against scene_properties.rs and its tests." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Re-read: the groups text covers New group, open and ungroup, which the 3D group outline leaves unchanged; nothing about canvas hit testing is claimed here" }
+stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "Re-read: the groups text covers New group, open and ungroup, which the 3D group outline leaves unchanged; nothing about canvas hit testing is claimed here" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/monitor.rs"]
-stamp = { hash = "b3:802d9970b3ba313b", by = "agent:studio-two-up", note = "Studio mode rewritten for the two-up: canvas as preview, program monitor (tapped program-mix stream), StudioControls between them sharing one Panel state with the Transitions panel via provide_transitions; Selection notes the canvas follows the preview scene in studio mode; style.css adds the stage-row, stage-label, monitor and studio-controls rules. | merge: #1567 sizes the canvas's stream at full resolution only on the desktop app's own engine (host::own_engine) and restages only on the newest resize; the merge gives the program monitor the same two rules, which the canvas section's description of its sizing covers. Studio mode text still holds." }
+stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:6e6d926c9df3d961", by = "agent:claude", note = "#1556: MAX_BACKLOG went from 3 to 12; the design section names no number and still holds" }
+stamp = { hash = "b3:0a844618464561f6", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:cb9ccbe7df38b064", by = "agent:claude-perf-suite", note = "projector pictures and the canvas report their views; the projector bullet says so; device_preview keeps an unreported tally" }
@@ -6870,16 +6876,16 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; no behaviour changed." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. dialog.rs paragraph describes Escape reaching the topmost dialog via a capture-phase listener under the dialog's owner (#1607, #1652); camera::Shape is described in the canvas section | kept from the merged side: dialog.rs paragraph now describes Escape reaching the topmost dialog wherever the focus is, via a capture-phase listener run under the dialog's owner (#1607, #1652)" }
+stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:8805062948c7618d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:9e68caa6a9089bbb", by = "agent:issues-thread", note = "Edited the header readout and Outputs health paragraphs for #1690 (counted only while an output runs, Idle otherwise); checked against Dropped and Health." }
+stamp = { hash = "b3:0eb880f42fea463e", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited the header readout and Outputs health paragraphs for #1690 (counted only while an output runs, Idle otherwise); checked against Dropped and Health." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:a9edace53bbce78a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
+stamp = { hash = "b3:580e6af3aba32e29", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/hotkeys.rs"]
 stamp = { hash = "b3:963da80dc92013c6", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via, and no panel shows camera_path beyond the generic preset settings form" }
@@ -6894,13 +6900,13 @@ stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:d8b85b4ad317ad23", by = "agent:release-alpha8", note = "replaced the restart text: a saved change applies at once; checked jtunnel.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:173d02f705d68d0c", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
+stamp = { hash = "b3:a415f479f094e5a4", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/menu.rs"]
-stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Right-click menus bullet names menu::keys/focus_first/asks_for_menu; control button bullet says an existing lane only opens and the keyboard opening; sequences bullet covers unchanged edits sending nothing, point focus keys, the Events editor's editable/(missing)/position rules and chip keys; style.css only adds a .seq-dot focus ring" }
+stamp = { hash = "b3:7336baee667f67f5", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/pairing.rs"]
 stamp = { hash = "b3:ed4734a23d304b33", by = "agent:claude", note = "Re-read against pairing.rs: only Pairing's doc comment changed, naming PairDialog as code rather than an intra-doc link to a private item (cargo doc -D warnings); the section's text on the Paired devices section and Pair a device dialog still holds." }
@@ -6936,7 +6942,7 @@ stamp = { hash = "b3:5ff0c8373b6af2f5", by = "agent:claude", note = "Rewrote the
 stamp = { hash = "b3:182bfb10bb31e2e9", by = "agent:claude", note = "Round 1: the Close footer is now keyed on form_open (nothing picked, or a pick not listed: deleted or still saving), so the dialog never has no footer; README states it." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/events.rs"]
-stamp = { hash = "b3:8f3627dbd0f8021f", by = "agent:claude", note = "Right-click menus bullet names menu::keys/focus_first/asks_for_menu; control button bullet says an existing lane only opens and the keyboard opening; sequences bullet covers unchanged edits sending nothing, point focus keys, the Events editor's editable/(missing)/position rules and chip keys; style.css only adds a .seq-dot focus ring" }
+stamp = { hash = "b3:7b17bf25413e3905", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
 stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Updated the Add filter and preset lists with the hologram and its four presets, matching filters.rs and filter_presets.rs." }
@@ -6954,7 +6960,7 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty lanes/starts/stops and delay_ms None in literals." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:f92cba49cd54d28a", by = "agent:claude", note = "Control button bullet: a learned MIDI control's Smoothing field first in the menu; Channels bullet: each input shows its smoothing_ms set with learn::set_smoothing; style.css adds .control-menu-row and .chan-row-smooth." }
+stamp = { hash = "b3:d2852f91304963b9", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch: looks.rs's table in the settings form, small buttons, duplicate states refused, bytes; README's looks paragraph matches; the merge brought #1606's settings pages and pairing dialog CSS, separate from the .looks rules" }
@@ -6969,7 +6975,7 @@ stamp = { hash = "b3:740cfa56ec97a3f3", by = "agent:claude", note = "Added Contr
 stamp = { hash = "b3:7fee3677c4dd7fd9", by = "agent:claude", note = "motion.rs: the Palette problem now says bytes; the design's Palette line (saying which pair it left out) still holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/number.rs"]
-stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
+stamp = { hash = "b3:cf8453771e0803d5", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:15cc17cbaf601483", by = "agent:issues-thread", note = "Edited the header readout and Outputs health paragraphs for #1690 (counted only while an output runs, Idle otherwise); checked against Dropped and Health. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Rewrote the outputs, mixer master card, Transitions panel, Live chat and Agent activity lines for C20-C22: funnel FX buttons with a count, the master card's icon buttons and ⋯ menu (Hear by name, reset loudness), spread() gradient bars, the preset toolbar's ⋯ menu, by_time runs" }
@@ -6987,7 +6993,7 @@ stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scen
 stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "control button paragraph lists Add to sequence and Set key with KeyCapture; the Channels card names its Key row; the Sequences paragraph describes the Events lane (read-only for cues it can't represent) and the Scenes panel's sequence rows; matches learn.rs, channels.rs, events.rs, scenes.rs, style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sequence.rs"]
-stamp = { hash = "b3:df107152d161984e", by = "agent:claude", note = "Right-click menus bullet names menu::keys/focus_first/asks_for_menu; control button bullet says an existing lane only opens and the keyboard opening; sequences bullet covers unchanged edits sending nothing, point focus keys, the Events editor's editable/(missing)/position rules and chip keys; style.css only adds a .seq-dot focus ring" }
+stamp = { hash = "b3:3eeeecb9e319e07e", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Added a Controller learn bullet (where the buttons are, poll every 150 ms for 15 s, the binding learned, unbind), against learn.rs, properties.rs and mixer.rs." }
@@ -7037,6 +7043,9 @@ stamp = { hash = "b3:d93a797b4c57e4d5", by = "agent:claude", note = "Added Contr
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
 stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "New Channels and Sequences bullets and the control button paragraph checked against channels.rs, sequence.rs, learn.rs, store.rs and dock.rs." }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ui_scale.rs"]
+stamp = { hash = "b3:66b0d58e3bbe08ee", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "Hotkeys paragraph now names the desktop's Hear hotkeys while another app has the focus check, its hotkeys.global setting, and that a registered chord doesn't reach the page; style.css only spaces the Settings checks." }
 
@@ -7053,13 +7062,13 @@ stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 review: the design text already names Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit, now matching every module doc; Info's placement and the toggles' <label for> sit below this level and the paragraph holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:bfb85071cf8940dc", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
+stamp = { hash = "b3:bb704dab8718156c", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "Added Control PTZ cameras on the Devices page, the ptzCameras and setPtzCameras globals, and the PTZ panel bullet, checked against ptz_cameras.rs, host.rs and panels/ptz.rs." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:b6662cb5e7fe446d", by = "agent:claude", note = "Review round 1 (B1, B2, N1, N3): the pad stops a drive when the focus leaves it or the window, Near and Far stop on cancel, blur, leaving manual and cleanup, stops go to the camera driven, and the camera list saves one at a time; the module bullets still hold. | kept from the merged side: C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds | merge: wave 2: #1662's panels restyled on the design language; the purpose holds | kept from the merged side: Edited the readout line: frames the outputs dropped while they ran (#1690); the rest of the purpose holds. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording." }
+stamp = { hash = "b3:4b9069f6f700f5f2", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited the readout line: frames the outputs dropped while they ran (#1690); the rest of the purpose holds. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds | merge: wave 2: #1662's panels restyled on the design language; the purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -7071,7 +7080,7 @@ stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "C20-C22 (ou
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "#1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read: screenshot.rs's entry now says the desktop app saves in Downloads with a toast naming the place and Open/Show in folder (host::save_screenshot, host::open_saved); matches screenshot.rs and host.rs." }
+stamp = { hash = "b3:ce295f6fe0a2b7f7", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:3017b6184ed2062d", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
@@ -7089,16 +7098,16 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): the Store bullet names Collection::camera_of (own camera, a keyframe's override or its parent's), checked against store.rs. canvas/camera.rs, live.rs, mod.rs and model.rs (3D canvas), clipboard.rs (Duplicate scene copies the camera) and scene_properties.rs (camera fields) are described under Canvas and Design; the module entries here still hold." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Re-read: the purpose names the canvas generally; the 3D group outline adds no new purpose or crate seam" }
+stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "Re-read: the purpose names the canvas generally; the 3D group outline adds no new purpose or crate seam" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/monitor.rs"]
-stamp = { hash = "b3:802d9970b3ba313b", by = "agent:studio-two-up", note = "Studio two-up: Workspace, Store (followed_preview), the Transitions panel's StudioControls and StageLabel, and canvas/monitor.rs's ProgramMonitor listed in Contents; app.rs provides the shared transitions state, header turns studio mode on with the shown scene on preview. | merge: #1567 sizes the canvas's stream at full resolution only on the desktop app's own engine (host::own_engine) and restages only on the newest resize; the merge gives the program monitor the same two rules, which the canvas section's description of its sizing covers. Studio mode text still holds." }
+stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:6e6d926c9df3d961", by = "agent:claude", note = "#1556: only the canvas decoder's backlog limit changed (3 to 12 chunks); the purpose holds" }
+stamp = { hash = "b3:0a844618464561f6", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:cb9ccbe7df38b064", by = "agent:claude-perf-suite", note = "Contents gained Views (views.rs); Screen::new now takes a tally; lib.rs Docs line names #views" }
@@ -7119,16 +7128,16 @@ stamp = { hash = "b3:783ed50376435a02", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:8834df42a315b6a4", by = "agent:channels", note = "Re-read: UI files only gain amount: None in literals; the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Re-read against the Escape capture listener in dialog.rs and camera.rs's Shape (3D group outline) plus the near-plane model fallback; the purpose summary still holds | kept from the merged side: Re-read against the Escape capture listener in dialog.rs and the solid outline fallback in canvas/camera.rs; the purpose summary still holds" }
+stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:8805062948c7618d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:9e68caa6a9089bbb", by = "agent:issues-thread", note = "Edited the readout line: frames the outputs dropped while they ran (#1690); the rest of the purpose holds." }
+stamp = { hash = "b3:0eb880f42fea463e", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited the readout line: frames the outputs dropped while they ran (#1690); the rest of the purpose holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:a9edace53bbce78a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
+stamp = { hash = "b3:580e6af3aba32e29", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/hotkeys.rs"]
 stamp = { hash = "b3:963da80dc92013c6", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: constructors gain via: Vec::new() and patterns gain ..; re-read it and nothing it says about these files changed: the UI's scene switches send no via" }
@@ -7143,13 +7152,13 @@ stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:d8b85b4ad317ad23", by = "agent:release-alpha8", note = "jtunnel.rs only drops the restart note; purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:173d02f705d68d0c", by = "agent:claude", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs." }
+stamp = { hash = "b3:a415f479f094e5a4", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/menu.rs"]
-stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Events lane entry now names editable and position tests; menu.rs, learn.rs and sequence.rs entries still hold for the keyboard additions" }
+stamp = { hash = "b3:7336baee667f67f5", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/pairing.rs"]
 stamp = { hash = "b3:ed4734a23d304b33", by = "agent:claude", note = "Re-read against pairing.rs: only Pairing's doc comment changed, naming PairDialog as code rather than an intra-doc link to a private item (cargo doc -D warnings); the section's text on the Paired devices section and Pair a device dialog still holds." }
@@ -7185,7 +7194,7 @@ stamp = { hash = "b3:5ff0c8373b6af2f5", by = "agent:claude", note = "filters.rs'
 stamp = { hash = "b3:182bfb10bb31e2e9", by = "agent:claude", note = "Round 1: encoders.rs adds is_listed/form_open, outputs.rs keys Close on it; the Contents list still names these modules correctly." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/events.rs"]
-stamp = { hash = "b3:8f3627dbd0f8021f", by = "agent:claude", note = "Events lane entry now names editable and position tests; menu.rs, learn.rs and sequence.rs entries still hold for the keyboard additions" }
+stamp = { hash = "b3:7b17bf25413e3905", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
 stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Re-read: the Add filter catalogue gains Hologram under Style and its presets; purpose unchanged." }
@@ -7203,7 +7212,7 @@ stamp = { hash = "b3:bd0bae9dc0fe0bd9", by = "agent:wave-owner", note = "merged 
 stamp = { hash = "b3:8f4fcdc3d37f8be1", by = "agent:channels", note = "Re-read: UI files only gain empty fields in literals." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/learn.rs"]
-stamp = { hash = "b3:f92cba49cd54d28a", by = "agent:claude", note = "learn.rs gains smoothing_of/set_smoothing and the control menu's Smoothing field; channels.rs shows each input's smoothing; the purpose list still names them right." }
+stamp = { hash = "b3:d2852f91304963b9", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/looks.rs"]
 stamp = { hash = "b3:ab766e9b076d7239", by = "agent:claude", note = "this branch adds looks.rs, the grid's Looks table (rows, Own colour, brightness, blink, add/remove, the clip launcher preset), which now refuses duplicate states and counts bytes, as the README says; the merge brought #1606's Video and Audio settings pages and Pair a device dialog, which the purpose already covers" }
@@ -7218,7 +7227,7 @@ stamp = { hash = "b3:740cfa56ec97a3f3", by = "agent:claude", note = "Host detect
 stamp = { hash = "b3:7fee3677c4dd7fd9", by = "agent:claude", note = "motion.rs: the Palette problem now says bytes, which is what it counts; the purpose section names no unit" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/number.rs"]
-stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
+stamp = { hash = "b3:cf8453771e0803d5", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:15cc17cbaf601483", by = "agent:issues-thread", note = "Edited the readout line: frames the outputs dropped while they ran (#1690); the rest of the purpose holds. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: C20-C22 (outputs rows, mixer master card, transitions toolbar, stats, agent activity, live chat, About) add no module and change no crate purpose; re-read, still holds" }
@@ -7236,7 +7245,7 @@ stamp = { hash = "b3:9f2b9ac06cea3af4", by = "agent:issues-thread", note = "scen
 stamp = { hash = "b3:be9f9f1743a2395b", by = "agent:claude", note = "re-read after events.rs (Events lane; a cue it can't represent opens read-only), Scenes sequence rows, KeyCapture with Add to sequence and Set key in learn.rs, and the channel card's Key row; the module list names events.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sequence.rs"]
-stamp = { hash = "b3:df107152d161984e", by = "agent:claude", note = "Events lane entry now names editable and position tests; menu.rs, learn.rs and sequence.rs entries still hold for the keyboard additions" }
+stamp = { hash = "b3:3eeeecb9e319e07e", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Added learn.rs to the panels and value_bindings to the store's Collection." }
@@ -7286,6 +7295,9 @@ stamp = { hash = "b3:d93a797b4c57e4d5", by = "agent:claude", note = "Host detect
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
 stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "Module list names channels.rs and sequence.rs and the control button; checked against the code." }
 
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ui_scale.rs"]
+stamp = { hash = "b3:66b0d58e3bbe08ee", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
+
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "updates.rs' Settings dialog gains the desktop-only global hotkeys check and ui_settings.rs the hotkeys.global key; the purpose text holds." }
 
@@ -7302,7 +7314,7 @@ stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:168440e92dd25c0b", by = "agent:ui-design", note = "#1590 review: module docs of settings.rs, updates.rs, agents.rs and warm.rs now use the General page's names; dialog.rs's Info opens its details on the side with room (tip_side, tested); toggles got <label for>. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:bfb85071cf8940dc", by = "agent:claude", note = "Host detection names desktop_ptz_cameras and set_ptz_cameras; module bullets for ptz_cameras.rs and panels/ptz.rs." }
+stamp = { hash = "b3:bb704dab8718156c", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
 
 ["CRATE-jstream-ui#views"."body"]
 stamp = { hash = "b3:c8a34bdd85887b52", by = "agent:claude-perf-suite", note = "review N2: labels are projector#<channel>:<scene|program|source:<id>>, checked against Picture in projector.rs; the channel survives the 64-char cut" }
@@ -7457,6 +7469,9 @@ stamp = { hash = "b3:38c578fbd67ef44c", by = "agent:ui-design", note = "Specs no
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/transitions.spec.js"]
 stamp = { hash = "b3:e2144d3a0b7f5734", by = "agent:claude", note = "Specs only changed locators/labels (getByLabel Name, 'Include audio when nested'); the harness is unchanged." }
 
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/ui-scale.spec.js"]
+stamp = { hash = "b3:fbc2658d50f1b49c", by = "agent:claude", note = "Re-read with ui-scale.spec.js: it uses the shared fixtures and sets its own viewport for one test; nothing in the harness changes." }
+
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/video-settings.spec.js"]
 stamp = { hash = "b3:e182326757085ed7", by = "agent:claude", note = "Re-read against the new video-settings test, which opens a second page in the same context as groups.spec does; harness unchanged." }
 
@@ -7473,7 +7488,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:9403c669145e937d", by = "agent:claude", note = "The PTZ cameras bullet adds the focus-leaving stops test, which passes locally with the others in ptz.spec.js. | kept from the merged side: Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds | kept from the merged side: Edited the Header stats entry: no dropped count while idle, counting from the first tick with a running output (#1690). | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording." }
+stamp = { hash = "b3:20a745bfbe1d58cf", by = "agent:claude", note = "Re-read with ui-scale.spec.js: the new UI scale entry describes its three tests (menu steps and ends, keys and a kept scale across reload, a click and a right-click menu at 150%) and says the desktop zoom isn't tested here. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited the Header stats entry: no dropped count while idle, counting from the first tick with a running output (#1690). | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7594,6 +7609,9 @@ stamp = { hash = "b3:38c578fbd67ef44c", by = "agent:ui-design", note = "Updated 
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/transitions.spec.js"]
 stamp = { hash = "b3:e2144d3a0b7f5734", by = "agent:claude", note = "Renamed the nested-audio check in the scene properties test's description; scene-filters now finds Name by its label." }
+
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/ui-scale.spec.js"]
+stamp = { hash = "b3:fbc2658d50f1b49c", by = "agent:claude", note = "Re-read with ui-scale.spec.js: the new UI scale entry describes its three tests (menu steps and ends, keys and a kept scale across reload, a click and a right-click menu at 150%) and says the desktop zoom isn't tested here." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/video-settings.spec.js"]
 stamp = { hash = "b3:e182326757085ed7", by = "agent:claude", note = "Added the untouched-Video-page-follows-another-window case to the Video settings line; checked against video-settings.spec.js." }
@@ -7998,7 +8016,7 @@ stamp = { hash = "b3:57db58043cad8447", by = "agent:claude", note = "Step 1 keep
 stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:c96a2fde2f9213b6", by = "agent:issues-thread", note = "Re-read: going live is described without the dropped readout or health words; nothing to change for #1690. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:7c4e10c1e2b66f96", by = "agent:claude", note = "Re-read against UI-FEATURES' header (new HD-13 UI scale row) and canvas (CV-03 now says the picture is as sharp as the canvas at the UI scale): this section's steps don't depend on either change and still hold. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Re-read: going live is described without the dropped readout or health words; nothing to change for #1690. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:b2949e012ef014f1", by = "agent:issues-thread", note = "Re-read: going live is described without the dropped readout or health words; nothing to change for #1690. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8010,7 +8028,7 @@ stamp = { hash = "b3:23d99288d10a6118", by = "agent:claude", note = "Pick Record
 stamp = { hash = "b3:8a7d6495ae6d0dd7", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:c96a2fde2f9213b6", by = "agent:issues-thread", note = "Re-read: the record steps don't cite the readout or the Outputs health; still accurate. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:7c4e10c1e2b66f96", by = "agent:claude", note = "Re-read against UI-FEATURES' header (new HD-13 UI scale row) and canvas (CV-03 now says the picture is as sharp as the canvas at the UI scale): this section's steps don't depend on either change and still hold. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Re-read: the record steps don't cite the readout or the Outputs health; still accurate. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:b2949e012ef014f1", by = "agent:issues-thread", note = "Re-read: the record steps don't cite the readout or the Outputs health; still accurate. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
@@ -8031,7 +8049,7 @@ stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "Pack
 stamp = { hash = "b3:741d1e68f59f3ed4", by = "agent:release-alpha8", note = "The fog card bundle's new Add source type appears in the walkthrough as a fog card after the backdrop under Generated, where UI-FEATURES DL-06 puts it; the walkthrough never named light, so leaving out #1609's reflection probe keeps it a beginner's list. | kept from the merged side: Step 3 now tells a newcomer about the 3D Depth and Turn tools and camera mode (K, drags, wheel zoom, Save view, Esc), matching UI-FEATURES#canvas" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#canvas"]
-stamp = { hash = "b3:7e72b670187e720e", by = "agent:issues-thread", note = "Re-read: the 3D scene paragraph says a drag slides an item on its depth plane, which still holds for a 3D group's item; the new CV-15 text on group outlines needs no getting-started step" }
+stamp = { hash = "b3:6a0ae9449553483e", by = "agent:claude", note = "Re-read against UI-FEATURES' header (new HD-13 UI scale row) and canvas (CV-03 now says the picture is as sharp as the canvas at the UI scale): this section's steps don't depend on either change and still hold." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
 stamp = { hash = "b3:58f92aed22ff4a94", by = "agent:release-alpha11", note = "UI-FEATURES dialogs only gained the Escape-reaches-the-topmost-dialog sentence; this walkthrough's dialog steps don't depend on it and still hold | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once in UI-FEATURES DL-03 only; the scene walkthrough holds | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; holds | kept from the merged side: UI-FEATURES DL-03 only adds the once-per-scene sentence to the Share the 3D space note; this walkthrough doesn't describe 3D groups or that note; holds | kept from the merged side: Merged #1679 into #1596's canvas branch. UI-FEATURES dialogs and canvas changed (Escape, 3D group outline); this walkthrough's steps don't depend on them" }
@@ -8040,7 +8058,7 @@ stamp = { hash = "b3:58f92aed22ff4a94", by = "agent:release-alpha11", note = "UI
 stamp = { hash = "b3:b96ceca3138fc384", by = "agent:claude", note = "Re-read against DK-07's new home zones; the View menu paragraph still holds for the PTZ cameras panel." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:c96a2fde2f9213b6", by = "agent:issues-thread", note = "Re-read: the getting-started scene steps don't mention the header readout or drops; the UI-FEATURES header change (drops shown only while an output runs) doesn't affect them. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
+stamp = { hash = "b3:7c4e10c1e2b66f96", by = "agent:claude", note = "Re-read against UI-FEATURES' header (new HD-13 UI scale row) and canvas (CV-03 now says the picture is as sharp as the canvas at the UI scale): this section's steps don't depend on either change and still hold. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Re-read: the getting-started scene steps don't mention the header readout or drops; the UI-FEATURES header change (drops shown only while an output runs) doesn't affect them. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read against C20-C22: the steps name Outputs rows with their state and Start, the ⋯ menu, + Add output, Start all, the Audio mixer's meters and the Transitions presets, all still there; holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:3f0a4004877ab302", by = "agent:claude", note = "UI-FEATURES inspector and mixer now describe the control menu; this walkthrough doesn't mention the learn button, so it holds" }
@@ -8682,37 +8700,37 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:7fa4b50c629a54e7", by = "agent:claude", note = "Added the Icon button rule (28 px, borderless, muted, link-coloured while on, a funnel's count, ⋯ opens what the icons don't show) for C20-C22" }
 
 ["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "PTZ panel: one primary (Recall, or Add camera… in the empty state), the gear an icon button with an accessible name, the rest secondary." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#colour"."body"]
 stamp = { hash = "b3:1fdba0e3b5a5b18c", by = "agent:claude", note = "added: a sequence's own mark is --code-type (Scenes row icon, event chip edge); the playing badge is teal, not the on-air red; checked style.css" }
 
 ["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "New .ptz-* rules use only the listed tokens; the armed Save moved off the on-air red to --selected with --link, and the save hint off --warn to --link." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#controls"."body"]
 stamp = { hash = "b3:b695b2473bcd0e39", by = "agent:claude", note = "Added the toggle row rule (.toggle-row: label then switch on the right), which Over the canvas now uses as a setting that applies at once." }
 
 ["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "Focus mode is a segmented control; the camera select and Control PTZ cameras checkbox use the styled controls, as the sibling Devices settings do." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#copy"."body"]
 stamp = { hash = "b3:9de1c5d0cb4616bb", by = "agent:claude", note = "Added the empty-state rule (icon, short title, one line) used by Live chat, Agent activity and the stats chart (C22)" }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. dialog.rs's Info component unchanged | kept from the merged side: dialog.rs's Info component is unchanged; the copy rules still hold" }
+stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#copy"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "The panel's empty state is .empty-state with an icon, title and one line; the Control PTZ cameras note matches its siblings' single helper." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#dialogs"."body"]
 stamp = { hash = "b3:e43457bb6cbd48d0", by = "agent:claude", note = "Added the library rule (Encoders & mixes): 240 px rail of grouped rows with right-aligned summaries, a + per group eyebrow, empty texts, the editor under the pick's name and summary, and the form's Delete/Cancel/Save as the dialog's footer, Close while nothing is open. The libraries body drops the fade since the sticky footer is its last box." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Dialog layout rules unchanged by the Escape listener | kept from the merged side: The dialog layout rules are unchanged by the Escape listener; this section doesn't describe keys" }
+stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with dialog.rs's drag now in the page's CSS pixels (ui_scale::pointer, rect, window_size) and the 60vh bodies divided by --ui-scale: widths, header, footer and commit model are unchanged." }
 
 ["UI-DESIGN#dialogs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "Camera settings live on Settings' Devices page, which applies at once and keeps its Close footer; no new dialog." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read with dialog.rs's drag now in the page's CSS pixels (ui_scale::pointer, rect, window_size) and the 60vh bodies divided by --ui-scale: widths, header, footer and commit model are unchanged." }
 
 ["UI-DESIGN#forms"."body"]
 stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
@@ -8721,28 +8739,28 @@ stamp = { hash = "b3:e6f5f76e2ba58ffc", by = "agent:claude", note = "Learn butto
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "Learn button bullet now says it opens the control menu and shows a followed channel as a chip; properties.rs passes the setting's label and value to it. Channel card uses the 88 px label column." }
 
 ["UI-DESIGN#forms"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "Position rows are a label, a number field and the learn button, as in a panel's narrow grid; the camera form follows the PTZ controller form's add row." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#menus"."body"]
-stamp = { hash = "b3:016874f779f3e262", by = "agent:claude", note = "Edited: the add-something-new rule names its two exceptions (nested scene Add source…, Group selection), and new rules for an all-off submenu opener and a command unavailable in this build (Check for updates tooltip); checked against item_menu.rs and header.rs." }
+stamp = { hash = "b3:6fa813ffeddc1249", by = "agent:claude", note = "Re-read with the UI scale row: the new bullet (a value stepped in place is one line, label then − value +, stays open, the value resets) matches header.rs's scale_row and the .menu-scale rules; enabled_items now also walks that row's items, so keyboard focus reaches them." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/src/menu.rs"]
-stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Re-read: menu.rs gains keys/focus_first/asks_for_menu so panel-drawn menus take the same keys; the menu style rules here are unchanged." }
+stamp = { hash = "b3:7336baee667f67f5", by = "agent:claude", note = "Re-read with the UI scale row: the new bullet (a value stepped in place is one line, label then − value +, stays open, the value resets) matches header.rs's scale_row and the .menu-scale rules; enabled_items now also walks that row's items, so keyboard focus reaches them." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "The preset right-click menu uses the shared menu (Recall, Save position here, Name…, Set key…, Remove key, Use as scene shot); no deleting item." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read with the UI scale row: the new bullet (a value stepped in place is one line, label then − value +, stays open, the value resets) matches header.rs's scale_row and the .menu-scale rules; enabled_items now also walks that row's items, so keyboard focus reaches them." }
 
 ["UI-DESIGN#tabs"."body"]
 stamp = { hash = "b3:ee5f0707d24757bc", by = "agent:claude", note = "The Properties dialogs now pick Settings or Filters with a .segmented whose Filters segment ends with a count; added it as an example of a counted segment." }
 
 ["UI-DESIGN#tabs"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "Focus Auto, One push and Manual use .segmented inside the panel; the dock tab is the usual strip." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-DESIGN#type"."body"]
 stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "PTZ panel text is 11 to 13 px (the preset name raised from 10 to 11, Home to 12); section heads use .eyebrow; readouts use tabular figures." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read against style.css: the change adds only the View menu's .menu-scale row and divides viewport units by --ui-scale; nothing in this section's rules changes." }
 
 ["UI-FEATURES#automation"."body"]
 stamp = { hash = "b3:fed62ddf1b5177ec", by = "agent:claude", note = "Only the ADR number and link changed, 0188 to 0190." }
@@ -8751,7 +8769,7 @@ stamp = { hash = "b3:fed62ddf1b5177ec", by = "agent:claude", note = "Only the AD
 stamp = { hash = "b3:5ebd7fc23c2a4cb5", by = "agent:claude", note = "VC-01: the Smoothing field for a learned MIDI control and the 60 fps updates while moving (ADR-0188); VC-02: each input's Smoothing in ms." }
 
 ["UI-FEATURES#automation"."file:crates/jstream-ui/src/panels/sequence.rs"]
-stamp = { hash = "b3:df107152d161984e", by = "agent:claude", note = "VC-01: keyboard opening and keys, Add to sequence on an existing lane only opens, dropped arrow-key use from not built. SQ-02: point focus, menu keys and Delete, unchanged edits send nothing. SQ-04: editable rule, (missing) objects, matching by time and action, chip keys." }
+stamp = { hash = "b3:3eeeecb9e319e07e", by = "agent:claude", note = "Re-read with sequence.rs and events.rs opening their menus and editors in CSS pixels, by pointer or from the keyboard: the channels and sequences rows still hold." }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:23e71cd58085129e", by = "agent:claude", note = "Devices paragraph names Control PTZ cameras (PZ-01, ptz_cameras.rs, applied at once) before Accept a PTZ controller, matching settings.rs; host.rs's new camera setting needs nothing else here." }
@@ -8760,7 +8778,7 @@ stamp = { hash = "b3:23e71cd58085129e", by = "agent:claude", note = "Devices par
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "agents.rs: only its doc comment and the toggle's <label for> changed; the Agents bullet's Ask before connecting holds." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:a9edace53bbce78a", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
+stamp = { hash = "b3:580e6af3aba32e29", by = "agent:claude", note = "Re-read with host.rs's new set_desktop_zoom: nothing in the beyond-the-prototype list changes." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/pairing.rs"]
 stamp = { hash = "b3:ed4734a23d304b33", by = "agent:claude", note = "Re-read against pairing.rs: only Pairing's doc comment changed, naming PairDialog as code rather than an intra-doc link to a private item (cargo doc -D warnings); the section's text on the Paired devices section and Pair a device dialog still holds." }
@@ -8775,7 +8793,7 @@ stamp = { hash = "b3:21472b2516d7a36f", by = "agent:claude", note = "C18: the WA
 stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }
 
 ["UI-FEATURES#canvas"."body"]
-stamp = { hash = "b3:7e72b670187e720e", by = "agent:issues-thread", note = "CV-15 now says a 3D group is outlined by its children's hull, picked only on a child, and dragged by its item; matches camera::Shape and its tests" }
+stamp = { hash = "b3:6a0ae9449553483e", by = "agent:claude", note = "Re-read with the canvas's picks in CSS pixels and streams sized by ui_scale::pixel_ratio: CV-03 now says the picture is as sharp as the canvas on screen at the UI scale; the rest holds." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
 stamp = { hash = "b3:85e9ab93ca6e5827", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Re-read: CV-15 describes the 3D group outline (#1596); the model near-plane fallback is in the jstream-ui README canvas section | kept from the merged side: Re-read: the 3D canvas bullet describes cards' outlines; the model outline fallback is in the jstream-ui README canvas section; still holds" }
@@ -8790,16 +8808,16 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): re-read the canvas rows against the 3D canvas (camera.rs, live.rs, mod.rs, model.rs, store.rs's camera_of): 2D behaviour is unchanged; the 3D canvas is described under Beyond the prototype, and KB-02 says what Alt does there." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "CV-15 now says a 3D group is outlined by its children's hull, picked only on a child, and dragged by its item; matches camera::Shape and its tests" }
+stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with the canvas's picks in CSS pixels and streams sized by ui_scale::pixel_ratio: CV-03 now says the picture is as sharp as the canvas on screen at the UI scale; the rest holds." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "CV-15 now says a 3D group is outlined by its children's hull, picked only on a child, and dragged by its item; matches camera::Shape and its tests" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/monitor.rs"]
-stamp = { hash = "b3:802d9970b3ba313b", by = "agent:studio-two-up", note = "CV-02 notes the canvas follows a new preview scene in studio mode (followed_preview); monitor.rs is the program monitor, described under TR-06; other rows hold. | merge: #1567 sizes the canvas's stream at full resolution only on the desktop app's own engine (host::own_engine) and restages only on the newest resize; the merge gives the program monitor the same two rules, which the canvas section's description of its sizing covers. Studio mode text still holds." }
+stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with the canvas's picks in CSS pixels and streams sized by ui_scale::pixel_ratio: CV-03 now says the picture is as sharp as the canvas on screen at the UI scale; the rest holds." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
-stamp = { hash = "b3:6e6d926c9df3d961", by = "agent:claude", note = "#1556: CV-03 says nothing about the decoder backlog; the higher skip limit only means fewer frames lost, the row holds" }
+stamp = { hash = "b3:0a844618464561f6", by = "agent:claude", note = "Re-read with the canvas's picks in CSS pixels and streams sized by ui_scale::pixel_ratio: CV-03 now says the picture is as sharp as the canvas on screen at the UI scale; the rest holds." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:cb9ccbe7df38b064", by = "agent:claude-perf-suite", note = "CV-03 corrected to #1205's behaviour (the last picture stays) and notes the canvas's view report (ADR-0132)" }
@@ -8820,7 +8838,7 @@ stamp = { hash = "b3:e5924eab6f626760", by = "agent:claude", note = "store.rs ga
 stamp = { hash = "b3:58f92aed22ff4a94", by = "agent:release-alpha11", note = "DL-01 now says Escape closes the topmost dialog wherever the focus is (#1607, #1652) | merge: alpha.11: #1685 (f26e7e2): a model with effects casts in the first frame (#1674), transitions split the same 3D groups as the pass with each child a track sampled through its links (#1596), a scene shares a group once: DL-03 says a scene shares a group once; re-read beside #1679's Escape text, holds | merge: alpha.11: #1686 (ef33310, stacked on #1679) outlines, hits and drags a 3D group by its children on the canvas (camera::Shape, Layout::sized); UI only; DL rows unchanged, holds | kept from the merged side: DL-03 now says the Share the 3D space note adds that a scene shares a group once, a second placement being a flat card, as scene_properties.rs shows | kept from the merged side: Merged #1679 into #1596's canvas branch. DL-01 says Escape closes the topmost dialog wherever the focus is (#1607, #1652)" }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
-stamp = { hash = "b3:d52db28424919cf0", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. DL-01 says Escape closes the topmost dialog wherever the focus is (#1607, #1652) | kept from the merged side: DL-01 now says Escape closes the topmost dialog wherever the focus is (#1607, #1652)" }
+stamp = { hash = "b3:ba2d9bda71f93f73", by = "agent:claude", note = "Re-read with dialog.rs's drag and tooltip placement in CSS pixels at every UI scale: the dialog rows still hold." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/add_source.rs"]
 stamp = { hash = "b3:beb5beb8909eae52", by = "agent:release-alpha8", note = "DL-03 has #1609's Reflections check and #1631's Autofocus and Aperture (blur) with Pan and Tilt in camera motion, matching scene_properties.rs and camera_moves.rs; DL-06 lists the fog card bundle's Fog card after Backdrop and #1609's Reflection probe after Light, as the 20-kind ORDER has them." }
@@ -8838,13 +8856,13 @@ stamp = { hash = "b3:1113a05e2d840d0f", by = "agent:claude", note = "Re-read: so
 stamp = { hash = "b3:b96ceca3138fc384", by = "agent:claude", note = "DK-07 home zones now list Channels and PTZ cameras on the right and Sequence at the bottom, matching dock.rs's home()." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read against app.rs's Toast component change: docking is unaffected." }
+stamp = { hash = "b3:ce295f6fe0a2b7f7", by = "agent:claude", note = "Re-read with workspace.rs's zone resize now in CSS pixels and app.rs's UiScale: the docking rows still hold." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:8805062948c7618d", by = "agent:claude", note = "Renumbered to ADR-0209 and protocol 0.183 (0208 and 0.180 were claimed elsewhere); the staged diff changes only those numbers, and the section reads right with them." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:bfb85071cf8940dc", by = "agent:claude", note = "DK-07 home zones now list Channels and PTZ cameras on the right and Sequence at the bottom, matching dock.rs's home()." }
+stamp = { hash = "b3:bb704dab8718156c", by = "agent:claude", note = "Re-read with workspace.rs's zone resize now in CSS pixels and app.rs's UiScale: the docking rows still hold." }
 
 ["UI-FEATURES#filters"."body"]
 stamp = { hash = "b3:d895a7b3f5cad48b", by = "agent:release-alpha8", note = "With the hologram follow-up's Transmission, Steady, Broken signal and Amber presets FL-11 names every kind filter_presets.rs gives presets, and the text below the table describes CC PR 3 value bindings' learn button on any chain's live settings, wired through LearnOwner::Filter in both forms." }
@@ -8859,16 +8877,16 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "FL-11 now
 stamp = { hash = "b3:c0ae83731740182a", by = "agent:release-alpha8", note = "With the hologram follow-up's Transmission, Steady, Broken signal and Amber presets FL-11 names every kind filter_presets.rs gives presets, and the text below the table describes CC PR 3 value bindings' learn button on any chain's live settings, wired through LearnOwner::Filter in both forms." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:c96a2fde2f9213b6", by = "agent:issues-thread", note = "Edited HD-04: N dropped counts only while an output or recording runs, from when outputs began, and shows only then (#1690); checked against header.rs Dropped. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
+stamp = { hash = "b3:7c4e10c1e2b66f96", by = "agent:claude", note = "Re-read with ui_scale.rs, header.rs's scale_row and app.rs providing it: the new HD-13 row and HD-02's mention of the UI scale row match; the summary count is regenerated. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited HD-04: N dropped counts only while an output or recording runs, from when outputs began, and shows only then (#1690); checked against header.rs Dropped. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:ac16cb6f337012da", by = "agent:claude", note = "HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:5c51f4de80fb05fc", by = "agent:claude", note = "Re-read against app.rs (Toast with buttons, WS-08 row updated): the header rows hold." }
+stamp = { hash = "b3:ce295f6fe0a2b7f7", by = "agent:claude", note = "Re-read with ui_scale.rs, header.rs's scale_row and app.rs providing it: the new HD-13 row and HD-02's mention of the UI scale row match; the summary count is regenerated." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:9e68caa6a9089bbb", by = "agent:issues-thread", note = "Edited HD-04: N dropped counts only while an output or recording runs, from when outputs began, and shows only then (#1690); checked against header.rs Dropped." }
+stamp = { hash = "b3:0eb880f42fea463e", by = "agent:claude", note = "Re-read with ui_scale.rs, header.rs's scale_row and app.rs providing it: the new HD-13 row and HD-02's mention of the UI scale row match; the summary count is regenerated. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together. | kept from the merged side: Edited HD-04: N dropped counts only while an output or recording runs, from when outputs began, and shows only then (#1690); checked against header.rs Dropped." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:15cc17cbaf601483", by = "agent:issues-thread", note = "Edited HD-04: N dropped counts only while an output or recording runs, from when outputs began, and shows only then (#1690); checked against header.rs Dropped. | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: HD-10's About now says the facts sit on the property grid's columns in plain text with one muted row of links (C22); the outputs change doesn't touch the header's Go Live or stats" }
@@ -8878,6 +8896,9 @@ stamp = { hash = "b3:8385e7f9b58814f5", by = "agent:claude", note = "Round 1 N1:
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/settings.rs"]
 stamp = { hash = "b3:d93a797b4c57e4d5", by = "agent:claude", note = "Devices paragraph names Control PTZ cameras and PZ-01, before Accept a PTZ controller, matching settings.rs." }
+
+["UI-FEATURES#header"."file:crates/jstream-ui/src/ui_scale.rs"]
+stamp = { hash = "b3:66b0d58e3bbe08ee", by = "agent:claude", note = "Re-read with ui_scale.rs, header.rs's scale_row and app.rs providing it: the new HD-13 row and HD-02's mention of the UI scale row match; the summary count is regenerated." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1: HD-01 now names the General page's settings as they read (Check for updates, Global hotkeys, Ask before connecting, Keep ready, Memory limit, under Updates, Hotkeys, Agents and Performance) and HD-10 the Check for updates and Global hotkeys toggles; HD-11 Scale existing scenes to fit; HD-12's callout; checked against updates.rs, agents.rs, warm.rs, settings.rs, video_settings.rs, project.rs and outputs.rs." }
@@ -8898,7 +8919,7 @@ stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.
 stamp = { hash = "b3:55d82fbadddc32cb", by = "agent:claude", note = "KB-01 lists K, D, R and Esc leaving camera mode; KB-02 adds Ctrl-drag depth in 3D; checked against on_key and on_down" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:b62a8e556aa81622", by = "agent:issues-thread", note = "Re-read: the mod.rs change only passes a shape instead of a model's bounds to outline and hit; no key binding changed" }
+stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with canvas/mod.rs's picks in CSS pixels; the new Ctrl+=/-/0 keys are described in HD-13 and yield to a hotkey the project binds, so KB-07 still holds." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }
@@ -8913,7 +8934,7 @@ stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited CM-0
 stamp = { hash = "b3:2bf86e12f88885e1", by = "agent:claude", note = "Edited CM-02: the Duplicate opener is off for several items or in a keyframe; checked against item_menu.rs." }
 
 ["UI-FEATURES#menus"."file:crates/jstream-ui/src/menu.rs"]
-stamp = { hash = "b3:c330576ccfa91bb3", by = "agent:claude", note = "Re-read: CM-01's keyboard navigation still holds; menu.rs only adds helpers for panel-drawn menus (VC-01, SQ-02 say so)." }
+stamp = { hash = "b3:7336baee667f67f5", by = "agent:claude", note = "Re-read with menu.rs placing menus in the page's CSS pixels and enabled_items reaching the UI scale row: the context menu rows still hold." }
 
 ["UI-FEATURES#mixer"."body"]
 stamp = { hash = "b3:b61a62ba1ceebc14", by = "agent:claude", note = "MX-01 rewritten for C20: Master over Program output and the count, headphones, funnel and ⋯ (Hear by name, reset loudness), gradient bars for loudness and true peak, the note shown only over 0 dBTP" }
@@ -8970,10 +8991,10 @@ stamp = { hash = "b3:67cb3de4e6103ee0", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:f6309095a048ad27", by = "agent:claude", note = "WS-04 names the new headphones icon and the funnels and empty states that use icons (C20, C22)" }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/src/panels/number.rs"]
-stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
+stamp = { hash = "b3:cf8453771e0803d5", by = "agent:claude", note = "Re-read with number.rs's drag now measured in the page's CSS pixels (same speed at every UI scale) and style.css's scale rules: the shared-controls rows still hold." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:aca5e952f21eb7ca", by = "agent:claude", note = "New CSS uses existing tokens and the shared NumberField; the WS rows still hold." }
+stamp = { hash = "b3:59eca5e1c4e5f53e", by = "agent:claude", note = "Re-read with number.rs's drag now measured in the page's CSS pixels (same speed at every UI scale) and style.css's scale rules: the shared-controls rows still hold." }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
