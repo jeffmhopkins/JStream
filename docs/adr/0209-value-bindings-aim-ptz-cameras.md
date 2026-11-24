@@ -59,7 +59,7 @@ changes the product's scope, or makes a compatibility promise, so it is agent ti
    from the head's position too ("set from current", ADR-0146 §6). Preset names are a UI
    setting kept per machine (`ptz.preset_names`), never in the collection, since a
    preset's content lives in the head.
-3. **A value binding can aim one axis of a head (protocol 0.178).** `ValueTarget` gains
+3. **A value binding can aim one axis of a head (protocol 0.179).** `ValueTarget` gains
    `ptz_axis {camera, axis}`, `axis` one of `pan`, `tilt`, `zoom` and `focus`, in the
    head's own counts (ADR-0146 §5). So a MIDI control, a live-data field or a channel can
    drive a camera's position through the same binding system, mapping range, smoothing,
