@@ -485,7 +485,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   channel's `channel` inputs come first, combines, switches, averages, fades and curves
   them, and stores each level in its `ChannelCell` in `LiveData::channels`, which the
   `channel` kind and `amount` read on any thread. The `jstream-values` thread ticks it
-  before the value bindings while the collection holds a channel, and puts a scene's
+  before the value bindings while the collection holds a channel (from the moment
+  `with_collection_file` loads one, not only from the first action or edit; a channel
+  not followed yet reads 0 to what follows it), and puts a scene's
   channels back to their defaults when that scene goes on program. `channel.set_value`,
   `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
   reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
@@ -1043,8 +1045,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   driver's own test (`value_bindings.rs`) waits for a control to move and follows it.
   Channels (`src/tests/channels.rs`, ADR-0183): a held note drives a channel to 1 and
   its release to 0, `channel.set_value` takes over, `channel.switch` holds the off value,
-  a missing channel's action fails, and a binding's `amount` gives half the throw at
-  0.5; `channels.rs`'s own tests cover combining, fades, averaging, the order of
+  a missing channel's action fails, a binding's `amount` gives half the throw at
+  0.5, and a collection file's channel reads its default as soon as the file loads; `channels.rs`'s own tests cover combining, fades, averaging, the order of
   channels reading channels and a scene's reset. A
   `width` and `height` modifier stretching one side is `motion.rs`'s. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
@@ -4578,7 +4580,9 @@ collection there at once, with `Graph::with_sample_labels`'s four labels when it
 none, still at its `rev`, and keeps that as the engine's collection, so the file and the
 engine agree and an unwritable path fails at startup rather than at the first change.
 A file that doesn't read or load is refused with `CollectionFileError` (`Read`, `Load`
-or `Create`, each naming the path but never the contents) and left as it is. It is
+or `Create`, each naming the path but never the contents) and left as it is. A loaded
+collection's channels, bindings and triggers are followed at once (the `jstream-values`
+thread starts with it), as an opened one's are. It is
 configured before `connect`, like the other builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before
