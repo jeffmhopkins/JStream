@@ -997,12 +997,12 @@ pub enum Edit {
     /// Binds a key chord to an action (ADR-0024 §5). A client that listens for keys
     /// sends the action when the chord is pressed; the engine only stores the binding.
     /// Only actions can be bound, so pressing a hotkey never adds to an undo history.
-    /// Since 0.182 (ADR-0208) a chord can run several actions: binding a chord that is
+    /// Since 0.177 (ADR-0208) a chord can run several actions: binding a chord that is
     /// already bound adds this action after its others, and a press runs them all, in
     /// the order they were bound. Rejected with `invalid_argument` for a chord that isn't
     /// valid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose
     /// stream key is never stored in the collection), with `already_exists` (entity
-    /// `hotkey`) for a chord already bound to an equal action (before 0.182, for any chord
+    /// `hotkey`) for a chord already bound to an equal action (before 0.177, for any chord
     /// already bound), and with `not_found` for a scene or output the action names that
     /// doesn't exist. Deleting that object later removes that action's binding with it
     /// (ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the
@@ -1023,7 +1023,7 @@ pub enum Edit {
     HotkeyClear {
         /// The chord to unbind.
         chord: Chord,
-        /// The one action to unbind (since 0.182, ADR-0208). Omitted unbinds them all.
+        /// The one action to unbind (since 0.177, ADR-0208). Omitted unbinds them all.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         action: Option<Action>,
     },
@@ -1050,7 +1050,7 @@ pub enum Edit {
     /// `already_exists` (entity `binding`) for a trigger that is already bound to an equal
     /// action (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`
     /// for an object the action names that doesn't exist. Deleting that object later
-    /// removes the binding with it, as for hotkeys. Since 0.182 (ADR-0208) a trigger can
+    /// removes the binding with it, as for hotkeys. Since 0.177 (ADR-0208) a trigger can
     /// run several actions, as a chord can: binding a trigger that is already bound adds
     /// this action after its others, the engine runs them all in that order, and
     /// `already_exists` is only for a trigger already bound to an equal action. Inverse:
@@ -1070,7 +1070,7 @@ pub enum Edit {
     BindingClear {
         /// The trigger to unbind.
         trigger: Trigger,
-        /// The one action to unbind (since 0.182, ADR-0208). Omitted unbinds them all.
+        /// The one action to unbind (since 0.177, ADR-0208). Omitted unbinds them all.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         action: Option<Action>,
     },
@@ -1501,7 +1501,7 @@ pub enum Action {
         output_id: OutputId,
     },
     /// Starts an output that is stopped or failed, and stops one that is starting,
-    /// running or reconnecting (since 0.182, ADR-0208), so one key or pad can go live and
+    /// running or reconnecting (since 0.177, ADR-0208), so one key or pad can go live and
     /// end the stream. The engine runs it as the `output.start` or `output.stop` it
     /// resolves to, with that action's events, audit entry and errors.
     #[serde(rename = "output.toggle")]

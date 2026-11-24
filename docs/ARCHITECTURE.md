@@ -770,7 +770,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
   A chord or trigger runs several actions in the order they were bound, and a clear can
-  name the one action to unbind (protocol 0.182,
+  name the one action to unbind (protocol 0.177,
   [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
   `output.toggle`, the start-or-stop a "go live" key binds.
   `binding.set_value` and `binding.clear_value` (protocol 0.168,

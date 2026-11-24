@@ -15,7 +15,7 @@ tier = "agent"
 Amends [ADR-0024](0024-scene-structure.md) (scene hotkeys) and
 [ADR-0122](0122-controller-input-midi-and-one-binding-system.md) decision 1 (controller
 bindings), which allowed one action per chord and per trigger. It is an additive protocol
-change (0.182) with no new data kind, so it is agent tier.
+change (0.177) with no new data kind, so it is agent tier.
 
 <a id="context"></a>
 ## Context

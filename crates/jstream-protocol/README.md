@@ -70,7 +70,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
-  `Action` (`output.start`, `output.stop`, `output.toggle` (0.182, ADR-0208), `output.set_key`, `output.clear_key`,
+  `Action` (`output.start`, `output.stop`, `output.toggle` (0.177, ADR-0208), `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
@@ -384,7 +384,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.182 because a key chord or a controller trigger can run several
+`PROTOCOL_VERSION` is 0.177 because a key chord or a controller trigger can run several
 actions: `hotkey.set` and `binding.set` add an action to a chord or trigger already
 bound (refusing only an equal one), `hotkey.clear` and `binding.clear` take an optional
 `action`, and `output.toggle` starts a stopped output and stops a running one
@@ -1288,7 +1288,7 @@ covers = ["crates/jstream-protocol/src/output.rs"]
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
 `output.start`; `output.delete` removes one, and is refused with `invalid_argument`
-while it runs. `output.toggle` (0.182,
+while it runs. `output.toggle` (0.177,
 [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)) starts an output
 that is stopped or failed and stops any other, and is run as the `output.start` or
 `output.stop` it resolves to, with that action's events and errors: it is what a "go
@@ -1393,7 +1393,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   what one notch zooms). Bound to any other action, `hotkey.set` is `invalid_argument`
   on `action.type`.
 - **`hotkey.set {chord, action}`** binds a chord to an action; its inverse is
-  `hotkey.clear` naming that action. A chord runs several actions (0.182,
+  `hotkey.clear` naming that action. A chord runs several actions (0.177,
   [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)), in the order
   they were bound: `hotkey.set` on a bound chord adds the action after its others, and
   is refused with `already_exists` (entity `hotkey`, the chord as `id`) only for an
@@ -1538,7 +1538,7 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   `trigger.<field>`, with `Trigger::problem`'s reason.
 - **`binding.set {trigger, action}`** binds a trigger to an action; its inverse is
   `binding.clear` naming that action. Like a chord, a trigger runs several actions in
-  bind order (0.182, ADR-0208): it is refused with `already_exists` (entity `binding`,
+  bind order (0.177, ADR-0208): it is refused with `already_exists` (entity `binding`,
   the trigger as `Display` writes it, such as `MIDI note 36 on channel 10`, as `id`)
   only for an action the trigger runs already. The action is checked as `hotkey.set`
   checks it: the same actions can't be bound, and an object it names must exist.
