@@ -2047,7 +2047,6 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
         let mut timing = false;
         // Chooses the size 3D models are drawn at, once the first tick says what a
         // frame may take (ADR-0197).
-        let model_mode = crate::resolution::Mode::from_env();
         let mut governor: Option<crate::resolution::Governor> = None;
         let draw: DrawFn = Box::new(
             move |program, scenes, live, captures, frames, at, meter, warm| {
@@ -2088,11 +2087,17 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 // How many pixels this tick's 3D models are drawn with (ADR-0197): fewer
                 // while the GPU is short of time, so the outputs' frames are not what
                 // gives way.
+                // It lowers it only while the frames before this one drew a model.
+                let mode = crate::resolution::Mode::of(program.model_resolution());
                 chains.model_percent = governor
-                    .get_or_insert_with(|| {
-                        crate::resolution::Governor::new(model_mode, meter.budget())
-                    })
-                    .tick(meter.take_gpu_frame(), behind);
+                    .get_or_insert_with(|| crate::resolution::Governor::new(meter.budget()))
+                    .tick(
+                        mode,
+                        meter.take_gpu_frame(),
+                        behind,
+                        std::mem::take(&mut chains.model_drawn),
+                    );
+                meter.model_percent(chains.model_percent.get());
                 let mut converted = false;
                 // The GPU is still on the tick before this one: the pictures only this
                 // machine sees give way, so the outputs' never queue behind a preview's.
