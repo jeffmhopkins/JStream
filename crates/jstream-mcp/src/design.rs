@@ -236,7 +236,9 @@ how soft the far background gets; things nearer or farther blur in proportion. A
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
 `blur_px` is the aperture: 0 keeps everything sharp. With `autofocus: true` the camera \
-focuses each frame on the nearest item at the centre of the frame, gliding there, and \
+focuses each frame on the nearest item at the centre of the frame, gliding there (an \
+item blended any way but `normal`, such as an additive glow or hologram, or under half \
+opaque, is seen through, so it doesn't steal the focus), and \
 `focus_px` is only where it starts; a camera motion modifier on `autofocus` (on at 0.5 \
 or more, added to 1 when the camera's switch is on) lets a CC button switch it. \
 Models blur too, each part by its own distance, so a near part of a model goes soft \

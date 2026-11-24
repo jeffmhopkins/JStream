@@ -1484,7 +1484,10 @@ audit entry and errors.
   quietly so the probe reaches none) and puts a Move toward the program scene on the
   studio, by item, with the default preset's duration and easing and its `unmatched`
   (none for a `cut`): every other item pairs with itself and holds still, and only the
-  changed one appears or disappears with its effect. A preset that lasts no time, the
+  changed one appears or disappears with its effect. In a 3D scene whose camera moves on
+  its own, the screen's camera is moved by the family's camera motion as the scene's is,
+  so the Move starts from the camera on screen and doesn't jump to the camera without
+  its motion and glide back. A preset that lasts no time, the
   initial cut included, starts no run, so the item shows or hides on the next frame
   even when it has its own effect. A `cut` that stores a duration still plays that
   effect over it. A transition in flight is

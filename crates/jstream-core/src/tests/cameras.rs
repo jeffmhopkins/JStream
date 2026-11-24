@@ -294,6 +294,107 @@ fn autofocus_measures_the_item_at_the_centre() {
     );
 }
 
+/// Autofocus focuses only on what hides what is behind it: a card in front of the screen
+/// is met while it is a normal, opaque card, and passed over once it is blended onto
+/// what is behind it (a glow or a hologram added on) or mostly faded, so showing or
+/// hiding it doesn't pull the focus off the scene behind.
+#[test]
+fn autofocus_sees_through_blended_and_faded_items() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut setup = scenes();
+    for (id, depth) in [("back", 0.0), ("glow", 500.0)] {
+        setup.push(Edit::SourceCreate {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: jstream_protocol::Settings(
+                [
+                    ("color".to_owned(), serde_json::json!("#ff0000ff")),
+                    ("width".to_owned(), serde_json::json!(400)),
+                    ("height".to_owned(), serde_json::json!(300)),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            duplicated_from: None,
+        });
+        let mut geometry = ItemGeometry::try_new(
+            Vec2::new(960.0, 540.0).expect("finite"),
+            Size::try_new(400.0, 300.0).expect("size"),
+        )
+        .expect("geometry");
+        geometry.depth_px = jstream_protocol::Finite32::new(depth).expect("finite");
+        setup.push(Edit::ItemAdd {
+            scene_id: SceneId::new("a"),
+            item_id: ItemId::new(id),
+            source_id: SourceId::new(id),
+            transform: None,
+            geometry: Some(geometry),
+            opacity: None,
+            blend: None,
+        });
+    }
+    batch(&control, edits(setup)).expect("scenes");
+    block_on(control.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    }))
+    .expect("on program");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let distance = f64::from(framing.target_distance());
+    let family = SceneId::new("a");
+    let at = jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS);
+    let met = || {
+        hub.load()
+            .shot()
+            .centre_distance(&family, framing, at)
+            .expect("something is at the centre")
+    };
+    assert!(
+        (met() - (distance - 500.0)).abs() < 0.5,
+        "the card in front"
+    );
+    let glow = |edit: Edit| batch(&control, Batch::single(edit)).expect("an edit");
+    glow(Edit::ItemSetBlend {
+        item_id: ItemId::new("glow"),
+        blend: jstream_protocol::BlendMode::Additive,
+    });
+    assert!(
+        (met() - distance).abs() < 0.5,
+        "added on, it is seen through"
+    );
+    glow(Edit::ItemSetBlend {
+        item_id: ItemId::new("glow"),
+        blend: jstream_protocol::BlendMode::Normal,
+    });
+    glow(Edit::ItemSetOpacity {
+        item_id: ItemId::new("glow"),
+        scene_id: None,
+        opacity: jstream_protocol::Finite32::new(0.3).expect("finite"),
+    });
+    assert!(
+        (met() - distance).abs() < 0.5,
+        "mostly faded, it is seen through"
+    );
+    glow(Edit::ItemSetOpacity {
+        item_id: ItemId::new("glow"),
+        scene_id: None,
+        opacity: jstream_protocol::Finite32::new(0.8).expect("finite"),
+    });
+    assert!(
+        (met() - (distance - 500.0)).abs() < 0.5,
+        "mostly opaque, it is met"
+    );
+}
+
 /// ADR-0218: autofocus meets a model at the surface it draws, not at its item's flat box:
 /// a cube 300 px deep is met at its front face, 150 px before its item's plane, from in
 /// front and from behind; and from inside it, where only the backs of its faces are

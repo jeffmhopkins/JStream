@@ -116,7 +116,8 @@ pub struct SceneCamera {
     pub blur_px: Finite32,
     /// Whether the focus follows whatever is at the centre of the frame (since 0.167,
     /// ADR-0176 decision 5): with a depth of field, each frame the engine measures the
-    /// nearest item the viewing axis meets and glides `focus_px` there, holding the last
+    /// nearest item the viewing axis meets that hides what is behind it (a `normal`
+    /// item at least half opaque, a model at its opaque surface) and glides `focus_px` there, holding the last
     /// distance (at first `focus_px`) while nothing is there. Off, `focus_px` is where it
     /// focuses. Default `false`, which isn't written.
     #[serde(default, skip_serializing_if = "is_false")]

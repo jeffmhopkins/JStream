@@ -1812,7 +1812,9 @@ the distance along the view of the plane in focus (absent, everything is in focu
 written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), its
 aperture: 0 keeps everything sharp. Since 0.167 `autofocus` (default `false`, not
 written while false) focuses a camera with a depth of field on the nearest item its
-viewing axis meets each frame, gliding there and holding while nothing is met, with
+viewing axis meets each frame that hides what is behind it (an item blended any way but
+`normal`, or under half opaque, is seen through, and a model is met at its opaque
+surface), gliding there and holding while nothing is met, with
 `focus_px` the distance it starts from
 ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)
 decision 5). Since 0.191 `fixed_aperture` (default `false`, not written while false)
