@@ -127,7 +127,7 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
   (e.g. `accepted` when the maintainer rejected it). A maintainer-tier ADR still **awaiting** a valid
   decision is not a blocking finding: it gets `escalate` (see the verdict table);
 - a security problem;
-- a red required CI check caused by this PR. On a PR into a `wave/*` branch, a red `fmt`,
+- a red required CI check caused by this PR. On a PR into any branch but `main` (a wave, a train or a stack), a red `fmt`,
   `clippy (ubuntu-latest)`, `test (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
 
 **Non-blocking** (doesn't prevent `pass`): style, naming, suggestions, questions, and
@@ -193,8 +193,10 @@ comment, so a verdict that isn't in a marker changes nothing.
 A `success` on the head SHA also makes `review-gate` dispatch the Windows, macOS and
 end-to-end CI jobs for that SHA ([ADR-0054](docs/adr/0054-platform-ci-after-review.md)). A push
 cancels those runs for the PR's earlier heads. The PR
-merges once the required Windows checks pass. A PR into a `wave/*` branch gets no such run; the
-wave's PR into `main` does ([ADR-0055](docs/adr/0055-wave-branches.md)).
+merges once the required Windows checks pass. A PR into any branch but `main` (a wave, a train
+or a stack) gets no such run; that branch's PR into `main` does
+([ADR-0055](docs/adr/0055-wave-branches.md), [ADR-0231](docs/adr/0231-prs-into-any-branch-but-main-run-the-light-ci.md)).
+A PR retargeted to `main` gets it when `review-gate` evaluates the retarget.
 
 <a id="rounds"></a>
 ## Re-review rounds and disputes
