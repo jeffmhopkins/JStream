@@ -3658,7 +3658,7 @@ one sent (a repeated frame is the same buffer, so that costs no compare), a keyf
 hub's), or 2 s passed, and only while the stream's queue has room. A staged stream's
 `pts_us` go on from the hub's own across stages and sizes (`StreamClock`): its first
 picture on a stage is timed by how long the stream has been open, later ones by their
-media time past that one's, never back past the last time the stream sent, whether
+media time past that one's, always after the last time the stream sent (never the same, so a decoder never gets two pictures at one time), whether
 the hub, this stage's sender or an earlier one sent it (`Work::last_pts`, shared). The hub doesn't wait for that thread when it closes the stream:
 it sees the close within its 100 ms wait, sends nothing more and ends, and the render
 thread then lets go of the queue. A JPEG or PNG stream the stage can't take is drawn by
