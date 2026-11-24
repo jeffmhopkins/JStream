@@ -2246,6 +2246,32 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at_ms: Option<u32>,
     },
+    /// Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with
+    /// or without a show running: on the internal show scene's top layer, through its
+    /// fade, and steady while program transitions under it. Runtime state like the
+    /// program scene: no `rev`, never undone or saved; `studio.get` lists it in
+    /// `overlays`. Showing one already up does nothing. Fails with `not_found` for a
+    /// scene the collection doesn't hold.
+    #[serde(rename = "overlay.show")]
+    OverlayShow {
+        /// The scene to put over program.
+        scene_id: SceneId,
+    },
+    /// Takes a scene down from over program, through its fade (ADR-0210, since 0.177).
+    /// Hiding one that isn't up does nothing. Fails as `overlay.show` does.
+    #[serde(rename = "overlay.hide")]
+    OverlayHide {
+        /// The scene to take down.
+        scene_id: SceneId,
+    },
+    /// `overlay.show` if the scene isn't up as an overlay, else `overlay.hide`
+    /// (ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry
+    /// sends `overlay.show` or `overlay.hide`.
+    #[serde(rename = "overlay.toggle")]
+    OverlayToggle {
+        /// The scene.
+        scene_id: SceneId,
+    },
     /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
     /// loads again, and a `media` file plays from its start. Other kinds have nothing to
     /// restart, so for them it succeeds and does nothing, as it does for a source no mix
@@ -2587,6 +2613,9 @@ impl Action {
             Action::ShowGoToNumber { .. } => "show.go_to_number",
             Action::ShowSeek { .. } => "show.seek",
             Action::ShowArm { .. } => "show.arm",
+            Action::OverlayShow { .. } => "overlay.show",
+            Action::OverlayHide { .. } => "overlay.hide",
+            Action::OverlayToggle { .. } => "overlay.toggle",
             Action::SourceRestart { .. } => "source.restart",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
@@ -2733,6 +2762,9 @@ impl Action {
             Action::ShowPlay { show_id, .. } | Action::ShowGoTo { show_id, .. } => {
                 vec![(EntityKind::Show, show_id.as_str())]
             }
+            Action::OverlayShow { scene_id }
+            | Action::OverlayHide { scene_id }
+            | Action::OverlayToggle { scene_id } => vec![(EntityKind::Scene, scene_id.as_str())],
         }
     }
 
@@ -2869,6 +2901,9 @@ impl Action {
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. }
             | Action::SourceRestart { .. }
+            | Action::OverlayShow { .. }
+            | Action::OverlayHide { .. }
+            | Action::OverlayToggle { .. }
             | Action::PrivacySet { .. } => None,
             Action::TimelinePlay { .. } => self.play_problem(),
             // Bindable, but checked as the call would be, so a saved binding never fails
@@ -2925,6 +2960,9 @@ impl Action {
             | Action::ShowGoToNumber { .. }
             | Action::ShowSeek { .. }
             | Action::ShowArm { .. }
+            | Action::OverlayShow { .. }
+            | Action::OverlayHide { .. }
+            | Action::OverlayToggle { .. }
             | Action::SceneDriveCamera { .. }
             | Action::SceneAimCamera { .. }
             | Action::PtzDrive { .. }

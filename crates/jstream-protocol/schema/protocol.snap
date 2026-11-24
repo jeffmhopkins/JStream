@@ -1460,6 +1460,60 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put over program."
+            },
+            "type": {
+              "const": "overlay.show",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to take down."
+            },
+            "type": {
+              "const": "overlay.hide",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "overlay.toggle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
           "properties": {
             "source_id": {
@@ -15275,6 +15329,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "type": "array"
             },
+            "overlays": {
+              "description": "The scenes up over program as overlays (ADR-0210, since 0.177), bottom first,\nwhether a show or `overlay.show` put them there. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/SceneId"
+              },
+              "type": "array"
+            },
             "preview_scene": {
               "anyOf": [
                 {
@@ -19985,5 +20046,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.176"
+  "title": "JStream protocol 0.177"
 }

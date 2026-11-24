@@ -782,6 +782,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   into one live value, 0 to 1, that a `channel` modifier or value binding follows and an
   `amount` scales by; `channel.set_value`, `channel.nudge` and `channel.switch` move it
   with no `rev`, and `channel.values` reads every channel's level.
+  `show.set` and `show.delete` (protocol 0.177,
+  [ADR-0210](adr/0210-shows-a-run-order-with-bookmarks.md)) set and remove a show: a
+  saved run order of scenes on program, overlay, keyframe, sequence and audio tracks in
+  show time, with pausing and non-pausing bookmarks and loops; the `show.*` actions
+  (`show.continue` among them) run one as studio state with no `rev`, `studio.get`
+  reports it in `show`, and `show.changed` says what it did; `overlay.show`,
+  `overlay.hide` and `overlay.toggle` put a scene over program with or without a show.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and

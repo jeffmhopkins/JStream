@@ -1540,6 +1540,7 @@ mod tests {
             warm_gpu_mib: None,
             rendering: None,
             show: None,
+            overlays: Vec::new(),
         };
         assert_eq!(Collection::from_result(other), None);
     }

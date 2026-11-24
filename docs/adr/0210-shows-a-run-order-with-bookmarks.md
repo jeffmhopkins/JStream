@@ -120,7 +120,11 @@ no new way of doing anything, only a saved order of the actions that exist.
     scene of the collection, made by the engine, never listed, selected, edited, put on
     program or used as a source. The collection file saves which scene it is in a top-level
     `show_scene` marker; a marker naming a scene the file doesn't hold is dropped on load.
-    Overlays also work with no show running, toggled by the existing item actions.
+    Overlays also work with no show running: `overlay.show`, `overlay.hide` and
+    `overlay.toggle` put a scene over program on the show scene's top layer, or take it
+    down, through its fade, from a key, a pad or MCP, since a client can't name the show
+    scene's items. They are runtime state, and `studio.get` lists the scenes up as
+    `overlays`.
 
 12. **What runs is reported, not saved.** `studio.get` reports the running show in `show`
     (`RunningShow`: its play head, `playing`, `paused` or `off_script`, the bookmark it

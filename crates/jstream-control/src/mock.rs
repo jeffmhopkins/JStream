@@ -1590,6 +1590,7 @@ impl State {
                 rendering: Some(self.rendering),
                 // The mock runs no show (ADR-0210).
                 show: None,
+                overlays: Vec::new(),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,

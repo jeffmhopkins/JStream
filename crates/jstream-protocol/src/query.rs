@@ -748,6 +748,10 @@ pub enum QueryResult {
         /// is doing. Omitted when no show runs.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         show: Option<Box<crate::RunningShow>>,
+        /// The scenes up over program as overlays (ADR-0210, since 0.177), bottom first,
+        /// whether a show or `overlay.show` put them there. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        overlays: Vec<SceneId>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]

@@ -86,7 +86,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
-  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`,
+  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
@@ -393,7 +393,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.177 because a collection holds shows: `show.set` and
 `show.delete`, `state.get`'s `shows`, the `show.*` actions that run one, `studio.get`'s
-`show` and the `show.changed` event
+`show` and `overlays`, the `overlay.*` actions and the `show.changed` event
 ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)); 0.176 because `profile.get`'s drawers report
 `preview_skipped`, the pictures only preview streams take that the program skipped,
 which `stats.tick`'s `render_ticks` no longer counts (#1690); 0.172 because a scene whose `reflections` is on also reflects
@@ -1940,7 +1940,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   reflection switch and steps. Since 0.177 `show` is the running show (`RunningShow`:
   its play head `at_ms`, its `state` `playing`, `paused` or `off_script`, the bookmark it
   waits at and `waited_ms`, the scene that took it `off_script`, its `loop_id` and
-  `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs
+  `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs, and
+  `overlays` the scenes up over program as overlays, bottom first, omitted while none is
   ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)).
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
@@ -3279,7 +3280,9 @@ Running a show is studio state: the `show.*` actions (`show.play`, `show.stop`,
 `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`,
 `show.seek`, `show.arm`), all bindable and checked by `Action::show_problem`, drive it,
 `studio.get`'s `show` reports it and `show.changed` says what it did. `show.delete` takes
-the bindings that name the show with it.
+the bindings that name the show with it. `overlay.show`, `overlay.hide` and
+`overlay.toggle` put a scene over program as an overlay, or take it down, with or without
+a show running; `studio.get` lists the scenes up in `overlays`. Both are runtime state.
 
 <a id="media-clock"></a>
 ## Holding the media clock
