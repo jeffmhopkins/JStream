@@ -4,7 +4,7 @@
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
 //! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, network,
 //! networkOpen, browse, allowNetwork, jtunnel, setJtunnel, ptz, setPtz, saveScreenshot,
-//! openSaved, showSaved }`: its in-process engine's WebSocket URL and control token,
+//! openSaved, showSaved, setZoom }`: its in-process engine's WebSocket URL and control token,
 //! whether its virtual camera can be used, the default project's folder `collection`
 //! asset paths are relative to, whether "Allow devices on my network" was on at start and its listener
 //! opened, `browse`, which
@@ -12,7 +12,8 @@
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
 //! `setJtunnel` and `setPtz` save them. `saveScreenshot` saves a screenshot in Downloads and
 //! answers its path, and `openSaved` and `showSaved` open such a file or show it in its
-//! folder (ADR-0163 §3). In a browser the global is absent and the UI shows
+//! folder (ADR-0163 §3). `setZoom` zooms the app's webview, for the UI scale
+//! (`ui_scale.rs`). In a browser the global is absent and the UI shows
 //! the connect form.
 //!
 //! A projector window the app opens for `window.open` (`projector.rs`) may not run that
@@ -460,6 +461,25 @@ async fn allow_network_js(allow: bool) -> bool {
         .ok()
         .and_then(|value| value.as_bool())
         == Some(true)
+}
+
+/// Asks the desktop app to zoom its webview to `factor` (1.0 is 100 %), as the UI scale
+/// does (`ui_scale.rs`), through the global's `setZoom`. Whether the app has it: in a
+/// browser, and in an app without it, the page zooms itself instead.
+pub fn set_desktop_zoom(factor: f64) -> bool {
+    use leptos::wasm_bindgen::JsCast;
+    use leptos::web_sys::js_sys::Function;
+
+    let Some(global) = global() else {
+        return false;
+    };
+    let Some(function) = Reflect::get(&global, &JsValue::from_str("setZoom"))
+        .ok()
+        .and_then(|value| value.dyn_into::<Function>().ok())
+    else {
+        return false;
+    };
+    function.call1(&global, &JsValue::from_f64(factor)).is_ok()
 }
 
 /// Whether the desktop app saves screenshots itself (the global's `saveScreenshot`,

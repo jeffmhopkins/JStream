@@ -364,8 +364,8 @@ pub fn Events(
         editing.set(Some(Editing {
             cue: None,
             at_ms: at(&e, &el),
-            x: f64::from(e.client_x()),
-            y: f64::from(e.client_y()),
+            x: crate::ui_scale::pointer(&e).0,
+            y: crate::ui_scale::pointer(&e).1,
         }));
     };
     let drag_to = move |e: leptos::ev::PointerEvent| {
@@ -396,8 +396,8 @@ pub fn Events(
             editing.set(Some(Editing {
                 cue: Some(m.held),
                 at_ms: m.at_ms,
-                x: f64::from(e.client_x()),
-                y: f64::from(e.client_y()),
+                x: crate::ui_scale::pointer(&e).0,
+                y: crate::ui_scale::pointer(&e).1,
             }));
         }
     };
@@ -443,7 +443,7 @@ pub fn Events(
                         else {
                             return;
                         };
-                        let r = chip.get_bounding_client_rect();
+                        let r = crate::ui_scale::rect(&chip);
                         editing.set(Some(Editing {
                             cue: Some(keyed.clone()),
                             at_ms,
@@ -687,17 +687,10 @@ pub fn Events(
 
 /// Where the editor opens for a click at (`x`, `y`): below it, kept inside the window.
 fn place(x: f64, y: f64) -> (String, String) {
-    let (w, h) = web_sys::window()
-        .map(|w| {
-            let n = |v: Result<leptos::wasm_bindgen::JsValue, leptos::wasm_bindgen::JsValue>| {
-                v.ok().and_then(|v| v.as_f64())
-            };
-            (
-                n(w.inner_width()).unwrap_or(1600.0),
-                n(w.inner_height()).unwrap_or(1000.0),
-            )
-        })
-        .unwrap_or((1600.0, 1000.0));
+    let (w, h) = match crate::ui_scale::window_size() {
+        (0.0, _) | (_, 0.0) => (1600.0, 1000.0),
+        size => size,
+    };
     let left = (x - 20.0).min(w - 330.0).max(4.0);
     let top = if y + 190.0 > h {
         (y - 190.0).max(4.0)

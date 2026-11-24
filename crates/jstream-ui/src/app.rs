@@ -146,6 +146,10 @@ pub fn App() -> impl IntoView {
 
     // A projector window (`projector.rs`) shows one picture instead of the workspace.
     let projector = crate::projector::page_request();
+    // Every other page is drawn at this machine's UI scale (`ui_scale.rs`).
+    if projector.is_none() {
+        crate::ui_scale::UiScale::provide();
+    }
     // In the desktop app, connect to its engine at once (`host.rs`). A projector in a
     // browser connects at once too, with the credentials the browser already sends,
     // and shows the connect form if they aren't enough.

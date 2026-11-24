@@ -1147,6 +1147,124 @@ fn a_warm_scenes_media_file_is_held_at_its_start() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `source.seek` (alpha.13 ST6) holds through the program showing the source: a seek
+/// just before a switch to its scene, or just after, plays the file on from the seek
+/// rather than from its start, as `restart_on_show` would; and a file held at its start
+/// on the upcoming scene a show runs to next plays on from a seek too.
+#[test]
+fn a_seek_holds_through_the_switch_that_shows_the_file() {
+    let dir = temp_dir("media-seek");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(false)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source("video", "media", video),
+            add("b", "i1", "video"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the file is open");
+    engine.replan();
+    // Its length, as the container says: 10 frames of 100 ms.
+    let sizes = super::query(&control, jstream_protocol::Query::SourceSizes).expect("the sizes");
+    let jstream_protocol::QueryResult::SourceSizes { sources } = sizes else {
+        panic!("not sizes: {sizes:?}");
+    };
+    assert_eq!(
+        sources
+            .iter()
+            .find(|s| s.source_id.as_str() == "video")
+            .and_then(|s| s.duration_ms),
+        Some(1_000),
+        "{sources:?}"
+    );
+    let switch = |scene| {
+        block_on(control.call(super::switch_call(scene))).expect("switched");
+    };
+    let seek = |at_ms| {
+        block_on(control.call(Call::Action {
+            action: Action::SourceSeek {
+                source_id: SourceId::new("video"),
+                at_ms,
+            },
+        }))
+        .expect("sought");
+    };
+
+    // Before the switch.
+    seek(500);
+    switch("b");
+    assert!(plays(&engine, 5), "shown from the seek, not from its start");
+    clock.advance(100);
+    assert!(plays(&engine, 6), "and it plays on");
+
+    // Just after the switch.
+    switch("a");
+    switch("b");
+    seek(300);
+    assert!(plays(&engine, 3), "the show doesn't undo the seek");
+    clock.advance(100);
+    assert!(plays(&engine, 4));
+
+    // Held at its start on the upcoming scene, then sought.
+    switch("a");
+    engine.set_upcoming(Some("b")).expect("b is upcoming");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while engine.painted_pixel("video") != Some(FakeClip::pixel(0)) && Instant::now() < deadline {
+        clock.advance(5);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(
+        engine.painted_pixel("video"),
+        Some(FakeClip::pixel(0)),
+        "upcoming, it is held at its first frame"
+    );
+    seek(700);
+    switch("b");
+    assert!(plays(&engine, 7), "the seek ends the hold");
+
+    // A source the collection doesn't hold.
+    let missing = block_on(control.call(Call::Action {
+        action: Action::SourceSeek {
+            source_id: SourceId::new("ghost"),
+            at_ms: 0,
+        },
+    }))
+    .expect_err("no such source");
+    assert!(format!("{missing:?}").contains("NotFound"), "{missing:?}");
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// #1172: a `source.restart` cue on a late tick starts the file at the cue's time, so
 /// 200 ms later the picture is that far in, not back at the first frame.
 #[test]
@@ -1736,6 +1854,7 @@ fn an_asset_install_announces_the_sizes_its_plan_changed() {
                 height: 2,
             }),
             depth: None,
+            duration_ms: None,
         }]
     );
     let _ = fs::remove_dir_all(dir);

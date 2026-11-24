@@ -88,7 +88,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.pause`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
-  `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
+  `source.restart`, `source.seek`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
@@ -138,7 +138,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch`, and
   `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
   [Controller bindings](#bindings).
-- **Shows** (`show.rs`, since 0.177,
+- **Shows** (`show.rs`, since 0.178,
   [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)): `ShowInfo`, a
   saved run order of scenes on tracks in show time: the program track's `ProgramClip`s end
   to end, `OverlayTrack`s, `KeyframeMarker`s, `SequenceTrack`s of `ShowCue`s and
@@ -207,7 +207,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
   (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets, and
-  since 0.177 `state.get` the `shows` and `studio.get` the running `show` and the
+  since 0.178 `state.get` the `shows` and `studio.get` the running `show` and the
   `overlays` up ([Shows](#shows)). `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
@@ -293,7 +293,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `plugin.uninstalled` (0.163),
-  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, `show.changed` (with `ShowChange`, since 0.177), and `timeline.changed` (with `TimelineChange`)
+  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, `show.changed` (with `ShowChange`, since 0.178), and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
   `KindsCause`, 0.107), `agent.approval_requested` and `agent.approval_resolved`
@@ -394,10 +394,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.177 because a collection holds shows: `show.set` and
+`PROTOCOL_VERSION` is 0.178 because a collection holds shows: `show.set` and
 `show.delete`, `state.get`'s `shows`, the `show.*` actions that run one, `studio.get`'s
 `show` and `overlays`, the `overlay.*` actions and the `show.changed` event
-([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)); 0.176 because `profile.get`'s drawers report
+([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)); 0.177 because of `source.seek`, which plays a `media` file on
+from a point into it and holds through the program showing it, and `SourceSize`'s and
+`source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
+the release queue sets); 0.176 because `profile.get`'s drawers report
 `preview_skipped`, the pictures only preview streams take that the program skipped,
 which `stats.tick`'s `render_ticks` no longer counts (#1690); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
@@ -1882,7 +1885,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   missing, also from a pre-0.168 server, parses as empty), every channel (`channels`,
   ordered by ID; omitted when there are none, so missing, also from a pre-0.169 server,
   parses as empty), every show (`shows`, ordered by ID; omitted when there are none, so
-  missing, also from a pre-0.177 server, parses as empty), the
+  missing, also from a pre-0.178 server, parses as empty), the
   master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
@@ -1940,7 +1943,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
   sets, since 0.165 the probe switch and face-size cap, and since 0.172 the screen-space
-  reflection switch and steps. Since 0.177 `show` is the running show (`RunningShow`:
+  reflection switch and steps. Since 0.178 `show` is the running show (`RunningShow`:
   its play head `at_ms`, its `state` `playing`, `paused` or `off_script`, the bookmark it
   waits at and `waited_ms`, the scene that took it `off_script`, its `loop_id` and
   `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs, and
@@ -2116,7 +2119,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
   height are reported at (the larger 512), so an editor can outline and hit it by its 3D
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
-  other source.
+  other source. Since 0.177 a `media` file whose length is known also reports
+  `duration_ms`, one play's length in milliseconds: from its container, or once a play
+  has reached its end (`source.size_changed` announces it when it becomes known). A file
+  with no video stream reports it beside the 1×1 `size` above. Omitted for every other
+  source and while the length isn't known.
 - `activity.list {after_seq?, limit?}`: the engine's recent activity, newest first
   ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)): one
   `ActivityEntry` for each batch, undo, redo and action the audit log records (not
@@ -2466,13 +2473,15 @@ After `welcome`, the server pushes every event to every client.
 - `privacy.changed {on, client_id, request_id?}`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so the engine never sends it. Added in 0.33.
-- `source.size_changed {source_id, size?, depth?}` says a source's size changed: it became
+- `source.size_changed {source_id, size?, depth?, duration_ms?}` says a source's size changed: it became
   known (the first frame), changed, or became unknown (`size` omitted: the source
   stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
-  `depth`, as `source.sizes` reports it, since 0.157.
+  `depth`, as `source.sizes` reports it, since 0.157; `duration_ms`, likewise, since
+  0.177: a length becoming known (once a play reaches the end of a file whose container
+  didn't say) is a change too, even when the size stays the same.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -2578,7 +2587,7 @@ After `welcome`, the server pushes every event to every client.
 - `timeline.changed {timeline_id, scene_id, change, playing, position_ms, pass}` and
   `timeline.cue_fired {timeline_id, cue, pass, at_ms, error?}` (0.87) are described
   under [Timelines](#timelines). Neither is sent once a frame: a cue fires once a pass.
-- `show.changed {show_id, change, running, at_ms, bookmark_id?, loop_id?}` (0.177,
+- `show.changed {show_id, change, running, at_ms, bookmark_id?, loop_id?}` (0.178,
   [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)) says the running
   show `started`, `paused` at a bookmark, `continued`, `jumped`, `looped`, went
   `off_script`, `ended` or `stopped`. Runtime state, so no `rev`, and never once a frame.
@@ -2671,7 +2680,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
-  `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, and `channel.set_value`,
+  `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, `source.seek`, and `channel.set_value`,
   `channel.nudge` and `channel.switch`, ADR-0183, and `overlay.show`, `overlay.hide` and
   `overlay.toggle`, ADR-0210) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
@@ -3007,7 +3016,7 @@ after 1.0:
   `collection.save_as` names it.
   0.96 adds `binding` the same way, named only by an error answering a `binding.*`
   edit. 0.169 adds `channel` the same way, named only by an error answering a
-  `channel.*` edit or action. 0.177 adds `show` the same way, named only by an error
+  `channel.*` edit or action. 0.178 adds `show` the same way, named only by an error
   answering a `show.*` edit or action, or a binding naming a show; a show's cue holds its
   action as plain JSON, as a timeline's does, and its enums (`ShowEnd`, `LoopLeave`,
   `NextMonitor`, `ShowState`, `ShowChange`) parse an unknown value as `Unknown`, which
@@ -3253,6 +3262,14 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+- **`source.seek {source_id, at_ms}`** (since 0.177) plays a `media` file on from
+  `at_ms` into its timeline: past the end of a looping file it lands where that many
+  plays would reach, and on one that doesn't loop, on its last frame. A kind with nothing
+  to seek starts over as `source.restart` starts it, and others do nothing. A seek
+  made before the program shows the source holds through the show, so the source isn't
+  started again from its start by `restart_on_show`: a switch and a seek can come in
+  either order. Like `source.restart` it is runtime state, bindable to a hotkey, not a
+  timeline cue, and needs the `live` class from a plugin.
 
 <a id="shows"></a>
 ## Shows
@@ -3261,7 +3278,7 @@ covers = ["crates/jstream-protocol/src/show.rs"]
 depends_on = ["docs/adr/0210-shows-a-run-order-with-bookmarks.md"]
 -->
 
-A show (since 0.177, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md))
+A show (since 0.178, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md))
 is a saved run order of scenes in show time, in milliseconds. `show.set` stores a whole
 `ShowInfo` (new, or in place of the one with its `show_id`) and `show.delete` removes it;
 `state.get` lists `shows`. A collection holds at most 64.
@@ -3273,11 +3290,13 @@ is a saved run order of scenes in show time, in milliseconds. `show.set` stores 
 - **Overlay tracks** (`overlays`, at most 8) hold scene clips anywhere, none overlapping on
   one track, drawn over program for their span; **sequence tracks** (`sequences`, at most
   8) hold `ShowCue`s, each one action a timeline's cue may run except `scene.switch`;
-  the **keyframe track** (`keyframes`) holds markers that load a keyframe of the scene on
-  program; **audio tracks** (`audio`, at most 8) hold clips that bring a source's fader
+  the **keyframe track** (`keyframes`) holds markers that switch program to a keyframe
+  scene of the scene on program, as a Move; **audio tracks** (`audio`, at most 8) hold clips that bring a source's fader
   up to `gain_db` for their span, with fades that fit in it.
 - **Bookmarks** are in time order, no two at one time; a pausing one (the default) waits
-  for `show.continue`, or `continue_after_ms`. **Loops** are in time order, at least
+  for `show.continue`, or `continue_after_ms`, and one at a clip's start waits with that
+  clip already on program. Its `note` is the operator's show notes,
+  Markdown of at most 16 KiB. **Loops** are in time order, at least
   100 ms, none overlapping another, and `leave` says how Continue leaves them. `end` is
   `stop` (the default), `loop` or `go_to` a bookmark the show holds.
 - Every element's ID is unique within its show. What a clip names is not looked up: one
