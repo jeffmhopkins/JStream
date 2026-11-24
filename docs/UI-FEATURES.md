@@ -73,7 +73,7 @@ real UI shows the engine's real state instead.
 | [Channels and sequences](#automation) | 6 | 1 | 5 | 0 | 0 | 0 |
 | [PTZ cameras](#ptz) | 5 | 5 | 0 | 0 | 0 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **151** | **132** | **10** | **0** | **5** | **4** |
+| **Total** | **156** | **137** | **10** | **0** | **5** | **4** |
 <!-- @generated end ui-summary -->
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
