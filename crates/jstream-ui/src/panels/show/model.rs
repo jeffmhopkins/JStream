@@ -66,9 +66,7 @@ impl ShowView {
 
     /// The first pausing bookmark after `at_ms`.
     pub fn next_pause(&self, at_ms: u32) -> Option<&BookmarkView> {
-        self.bookmarks
-            .iter()
-            .find(|b| b.pausing && b.at_ms > at_ms)
+        self.bookmarks.iter().find(|b| b.pausing && b.at_ms > at_ms)
     }
 }
 
@@ -344,8 +342,20 @@ pub(crate) mod demo {
                     id: "k".to_owned(),
                     kind: TrackKind::Keyframes,
                     clips: vec![
-                        clip("k1", 240_000, 0, "Wide", ClipKind::Keyframe("wide".to_owned())),
-                        clip("k2", 330_000, 0, "Close", ClipKind::Keyframe("close".to_owned())),
+                        clip(
+                            "k1",
+                            240_000,
+                            0,
+                            "Wide",
+                            ClipKind::Keyframe("wide".to_owned()),
+                        ),
+                        clip(
+                            "k2",
+                            330_000,
+                            0,
+                            "Close",
+                            ClipKind::Keyframe("close".to_owned()),
+                        ),
                     ],
                     muted: false,
                     locked: false,

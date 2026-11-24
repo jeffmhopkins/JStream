@@ -15,8 +15,11 @@ pub mod edit;
 pub mod model;
 pub mod run;
 pub mod time;
+pub mod wire;
 
+use crate::app::SessionContext;
 use crate::store::Studio;
+use jstream_control::protocol::{Edit, NextMonitor as WireMonitor, ShowInfo};
 use leptos::prelude::*;
 use model::{RunPhase, RunView, ShowView};
 use time::Viewport;
@@ -74,6 +77,10 @@ pub struct ShowPanel {
     pub clock: RwSignal<f64>,
     /// The problem bar's message, where a command that failed says so.
     pub problem: RwSignal<Option<String>>,
+    /// The shows whose editing is locked, by ID: the panel's own state, never saved.
+    pub locked: RwSignal<std::collections::HashSet<String>>,
+    /// The shared state and the open session, where the panel runs in the app.
+    engine: Option<(Studio, SessionContext)>,
 }
 
 impl ShowPanel {
@@ -81,6 +88,8 @@ impl ShowPanel {
     pub fn new(problem: RwSignal<Option<String>>) -> ShowPanel {
         ShowPanel {
             problem,
+            locked: RwSignal::new(std::collections::HashSet::new()),
+            engine: None,
             shows: RwSignal::new(Vec::new()),
             open: RwSignal::new(None),
             run: RwSignal::new(RunView::default()),
@@ -113,14 +122,95 @@ impl ShowPanel {
         self.run.with(|r| r.head_at(now))
     }
 
-    /// Asks the runner to do `command`.
-    ///
-    /// The engine's `show.*` calls arrive with the show protocol (ST0); until then a
-    /// command only says so in the problem bar.
+    /// A panel that follows the studio's shows and running show, and sends its commands
+    /// through `session`.
+    pub fn connected(studio: Studio, session: SessionContext) -> ShowPanel {
+        let panel = ShowPanel {
+            engine: Some((studio, session)),
+            ..ShowPanel::new(studio.problem)
+        };
+        Effect::new(move |_| {
+            let locked = panel.locked.get();
+            let shows = studio.collection.with(|c| {
+                c.as_ref().map_or_else(Vec::new, |c| {
+                    c.shows
+                        .iter()
+                        .map(|s| {
+                            let mut view = wire::view_of(s, c);
+                            view.locked = locked.contains(&view.id);
+                            view
+                        })
+                        .collect()
+                })
+            });
+            panel.shows.set(shows);
+        });
+        Effect::new(move |_| {
+            panel
+                .run
+                .set(studio.show.with(|s| wire::run_of(s.as_ref())));
+        });
+        panel
+    }
+
+    /// Asks the runner to do `command`: the `show.*` action it runs, or for Lock the
+    /// panel's own switch, or for the Next monitor a `show.set` of the open show.
     pub fn send(&self, command: Command) {
-        let _ = command;
-        self.problem
-            .set(Some("This build's engine can't run shows yet.".into()));
+        match &command {
+            Command::Lock(id, on) => {
+                let (id, on) = (id.clone(), *on);
+                self.locked.update(|l| {
+                    if on {
+                        l.insert(id);
+                    } else {
+                        l.remove(&id);
+                    }
+                });
+                return;
+            }
+            Command::NextMonitor(id, monitor) => {
+                self.set_show(id, |s| {
+                    s.next_monitor = match monitor {
+                        model::NextMonitor::Live => WireMonitor::Live,
+                        model::NextMonitor::Still => WireMonitor::Still,
+                        model::NextMonitor::Off => WireMonitor::Off,
+                    };
+                });
+                return;
+            }
+            _ => {}
+        }
+        let Some((studio, session)) = self.engine else {
+            return;
+        };
+        let open = self.show().map(|s| s.id);
+        if let (Some(action), Some(session)) =
+            (wire::action_of(&command, open.as_deref()), session.get())
+        {
+            studio.act(&session, action);
+        }
+    }
+
+    /// Changes show `id` with `f` and sends it as one `show.set`, so one undo step. A
+    /// change that changes nothing sends nothing.
+    pub fn set_show(&self, id: &str, f: impl FnOnce(&mut ShowInfo)) {
+        let Some((studio, session)) = self.engine else {
+            return;
+        };
+        let Some(before) = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .and_then(|c| c.shows.iter().find(|s| s.show_id.as_str() == id).cloned())
+        }) else {
+            return;
+        };
+        let mut show = before.clone();
+        f(&mut show);
+        if show == before {
+            return;
+        }
+        if let Some(session) = session.get() {
+            studio.apply(&session, vec![Edit::ShowSet { show }]);
+        }
     }
 }
 
@@ -156,8 +246,12 @@ pub fn status(show: &ShowView, run: &RunView, now: f64) -> String {
 #[component]
 pub fn Show() -> impl IntoView {
     let panel = use_context::<ShowPanel>().unwrap_or_else(|| {
-        let problem = use_context::<Studio>().map_or_else(|| RwSignal::new(None), |s| s.problem);
-        ShowPanel::new(problem)
+        match (use_context::<Studio>(), use_context::<SessionContext>()) {
+            (Some(studio), Some(session)) => ShowPanel::connected(studio, session),
+            (studio, _) => {
+                ShowPanel::new(studio.map_or_else(|| RwSignal::new(None), |s| s.problem))
+            }
+        }
     });
     provide_context(panel);
     if let Ok(handle) = set_interval_with_handle(
@@ -169,10 +263,11 @@ pub fn Show() -> impl IntoView {
         on_cleanup(move || handle.clear());
     }
     let mode = panel.mode;
+    let has_show = Memo::new(move |_| panel.shows.with(|s| !s.is_empty()));
     view! {
         <div class="show-panel" class:run=move || mode.get() == Mode::Run>
-            {move || match panel.show() {
-                None => view! {
+            {move || match has_show.get() {
+                false => view! {
                     <div class="show-empty">
                         <p class="show-empty-title">"No show yet"</p>
                         <p class="show-empty-hint">
@@ -180,7 +275,7 @@ pub fn Show() -> impl IntoView {
                         </p>
                     </div>
                 }.into_any(),
-                Some(_) => match mode.get() {
+                true => match mode.get() {
                     Mode::Edit => view! { <edit::EditView /> }.into_any(),
                     Mode::Run => view! { <run::RunView /> }.into_any(),
                 },

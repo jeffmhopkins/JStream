@@ -239,9 +239,14 @@ pub fn position(t: &TimelineInfo, cue: &TimelineCue) -> Option<usize> {
 
 /// A cue as a chip's few words: "Show Title", "Keyframe Wide", "Lights on".
 pub fn text(collection: &Collection, cue: &TimelineCue) -> String {
-    let Some(action) = cue.action() else {
-        return "Unknown event".into();
-    };
+    match cue.action() {
+        Some(action) => action_text(collection, &action),
+        None => "Unknown event".into(),
+    }
+}
+
+/// An action as a chip's few words, as [`text`] reads a cue's.
+pub fn action_text(collection: &Collection, action: &Action) -> String {
     let item = |id: &ItemId| {
         collection
             .scenes
@@ -260,7 +265,7 @@ pub fn text(collection: &Collection, cue: &TimelineCue) -> String {
             .timeline(id)
             .map_or_else(|| id.to_string(), |(_, t)| timeline_name(t))
     };
-    match &action {
+    match action {
         Action::ItemShow { item_id, .. } => format!("Show {}", item(item_id)),
         Action::ItemHide { item_id, .. } => format!("Hide {}", item(item_id)),
         Action::ItemToggle { item_id, .. } => format!("Toggle {}", item(item_id)),
