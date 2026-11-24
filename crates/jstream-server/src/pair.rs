@@ -25,6 +25,7 @@
 //!   code, the token and the cookie are never logged (R-SEC-001).
 
 use crate::App;
+use crate::asks::{ASK_TIMEOUT, AskRefused};
 use crate::devices::{Now, PairError, check_name};
 use crate::gate::{Refusal, device_cookie_header};
 use crate::listener::Accepted;
@@ -32,11 +33,15 @@ use axum::body::Body;
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use jstream_protocol::PairingAskOutcome;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// The path a device posts the pairing code to.
 pub const PAIR_PATH: &str = "/api/v1/pair";
+
+/// The path a device posts its name to, to ask the person to pair it (ADR-0235).
+pub const PAIR_ASK_PATH: &str = "/api/v1/pair/ask";
 
 /// The largest body accepted, in bytes: a code and a short name.
 const MAX_BODY_BYTES: usize = 4096;
@@ -162,6 +167,111 @@ pub(crate) async fn handle(
             )
                 .into_response()
         }
+    }
+}
+
+/// `POST /api/v1/pair/ask` ([`PAIR_ASK_PATH`], ADR-0235): a native device asks the person
+/// to pair it, with `{"name": "Stream Deck"}`, and the request is held until they answer.
+///
+/// - **Answers.** `200` with `{"device_id": "dev_…", "token": "…"}` and
+///   `Cache-Control: no-store` when the person allows it, as a code would; `403` when
+///   they deny it, `408` when no one answered in 2 minutes, `429` while 4 asks are open
+///   or one from this address is, `404` while the server pairs no device (its network
+///   listener closed and `ServerConfig::pairing` off), `400` for a body that isn't that
+///   object or a name that isn't allowed, `415` for another content type, `405` for
+///   another method, and `500` when the device file can't be written.
+/// - **Gone.** A device that closes its connection ends its ask (`closed`).
+pub(crate) async fn ask(
+    State(app): State<Arc<App>>,
+    ConnectInfo(accepted): ConnectInfo<Accepted>,
+    method: Method,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let peer = accepted.peer;
+    if let Err(refusal) = app
+        .gate
+        .admit_unauthenticated(&headers, peer, accepted.on())
+    {
+        return refusal.into_response();
+    }
+    if method != Method::POST {
+        return (
+            StatusCode::METHOD_NOT_ALLOWED,
+            [(header::ALLOW, "POST")],
+            "post the device's name\n",
+        )
+            .into_response();
+    }
+    if !app.pairs() || !app.pairing_offered && !accepted.network {
+        return (StatusCode::NOT_FOUND, "this server pairs no device\n").into_response();
+    }
+    let json = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|media| media.trim().eq_ignore_ascii_case("application/json"));
+    if !json {
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "the body must be JSON (`Content-Type: application/json`)\n",
+        )
+            .into_response();
+    }
+    let Ok(bytes) = axum::body::to_bytes(body, MAX_BODY_BYTES).await else {
+        return bad_request("the body is over 4 KiB, or could not be read");
+    };
+    let Some(name) = serde_json::from_slice::<Value>(&bytes)
+        .ok()
+        .and_then(|value| value.get("name").and_then(Value::as_str).map(str::to_owned))
+    else {
+        return bad_request("the body must be `{\"name\": …}`");
+    };
+    let name = match check_name(&name) {
+        Ok(name) => name.to_owned(),
+        Err(reason) => return bad_request(reason),
+    };
+    let mut pending = match app.asks.open(&name, peer.ip()) {
+        Ok(pending) => pending,
+        Err(AskRefused::Busy) => {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                "another ask is waiting for an answer; try again in a moment\n",
+            )
+                .into_response();
+        }
+    };
+    // Dropped with the request when the device goes away, which ends the ask.
+    match pending.answer(ASK_TIMEOUT).await {
+        None => (StatusCode::REQUEST_TIMEOUT, "no one answered in JStream\n").into_response(),
+        Some(false) => {
+            pending.finish(PairingAskOutcome::Denied);
+            tracing::warn!(%peer, "a device's ask to pair was denied");
+            (StatusCode::FORBIDDEN, "denied in JStream\n").into_response()
+        }
+        Some(true) => match app.devices.add(&name, Now::current()) {
+            Ok((device_id, token)) => {
+                pending.finish(PairingAskOutcome::Allowed);
+                (
+                    StatusCode::OK,
+                    [
+                        (header::CONTENT_TYPE, "application/json"),
+                        (header::CACHE_CONTROL, "no-store"),
+                    ],
+                    json!({"device_id": device_id.as_str(), "token": token}).to_string(),
+                )
+                    .into_response()
+            }
+            Err(error) => {
+                pending.finish(PairingAskOutcome::Denied);
+                tracing::warn!(?error, "could not pair an allowed device");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "could not save the device\n",
+                )
+                    .into_response()
+            }
+        },
     }
 }
 

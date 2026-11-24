@@ -36,6 +36,7 @@ mod motion;
 mod organise;
 mod output;
 mod pack;
+mod pairing_ask;
 #[cfg(feature = "fixtures")]
 pub mod parity;
 mod plugin;
@@ -153,6 +154,7 @@ pub use pack::{
     MAX_PACK_FILES, MAX_PACK_IMAGE_BYTES, MAX_PACK_WRITE_BYTES, PackContent, PackFile,
     PackFileInfo, PackInfo,
 };
+pub use pairing_ask::{PairingAsk, PairingAskOutcome};
 pub use plugin::{
     PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginInfo,
     PluginRequest, PluginScope, PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope,

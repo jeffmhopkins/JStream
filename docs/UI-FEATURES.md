@@ -670,6 +670,13 @@ not remove them; they move into the prototype's look.
   It is the
   Settings dialog's Devices page ([HD-01](#header)), which says no device can pair where
   the server pairs nothing.
+- Pairing a device by allowing it
+  ([ADR-0235](adr/0235-pair-a-device-by-approving-it-on-the-host.md), `device_asks.rs`):
+  while network access is on, a device such as a Stream Deck can ask to connect instead
+  of typing a code, and the window shows "\<name\> wants to connect" with the address it
+  asked from, Deny and Allow. Allowed, it is paired and listed on the Devices page;
+  Deny, or no answer within two minutes, turns it away. Closing the dialog leaves it
+  waiting until it times out.
 - Asking before a new agent connects
   ([ADR-0131](adr/0131-ask-before-a-new-agent-connects.md), `agents.rs`): in the desktop
   app with agents on, an agent the person hasn't always allowed waits at its hello while

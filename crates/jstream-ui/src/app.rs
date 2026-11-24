@@ -361,6 +361,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <crate::settings::Settings />
             <crate::panels::map_control::MapControlHost />
             <crate::agents::AgentPrompt />
+            <crate::device_asks::DevicePrompt />
             <ContextMenu />
         </div>
     }

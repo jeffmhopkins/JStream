@@ -257,6 +257,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.bind_broadcast", N),
     ("youtube.transition_broadcast", N),
     ("pairing.start", N),
+    ("pairing.answer", N),
     ("device.revoke", N),
     ("agent.approve", N),
     ("agent.forget", N),

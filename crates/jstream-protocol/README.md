@@ -88,7 +88,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.show`,
   `preview.request_keyframe`, `preview.report`,
-  `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
+  `pairing.start`, `pairing.answer` (0.193), `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.pause`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
@@ -308,7 +308,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
   `KindsCause`, 0.107), `agent.approval_requested` and `agent.approval_resolved`
-  (0.108), and `jtunnel.senders_changed` (0.114).
+  (0.108), `jtunnel.senders_changed` (0.114), and `pairing.asked` (with `PairingAsk`) and
+  `pairing.ask_ended` (with `PairingAskOutcome`, 0.193, `pairing_ask.rs`).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -407,7 +408,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.192 because `scene.drawn_camera` answers the camera a 3D scene
+`PROTOCOL_VERSION` is 0.193 because a device may ask to pair instead of typing a code:
+every client hears `pairing.asked` and `pairing.ask_ended`, and any answers with
+`pairing.answer` (`not_found` with the entity kind `pairing_ask`,
+[Queries › pairing](#queries),
+[ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)); 0.192 because `scene.drawn_camera` answers the camera a 3D scene
 was drawn through last, as its camera motion, follow camera, live aim and the 3D group
 it rides with moved it, which is where an editor outlines its items; 0.191 because a scene
 camera gains `fixed_aperture`, which makes its depth of field follow its zoom and focus
@@ -1500,8 +1505,8 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   hotkey never adds to an undo history. `output.set_key` can't be bound (its stream key
   would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
   can the preview actions (they serve only the sending session), `live.set` and
-  `live.cancel` (their gesture belongs to the sending session), `pairing.start` and
-  `device.revoke` (the server answers them for the client that asks), the
+  `live.cancel` (their gesture belongs to the sending session), `pairing.start`,
+  `pairing.answer` and `device.revoke` (the server answers them for the client that asks), the
   `youtube.*` actions (YouTube is driven through the UI,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
   `plugin.*` actions (a person installs, grants and removes plugins): each is
@@ -2434,6 +2439,18 @@ in front of the engine answers them
 server in front answers `unsupported`. The code is a `SecretString`: it never prints,
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
+**Pairing by asking** (0.193,
+[ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)). A device
+on the network may ask to pair instead of typing a code (`POST /api/v1/pair/ask`,
+[jstream-server › Design](../jstream-server/README.md#design)). Every client then hears
+**`pairing.asked {ask}`**, a `PairingAsk` `{ask_id, name, address}`: the name the
+device gave (its own text, shown as data) and the address it asked from. **`pairing.answer
+{ask_id, allow}`** answers it; any admitted client may, and an ask that isn't open is
+`not_found` (entity `pairing_ask`). **`pairing.ask_ended {ask_id, outcome}`** tells every
+client how it ended: `allowed`, `denied`, `timed_out` (no answer in 2 minutes) or
+`closed` (the device went away first). The server answers `pairing.answer`; a `Control`
+with no server in front answers `unsupported`, and hears no ask.
+
 **UI settings** (0.52, [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 `ui_settings.set {key, value}` keeps any JSON value under a key, and a `null` or missing
 `value` removes the key; `ui_settings.get {key}` reads it back. A UI owns each value's
@@ -3228,7 +3245,8 @@ after 1.0:
   `collection.save_as` names it.
   0.96 adds `binding` the same way, named only by an error answering a `binding.*`
   edit. 0.169 adds `channel` the same way, named only by an error answering a
-  `channel.*` edit or action. 0.180 adds `show` the same way, named only by an error
+  `channel.*` edit or action. 0.193 adds `pairing_ask` the same way, named only by an
+  error answering `pairing.answer`. 0.180 adds `show` the same way, named only by an error
   answering a `show.*` edit or action, or a binding naming a show; a show's cue holds its
   action as plain JSON, as a timeline's does, and its enums (`ShowEnd`, `LoopLeave`,
   `NextMonitor`, `ShowState`, `ShowChange`) parse an unknown value as `Unknown`, which

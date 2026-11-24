@@ -284,6 +284,9 @@ pub enum EntityKind {
     /// A show (0.180, ADR-0210). Only an error answering a `show.*` command names it, so
     /// a client that sends none never reads it.
     Show,
+    /// A device's ask to pair (0.193, ADR-0235). Only an error answering
+    /// `pairing.answer` names it, so a client that sends none never reads it.
+    PairingAsk,
 }
 
 impl fmt::Display for EntityKind {
@@ -308,6 +311,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Timeline => "timeline",
             EntityKind::File => "file",
             EntityKind::Approval => "approval",
+            EntityKind::PairingAsk => "pairing_ask",
             EntityKind::Channel => "channel",
             EntityKind::Show => "show",
         })

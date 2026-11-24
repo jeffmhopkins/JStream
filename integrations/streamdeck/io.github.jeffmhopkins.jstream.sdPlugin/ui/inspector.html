@@ -23,13 +23,18 @@
 				<div id="found" class="found"></div>
 				<div class="row"><label for="host">Address</label><input id="host" type="text" placeholder="192.168.1.20 or studio.local" spellcheck="false" /></div>
 				<div class="row"><label for="port">Port</label><input id="port" type="number" min="1" max="65535" value="4456" /></div>
+				<div class="row"><label for="device-name">Name</label><input id="device-name" type="text" maxlength="64" /></div>
 				<div class="row"><label></label><span class="buttons"><button id="probe">Connect</button></span></div>
+
+				<div id="asking" hidden>
+					<p class="hint">Press <b>Allow</b> on JStream's screen. It asks there whether this Stream Deck may connect.</p>
+					<div class="row"><label></label><span class="buttons"><button id="use-code">Use a code instead</button></span></div>
+				</div>
 
 				<div id="confirm" hidden>
 					<p class="hint">In JStream, open <b>Settings › Devices</b> and press <b>Pair a device</b>. Check that the fingerprint JStream shows is this one:</p>
 					<p id="offered" class="mono small fingerprint"></p>
 					<div class="row"><label for="code">Code</label><input id="code" type="text" placeholder="XXXX-XXXX" maxlength="9" spellcheck="false" autocomplete="off" /></div>
-					<div class="row"><label for="device-name">Name</label><input id="device-name" type="text" maxlength="64" /></div>
 					<div class="row"><label></label><span class="buttons"><button id="pair">It matches: pair</button></span></div>
 				</div>
 			</div>

@@ -199,6 +199,8 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::YoutubeBindBroadcast { .. } => "Bound a YouTube broadcast".to_owned(),
         Action::YoutubeTransitionBroadcast { .. } => "Moved a YouTube broadcast on".to_owned(),
         Action::PairingStart => "Started pairing a device".to_owned(),
+        Action::PairingAnswer { allow: true, .. } => "Allowed a device to pair".to_owned(),
+        Action::PairingAnswer { allow: false, .. } => "Refused a device's ask to pair".to_owned(),
         Action::DeviceRevoke { .. } => "Revoked a paired device".to_owned(),
         Action::AgentApprove { .. } => "Answered an agent's request to connect".to_owned(),
         Action::AgentForget { .. } => "Removed an approved agent".to_owned(),

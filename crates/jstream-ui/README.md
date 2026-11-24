@@ -455,6 +455,13 @@ Contents ([Design](#design) explains the choices):
   app's "Accept a PTZ controller" switch, endpoints and allowed controllers on the
   Devices page, and `with_endpoint`, `with_allowed` and `target_label`, the add rows'
   checks and how a target reads, tested natively with the setting's JSON.
+- **Device asks** (`device_asks.rs`,
+  [ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)):
+  `DevicePrompt`, the "\<name\> wants to connect" dialog the shell draws while a device on
+  the network asks to pair (Deny, Allow, answered with `pairing.answer`), on
+  `pairing.asked` and gone on `pairing.ask_ended`, with the address it asked from. Closing
+  it leaves the device waiting and shows the next ask; a page opened during an ask
+  doesn't show it. Like `AgentPrompt`, it holds no session of its own.
 - **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
   `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
   holds a new agent's hello (Deny, Allow once, Always allow), on

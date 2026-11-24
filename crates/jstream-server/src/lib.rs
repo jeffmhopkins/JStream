@@ -29,6 +29,7 @@ mod admitted;
 #[cfg(feature = "tls")]
 pub mod announce;
 mod approvals;
+mod asks;
 mod config;
 mod devices;
 mod envelope;
@@ -60,7 +61,7 @@ pub use jstream_control::WS_PATH;
 pub use mcp::MCP_PATH;
 #[cfg(feature = "tls")]
 pub use network::NetworkConfig;
-pub use pair::PAIR_PATH;
+pub use pair::{PAIR_ASK_PATH, PAIR_PATH};
 pub use pair_page::PAIR_PAGE_PATH;
 #[cfg(feature = "tls")]
 pub use switch::{NetworkInfo, NetworkSwitch};
@@ -70,7 +71,7 @@ use admitted::Admitted;
 use axum::Router;
 use axum::extract::ws::{WebSocketUpgrade, rejection::WebSocketUpgradeRejection};
 use axum::extract::{ConnectInfo, State};
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
 use devices::Devices;
@@ -151,12 +152,20 @@ struct App {
     ui_settings: Arc<UiSettings>,
     /// The agent approvals (ADR-0131).
     approvals: Arc<approvals::Approvals>,
+    /// The devices asking to pair (ADR-0235).
+    asks: Arc<asks::Asks>,
 }
 
 impl App {
     /// Whether the connection came over TLS: the network listener's always do.
     fn tls(&self, accepted: &Accepted) -> bool {
         self.tls || accepted.network
+    }
+
+    /// Whether the server pairs devices now: `ServerConfig::pairing` on, or the network
+    /// listener open (ADR-0234 decision 3).
+    fn pairs(&self) -> bool {
+        self.pairing || self.network.is_open()
     }
 
     /// A new session from the connector, admitted by `credential`.
@@ -172,6 +181,7 @@ impl App {
                 network: Arc::clone(&self.network),
                 ui_settings: Arc::clone(&self.ui_settings),
                 approvals: Arc::clone(&self.approvals),
+                asks: Arc::clone(&self.asks),
             },
         ))
     }
@@ -246,6 +256,7 @@ impl Server {
             network,
             ui_settings,
             approvals,
+            asks: Arc::default(),
         });
         Ok(Server {
             listener,
@@ -354,6 +365,7 @@ impl Server {
         let mut router = Router::new()
             .route(WS_PATH, get(upgrade))
             .route(PAIR_PATH, any(pair::handle))
+            .route(PAIR_ASK_PATH, any(pair::ask))
             // Always routed, so the UI's fallback never serves it; 404 without TLS.
             .route(PAIR_PAGE_PATH, any(pair_page::handle));
         if app.mcp.is_some() {
@@ -429,6 +441,21 @@ async fn upgrade(
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
     let peer = accepted.peer;
+    // A session admitted on the network listener closes when that listener does. Its
+    // receiver is taken before the gate admits it, so a close at any point after this
+    // reaches the session (ADR-0234 decision 2), and one before it refuses it here.
+    let network_stopping = if accepted.network {
+        match app.network.stopping() {
+            Some(stopping) if !*stopping.borrow() => Some(stopping),
+            _ => {
+                tracing::debug!(peer = %peer, "the network listener closed before the upgrade");
+                return (StatusCode::SERVICE_UNAVAILABLE, "network access is off\n")
+                    .into_response();
+            }
+        }
+    } else {
+        None
+    };
     let credential = match app.gate.admit(&headers, peer, accepted.on()) {
         Ok(credential) => credential,
         Err(refusal) => return refusal.into_response(),
@@ -472,16 +499,11 @@ async fn upgrade(
         }
         app.open(credential, AgentTransport::Websocket)
     });
-    // A session admitted on the network listener closes when that listener does, and
-    // also holds the server's receiver, so the shutdown waits for its close too.
+    // A session admitted on the network listener closes when that listener does (its
+    // receiver taken above), and also holds the server's receiver, so the shutdown waits
+    // for its close too.
     let held = app.shutdown.clone();
-    let shutdown = if accepted.network {
-        app.network
-            .stopping()
-            .unwrap_or_else(|| app.shutdown.clone())
-    } else {
-        app.shutdown.clone()
-    };
+    let shutdown = network_stopping.unwrap_or_else(|| app.shutdown.clone());
     let liveness = app.liveness;
     // A browser client offers `jstream` beside the token's subprotocol and fails the
     // connection unless one is selected; the token's is never echoed.

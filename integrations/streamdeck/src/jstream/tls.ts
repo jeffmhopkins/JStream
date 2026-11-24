@@ -126,11 +126,36 @@ export type PairResult = { deviceId: string; token: string };
  */
 export function pair(host: string, port: number, fingerprint: string, code: string, name: string): Promise<PairResult> {
 	const body = JSON.stringify({ code: code.trim().toUpperCase(), name });
+	return postForToken(host, port, fingerprint, "/api/v1/pair", body, 30_000, pairingRefusal);
+}
+
+/** How long to wait for the person to answer an ask: JStream gives up after 2 minutes. */
+export const ASK_WAIT_MS = 130_000;
+
+/**
+ * Asks JStream to pair this Stream Deck without a code (ADR-0235): `POST /api/v1/pair/ask`
+ * over a connection pinned to `fingerprint`, the certificate seen when probing (trust on
+ * first use). JStream shows the person Allow / Deny and answers once they do.
+ */
+export function askToPair(host: string, port: number, fingerprint: string, name: string): Promise<PairResult> {
+	return postForToken(host, port, fingerprint, "/api/v1/pair/ask", JSON.stringify({ name }), ASK_WAIT_MS, askRefusal);
+}
+
+/** Posts `body` to `path` and reads the device token from a `200`. */
+function postForToken(
+	host: string,
+	port: number,
+	fingerprint: string,
+	path: string,
+	body: string,
+	waitMs: number,
+	refusal: (status: number, body: string) => string,
+): Promise<PairResult> {
 	const options: RequestOptions = {
 		host,
 		port,
 		method: "POST",
-		path: "/api/v1/pair",
+		path,
 		headers: {
 			"Content-Type": "application/json",
 			"Content-Length": Buffer.byteLength(body),
@@ -161,12 +186,29 @@ export function pair(host: string, port: number, fingerprint: string, code: stri
 					reject(new Error("JStream's answer to the pairing request was not understood"));
 					return;
 				}
-				reject(new Error(pairingRefusal(res.statusCode ?? 0, text)));
+				reject(new Error(refusal(res.statusCode ?? 0, text)));
 			});
 		});
+		req.setTimeout(waitMs, () => req.destroy(new Error("JStream didn't answer in time. Try again.")));
 		req.on("error", reject);
 		req.end(body);
 	});
+}
+
+/** What a refused ask means, in words for the person. */
+export function askRefusal(status: number, body: string): string {
+	switch (status) {
+		case 403:
+			return "Denied in JStream.";
+		case 408:
+			return "No one pressed Allow in JStream in time. Try again.";
+		case 429:
+			return "JStream is already asking about another device. Answer that one, then try again.";
+		case 404:
+			return "JStream isn't taking new devices. Turn on Allow devices on my network in JStream's Settings › Devices.";
+		default:
+			return pairingRefusal(status, body);
+	}
 }
 
 /** What a refused pairing request means, in words for the person. */

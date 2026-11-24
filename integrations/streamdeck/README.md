@@ -36,12 +36,19 @@ Stream Deck and JStream can run on different computers on the same network.
 3. **Connect.** Drag any JStream key onto the deck and open its settings. The panel
    looks for JStream by itself the first time; when it finds exactly one, it fills in its
    address and connects. Otherwise press **Find JStream** and pick the computer, or type
-   its name or IP address and press **Connect**. The plugin shows the certificate
-   fingerprint JStream offered.
-4. **Pair.** In JStream, open **Settings › Devices** and press **Pair a device**. Check
-   that the fingerprint JStream shows matches the one in the plugin, then type the
-   8-character code into the plugin and press **It matches: pair**. The code works once
-   and expires after 2 minutes.
+   its name or IP address and press **Connect**.
+4. **Allow it in JStream.** Connecting asks JStream to pair this Stream Deck: JStream
+   shows "Stream Deck (*computer*) wants to connect" with the address it asked from. Press
+   **Allow**, within 2 minutes, and the keys connect
+   ([ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)). The
+   Stream Deck trusts the certificate it saw when it asked.
+
+   **Or pair with a code**, which also checks the certificate: press **Use a code
+   instead** (the panel offers it by itself when JStream denies the ask, no one answers,
+   or JStream is too old to ask). In JStream, open **Settings › Devices** and press
+   **Pair a device**. Check that the fingerprint JStream shows matches the one in the
+   plugin, then type the 8-character code into the plugin and press **It matches:
+   pair**. The code works once and expires after 2 minutes.
 
 Every key shares that one pairing, so this happens once per Stream Deck computer.
 JStream lists the Stream Deck under **Paired devices**, where it can be revoked. A revoked
@@ -56,7 +63,8 @@ Paired devices**.
 **Allow devices on my network** is on and whose **Let devices find JStream on my network**,
 just under it, is on too (it is unless turned off; the daemon announces unless started
 with `--lan-quiet`, [ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
-Finding JStream lets nothing in: pairing still takes the code and the fingerprint. Typing
+Finding JStream lets nothing in: pairing still takes Allow in JStream, or the code and
+the fingerprint. Typing
 the address always works, for example where the network drops multicast.
 
 <a id="keys"></a>
@@ -100,12 +108,16 @@ depends_on = ["docs/adr/0104-network-listener-over-tls.md", "docs/adr/0044-pairi
   certificate other than the paired one stops the retries until the person pairs again.
 - **Trust.** JStream's network listener has a self-signed certificate
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), so the plugin trusts
-  its SHA-256 fingerprint, which the person compared with the one JStream shows. Every
+  its SHA-256 fingerprint: the one the person compared with the one JStream shows when
+  pairing with a code, or, when pairing by asking, the one the probe saw (trust on first
+  use, [ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)). Every
   connection, the pairing request included, completes the TLS handshake and checks the
   fingerprint before it writes a byte of HTTP (`jstream/tls.ts`). So no token and no code
   reaches any other server. A mismatch is refused, and not retried, with a message that
   says to pair again if JStream renewed its certificate.
-- **Pairing** is ADR-0044's exchange: `POST /api/v1/pair` with the code and a name, which
+- **Pairing** is ADR-0235's ask, `POST /api/v1/pair/ask` with a name, held until the
+  person presses Allow or Deny in JStream (the plugin waits 130 seconds, one ask at a
+  time), or ADR-0044's exchange, `POST /api/v1/pair` with the code and a name. Either
   answers with a device token. The token, the fingerprint, the host and the port are kept
   in the plugin's global settings, which the Stream Deck app stores for the plugin on that
   computer. The token admits only this device and can be revoked from JStream at any time.
@@ -122,7 +134,8 @@ depends_on = ["docs/adr/0104-network-listener-over-tls.md", "docs/adr/0044-pairi
   seconds and lists each instance's name, address and port, as JStream announces them
   (one entry per instance and address, so two JStreams on one computer are both listed)
   ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)). Finding
-  JStream proves nothing about it: the fingerprint check and the code still decide.
+  JStream proves nothing about it: the person's Allow, or the fingerprint check and the
+  code, still decide.
 - **Key images** are SVG drawn per state (`render.ts`). The plugin sets an image or a
   title only when it changed.
 

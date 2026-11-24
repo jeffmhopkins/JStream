@@ -139,15 +139,17 @@ function fromPlugin(message) {
 			drawFound(message.found || []);
 			break;
 		case "probed":
+			// Ask JStream to show Allow / Deny (ADR-0235); the code stays one click away.
 			offered = message;
 			$("offered").textContent = message.fingerprint;
-			$("confirm").hidden = false;
 			$("probe").disabled = false;
 			$("pair").disabled = false;
+			$("asking").hidden = false;
 			say("");
-			$("code").focus();
+			toPlugin({ type: "ask", host: offered.host, port: offered.port, fingerprint: offered.fingerprint, name: $("device-name").value });
 			break;
 		case "paired":
+			$("asking").hidden = true;
 			$("confirm").hidden = true;
 			$("code").value = "";
 			offered = undefined;
@@ -156,6 +158,12 @@ function fromPlugin(message) {
 		case "failed":
 			$("probe").disabled = false;
 			$("pair").disabled = false;
+			if (message.step === "ask") {
+				// Denied, unanswered, or a JStream too old to ask: the code still works.
+				if (!offered) break;
+				$("asking").hidden = true;
+				useCode();
+			}
 			say(message.message);
 			break;
 	}
@@ -346,6 +354,7 @@ function probe() {
 		return;
 	}
 	$("probe").disabled = true;
+	$("asking").hidden = true;
 	$("confirm").hidden = true;
 	say("");
 	toPlugin({ type: "probe", host, port: Number($("port").value) || 4456 });
@@ -382,5 +391,11 @@ $("pair").onclick = () => {
 $("code").onkeydown = (e) => {
 	if (e.key === "Enter") $("pair").click();
 };
+function useCode() {
+	$("asking").hidden = true;
+	$("confirm").hidden = false;
+	$("code").focus();
+}
+$("use-code").onclick = useCode;
 $("retry").onclick = () => toPlugin({ type: "retry" });
 $("forget").onclick = () => toPlugin({ type: "forget" });

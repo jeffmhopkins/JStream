@@ -332,7 +332,10 @@ The `pairing` and `device` tools (protocol 0.21) need no code here either: the s
 ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so an agent can
 pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
 session with no server in front. A `pairing.start` result carries the code, the one
-place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). From 0.193 the `pairing` tool also
+offers `pairing.answer`, which allows or denies a device's ask to pair
+([ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)); an agent
+that can start pairing and read the code could pair a device already.
 
 The `ui_settings` tool (protocol 0.52) is the same:
 [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)'s server answers it,

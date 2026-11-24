@@ -260,10 +260,11 @@ covers = [
   "crates/jstream-server/src/admitted.rs",
   "crates/jstream-server/src/pair.rs",
   "crates/jstream-server/src/pair_page.rs",
+  "crates/jstream-server/src/asks.rs",
   "crates/jstream-server/src/gate.rs",
   "crates/jstream-server/src/announce.rs",
 ]
-depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md", "docs/adr/0104-network-listener-over-tls.md"]
+depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md", "docs/adr/0104-network-listener-over-tls.md", "docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md"]
 -->
 
 **Built:** codes, device tokens, and the browser pairing page and device cookie (#288),
@@ -296,6 +297,21 @@ that connection ([ADR-0104](../adr/0104-network-listener-over-tls.md)). With `--
 on the network can void each open code with five wrong guesses, so pairing can be
 denied while they keep at it, never won; ADR-0044's five are kept rather than giving the
 network its own allowance.
+
+**Accepted** ([ADR-0235](../adr/0235-pair-a-device-by-approving-it-on-the-host.md)):
+while the server pairs devices, a device may ask to pair instead of typing a code
+(`POST /api/v1/pair/ask`), and the host shows the person its name and address with
+Allow and Deny. Anyone on the network can ask, so the person can be shown asks they
+didn't expect; at most 4 are open at once and one per address, each for at most 2
+minutes, and an ask admits no one until a person presses Allow. The name is the
+device's own text, shown as data. A device that pairs this way doesn't compare
+fingerprints: it trusts the certificate it saw when it asked, so an attacker already in
+the middle of that connection at that moment could be the one it trusts, and the person
+pressing Allow on an unexpected ask pairs a stranger's device with the control token's
+power. The prompt says so, the address helps tell the person's own device apart,
+Paired devices lists it for revoking, and the code (with its fingerprint check) stays
+for anyone who doesn't want the risk. No ask, name or token is logged beyond `info`,
+and no token at all ([R-SEC-001](../RULES.md#R-SEC-001)).
 
 **Accepted** ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md)): while
 the network listener is open, the host announces it on mDNS as `_jstream._tcp.local`

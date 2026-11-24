@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { WebSocketServer, type WebSocket } from "ws";
 
-import { call, fingerprint, lanHost, lanPort, skip, startDaemon, stopDaemon, until } from "./daemon.ts";
+import { call, events, fingerprint, heard, lanHost, lanPort, skip, startDaemon, stopDaemon, until } from "./daemon.ts";
 
 const PLUGIN = "io.github.jeffmhopkins.jstream";
 const DIR = `${PLUGIN}.sdPlugin`;
@@ -72,15 +72,21 @@ test("a scene key pairs from its property inspector, then switches program and l
 	send({ event: "willAppear", ...key, payload });
 	await until("the key drawn offline", () => image().includes("#d93636") && image().includes('fill="#1f2329"'));
 
-	// The property inspector opens, probes JStream and pairs with the code JStream shows.
+	// The property inspector opens, probes JStream and asks it to pair; the person
+	// presses Allow on JStream's screen (ADR-0235).
 	send({ event: "propertyInspectorDidAppear", ...key });
 	send({ event: "sendToPlugin", ...key, payload: { type: "hello" } });
 	await until("the connection status", () => toInspector("connection")?.payload.paired === false);
 	send({ event: "sendToPlugin", ...key, payload: { type: "probe", host: lanHost(), port: lanPort } });
 	await until("the fingerprint", () => toInspector("probed") !== undefined || toInspector("failed") !== undefined, 8000);
 	assert.equal(toInspector("probed")?.payload.fingerprint, fingerprint);
-	const { code } = await call({ kind: "action", action: { type: "pairing.start" } });
-	send({ event: "sendToPlugin", ...key, payload: { type: "pair", host: lanHost(), port: lanPort, fingerprint, code, name: "Stream Deck (test)" } });
+	const from = events.length;
+	send({ event: "sendToPlugin", ...key, payload: { type: "ask", host: lanHost(), port: lanPort, fingerprint, name: "Stream Deck (test)" } });
+	// Asked again while the first waits (Connect pressed twice), the plugin keeps the one.
+	send({ event: "sendToPlugin", ...key, payload: { type: "ask", host: lanHost(), port: lanPort, fingerprint, name: "Stream Deck (test)" } });
+	const asked = await heard("pairing.asked", from);
+	assert.equal(asked.ask.name, "Stream Deck (test)");
+	await call({ kind: "action", action: { type: "pairing.answer", ask_id: asked.ask.ask_id, allow: true } });
 	await until("paired", () => toInspector("paired") !== undefined || toInspector("failed") !== undefined, 8000);
 	assert.equal(toInspector("failed"), undefined, JSON.stringify(toInspector("failed")?.payload));
 	assert.equal(globalSettings.fingerprint, fingerprint);
