@@ -392,8 +392,9 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 (`filter.set_settings`), an item's opacity (`item.set_opacity`) and the gains
 (`source.set_audio` and `bus.set_fader` carrying `gain_db` alone, and `send.set`) as live
 values, so a drag on any of them follows live and commits as one undo step
-([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md));
-0.178 because the rendering switches say how many pixels 3D models
+([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)); 0.179 because
+`profile.get` counts each drawing thread's GPU submits per frame (`DrawerProfile`'s
+`submits`); 0.178 because the rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
@@ -2028,7 +2029,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `stats.tick`'s `drops` leave out), since 0.178 the
   size its 3D models were drawn at when the window ended (`model_resolution`, a
   percentage, 100 from an older server) and the frames drawn with them below 100
-  (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  (`model_frames_reduced`), since 0.179 the GPU submits it made per frame (`submits`:
+  each costs the thread a fixed time however little work it carries, and only the
+  compositor's own are counted), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the
