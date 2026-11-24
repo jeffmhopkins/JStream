@@ -1370,8 +1370,9 @@ context's `MTLSharedEvent` after the submit that reads the frame, and a frame's 
 clone keeps its pixel buffer until the event reaches that value, so ScreenCaptureKit
 never writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so
 an encode target will be two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12
-IOSurface that VideoToolbox reads, as spike S6 does; until then encoding takes the
-CPU readback of step 6.
+IOSurface that VideoToolbox reads, as spike S6 does (`GpuFrame::planar`, which the
+engine's NV12 pass already writes, step 4); until `MetalGpu` makes them, encoding
+takes the CPU readback of step 6.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
