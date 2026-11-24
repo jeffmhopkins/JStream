@@ -2617,6 +2617,30 @@ impl Engine {
                     profile: Box::new(profile),
                 },
             })
+        } else if let Call::Query {
+            query: Query::SceneDrawnCamera { scene_id },
+        } = &call
+        {
+            // Read from the drawers' slots, never from the render thread itself; the
+            // collection lock is held only to check that the scene exists.
+            let known = lock(&self.shared.state)
+                .graph
+                .state()
+                .scene(scene_id)
+                .is_some();
+            if known {
+                let now = std::time::Instant::now();
+                Ok(CallResult::Query {
+                    result: QueryResult::SceneDrawnCamera {
+                        camera: self.shared.profile.drawn_camera(scene_id, now),
+                    },
+                })
+            } else {
+                Err(ProtocolError::NotFound {
+                    entity: EntityKind::Scene,
+                    id: scene_id.as_str().to_owned(),
+                })
+            }
         } else if let Call::Action {
             action:
                 action @ (Action::PreviewSubscribe { .. }

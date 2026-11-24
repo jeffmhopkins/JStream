@@ -8965,7 +8965,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_ptz_shots` (edit), `scene.set_camera_anchor` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.drive_camera` (action), `scene.aim_camera` (action), `scene.set_keyframe` (action), `scene.list` (query), `scene.camera_aim` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_ptz_shots` (edit), `scene.set_camera_anchor` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.drive_camera` (action), `scene.aim_camera` (action), `scene.set_keyframe` (action), `scene.list` (query), `scene.camera_aim` (query), `scene.drawn_camera` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BusId": {
@@ -10668,6 +10668,24 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "scene.camera_aim",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The camera a 3D scene was drawn through last (since 0.192): its camera as its\ncamera motion, follow camera, live aim, the 3D group it rides with and autofocus\nmoved it for the latest picture that drew the scene, which is where its items\nare seen. What an editor outlines and hits the scene's items through. Runtime\nstate, so no `rev`; `camera` is omitted while no picture has drawn the scene\nthrough a camera in the last second.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene, as a picture draws it: a keyframe scene by its own ID."
+                  },
+                  "type": {
+                    "const": "scene.drawn_camera",
                     "type": "string"
                   }
                 },

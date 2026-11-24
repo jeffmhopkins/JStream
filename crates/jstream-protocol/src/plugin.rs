@@ -89,6 +89,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("ptz.list", N),
     // A scene camera's live aim (ADR-0152) holds no address: it's the scene's.
     ("scene.camera_aim", Class(R)),
+    // The camera a scene was drawn through moves with its camera motion, which MIDI,
+    // live data and channels drive: it would tell what the person plays, as
+    // `channel.values` would (ADR-0183).
+    ("scene.drawn_camera", N),
     // LAN addresses of the senders on the person's network (ADR-0123).
     ("jtunnel.senders", N),
     // A DAW's state from the person's network (ADR-0171) is theirs: a page reads it only

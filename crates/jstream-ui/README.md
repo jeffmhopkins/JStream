@@ -2092,7 +2092,13 @@ each time its scene changes.
 - **3D scenes** (`camera.rs`, [ADR-0094](../../docs/adr/0094-scene-cameras.md)). A
   scene with a camera (`Layout.camera`: its own, or a keyframe's override or else its
   parent's, from `Collection::camera_of`) draws each outline through the camera as the
-  compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
+  compositor draws the box: the camera the engine last drew the scene through
+  (`scene.drawn_camera`, read ten times a second while the canvas shows a 3D scene,
+  `canvas/drawn.rs`), so camera motion, a follow camera, a live aim or a 3D group the
+  camera rides with move the outlines and hits with the picture. An orbit, dolly or
+  flight shows its own camera while it moves, and the stored camera is used before the
+  first answer, while no picture draws the scene, and from an edit of the camera until
+  the next answer. Outlines are `drawn_polygon_seen` clipped to the near plane, so a box
   partly behind the camera is outlined, labelled and hit by the part in front of it
   (`camera::polygon`, #1054). An item whose source has a depth (a 3D model,
   `CanvasItem::solid`, [ADR-0107](../../docs/adr/0107-3d-models.md) decision 8) is

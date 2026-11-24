@@ -880,6 +880,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0153](adr/0153-ptz-controller-idle-stop-counters-and-setting.md)), and
   `ptz_cameras` (0.121) how each head's link is doing
   ([ADR-0155](adr/0155-ptz-cameras-counters-in-profile-get.md)).
+- **The camera a scene was drawn through** (protocol 0.192): the query
+  `scene.drawn_camera` answers the camera the latest picture drew a 3D scene through,
+  after its camera motion, follow camera, live aim, group anchor and autofocus moved it.
+  The program stage and the preview hub publish their frames' cameras beside their
+  `profile.get` totals; an editor outlines and hits the scene's items through it.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));

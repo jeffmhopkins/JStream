@@ -429,7 +429,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   scene whose family anchors its camera to such a group item (`PassCamera.anchor`) has
   its camera, after camera motion and the live aim, placed through that item the same
   way; `placed_camera` is that camera as committed, where a transition from the scene
-  starts. A family with a follow camera ignores its anchor.
+  starts. A family with a follow camera ignores its anchor. Each colour pass a frame
+  draws through a camera (a nested scene's, the root's, the show scene's and a chain
+  phase's) notes that camera in the frame's meter by the pass's scene
+  (`DrawMeter::drew_camera`), which `scene.drawn_camera` reads.
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
@@ -601,7 +604,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   (`State::camera_aims`) and publishes them on the parameter channel; a pass's camera,
   and each end of a transition, is turned by its family's aim after its motion and
   follow camera. A drive belongs to the session that last set an axis moving, and
-  `forget_client` stops it.
+  `forget_client` stops it. The camera a colour pass ends up drawn through, after its
+  motion, follow camera, aim, group anchor and autofocus, is what `scene.drawn_camera`
+  reports (see *Profile* under [Contents: media](#contents-media)).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -811,7 +816,14 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   composite's. Its `ms` doesn't: on the CPU those stay in the finish phase. The preview hub's thread times none. Each
   drawer also counts the GPU submits its thread made (`DrawMeter::submitted`, from
   `jstream_render::submits_on_this_thread` at the end of a frame), which `profile.get`
-  reports per frame as `submits`. The
+  reports per frame as `submits`. A drawer's meter also carries the cameras its
+  frame drew each scene's colour pass through, after camera motion, follow, live aim,
+  a group anchor and autofocus moved them (`DrawMeter::drew_camera`, `drawn_camera.rs`),
+  and publishes them into its `DrawerSlot` as one `DrawnCameras` when they change (at
+  most every 50 ms, and every 250 ms while they don't); the collector frees the set it
+  replaces (`profile::Retired`). `scene.drawn_camera` reads both drawers' slots outside
+  the collection lock, which it takes only to check that the scene exists, and answers
+  the most recent camera published within the last second. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
   source's look and each plan, and each new GPU frame a browser page painted that a plan
   took as a paint of it (#1556), in the live sources' `SourceMeters`. The `Profiler`
@@ -1228,6 +1240,12 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   skipped, a longer transition pacing a pose), a preview moving only the cameras
   the program doesn't frame, and MIDI controls bound to a head's zoom and pan aiming
   it, pan keeping the tilt the head answered (`value_bindings_aim_ptz_axes`).
+- **The drawn camera** (`src/tests/cameras.rs`, `src/drawn_camera.rs`): a metered frame
+  of a 3D scene whose camera motion slides it is what `scene.drawn_camera` answers, the
+  moved camera rather than the stored one, with none before any frame, none for a 2D
+  scene and `not_found` for a missing one (GPU, skipped without an adapter); and the
+  recorder's publishes (at most every `PUBLISH_MIN`, again every `REFRESH_EVERY`, a
+  scene no longer drawn gone, a stopped drawer stale, the most recent drawer winning).
 - **PTZ controllers and the live aim** (`src/ptz/controller/tests.rs`, `src/aim/tests.rs`,
   `src/tests/cameras.rs`, `src/tests/transitions.rs`): a VISCA controller emulator on
   loopback over all three transports, driving, aiming, zooming and reading a keyframe
@@ -1382,6 +1400,9 @@ path, before the queries the graph answers: it takes the collection lock only to
 the MIDI inputs, and reads each one's latest control change under `MidiInputs`' leaf
 lock. `midi.last_notes` (ADR-0202) is answered the same way, reading each input's
 latest note-on.
+`scene.drawn_camera` (0.192) takes the collection lock only to check that the scene
+exists, then reads the drawers' published cameras with no lock (see *Profile* under
+[Contents: media](#contents-media)).
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -5451,9 +5472,10 @@ or a GPU that is behind drops (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
 too; a tick that fails part-way is discarded), which allocates nothing in a steady
-frame and publishes one snapshot of its totals about once a second, the meter's only
-allocation, handing the totals it replaces to the collector (*Profile* in
-[Purpose](#purpose)). The render thread uploads no 3D model: its draw's `Chains` asks the
+frame and publishes one snapshot of its totals about once a second, and the cameras its
+frame drew its scenes through when they change (at most 20 times a second, and 4 while
+they don't), the meter's only allocations, handing what they replace to the collector
+(*Profile* in [Contents: media](#contents-media)). The render thread uploads no 3D model: its draw's `Chains` asks the
 `jstream-models` thread for each (`Chains::upload_models_aside`, see *Snapshots*;
 [ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). After its draws it
 uploads the warm scenes' stills its cache holds no texture of, from held pixels only
