@@ -162,7 +162,7 @@ impl Studio {
             if warm.len() >= self.budget {
                 break;
             }
-            if Some(id) != program && !warm.contains(id) {
+            if Some(id) != program && Some(id) != collection.show_scene() && !warm.contains(id) {
                 warm.push(id.clone());
             }
         }
@@ -197,12 +197,18 @@ impl Studio {
     /// is forgotten. `true` when program or preview changed.
     pub(crate) fn reconcile(&mut self, collection: &State) -> bool {
         self.recent.retain(|id| collection.scene(id).is_some());
-        let first = collection.scenes().first().map(|scene| scene.id().clone());
+        let show = collection.show_scene();
+        let first = collection
+            .scenes()
+            .iter()
+            .map(|scene| scene.id())
+            .find(|id| Some(*id) != show)
+            .cloned();
         let mut changed = false;
         for slot in [&mut self.program, &mut self.preview] {
             let kept = slot
                 .as_ref()
-                .is_some_and(|id| collection.scene(id).is_some());
+                .is_some_and(|id| collection.scene(id).is_some() && Some(id) != show);
             if !kept && *slot != first {
                 *slot = first.clone();
                 changed = true;
@@ -219,9 +225,17 @@ impl Studio {
     }
 }
 
-/// `not_found` unless the collection has scene `scene_id`.
+/// `not_found` unless the collection has scene `scene_id`, and `invalid_argument` for
+/// the internal show scene, which draws over program and so never goes on it or on
+/// preview.
 pub(crate) fn exists(collection: &State, scene_id: &SceneId) -> Result<(), ProtocolError> {
     match collection.scene(scene_id) {
+        Some(_) if collection.show_scene() == Some(scene_id) => {
+            Err(ProtocolError::invalid_argument(
+                "scene_id",
+                format!("scene `{scene_id}` is the internal show scene, which nothing may show"),
+            ))
+        }
         Some(_) => Ok(()),
         None => Err(ProtocolError::NotFound {
             entity: EntityKind::Scene,

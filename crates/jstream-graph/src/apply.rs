@@ -92,6 +92,27 @@ impl Graph {
         }
     }
 
+    /// Makes `scene_id` the internal show scene, or clears it with `None`. The engine
+    /// alone sets it, and it is not a revision: [`apply`](Self::apply) keeps it, and an
+    /// edit that deletes the scene clears it. While a scene is the show scene, nothing
+    /// may place it, reference it from a source's settings or show it in a video mix.
+    ///
+    /// Returns `false`, and leaves the marker as it was, for a scene that doesn't exist
+    /// or that something already shows: a `scene` source, a settings reference or a
+    /// video mix ([`deps::blockers`]). Its keyframe scenes don't count.
+    pub fn set_show_scene(&mut self, scene_id: Option<SceneId>) -> bool {
+        if let Some(id) = &scene_id
+            && (self.state.scene(id).is_none()
+                || deps::blockers(&self.state, &Node::Scene(id.clone()))
+                    .iter()
+                    .any(|blocker| blocker.field != "variant_of"))
+        {
+            return false;
+        }
+        self.state.show_scene = scene_id;
+        true
+    }
+
     /// A copy of the graph whose placed scenes draw through `keyframes` (keyframe
     /// tracks, ADR-0116): each scene ID to the keyframe scene of it that its placements
     /// draw. Studio state, not a revision: no undo step, no inverse, and a pair that no
@@ -181,6 +202,14 @@ impl Graph {
             // So does any edit that takes an item away (ADR-0101).
             inverse.extend(crate::hotkey::remove_missing_items(&mut work, &mut removed));
             undo.push(inverse);
+        }
+        // The show scene's marker goes with its scene.
+        if work
+            .show_scene
+            .as_ref()
+            .is_some_and(|id| work.scene(id).is_none())
+        {
+            work.show_scene = None;
         }
         self.state = work;
         self.rev = rev;
@@ -305,6 +334,25 @@ fn find_scene(state: &State, id: &SceneId) -> Result<usize, ProtocolError> {
     state
         .scene_index(id)
         .ok_or_else(|| not_found(EntityKind::Scene, id.as_str()))
+}
+
+/// Refuses naming the internal show scene in `field`: it draws over program, so a
+/// scene source, a settings reference or a video mix showing it would draw program
+/// inside itself.
+pub(crate) fn not_the_show_scene(
+    state: &State,
+    id: &SceneId,
+    at: usize,
+    field: &str,
+) -> Result<(), ProtocolError> {
+    if state.show_scene() == Some(id) {
+        return Err(invalid(
+            at,
+            field,
+            format!("scene `{id}` is the internal show scene, which nothing may show"),
+        ));
+    }
+    Ok(())
 }
 
 fn find_item(state: &State, id: &ItemId) -> Result<(usize, usize), ProtocolError> {
@@ -884,6 +932,7 @@ fn apply_edit(
             let settings = match kind {
                 SourceKind::Scene { scene_id } => {
                     find_scene(state, scene_id)?;
+                    not_the_show_scene(state, scene_id, at, "kind.scene_id")?;
                     if !settings.is_empty() {
                         return Err(invalid(at, "settings", "a `scene` source has no settings"));
                     }
@@ -1582,6 +1631,7 @@ pub(crate) fn check_value(
     match Reference::from_value(value) {
         Some(Reference::Scene { scene_id }) => {
             find_scene(state, &scene_id)?;
+            not_the_show_scene(state, &scene_id, at, field)?;
         }
         Some(Reference::Bus { bus_id }) => {
             if state.bus(&bus_id).is_none() {
