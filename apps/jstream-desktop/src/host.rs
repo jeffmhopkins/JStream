@@ -885,8 +885,8 @@ fn handled(live: Live) -> Arc<Engine> {
 /// The macOS backends, as the daemon creates them (its `macos_backends`): the Mach
 /// clock, ScreenCaptureKit capture, AVFoundation webcams and media files, Core Audio,
 /// VideoToolbox and AudioToolbox codecs, and the Metal GPU interop (`MetalGpu`), whose
-/// device the engine composites on and capture delivers GPU frames to. There is no
-/// virtual camera. Creating them opens no device:
+/// device the engine composites on, capture delivers GPU frames to and VideoToolbox
+/// encodes from. There is no virtual camera. Creating them opens no device:
 /// capture, webcams and audio check the release floor, and ask for their permissions
 /// only when a pipeline first uses them.
 #[cfg(target_os = "macos")]

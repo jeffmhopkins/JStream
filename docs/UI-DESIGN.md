@@ -49,7 +49,7 @@ A source's kind has a mark too, a dot on its chip in the Mappings panel: MIDI
 `--warn`, only to tell the kinds apart.
 
 The Show panel's timeline is the other: its `--show-*` tokens tell its elements apart,
-each with one job. Bookmarks and Continue are yellow (`--show-bookmark`), loops and
+each with one job. Bookmarks are yellow (`--show-bookmark`), loops and
 keyframes violet (`--show-loop`, `--show-keyframe`), the armed spot light blue
 (`--show-armed`) and the play head white (`--show-head`); program clips take five dark
 colours in turn (`--show-clip-c0` to `c4`, and the Run view's strip `--show-seg-0` to
@@ -238,7 +238,10 @@ The property grid, as OBS's Properties lay a source's settings out:
   edge names the armed source. An Inspector number that takes mappings has no button:
   its mappings' offset is a 10 px `--accent` tag on a `--selected` pill over the
   field's top right corner, its border turns `--accent`, and a right-click on the number
-  opens its menu.
+  opens its menu. A mapping is an Offset or an Override, chosen on a segmented control
+  beside the chosen source. A bypassed mapping stays where it is, dimmed and struck
+  through, in its row and on the control button; the row's Bypass is a small pill,
+  outlined in `--warn` while it is on.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for

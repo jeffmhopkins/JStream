@@ -11,8 +11,8 @@
 
 use crate::store::Collection;
 use jstream_control::protocol::{
-    Action, ChannelSwitch, Chord, Edit, Finite32, ItemId, OutputId, OutputKind, SceneId, SourceId,
-    TimelineId, Trigger,
+    Action, ChannelSwitch, Chord, Edit, Finite32, ItemId, OutputId, OutputKind, SceneId, ShowId,
+    SourceId, TimelineId, Trigger,
 };
 
 /// What fires a row: a key chord, or a MIDI trigger.
@@ -155,6 +155,14 @@ pub fn describe(action: &Action, c: &Collection) -> String {
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| id.to_string())
     };
+    let show = |id: &ShowId| show_name(c, id);
+    let bookmark = |show_id: &ShowId, id: &str| {
+        c.shows
+            .iter()
+            .find(|s| &s.show_id == show_id)
+            .and_then(|s| bookmark_name(s, id))
+            .unwrap_or_else(|| id.to_owned())
+    };
     match action {
         Action::SceneSwitch { scene_id, .. } => format!("Switch to {}", scene(scene_id)),
         Action::StudioSetPreview { scene_id } => format!("Preview {}", scene(scene_id)),
@@ -196,6 +204,36 @@ pub fn describe(action: &Action, c: &Collection) -> String {
             steps.unsigned_abs()
         ),
         Action::AudioResetLoudness {} => "Reset the loudness meter".into(),
+        Action::ShowPlay {
+            show_id,
+            bookmark_id,
+            rehearse,
+        } => {
+            let verb = if *rehearse { "Rehearse" } else { "Play" };
+            match bookmark_id {
+                Some(b) => format!("{verb} {} from {}", show(show_id), bookmark(show_id, b)),
+                None => format!("{verb} {}", show(show_id)),
+            }
+        }
+        Action::ShowContinue => "Continue the show".into(),
+        Action::ShowPause => "Pause the show".into(),
+        Action::ShowStop => "Stop the show".into(),
+        Action::ShowBack => "Back to the show's last bookmark".into(),
+        Action::ShowSkip => "Skip to the show's next bookmark".into(),
+        Action::ShowGoTo {
+            show_id,
+            bookmark_id,
+        } => format!(
+            "Go to {} in {}",
+            bookmark(show_id, bookmark_id),
+            show(show_id)
+        ),
+        Action::ShowGoToNumber { number } => format!("Go to bookmark {number}"),
+        Action::OverlayShow { scene_id } => format!("Show overlay {}", scene(scene_id)),
+        Action::OverlayHide { scene_id } => format!("Hide overlay {}", scene(scene_id)),
+        Action::OverlayToggle { scene_id } => {
+            format!("Show or hide overlay {}", scene(scene_id))
+        }
         other => humanize(other.name()),
     }
 }
@@ -224,6 +262,34 @@ pub fn output_name(c: &Collection, id: &OutputId) -> String {
         _ => id.to_string(),
     }
 }
+
+/// A show as people read it: its name, or its ID if it has none.
+pub fn show_name(c: &Collection, id: &ShowId) -> String {
+    c.shows
+        .iter()
+        .find(|s| &s.show_id == id)
+        .map(|s| s.name.clone())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// A bookmark of `show` in words: its name, or for an unnamed one "Bookmark N", N its
+/// place from 1 in show order, the number `show.go_to_number` counts.
+fn bookmark_name(show: &jstream_control::protocol::ShowInfo, id: &str) -> Option<String> {
+    let b = show.bookmarks.iter().find(|b| b.bookmark_id == id)?;
+    if !b.name.is_empty() {
+        return Some(b.name.clone());
+    }
+    let place = show
+        .bookmarks
+        .iter()
+        .filter(|o| (o.at_ms, &o.bookmark_id) < (b.at_ms, &b.bookmark_id))
+        .count();
+    Some(format!("Bookmark {}", place + 1))
+}
+
+/// What separates a show's ID from a bookmark's in a [`Needs::Bookmark`] target.
+const BOOKMARK_SEPARATOR: char = '\n';
 
 /// A kind of action a person can bind, as the picker lists it. Each builds one or more
 /// actions from what the picker's fields hold ([`Pick::actions`]).
@@ -267,6 +333,28 @@ pub enum Pick {
     SourceRestart,
     /// The loudness meter restarted.
     ResetLoudness,
+    /// A show played from its start.
+    ShowPlay,
+    /// The running show plays on: from a pausing bookmark, a pause, or to the next one.
+    ShowContinue,
+    /// The running show held where it is.
+    ShowPause,
+    /// The running show stopped.
+    ShowStop,
+    /// The running show back to the pausing bookmark before it.
+    ShowBack,
+    /// The running show on to the next pausing bookmark.
+    ShowSkip,
+    /// One bookmark of one show.
+    ShowGoTo,
+    /// Bookmark 1 to 8 of the running show, by order.
+    ShowGoToNumber,
+    /// A scene put over program as an overlay, or taken down, in turn.
+    OverlayToggle,
+    /// A scene put over program as an overlay.
+    OverlayShow,
+    /// An overlay taken down.
+    OverlayHide,
 }
 
 /// What a [`Pick`] needs chosen before it can build its action.
@@ -288,11 +376,17 @@ pub enum Needs {
     Timeline,
     /// A source.
     Source,
+    /// A show.
+    Show,
+    /// A bookmark of a show.
+    Bookmark,
+    /// A bookmark number, 1 to 8.
+    BookmarkNumber,
 }
 
 impl Pick {
     /// Every pick, grouped as the picker lists them.
-    pub const ALL: [Pick; 19] = [
+    pub const ALL: [Pick; 30] = [
         Pick::GoLive,
         Pick::Record,
         Pick::OutputToggle,
@@ -312,6 +406,17 @@ impl Pick {
         Pick::TimelineStop,
         Pick::SourceRestart,
         Pick::ResetLoudness,
+        Pick::ShowContinue,
+        Pick::ShowPlay,
+        Pick::ShowPause,
+        Pick::ShowStop,
+        Pick::ShowBack,
+        Pick::ShowSkip,
+        Pick::ShowGoToNumber,
+        Pick::ShowGoTo,
+        Pick::OverlayToggle,
+        Pick::OverlayShow,
+        Pick::OverlayHide,
     ];
 
     /// The group it is listed under.
@@ -331,6 +436,15 @@ impl Pick {
             | Pick::ChannelNudge => "Channels",
             Pick::TimelinePlay | Pick::TimelineStop => "Sequences",
             Pick::SourceRestart | Pick::ResetLoudness => "Sources and audio",
+            Pick::ShowPlay
+            | Pick::ShowContinue
+            | Pick::ShowPause
+            | Pick::ShowStop
+            | Pick::ShowBack
+            | Pick::ShowSkip
+            | Pick::ShowGoTo
+            | Pick::ShowGoToNumber => "Shows",
+            Pick::OverlayToggle | Pick::OverlayShow | Pick::OverlayHide => "Overlays",
         }
     }
 
@@ -356,6 +470,17 @@ impl Pick {
             Pick::TimelineStop => "Stop a sequence",
             Pick::SourceRestart => "Restart a source",
             Pick::ResetLoudness => "Reset the loudness meter",
+            Pick::ShowPlay => "Play a show",
+            Pick::ShowContinue => "Continue the show",
+            Pick::ShowPause => "Pause the show",
+            Pick::ShowStop => "Stop the show",
+            Pick::ShowBack => "Back to the last bookmark",
+            Pick::ShowSkip => "Skip to the next bookmark",
+            Pick::ShowGoTo => "Go to a bookmark",
+            Pick::ShowGoToNumber => "Go to bookmark 1 to 8",
+            Pick::OverlayToggle => "Show or hide an overlay",
+            Pick::OverlayShow => "Show an overlay",
+            Pick::OverlayHide => "Hide an overlay",
         }
     }
 
@@ -381,6 +506,17 @@ impl Pick {
             Pick::TimelineStop => "timeline_stop",
             Pick::SourceRestart => "source_restart",
             Pick::ResetLoudness => "reset_loudness",
+            Pick::ShowPlay => "show_play",
+            Pick::ShowContinue => "show_continue",
+            Pick::ShowPause => "show_pause",
+            Pick::ShowStop => "show_stop",
+            Pick::ShowBack => "show_back",
+            Pick::ShowSkip => "show_skip",
+            Pick::ShowGoTo => "show_go_to",
+            Pick::ShowGoToNumber => "show_go_to_number",
+            Pick::OverlayToggle => "overlay_toggle",
+            Pick::OverlayShow => "overlay_show",
+            Pick::OverlayHide => "overlay_hide",
         }
     }
 
@@ -392,7 +528,18 @@ impl Pick {
     /// What it needs chosen.
     pub fn needs(self) -> Needs {
         match self {
-            Pick::GoLive | Pick::Record | Pick::ResetLoudness => Needs::Nothing,
+            Pick::GoLive
+            | Pick::Record
+            | Pick::ResetLoudness
+            | Pick::ShowContinue
+            | Pick::ShowPause
+            | Pick::ShowStop
+            | Pick::ShowBack
+            | Pick::ShowSkip => Needs::Nothing,
+            Pick::ShowPlay => Needs::Show,
+            Pick::ShowGoTo => Needs::Bookmark,
+            Pick::ShowGoToNumber => Needs::BookmarkNumber,
+            Pick::OverlayToggle | Pick::OverlayShow | Pick::OverlayHide => Needs::Scene,
             Pick::OutputToggle | Pick::OutputStart | Pick::OutputStop => Needs::Output,
             Pick::SceneSwitch | Pick::ScenePreview => Needs::Scene,
             Pick::ItemToggle | Pick::ItemShow | Pick::ItemHide => Needs::Item,
@@ -483,6 +630,36 @@ impl Pick {
                 source_id: SourceId::new(target),
             }),
             Pick::ResetLoudness => one(Action::AudioResetLoudness {}),
+            Pick::ShowPlay => one(Action::ShowPlay {
+                show_id: ShowId::new(target),
+                bookmark_id: None,
+                rehearse: false,
+            }),
+            Pick::ShowContinue => one(Action::ShowContinue),
+            Pick::ShowPause => one(Action::ShowPause),
+            Pick::ShowStop => one(Action::ShowStop),
+            Pick::ShowBack => one(Action::ShowBack),
+            Pick::ShowSkip => one(Action::ShowSkip),
+            Pick::ShowGoTo => match target.split_once(BOOKMARK_SEPARATOR) {
+                Some((show_id, bookmark_id)) if !bookmark_id.is_empty() => one(Action::ShowGoTo {
+                    show_id: ShowId::new(show_id),
+                    bookmark_id: bookmark_id.to_owned(),
+                }),
+                _ => Vec::new(),
+            },
+            Pick::ShowGoToNumber => match target.parse::<u8>() {
+                Ok(number @ 1..=8) => one(Action::ShowGoToNumber { number }),
+                _ => Vec::new(),
+            },
+            Pick::OverlayToggle => one(Action::OverlayToggle {
+                scene_id: SceneId::new(target),
+            }),
+            Pick::OverlayShow => one(Action::OverlayShow {
+                scene_id: SceneId::new(target),
+            }),
+            Pick::OverlayHide => one(Action::OverlayHide {
+                scene_id: SceneId::new(target),
+            }),
         }
     }
 }
@@ -549,6 +726,28 @@ pub fn targets(c: &Collection, needs: Needs) -> Vec<(String, String)> {
             .sources
             .iter()
             .map(|s| (s.source_id.to_string(), s.name.clone()))
+            .collect(),
+        Needs::Show => c
+            .shows
+            .iter()
+            .map(|s| (s.show_id.to_string(), show_name(c, &s.show_id)))
+            .collect(),
+        Needs::Bookmark => c
+            .shows
+            .iter()
+            .flat_map(|show| {
+                show.bookmarks.iter().map(move |b| {
+                    let name = bookmark_name(show, &b.bookmark_id)
+                        .unwrap_or_else(|| b.bookmark_id.clone());
+                    (
+                        format!("{}{BOOKMARK_SEPARATOR}{}", show.show_id, b.bookmark_id),
+                        format!("{} › {name}", show_name(c, &show.show_id)),
+                    )
+                })
+            })
+            .collect(),
+        Needs::BookmarkNumber => (1..=8)
+            .map(|n| (n.to_string(), format!("Bookmark {n}")))
             .collect(),
     }
 }
@@ -756,6 +955,83 @@ mod tests {
         for pick in Pick::ALL {
             assert_eq!(Pick::from_key(pick.key()), Some(pick));
         }
+    }
+
+    /// A collection with one show, "Evening", holding two bookmarks.
+    fn with_show() -> Collection {
+        let mut show = jstream_control::protocol::ShowInfo::new("evening");
+        show.name = "Evening".into();
+        let bookmark = |id: &str, name: &str, at_ms: u32| jstream_control::protocol::ShowBookmark {
+            bookmark_id: id.into(),
+            name: name.into(),
+            at_ms,
+            pausing: true,
+            preset_id: None,
+            continue_after_ms: None,
+            note: String::new(),
+        };
+        show.bookmarks = vec![bookmark("intro", "Intro", 0), bookmark("b2", "", 5000)];
+        Collection {
+            shows: vec![show],
+            ..Collection::default()
+        }
+    }
+
+    #[test]
+    fn show_picks_build_the_show_actions() {
+        let c = with_show();
+        assert_eq!(
+            Pick::ShowContinue.actions(&c, "", 0.0),
+            vec![Action::ShowContinue]
+        );
+        assert_eq!(
+            Pick::ShowPlay.actions(&c, "evening", 0.0),
+            vec![Action::ShowPlay {
+                show_id: ShowId::new("evening"),
+                bookmark_id: None,
+                rehearse: false,
+            }]
+        );
+        // A bookmark is picked as its show and its ID together.
+        let targets = targets(&c, Needs::Bookmark);
+        assert_eq!(
+            targets
+                .iter()
+                .map(|(_, label)| label.as_str())
+                .collect::<Vec<_>>(),
+            ["Evening › Intro", "Evening › Bookmark 2"]
+        );
+        let go_to = Pick::ShowGoTo.actions(&c, &targets[1].0, 0.0);
+        assert_eq!(
+            go_to,
+            vec![Action::ShowGoTo {
+                show_id: ShowId::new("evening"),
+                bookmark_id: "b2".into(),
+            }]
+        );
+        assert_eq!(describe(&go_to[0], &c), "Go to Bookmark 2 in Evening");
+        assert!(Pick::ShowGoTo.actions(&c, "evening", 0.0).is_empty());
+        // Bookmark 1 to 8, by order.
+        assert_eq!(targets_len(&c, Needs::BookmarkNumber), 8);
+        assert_eq!(
+            Pick::ShowGoToNumber.actions(&c, "3", 0.0),
+            vec![Action::ShowGoToNumber { number: 3 }]
+        );
+        assert!(Pick::ShowGoToNumber.actions(&c, "9", 0.0).is_empty());
+        assert_eq!(
+            describe(&Action::ShowGoToNumber { number: 3 }, &c),
+            "Go to bookmark 3"
+        );
+        assert_eq!(
+            Pick::OverlayToggle.actions(&c, "logo", 0.0),
+            vec![Action::OverlayToggle {
+                scene_id: SceneId::new("logo")
+            }]
+        );
+    }
+
+    fn targets_len(c: &Collection, needs: Needs) -> usize {
+        targets(c, needs).len()
     }
 
     #[test]
