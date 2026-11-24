@@ -5,7 +5,9 @@
 //! `at` its frames are asked for at. The engine keeps that zero when it builds a timer
 //! again for a change that doesn't restart it (every setting but `mode`, `duration`
 //! and the `restart` counter, [`SourceKind::keeps_time`]) and when it draws it at another density, so
-//! editing a timer's look or resizing its item keeps the count going. A clock shows the
+//! editing a timer's look or resizing its item keeps the count going. The engine moves
+//! that zero to start a countdown or stopwatch again when the program shows it again,
+//! and for `source.restart` ([`Source::counts_from_zero`], ADR-0212). A clock shows the
 //! wall-clock time in the machine's time zone, or the one `time_zone` names.
 //!
 //! Every frame has one size: the text is laid out in a fixed box, measured when the
@@ -92,7 +94,8 @@ impl TimerKind {
                 json!("countdown"),
                 false,
                 "Count down from Duration, count up from zero, or show the time of day. \
-                 Changing it restarts the count.",
+                 Changing it restarts the count, and a countdown or stopwatch starts \
+                 again each time its scene goes on program.",
             ),
             p(
                 "duration",
@@ -292,6 +295,13 @@ impl Source for TimerSource {
     fn painter(&self) -> Option<Arc<dyn Painter>> {
         let painter: Arc<dyn Painter> = self.painter.clone();
         Some(painter)
+    }
+
+    /// A countdown or stopwatch counts from its time zero, so the engine starts it again
+    /// when the program shows it again, and for `source.restart`, by moving that zero
+    /// (ADR-0212). A clock shows the wall clock, which a new zero doesn't change.
+    fn counts_from_zero(&self) -> bool {
+        true
     }
 }
 

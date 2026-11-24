@@ -867,8 +867,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a timeline action. The objects a cue names aren't checked, so a deleted one leaves the
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
-  `source.restart` reloads a page or plays a file from its start, and `source.seek`
-  (0.177) plays a file on from a point, holding through the switch that shows it; it
+  `source.restart` reloads a page, plays a file from its start or starts a timer's count
+  again (0.179, ADR-0212: a countdown or stopwatch also starts again each time the
+  program shows it again), and `source.seek` (0.177) plays a file on from a point, holding through the switch that shows it; it
   is runtime state a hotkey, MCP or a `live` plugin can run, but not a cue. Since 0.170
   ([ADR-0184](adr/0184-sequences-lanes-and-triggers.md)) a timeline with `lanes` is a
   sequence: each lane moves one channel through points as one more input of it, from

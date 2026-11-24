@@ -384,7 +384,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.177 because of `source.seek`, which plays a `media` file on
+`PROTOCOL_VERSION` is 0.179 because a `timer` countdown or stopwatch starts its count
+again when the program shows it again, and `source.restart` and `source.seek` start or
+move its count (ADR-0212, a placeholder number the release queue sets); 0.177 because of `source.seek`, which plays a `media` file on
 from a point into it and holds through the program showing it, and `SourceSize`'s and
 `source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
 the release queue sets); 0.176 because `profile.get`'s drawers report
@@ -3231,14 +3233,17 @@ Since 0.87 a scene holds timelines
   (`TimelineChange`, which parses an unknown value as `unknown`), and
   `timeline.cue_fired` each cue, with the error its action got.
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
-  effect pack's shader source from its beginning, whatever its `restart_on_show`; other
-  kinds have nothing to restart. Plugins need the `live` class for it.
+  effect pack's shader source from its beginning, whatever its `restart_on_show`, and
+  since 0.179 starts a `timer` countdown or stopwatch counting again from its start
+  (ADR-0212); other kinds, a `timer` clock among them, have nothing to restart. Plugins
+  need the `live` class for it.
 - **`source.seek {source_id, at_ms}`** (since 0.177) plays a `media` file on from
   `at_ms` into its timeline: past the end of a looping file it lands where that many
   plays would reach, and on one that doesn't loop, on its last frame. A kind with nothing
-  to seek starts over as `source.restart` starts it, and others do nothing. A seek
-  made before the program shows the source holds through the show, so the source isn't
-  started again from its start by `restart_on_show`: a switch and a seek can come in
+  to seek starts over as `source.restart` starts it, a `timer` (since 0.179) counts on
+  as if it had started `at_ms` ago, and others do nothing. A seek made before the
+  program shows the source holds through the show, so the source isn't started again
+  from its start by `restart_on_show` or a `timer`'s show: a switch and a seek can come in
   either order. Like `source.restart` it is runtime state, bindable to a hotkey, not a
   timeline cue, and needs the `live` class from a plugin.
 
