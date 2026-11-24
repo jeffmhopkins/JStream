@@ -258,7 +258,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
   says bye when it stops; it never announces itself or sends audio or MIDI. A
   `network_audio` source with an empty `sender` records the first accepted sender, the
-  desktop app's one live sender (ADR-0218); a reader that names no input already reads
+  desktop app's one live sender (ADR-0221); a reader that names no input already reads
   it. Beside each
   keepalive it may send a names packet
   ([ADR-0181](../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md),
@@ -278,7 +278,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `_jtunnel._udp.local` to 224.0.0.251:5353; `JtunnelSetup::discover` names where, `None`
   for nobody). JTunnel answers and announces to the group, so for a multicast `discover`
   the receiver also opens the mDNS listener (`mdns_listener`,
-  [ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)):
+  [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)):
   a read-only socket on the group's port, shared with the system's responder by address
   reuse and joined to the group, drained non-blocking (at most 16 datagrams per turn)
   and run without when it can't be opened. From either socket it lists the senders
@@ -1262,7 +1262,7 @@ ADR-0076), `jstream-youtube` (Google sign-in and the
 Live API client behind the YouTube commands and `youtube` outputs), `serde_json` (settings
 values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
 settings, and the CLAP kinds' parameter defaults), `socket2` (the JTunnel receiver's mDNS
-listener, which must set address reuse before it binds port 5353, ADR-0218; already in
+listener, which must set address reuse before it binds port 5353, ADR-0221; already in
 the tree under tokio with the same `all` feature), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), `thiserror`

@@ -495,7 +495,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   so far), `sender` the tunnel name (at most `MAX_SENDER_NAME`, 31 bytes, trimmed; free
   text like a device ID, and recorded only once this machine accepts it; empty, the
   default, records the first accepted sender, the desktop app's live one,
-  [ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), and
+  [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), and
   `latency_ms` how long frames wait before they play (`LATENCY_MS`: 5 to 500, 40 by
   default; out of range reads as the default). Its target is
   `AudioTarget::Network { transport: Transport::Jtunnel, sender, latency_ms }`.

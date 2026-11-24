@@ -27,7 +27,7 @@
 //! `jtunnel.senders` reports the list. Each change to it is sent on the host's
 //! `changed` channel, which the engine turns into `jtunnel.senders_changed`.
 //!
-//! **The live sender needs no name** ([ADR-0218](../../../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)).
+//! **The live sender needs no name** ([ADR-0221](../../../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)).
 //! The desktop app receives from one sender at a time, so a reader that names no input
 //! (a binding, a channel input, a page grant) already reads it, whatever its tunnel
 //! name, and a `network_audio` source with an empty `sender` records the first accepted
@@ -605,7 +605,7 @@ impl Receiver {
     }
 
     /// The sender called `name`, or for an empty name the first accepted one: the
-    /// desktop app's one live sender (ADR-0218).
+    /// desktop app's one live sender (ADR-0221).
     fn sender(&self, name: &str) -> Result<usize, String> {
         if name.is_empty() {
             return if self.senders.is_empty() {

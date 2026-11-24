@@ -690,7 +690,7 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
     };
 
     // JTunnel: Mods, and any other field of a sender's data.
-    // One JTunnel sender is live at a time, so a Mod follows it unnamed (ADR-0218).
+    // One JTunnel sender is live at a time, so a Mod follows it unnamed (ADR-0221).
     let any_sender = RwSignal::new(true);
     let opened = RwSignal::new(None::<(String, String, Vec<(String, String)>)>);
     let open_key = move |sender: String, key: String| {
@@ -839,7 +839,7 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                             .into_iter()
                             .map(|(field, value)| {
                                 // Live data comes only from JTunnel, one sender live at
-                                // a time: the reader names none (ADR-0218).
+                                // a time: the reader names none (ADR-0221).
                                 let reader = data_reader(None, &key, &field);
                                 let is_chosen = {
                                     let reader = reader.clone();

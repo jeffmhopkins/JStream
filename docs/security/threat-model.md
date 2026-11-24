@@ -736,14 +736,14 @@ somewhere it shouldn't.
   `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
   socket. It never announces itself and never sends audio or MIDI.
 - Senders answer and announce to the group, so a second socket, the mDNS listener
-  ([ADR-0218](../adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)),
+  ([ADR-0221](../adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)),
   binds port 5353 with address reuse beside the system's responder and joins the group
   while the receiver runs. Nothing is sent from it. It takes only an mDNS message from a
   LAN address's port 5353, into the same parser and list as below, and drops the rest
   uncounted; it reads at most 16 datagrams per turn of the thread, so other programs'
   mDNS traffic can't hold up playout. Another local program on 5353 sees the same
   group traffic it always did; JStream adds nothing to it.
-- In the desktop app one accepted sender is live at a time (ADR-0218): only it is
+- In the desktop app one accepted sender is live at a time (ADR-0221): only it is
   subscribed to, so a reader naming no input reads only that sender's data.
 - A names packet ([ADR-0181](../adr/0181-jstream-names-a-jtunnel-senders-params.md))
   tells an accepted sender whose state is on what the collection calls its modulation

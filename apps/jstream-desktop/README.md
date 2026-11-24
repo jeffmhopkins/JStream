@@ -304,7 +304,7 @@ folder, and its log `logs\cef.log`.
   turned on) and its list of accepted senders, each a tunnel name and the address and
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
   in the data folder; they apply at once. Several senders may be accepted, but one is
-  live at a time ([ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)): Make live switches, and a sender accepted becomes live. The
+  live at a time ([ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)): Make live switches, and a sender accepted becomes live. The
   readers that name no input (what Learn and Map make for a JTunnel source) follow
   whichever sender is live. On, the app receives the live
   sender's audio and MIDI as the daemon's `--jtunnel-accept` does
@@ -445,7 +445,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
 - **JTunnel** (`jtunnel.rs`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
   "address": "192.168.1.5:9000", "state": true}], "live": "Bitwig"}` in the data folder's `jtunnel.json`
-  (`live` names the one sender received from, [ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md); left out, or naming a sender no
+  (`live` names the one sender received from, [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md); left out, or naming a sender no
   longer accepted, the first accepted is live)
   (`state` is "Use this sender's state",
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 1, on

@@ -49,7 +49,11 @@ pub struct HostEngine {
 
 /// The desktop app's global: this page's own, else its opener's when the opener is a
 /// page of the same origin (reading a property of a cross-origin opener throws).
+/// Off wasm (native unit tests) there is no page, so no desktop app.
 fn global() -> Option<JsValue> {
+    if cfg!(not(target_arch = "wasm32")) {
+        return None;
+    }
     let own = |target: &JsValue| {
         Reflect::get(target, &JsValue::from_str(DESKTOP_GLOBAL))
             .ok()

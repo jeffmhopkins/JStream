@@ -40,7 +40,7 @@ use leptos::task::spawn_local;
 
 /// The input a reader learned from `input` names: none when `input` is a JTunnel sender
 /// this app accepts, since the app receives from one sender at a time and a reader
-/// naming no input reads the live one, whatever its tunnel name (ADR-0218); `input`
+/// naming no input reads the live one, whatever its tunnel name (ADR-0221); `input`
 /// itself for anything else (a MIDI port), or outside the desktop app.
 pub fn bound_input(input: &str) -> Option<String> {
     let jtunnel = crate::host::desktop_jtunnel()
@@ -497,7 +497,7 @@ mod tests {
         assert_eq!(JtunnelSetting::parse(&moved.to_json()), moved);
     }
 
-    /// ADR-0218: a reader learned from an accepted JTunnel sender names no input, so it
+    /// ADR-0221: a reader learned from an accepted JTunnel sender names no input, so it
     /// follows whichever sender is live; a MIDI port keeps its name.
     #[test]
     fn a_reader_learned_from_a_jtunnel_sender_names_no_input() {

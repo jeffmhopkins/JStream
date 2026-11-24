@@ -802,7 +802,7 @@ fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
         Some(&serde_json::json!({"playing": true}))
     );
     // A reader naming no sender reads it: with one sender received, the live one
-    // (ADR-0218).
+    // (ADR-0221).
     assert_eq!(
         data.get_from(None, "transport"),
         data.get("Bitwig", "transport")
@@ -869,7 +869,7 @@ fn an_expired_key_comes_back_with_its_next_resend() {
     assert_eq!(receiver.stats().state, 2);
 }
 
-/// ADR-0218: a source with no sender named records the first accepted one, the
+/// ADR-0221: a source with no sender named records the first accepted one, the
 /// desktop app's one live sender.
 #[test]
 fn an_unnamed_sender_is_the_first_accepted() {

@@ -236,7 +236,7 @@ impl Moved {
                 from: Finite32::ZERO,
                 to: Finite32::ONE,
             },
-            // Mods come only from JTunnel, and one sender is live: no name (ADR-0218).
+            // Mods come only from JTunnel, and one sender is live: no name (ADR-0221).
             Moved::Mod { slot, .. } => mod_reader(None, *slot),
         }
     }
@@ -661,7 +661,8 @@ mod tests {
             slot: 4,
         }
         .reader();
-        assert_eq!(mod_of(&knob), Some((Some("Bitwig"), 4)));
+        // A Mod is bound with no sender: it reads the live one (ADR-0221).
+        assert_eq!(mod_of(&knob), Some((None, 4)));
     }
 
     #[test]

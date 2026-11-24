@@ -415,7 +415,7 @@ Contents ([Design](#design) explains the choices):
   (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
   check, `with_heard` (accept a heard sender, or move an accepted one to the address it
   is heard at), `with_live` and `JtunnelSetting::live_name` (the one live sender,
-  [ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), and `accepts`, whether a heard sender is on the list, tested natively. The
+  [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), and `accepts`, whether a heard sender is on the list, tested natively. The
   store's `jtunnel_changed` counts `jtunnel.senders_changed`. `bound_input` is the
   input a learned reader names: none for an accepted JTunnel sender, so Learn, the Map
   dialog (whose JTunnel and Other data readers name no sender) and a channel's Learn
@@ -1658,7 +1658,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   switch, the accepted senders (name and `address:port`, each with a "Use this sender's
   state" checkbox, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decision 1, off for a new sender, and Remove) and an add row. One accepted sender is
-  live ([ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), marked Live; each other one has Make live, which switches to it, and a
+  live ([ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), marked Live; each other one has Make live, which switches to it, and a
   sender added or accepted becomes live in place of the one before, which stays. Each change saves the whole setting through `setJtunnel`, the app's own command,
   never a protocol call; a refused change is undone and the app's reason shown (the
   page itself only asks for a name, an address and a name no other sender has). The
