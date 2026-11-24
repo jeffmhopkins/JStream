@@ -9,6 +9,8 @@
 # `--check` thresholds and the `--bench` gates in xtask/perf/bench/gates-lavapipe.json:
 # software-rendering bars that catch a scene that stops drawing, a leak or a several-fold
 # regression. It is not required either; its report is uploaded as an artifact.
+# On a pull request both jobs skip drafts and PRs into any branch but main (a wave, a train
+# or a stack): that branch's own PR into main runs them (ADR-0231).
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
@@ -21,6 +23,8 @@ on:
     branches: [main]
   workflow_dispatch:
   pull_request:
+    # ready_for_review: drafts skip both jobs, so they run when a draft is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "crates/jstream-render/**"
       - "crates/jstream-audio/**"
@@ -48,6 +52,7 @@ env:
 
 jobs:
   bench:
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -102,6 +107,7 @@ jobs:
           retention-days: 90
 
   perf-linux:
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

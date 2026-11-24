@@ -133,7 +133,8 @@ starts it and prints the process ID, the URL and the token instead, for CI.
 `--purge` also removes the data folder.
 
 The `linux-install` workflow runs when the scripts, `Cargo.lock`, the browser helper's
-layout or what the UI build reads change. `lint` runs shellcheck. `ubuntu` runs the
+layout or what the UI build reads change, on `main` and on a ready PR into `main`
+([ADR-0231](../adr/0231-prs-into-any-branch-but-main-run-the-light-ci.md)). `lint` runs shellcheck. `ubuntu` runs the
 script from the checkout on `ubuntu-latest`, checks the install's files, the AAC notice
 and the setuid sandbox, starts the daemon through `jstream --print`, loads the UI, stops
 it, then starts it again and has a red browser source painted on program through MCP
