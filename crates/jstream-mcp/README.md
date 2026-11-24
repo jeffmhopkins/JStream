@@ -226,6 +226,7 @@ it, how a person drives one from keys or MIDI (`show.continue`, and `show.go_to_
 to 8 for a row of pads), that the `overlay` actions work with or without a show, and that
 a show is rehearsed and played live only when the person says so, since playing one
 switches program.
+
 The server instructions end with design guidance (`design.rs`), because an agent that can
 build any graphic still tends to build poor ones: flat full-saturation colours, thin
 type, boxes that don't fit their text. It says what a broadcast designer would: the
