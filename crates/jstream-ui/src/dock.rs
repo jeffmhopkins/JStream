@@ -82,7 +82,8 @@ impl Zone {
             Zone::OuterLeft | Zone::OuterRight | Zone::Left => (180.0, 560.0),
             Zone::Right => (200.0, 560.0),
             Zone::Top => (90.0, 400.0),
-            Zone::Bottom => (90.0, 440.0),
+            // Tall enough for the Show panel's Run view and its tracks.
+            Zone::Bottom => (90.0, 720.0),
             Zone::CanvasTop | Zone::CanvasBottom => (80.0, 400.0),
         }
     }
@@ -997,7 +998,7 @@ mod tests {
         dock.resize_zone(Zone::Right, 340.0, 40.0, 0.0);
         assert_eq!(dock.size(Zone::Right), 300.0);
         dock.resize_zone(Zone::Bottom, 190.0, 0.0, -1000.0);
-        assert_eq!(dock.size(Zone::Bottom), 440.0);
+        assert_eq!(dock.size(Zone::Bottom), 720.0);
         dock.resize_zone(Zone::CanvasTop, 140.0, 0.0, -1000.0);
         assert_eq!(dock.size(Zone::CanvasTop), 80.0);
         assert_eq!(dock.current, "Editing");

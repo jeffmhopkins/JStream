@@ -246,6 +246,13 @@ pub struct RunView {
     pub rehearsing: bool,
     /// The scene a hand switch put on program, taking the show off script.
     pub off_script: Option<String>,
+    /// How long the stream has been live, for the Run view's clocks, if it is.
+    pub live_ms: Option<u32>,
+    /// How long the show has run in wall time, pauses included, for "against plan".
+    pub elapsed_ms: Option<u32>,
+    /// The bindings of Continue (`show.continue`) as they show on key caps: "Space",
+    /// "PageDown", "MIDI note 36 · ch 10".
+    pub continue_keys: Vec<String>,
 }
 
 /// What the runner is doing.
@@ -427,12 +434,12 @@ pub(crate) mod demo {
                             clip("q2", 180_000, 54_000, "Lights up", seq("lights-up")),
                             &[(0.0, 0.1), (0.4, 0.15), (0.6, 0.75), (1.0, 0.8)],
                         ),
-                        clip("e1", 330_000, 0, "Show Title", event("show-title")),
+                        clip("e1", 330_000, 0, "Show Title", event("Show Title")),
                         curved(
                             clip("q3", 420_000, 54_000, "Demo sting", seq("sting")),
                             &[(0.0, 0.15), (0.3, 0.8), (0.6, 0.2), (1.0, 0.7)],
                         ),
-                        clip("e2", 540_000, 0, "Hide Title", event("hide-title")),
+                        clip("e2", 540_000, 0, "Hide Title", event("Hide Title")),
                         curved(
                             clip("q4", 600_000, 60_000, "Lights down", seq("lights-down")),
                             &[(0.0, 0.8), (0.5, 0.75), (0.6, 0.2), (1.0, 0.1)],

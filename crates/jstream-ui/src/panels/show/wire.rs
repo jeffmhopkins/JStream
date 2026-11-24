@@ -402,6 +402,7 @@ pub fn run_of(show: Option<&(RunningShow, f64)>) -> RunView {
         looping: s.loop_id.clone().map(|l| (l, s.pass.unwrap_or(0) + 1)),
         rehearsing: s.rehearse,
         off_script: s.off_script.as_ref().map(ToString::to_string),
+        ..RunView::default()
     }
 }
 

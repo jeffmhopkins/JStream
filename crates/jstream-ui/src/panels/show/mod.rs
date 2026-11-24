@@ -152,10 +152,19 @@ impl ShowPanel {
             });
             panel.shows.set(shows);
         });
+        let continue_keys = Memo::new(move |_| {
+            studio.collection.with(|c| {
+                c.as_ref().map_or_else(Vec::new, |c| {
+                    wire::keys_for(c, &jstream_control::protocol::Action::ShowContinue)
+                })
+            })
+        });
         Effect::new(move |_| {
-            panel
-                .run
-                .set(studio.show.with(|s| wire::run_of(s.as_ref())));
+            let keys = continue_keys.get();
+            panel.continue_key.set(keys.first().cloned());
+            let mut run = studio.show.with(|s| wire::run_of(s.as_ref()));
+            run.continue_keys = keys;
+            panel.run.set(run);
         });
         panel
     }
