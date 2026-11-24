@@ -37,21 +37,28 @@ const SHOW_GLYPHS: Record<ShowCommand, Glyph> = {
 /**
  * Runs a show: restart it, play it (or rehearse it on preview), continue, pause, stop,
  * go to the previous or next bookmark (Prev and Next: `show.back` and `show.skip`), or
- * jump to a bookmark. Restart plays it from its start, running or not. Play toggles its show: it plays it, pauses it while it
+ * jump to a bookmark. Restart plays it from its start, running or not. With no show
+ * picked, a key follows the selected show: the one running, else the one open in
+ * JStream's Show panel (its `show.open` UI setting), else the only one. Play toggles its show: it plays it, pauses it while it
  * plays, and continues it while it waits (at a bookmark, paused, or off script). It
  * lights while the show plays, showing the pause glyph, and is ringed while it waits.
  * Continue lights while the show waits for it; Pause while it's paused.
  */
 @action({ UUID: `${PLUGIN}.show` })
 export class ShowAction extends JStreamAction<ShowSettings> {
+	protected override watch(delta: 1 | -1): void {
+		// No event says which show the Show panel opens, so it is read while a key shows.
+		studio.watchOpenShow(delta);
+	}
+
 	protected view(s: ShowSettings, live: Live | undefined): View {
 		const command = s.command ?? "play";
 		const glyph = SHOW_GLYPHS[command];
 		if (!live) return { glyph, look: "offline" };
 		const shows = live.state.shows ?? [];
-		const show = shows.find((x) => x.show_id === s.show_id);
+		const show = shows.find((x) => x.show_id === (s.show_id || selectedShow(live)));
 		const needsShow = command === "play" || command === "restart" || command === "go_to";
-		if (needsShow && !show) return { glyph, look: "unset", title: shows.length ? "Pick a\nshow" : "No shows" };
+		if (needsShow && !show) return { glyph, look: "unset", title: shows.length ? (s.show_id ? "Pick a\nshow" : "Open a\nshow") : "No shows" };
 		const running = live.studio.show ?? undefined;
 		const mine = running && (!show || running.show_id === show.show_id) ? running : undefined;
 		const waiting = mine !== undefined && mine.state !== "playing";
@@ -84,25 +91,27 @@ export class ShowAction extends JStreamAction<ShowSettings> {
 		const command = s.command ?? "play";
 		switch (command) {
 			case "play": {
-				if (!s.show_id) throw new Error("no show picked");
+				const show_id = s.show_id || (await selectedShowNow(live));
+				if (!show_id) throw new Error("no show picked or open");
 				// A toggle while this show runs: pause it while it plays, continue it while
 				// it waits.
 				const running = live.studio.show ?? undefined;
-				if (running && running.show_id === s.show_id) {
+				if (running && running.show_id === show_id) {
 					await client.action({ type: running.state === "playing" ? "show.pause" : "show.continue" });
 					return;
 				}
-				const a: Action = { type: "show.play", show_id: s.show_id };
+				const a: Action = { type: "show.play", show_id };
 				if (s.rehearse === "yes") a.rehearse = true;
 				await client.action(a);
 				return;
 			}
 			case "restart": {
-				if (!s.show_id) throw new Error("no show picked");
+				const show_id = s.show_id || (await selectedShowNow(live));
+				if (!show_id) throw new Error("no show picked or open");
 				// `show.play` of the show that runs, paused, plays on: stopping first makes
 				// it start over.
 				if (live.studio.show) await client.action({ type: "show.stop" });
-				const a: Action = { type: "show.play", show_id: s.show_id };
+				const a: Action = { type: "show.play", show_id };
 				if (s.rehearse === "yes") a.rehearse = true;
 				await client.action(a);
 				return;
@@ -118,6 +127,22 @@ export class ShowAction extends JStreamAction<ShowSettings> {
 				await client.action({ type: `show.${command}` });
 		}
 	}
+}
+
+/**
+ * The selected show: the one running, else the one JStream's Show panel has open, else
+ * the only one there is.
+ */
+function selectedShow(live: Live): string | undefined {
+	const shows = live.state.shows ?? [];
+	const known = (id: string | undefined) => (id && shows.some((x) => x.show_id === id) ? id : undefined);
+	return known(live.studio.show?.show_id) ?? known(live.store.openShow) ?? (shows.length === 1 ? shows[0].show_id : undefined);
+}
+
+/** [`selectedShow`], reading the Show panel's open show first, for a press. */
+async function selectedShowNow(live: Live): Promise<string | undefined> {
+	if (!live.studio.show) await live.store.readOpenShow();
+	return selectedShow(live);
 }
 
 // ---- Scene controls ----

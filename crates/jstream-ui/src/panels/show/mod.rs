@@ -26,6 +26,7 @@ use crate::app::SessionContext;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{Edit, NextMonitor as WireMonitor, ShowInfo};
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use model::{RunPhase, RunView, ShowView};
 use time::Viewport;
 
@@ -259,6 +260,27 @@ impl ShowPanel {
             if let (Some(id), Ok(Some(storage))) = (panel.open.get(), window().local_storage()) {
                 let _ = storage.set_item(OPEN_KEY, &id);
             }
+        });
+        // The engine keeps it too, as the selected show a device such as a Stream Deck
+        // follows (`show.open`, read with `ui_settings.get`).
+        Effect::new(move |seen: Option<Option<String>>| {
+            let open = panel.open.get();
+            if seen.as_ref() != Some(&open)
+                && let Some(id) = open.clone()
+                && let Some(session) = session.get()
+            {
+                let control = session.control;
+                spawn_local(async move {
+                    // Only devices read it, so a failed save costs the panel nothing.
+                    let _ = crate::ui_settings::set(
+                        &*control,
+                        crate::ui_settings::OPEN_SHOW_KEY,
+                        serde_json::Value::String(id),
+                    )
+                    .await;
+                });
+            }
+            open
         });
         Effect::new(move |_| {
             let locked = panel.locked.get();

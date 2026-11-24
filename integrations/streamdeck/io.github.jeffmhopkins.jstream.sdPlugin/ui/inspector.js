@@ -24,7 +24,8 @@ const FORMS = {
 				{ value: "pause", label: "Pause only" },
 			],
 		},
-		{ setting: "show_id", label: "Show", list: "shows", when: (s) => ["play", "restart", "go_to", undefined].includes(s.command) },
+		{ setting: "show_id", label: "Show", list: "shows", blank: "Selected show", when: (s) => ["play", "restart", undefined].includes(s.command) },
+		{ setting: "show_id", label: "Show", list: "shows", when: (s) => s.command === "go_to" },
 		{ setting: "show_id", label: "Show", list: "shows", blank: "The one running", when: (s) => ["continue", "pause", "stop"].includes(s.command) },
 		{ setting: "bookmark_id", label: "Bookmark", list: "bookmarks", by: "show_id", when: (s) => s.command === "go_to" },
 		{

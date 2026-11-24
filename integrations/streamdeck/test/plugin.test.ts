@@ -141,6 +141,9 @@ test("a show's Play key toggles: it plays, pauses, and continues past a bookmark
 	const payload = { controller: "Keypad", coordinates: { column: 2, row: 0 }, isInMultiAction: false, settings: { show_id: "toggle", command: "play" } };
 	send({ event: "willAppear", ...key, payload });
 	await until("the show key titled", () => last("setTitle", "ctx-show")?.payload?.title === "Toggle", 8000);
+	await until("the show key drawn", () => image("ctx-show") !== "");
+	// How the Play key looks with no show running.
+	const idle = image("ctx-show");
 	const state = async () => (await call({ kind: "query", query: { type: "studio.get" } })).show?.state as string | undefined;
 	// Presses the key, waits for the show to be `want`, then for the key to redraw for it,
 	// so the next press acts on what the key shows.
@@ -191,4 +194,29 @@ test("a show's Play key toggles: it plays, pauses, and continues past a bookmark
 	assert.equal(last("showAlert", "ctx-restart"), undefined);
 	assert.equal(last("showAlert", "ctx-next"), undefined);
 	await call({ kind: "action", action: { type: "show.stop" } });
+	await until("the plugin sees the show stopped", () => image("ctx-show") === idle);
+
+	// With no show picked, a key follows the selected show: here the one JStream's Show
+	// panel has open (`show.open`), among two.
+	await call({
+		kind: "batch",
+		edits: [{ type: "show.set", show: { show_id: "other", name: "Other", program: [{ clip_id: "o", scene_id: "scn_b", length_ms: 30000 }], bookmarks: [] } }],
+	});
+	await call({ kind: "action", action: { type: "ui_settings.set", key: "show.open", value: "toggle" } });
+	const selected = { action: `${PLUGIN}.show`, context: "ctx-selected", device: "dev1" };
+	const selectedPayload = { ...payload, coordinates: { column: 0, row: 1 }, settings: { command: "play" } };
+	send({ event: "willAppear", ...selected, payload: selectedPayload });
+	await until("the selected key titled", () => last("setTitle", "ctx-selected")?.payload?.title === "Toggle", 8000);
+	send({ event: "keyDown", ...selected, payload: selectedPayload });
+	let running: { show_id?: string } | undefined;
+	for (let i = 0; i < 80 && running?.show_id !== "toggle"; i++) {
+		await new Promise((r) => setTimeout(r, 50));
+		running = (await call({ kind: "query", query: { type: "studio.get" } })).show;
+	}
+	assert.equal(running?.show_id, "toggle", "played the show open in JStream");
+	assert.equal(last("showAlert", "ctx-selected"), undefined);
+	// Opening the other one there moves the key to it, once the running show stops.
+	await call({ kind: "action", action: { type: "show.stop" } });
+	await call({ kind: "action", action: { type: "ui_settings.set", key: "show.open", value: "other" } });
+	await until("the selected key follows", () => last("setTitle", "ctx-selected")?.payload?.title === "Other", 8000);
 });

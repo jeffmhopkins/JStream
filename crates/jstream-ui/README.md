@@ -1185,7 +1185,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the position and the time it was heard, ticked about 30 times a second while the panel
   is open. `ShowPanel` lives with the shell rather than the panel, so the Inspector's
   Show page reads its selection and closing the panel keeps its view; its lock is the
-  panel's own, never saved. **Every edit is one `show.set` of the whole show**, so one
+  panel's own, never saved. The show it has open is kept by the browser, so it opens
+  again, and in the engine's UI settings under `show.open`
+  (`ui_settings::OPEN_SHOW_KEY`), the selected show a device such as a Stream Deck
+  follows. **Every edit is one `show.set` of the whole show**, so one
   undo step: each tool's gesture is a pure function from the show to the show
   (`edits.rs`, and `inspect_edits.rs` for the Inspector's fields), and `ShowPanel::commit`
   sends nothing when the result equals the show the engine has, and nothing when

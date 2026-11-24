@@ -13,6 +13,10 @@ import type { ChannelValue, FilterInfo, OutputState, ServerEvent, StateSnapshot,
 const DEBOUNCE_MS = 80;
 /** How often channel switches are read while a channel key is visible (no event reports them). */
 const CHANNEL_POLL_MS = 1000;
+/** How often the show open in JStream is read while a show key follows it (no event reports it). */
+const OPEN_SHOW_POLL_MS = 2000;
+/** The UI setting where JStream's Show panel keeps the show it has open (`ui_settings.get`). */
+export const OPEN_SHOW_KEY = "show.open";
 
 export interface StudioEvents {
 	changed: [];
@@ -24,6 +28,10 @@ export class Studio extends EventEmitter<StudioEvents> {
 	studio: StudioSnapshot | undefined;
 	outputs = new Map<string, OutputState>();
 	channels = new Map<string, ChannelValue>();
+	/** The show open in JStream's Show panel, while a show key follows it. */
+	openShow: string | undefined;
+	#openShowTimer: NodeJS.Timeout | undefined;
+	#openShowWatchers = 0;
 	#stateTimer: NodeJS.Timeout | undefined;
 	#studioTimer: NodeJS.Timeout | undefined;
 	#channelTimer: NodeJS.Timeout | undefined;
@@ -41,6 +49,7 @@ export class Studio extends EventEmitter<StudioEvents> {
 				this.studio = undefined;
 				this.outputs.clear();
 				this.channels.clear();
+				this.openShow = undefined;
 				this.emit("changed");
 			}
 		});
@@ -49,7 +58,37 @@ export class Studio extends EventEmitter<StudioEvents> {
 
 	/** Reads everything again. */
 	async refresh(): Promise<void> {
-		await Promise.all([this.#readState(), this.#readStudio(), this.#readChannels()]);
+		await Promise.all([this.#readState(), this.#readStudio(), this.#readChannels(), this.readOpenShow()]);
+	}
+
+	/** A show key that follows the show open in JStream appeared (`+1`) or went (`-1`): it is polled while any is visible. */
+	watchOpenShow(delta: 1 | -1): void {
+		this.#openShowWatchers = Math.max(0, this.#openShowWatchers + delta);
+		if (this.#openShowWatchers > 0 && !this.#openShowTimer) {
+			void this.readOpenShow();
+			this.#openShowTimer = setInterval(() => void this.readOpenShow(), OPEN_SHOW_POLL_MS);
+		} else if (this.#openShowWatchers === 0 && this.#openShowTimer) {
+			clearInterval(this.#openShowTimer);
+			this.#openShowTimer = undefined;
+		}
+	}
+
+	/** Reads which show JStream's Show panel has open, and answers it. */
+	async readOpenShow(): Promise<string | undefined> {
+		if (!this.#client.connected) {
+			return undefined;
+		}
+		try {
+			const answer = await this.#client.query<{ value?: unknown }>({ type: "ui_settings.get", key: OPEN_SHOW_KEY });
+			const open = typeof answer.value === "string" ? answer.value : undefined;
+			if (open !== this.openShow) {
+				this.openShow = open;
+				this.emit("changed");
+			}
+		} catch {
+			// A JStream that keeps no UI settings, or not connected.
+		}
+		return this.openShow;
 	}
 
 	/** A channel key appeared (`+1`) or went (`-1`): channels are polled while any is visible. */

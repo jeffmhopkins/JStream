@@ -17,6 +17,10 @@ pub const DOCK_KEY: &str = "workspace.dock";
 /// focus (ADR-0112 §6). The desktop app's `hotkeys.rs` names the same key.
 pub const GLOBAL_HOTKEYS_KEY: &str = "hotkeys.global";
 
+/// The key under which the Show panel keeps the show it has open, the selected show a
+/// device such as a Stream Deck follows: a show ID as a JSON string.
+pub const OPEN_SHOW_KEY: &str = "show.open";
+
 /// Whether hotkeys are heard while another application has the focus: on unless the
 /// server keeps `false`.
 pub fn global_hotkeys_on(kept: &Kept) -> bool {

@@ -26,7 +26,7 @@ type Answer = { name: string; type: string; data: unknown };
 
 /**
  * Asks the network for JStream for `waitMs` and resolves with what answered, one entry
- * per instance. Never rejects: no network, or nothing found, is an empty list.
+ * per instance and address. Never rejects: no network, or nothing found, is an empty list.
  */
 export function discover(waitMs = 2500): Promise<Found[]> {
 	return new Promise((resolve) => {
@@ -41,7 +41,9 @@ export function discover(waitMs = 2500): Promise<Found[]> {
 		const collect = new Collector();
 		mdns.on("response", (packet: { answers?: Answer[]; additionals?: Answer[] }, rinfo: { address: string }) => {
 			for (const entry of collect.add([...(packet.answers ?? []), ...(packet.additionals ?? [])], rinfo.address)) {
-				found.set(entry.name, entry);
+				// Keyed by where it listens too: two JStreams on one computer announce the
+				// same name on different ports, and both are listed.
+				found.set(`${entry.name}\n${entry.host}:${entry.port}`, entry);
 			}
 		});
 		mdns.on("error", () => undefined);
