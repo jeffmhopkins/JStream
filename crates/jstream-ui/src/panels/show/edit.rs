@@ -607,7 +607,7 @@ pub fn EditView() -> impl IntoView {
             snap_now(ms)
         };
         let now = crate::store::now_ms();
-        let running = panel.run.with_untracked(|r| r.show.is_some());
+        let running = untrack(|| panel.is_running());
         // While a show runs each seek jumps program, so a drag sends at most ~12 a second.
         let due = scrub.get_value().is_none_or(|sent| now - sent >= 80.0);
         if !running || due || last {

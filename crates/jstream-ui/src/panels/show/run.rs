@@ -634,7 +634,7 @@ pub fn RunView() -> impl IntoView {
 fn RunBar() -> impl IntoView {
     let panel = expect_context::<ShowPanel>();
     let id = move || panel.show().map(|s| s.id).unwrap_or_default();
-    let running = move || panel.run.with(|r| r.show.is_some());
+    let running = move || panel.is_running();
     let locked = move || panel.show().is_some_and(|s| s.locked);
     let monitor = move || panel.show().map(|s| s.next_monitor).unwrap_or_default();
     let pick = move |m: NextMonitor| move |_| panel.send(Command::NextMonitor(id(), m));
@@ -703,11 +703,7 @@ fn NowNext() -> impl IntoView {
         )
     };
     let busy = move || panel.run.with(|r| r.phase == RunPhase::Transition);
-    let playing = move || {
-        panel
-            .run
-            .with(|r| r.show.is_some() && r.phase == RunPhase::Playing)
-    };
+    let playing = move || panel.run.with(|r| r.phase == RunPhase::Playing) && panel.is_running();
     view! {
         {move || cards().map(|(n, x)| view! {
             <div class="show-card">

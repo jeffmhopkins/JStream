@@ -192,19 +192,21 @@ impl ShowPanel {
         self.run.with(|r| r.show.is_some() && r.show == id)
     }
 
-    /// The play head now.
+    /// The play head now: the runner's while it runs the open show, else where Play will
+    /// start the open show.
     pub fn head(&self) -> u32 {
-        let now = self.clock.get();
-        self.run.with(|r| match r.show {
-            Some(_) => r.head_at(now),
-            None => self.cursor.get().unwrap_or(0),
-        })
+        if self.is_running() {
+            let now = self.clock.get();
+            self.run.with(|r| r.head_at(now))
+        } else {
+            self.cursor.get().unwrap_or(0)
+        }
     }
 
-    /// Moves the play head to `at_ms`: a seek while the show runs, else where Play will
-    /// start it.
+    /// Moves the play head to `at_ms`: a seek while the open show runs, else where Play
+    /// will start it. Another show running doesn't move.
     pub fn move_head(&self, at_ms: u32) {
-        if self.run.with_untracked(|r| r.show.is_some()) {
+        if untrack(|| self.is_running()) {
             self.send(Command::Seek(at_ms));
         } else {
             self.cursor.set(Some(at_ms));
@@ -220,6 +222,14 @@ impl ShowPanel {
             open: RwSignal::new(remembered_show()),
             ..ShowPanel::new(studio.problem)
         };
+        // Where Play starts belongs to the show it was set on.
+        Effect::new(move |seen: Option<Option<String>>| {
+            let open = panel.open.get();
+            if seen.is_some_and(|seen| seen != open) {
+                panel.cursor.set(None);
+            }
+            open
+        });
         // The show last opened in this browser opens again next time.
         Effect::new(move |_| {
             if let (Some(id), Ok(Some(storage))) = (panel.open.get(), window().local_storage()) {
