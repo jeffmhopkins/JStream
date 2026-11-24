@@ -316,6 +316,57 @@ fn focus_button(menu: Menu) {
     }
 }
 
+/// View › UI scale: the page's scale between a smaller and a larger step, Chrome's zoom
+/// row, with the keys that do the same in each button's tooltip. The value resets to
+/// 100 %. Clicks leave the menu open, so the scale can be stepped while watching it.
+fn scale_row() -> impl IntoView {
+    use crate::ui_scale::{self, UiScale};
+    let Some(UiScale(scale)) = use_context::<UiScale>() else {
+        return ().into_any();
+    };
+    let command = if crate::host::on_macos() {
+        "⌘"
+    } else {
+        "Ctrl+"
+    };
+    let set = move |next: u16| scale.set(next);
+    view! {
+        <div class="menu-scale" role="group" aria-label="UI scale">
+            <span class="menu-scale-label">"UI scale"</span>
+            <button
+                class="menuitem scale-step"
+                role="menuitem"
+                aria-label="Smaller"
+                title=format!("Smaller ({command}-)")
+                disabled=move || scale.get() == ui_scale::STEPS[0]
+                on:click=move |_| set(ui_scale::step(scale.get_untracked(), false))
+            >
+                "−"
+            </button>
+            <button
+                class="menuitem scale-value"
+                role="menuitem"
+                aria-label=move || format!("UI scale {}: back to 100%", ui_scale::label(scale.get()))
+                title=format!("Back to 100% ({command}0)")
+                on:click=move |_| set(ui_scale::DEFAULT)
+            >
+                {move || ui_scale::label(scale.get())}
+            </button>
+            <button
+                class="menuitem scale-step"
+                role="menuitem"
+                aria-label="Larger"
+                title=format!("Larger ({command}=)")
+                disabled=move || scale.get() == ui_scale::STEPS[ui_scale::STEPS.len() - 1]
+                on:click=move |_| set(ui_scale::step(scale.get_untracked(), true))
+            >
+                "+"
+            </button>
+        </div>
+    }
+    .into_any()
+}
+
 /// File › Connection details…: the engine the session is connected to, the protocol it
 /// speaks, the client ID this window acts as, and the last revision it heard of.
 #[component]
@@ -800,6 +851,8 @@ pub fn Header(
                                     </button>
                                 }
                             }).collect_view()}
+                            <div class="menu-sep"></div>
+                            {scale_row()}
                             <div class="menu-sep"></div>
                             <p class="menu-head">"PROJECTORS"</p>
                             {[
