@@ -200,6 +200,8 @@ test('cuts, audio tracks, media drops, deletes, the lock and the show menu', asy
 
   // Locked, the tools are off and Delete leaves the clip.
   await show.getByRole('button', { name: '🔓 Lock' }).click();
+  // On, Lock takes the show accent, so a locked show stands out.
+  await expect(show.getByRole('button', { name: '🔒 Locked' })).toHaveCSS('color', 'rgb(245, 209, 66)');
   await expect(show.getByRole('button', { name: 'Split (S)' })).toBeDisabled();
   await show.locator('.show-prog').first().click();
   await page.keyboard.press('Delete');
