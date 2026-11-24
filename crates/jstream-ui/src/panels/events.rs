@@ -331,9 +331,13 @@ pub fn Events(
     scene: SceneId,
     /// Edits the sequence, as one `timeline.set`.
     change: impl Fn(&dyn Fn(&mut TimelineInfo)) -> bool + Copy + Send + Sync + 'static,
+    /// The part of the sequence in view (`seq_zoom`): the lane's frame follows it.
+    zoom: RwSignal<crate::panels::show::time::Viewport>,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let duration = timeline.duration_ms.max(1);
+    let inset = crate::panels::sequence::AREA_INSET_PX;
+    let frame = move || crate::panels::seq_zoom::frame(zoom.get(), inset);
     let editing = RwSignal::new(None::<Editing>);
     let moving = RwSignal::new(None::<Moving>);
     let cues = StoredValue::new(timeline.cues.clone());
@@ -698,15 +702,19 @@ pub fn Events(
                 </div>
                 <span class="hint">"Double-click to add one"</span>
             </div>
-            <div
-                class="seq-area seq-events-area"
-                title="Double-click to add an event here"
-                on:dblclick=add
-                on:pointermove=drag_to
-                on:pointerup=drop
-                on:pointercancel=move |_| moving.set(None)
-            >
-                {chips}
+            <div class="seq-clip">
+                <div
+                    class="seq-area seq-events-area"
+                    title="Double-click to add an event here"
+                    style:width=move || frame().0
+                    style:margin-left=move || frame().1
+                    on:dblclick=add
+                    on:pointermove=drag_to
+                    on:pointerup=drop
+                    on:pointercancel=move |_| moving.set(None)
+                >
+                    {chips}
+                </div>
             </div>
         </div>
         {editor}

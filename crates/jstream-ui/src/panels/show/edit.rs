@@ -192,38 +192,91 @@ fn fade_handles(clip: &ClipView) -> Option<impl IntoView + use<>> {
     })
 }
 
+/// How far right of its place a keyframe's name starts, in px: past its diamond.
+const KEYFRAME_LEAD_PX: f64 = 10.0;
+
+/// How much of an event's pill is not its name, in px: the bar and padding on its left
+/// and the padding on its right. The pill starts at the event's place.
+const EVENT_LEAD_PX: f64 = 18.0;
+
+/// A clip narrower than this, in px, draws no name: a sliver of text reads as noise.
+/// Its name is in the tooltip.
+const MIN_NAMED_CLIP_PX: f64 = 28.0;
+
+/// A marker's name, cut short to `fit`'s room with an ellipsis, or drawn only on hover
+/// when it has no room; then a "+N" for the markers stacked under it.
+/// `shifts` moves the name past the cluster's other markers (a keyframe's diamonds); an
+/// event's pill instead lies over its stack.
+fn mark_name(clip: &ClipView, fit: &MarkFit, shifts: bool) -> impl IntoView + use<> {
+    let max = fit.label.max_width;
+    let more = fit.label.more;
+    let shift = if shifts { fit.label.shift } else { 0.0 };
+    view! {
+        <em class="show-mk-name" class:hide=max.is_none()
+            style:max-width=max.map(|w| format!("{w:.1}px"))
+            style:margin-left=(shift > 0.0).then(|| format!("{shift:.1}px"))>{name(clip)}</em>
+        {(more > 0).then(|| view! { <em class="show-mk-more">{format!("+{more}")}</em> })}
+    }
+}
+
+/// Where a marker's label goes among its row's other markers (see [`geom::place_marks`]),
+/// and its tooltip: its name, or every name in its cluster when it leads one.
+struct MarkFit {
+    label: geom::MarkLabel,
+    title: String,
+}
+
 /// One clip of a track in the part of the show `view` shows, or nothing when it is out of
-/// view. `n` is its place on its track, for the program colours.
+/// view. `n` is its place on its track, for the program colours; `px` is the rows' width
+/// in px; `fit` is a marker's label room.
 fn clip_view(
     kind: TrackKind,
-    n: usize,
-    clip: &ClipView,
-    view: Viewport,
+    (n, clip): (usize, &ClipView),
+    (view, px): (Viewport, f64),
     selected: bool,
+    fit: Option<&MarkFit>,
 ) -> Option<AnyView> {
     let marker = clip.len_ms == 0;
     let id = clip.id.clone();
     let grab = grab_kind(kind, clip);
     if marker {
         let left = format!("{:.4}%", at_pct(view, clip.start_ms)?);
+        let fallback;
+        let fit = match fit {
+            Some(f) => f,
+            None => {
+                fallback = MarkFit {
+                    label: geom::MarkLabel {
+                        max_width: None,
+                        more: 0,
+                        lead: 0,
+                        shift: 0.0,
+                    },
+                    title: name(clip),
+                };
+                &fallback
+            }
+        };
         return Some(match clip.kind {
             ClipKind::Keyframe(_) => view! {
                 <div class="show-kf" class:missing=clip.missing class:show-sel=selected
-                    data-clip=id data-kind=grab style:left=left title=name(clip)>
-                    <s></s>{name(clip)}
+                    data-clip=id data-kind=grab style:left=left title=fit.title.clone()>
+                    <s></s>{mark_name(clip, fit, true)}
                 </div>
             }
             .into_any(),
             _ => view! {
                 <div class="show-ev" class:missing=clip.missing class:show-sel=selected
-                    data-clip=id data-kind=grab style:left=left title=name(clip)>
-                    <span>{name(clip)}</span>
+                    class:named=(fit.label.max_width.is_some() || fit.label.more > 0)
+                    data-clip=id data-kind=grab style:left=left title=fit.title.clone()>
+                    <span class:bare=fit.label.max_width.is_none()>{mark_name(clip, fit, false)}</span>
                 </div>
             }
             .into_any(),
         });
     }
     let (left, width) = span_pct(view, clip.start_ms, clip.end_ms())?;
+    let tight = width / 100.0 * px < MIN_NAMED_CLIP_PX;
     let (left, width) = placed(left, width);
     let title = if clip.detail.is_empty() {
         name(clip)
@@ -235,29 +288,29 @@ fn clip_view(
     Some(match (kind, &clip.kind) {
         (TrackKind::Program, _) => view! {
             <div class=format!("show-clip show-prog show-clip-c{}", n % geom::PROGRAM_COLOURS)
-                class:missing=clip.missing class:show-sel=selected
+                class:missing=clip.missing class:show-sel=selected class:tight=tight
                 data-clip=id data-kind=grab style:left=left style:width=width title=title>
-                <b>{name(clip)}{badge}</b>
+                <b><em class="show-clip-name">{name(clip)}</em>{badge}</b>
                 <span>{clip.detail.clone()}</span>
                 {selected.then(|| view! { <i class="show-grab-r"></i> })}
             </div>
         }
         .into_any(),
         (_, ClipKind::Sequence(_)) => view! {
-            <div class="show-seq" class:missing=clip.missing class:show-sel=selected
+            <div class="show-seq" class:missing=clip.missing class:show-sel=selected class:tight=tight
                 data-clip=id data-kind=grab style:left=left style:width=width title=title>
                 <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                     <path d=geom::curve_path(&clip.curve) vector-effect="non-scaling-stroke" />
                 </svg>
-                <b>"▶ "{name(clip)}{badge}</b>
+                <b><em class="show-clip-name">"▶ "{name(clip)}</em>{badge}</b>
             </div>
         }
         .into_any(),
         (_, ClipKind::Linked(_)) => view! {
             <div class="show-au show-linked" class:missing=clip.missing class:show-sel=selected
-                data-clip=id data-kind=grab style:left=left style:width=width
+                class:tight=tight data-clip=id data-kind=grab style:left=left style:width=width
                 title=format!("{title} · linked to its scene clip")>
-                <b><i class="show-link" aria-hidden="true">"🔗"</i>{name(clip)}</b>
+                <b><i class="show-link" aria-hidden="true">"🔗"</i><em class="show-clip-name">{name(clip)}</em></b>
                 <span>{clip.detail.clone()}</span>
             </div>
         }
@@ -266,12 +319,12 @@ fn clip_view(
             let fades = clip.fades.unwrap_or((0, 0));
             view! {
                 <div class="show-au" class:missing=clip.missing class:show-sel=selected
-                    data-clip=id data-kind=grab style:left=left style:width=width title=title>
+                    class:tight=tight data-clip=id data-kind=grab style:left=left style:width=width title=title>
                     <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
                         <path class="fill" d=geom::fade_path(clip.len_ms, fades, true) />
                         <path class="line" d=geom::fade_path(clip.len_ms, fades, false) vector-effect="non-scaling-stroke" />
                     </svg>
-                    <b>{name(clip)}{badge}</b>
+                    <b><em class="show-clip-name">{name(clip)}</em>{badge}</b>
                     <span>{clip.detail.clone()}</span>
                     {handles}
                 </div>
@@ -280,8 +333,9 @@ fn clip_view(
         }
         _ => view! {
             <div class="show-clip show-ov" class:missing=clip.missing class:show-sel=selected
-                data-clip=id data-kind=grab style:left=left style:width=width title=title>
-                <b>{name(clip)}{badge}</b>
+                class:tight=tight data-clip=id data-kind=grab style:left=left style:width=width
+                title=title>
+                <b><em class="show-clip-name">{name(clip)}</em>{badge}</b>
                 <span>{clip.detail.clone()}</span>
                 {handles}
             </div>
@@ -290,26 +344,86 @@ fn clip_view(
     })
 }
 
-/// The transition badges on program's cuts in view: "⧓ Fade 0.5 s" over each cut. A
-/// click opens the cut's transition menu.
-fn cuts(track: &TrackView, view: Viewport) -> Vec<AnyView> {
-    track
+/// How much of a cut's badge is not its label, in px: its icon, padding and border.
+const CUT_CHROME_PX: f64 = 30.0;
+
+/// The transition badges on program's cuts in view: "⧓ Fade 0.5 s" over each cut, its
+/// label cut short where it would run into the next badge, and only the icon when there
+/// is no room for a label. A click opens the cut's transition menu.
+fn cuts(track: &TrackView, view: Viewport, px: f64) -> Vec<AnyView> {
+    let shown: Vec<(&ClipView, String, f64)> = track
         .clips
         .iter()
-        .filter_map(|c| {
-            let label = c.transition_in.clone()?;
-            let left = at_pct(view, c.start_ms)?;
-            Some(
-                view! {
-                    <div class="show-cut" style:left=format!("{left:.4}%") data-cut=c.id.clone()
-                        title=format!("Transition into {}: {label} · click to change", c.label)>
-                        <i>"⧓"</i>{label.clone()}
-                    </div>
-                }
-                .into_any(),
-            )
+        .filter_map(|c| Some((c, c.transition_in.clone()?, at_pct(view, c.start_ms)?)))
+        .collect();
+    let xs: Vec<f64> = shown.iter().map(|(_, _, pct)| pct / 100.0 * px).collect();
+    shown
+        .into_iter()
+        .zip(geom::cut_room(&xs))
+        .map(|((c, label, left), room)| {
+            // A lone cut has the whole row.
+            let room = if room.is_finite() { room } else { px } - CUT_CHROME_PX;
+            let fits = room >= geom::MIN_LABEL_PX;
+            view! {
+                <div class="show-cut" class:bare=!fits style:left=format!("{left:.4}%")
+                    data-cut=c.id.clone()
+                    title=format!("Transition into {}: {label} · click to change", c.label)>
+                    <i>"⧓"</i>
+                    <em class="show-cut-name" class:hide=!fits
+                        style:max-width=fits.then(|| format!("{room:.1}px"))>{label.clone()}</em>
+                </div>
+            }
+            .into_any()
         })
         .collect()
+}
+
+/// Lays out the labels of a row's markers (see [`geom::place_marks`]): one per clip,
+/// `None` for a clip that is not a marker or is out of view.
+fn mark_fits(track: &TrackView, view: Viewport, px: f64) -> Vec<Option<MarkFit>> {
+    let marks: Vec<(usize, f64, f64)> = track
+        .clips
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.len_ms == 0)
+        .filter_map(|(n, c)| {
+            let lead = if matches!(c.kind, ClipKind::Keyframe(_)) {
+                KEYFRAME_LEAD_PX
+            } else {
+                EVENT_LEAD_PX
+            };
+            Some((n, at_pct(view, c.start_ms)? / 100.0 * px, lead))
+        })
+        .collect();
+    let mut fits: Vec<Option<MarkFit>> = track.clips.iter().map(|_| None).collect();
+    if marks.is_empty() {
+        return fits;
+    }
+    let xs: Vec<f64> = marks.iter().map(|m| m.1).collect();
+    // One row holds one kind of marker; the widest lead keeps every label clear.
+    let lead = marks.iter().map(|m| m.2).fold(0.0, f64::max);
+    let labels = geom::place_marks(&xs, px, lead);
+    for (m, label) in labels.iter().enumerate() {
+        let clip = &track.clips[marks[m].0];
+        // A cluster's first marker lists every name stacked there.
+        let leads = label.lead == m && labels.iter().filter(|l| l.lead == m).count() > 1;
+        let title = if leads {
+            labels
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| l.lead == m)
+                .map(|(k, _)| name(&track.clips[marks[k].0]))
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            name(clip)
+        };
+        fits[marks[m].0] = Some(MarkFit {
+            label: label.clone(),
+            title,
+        });
+    }
+    fits
 }
 
 /// One track's row: its head and its clips. `slot` draws the "Drop a scene or a file"
@@ -318,21 +432,26 @@ fn cuts(track: &TrackView, view: Viewport) -> Vec<AnyView> {
 fn track_row(
     track: &TrackView,
     previous: Option<TrackKind>,
-    view: Viewport,
+    (view, px): (Viewport, f64),
     selected: Option<&str>,
     (over, slot): (bool, Option<f64>),
     (lifted, target): (bool, bool),
     rename: Option<AnyView>,
 ) -> AnyView {
     let kind = track.kind;
+    let fits = mark_fits(track, view, px);
     let mut body: Vec<AnyView> = track
         .clips
         .iter()
         .enumerate()
-        .filter_map(|(n, c)| clip_view(kind, n, c, view, selected == Some(c.id.as_str())))
+        .zip(&fits)
+        .filter_map(|((n, c), fit)| {
+            let on = selected == Some(c.id.as_str());
+            clip_view(kind, (n, c), (view, px), on, fit.as_ref())
+        })
         .collect();
     if kind == TrackKind::Program {
-        body.extend(cuts(track, view));
+        body.extend(cuts(track, view, px));
         if let Some(left) = slot {
             body.push(
                 view! {
@@ -1575,6 +1694,7 @@ pub fn EditView() -> impl IntoView {
     };
     let rows = move || {
         let v = viewport.get();
+        let px = width.get();
         let sel = selected.get();
         let over = hover.get();
         let naming = renaming.get();
@@ -1595,7 +1715,7 @@ pub fn EditView() -> impl IntoView {
                     track_row(
                         t,
                         n.checked_sub(1).map(|p| s.tracks[p].kind),
-                        v,
+                        (v, px),
                         sel.as_deref(),
                         (is_over, slot),
                         lift.as_ref().map_or((false, false), |(id, over)| {
