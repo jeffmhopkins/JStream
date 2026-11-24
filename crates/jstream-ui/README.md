@@ -109,7 +109,18 @@ Contents ([Design](#design) explains the choices):
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
   sender's state" (its JSON tested natively), and `desktop_ptz()`
-  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
+  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`. `set_desktop_zoom` asks the app to zoom its webview, through the global's `setZoom`,
+  for the UI scale.
+- **UI scale** (`ui_scale.rs`): `UiScale`, the page's scale in percent (`STEPS`, 50 to
+  150), which View › UI scale and Ctrl with `=`, `-` or `0` set (a chord the project
+  binds as a hotkey is left to it), kept in the browser's storage per machine. In the
+  desktop app the webview zooms; in a browser the root element gets CSS `zoom` and
+  `--ui-scale`, the style sheet divides viewport units by it, and `css`, `rect`,
+  `pointer` and `window_size` turn viewport pixels into the root's CSS pixels where menus,
+  dialogs, the dock's zone handles, number drags and the canvas place things by the
+  pointer. `pixel_ratio` is the device pixels per CSS pixel the canvas and the monitor
+  size their streams by. Projectors aren't scaled. Its steps and keys are tested
+  natively, its zoom in `ui-scale.spec.js`.
   `same_engine` says
   whether the open session is that app's own engine, and `own_engine` asks it of the
   session's `ConnectedEngine` (for Browse… and the canvas's full-resolution preview).
