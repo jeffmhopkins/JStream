@@ -1378,10 +1378,9 @@ needs = ["build"]
 id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
-status = "planned"
-prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639, 646, 1093, 1135]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); spike S6, IOSurface and Metal interop and its synchronisation, for ADR-0063 decision 8 (#646, its Mac run in #648); a one-command install that builds JStream on a tester's Mac and runs it from Terminal (#1093); per-thread CPU for the performance profile (#1135); the rest of the crate to build"
-needs = ["build"]
+status = "done"
+prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639, 646, 1093, 1135, 1761, 1765, 1767, 1769, 1780]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); spike S6, IOSurface and Metal interop and its synchronisation, for ADR-0063 decision 8 (#646, its Mac run in #648); a one-command install that builds JStream on a tester's Mac and runs it from Terminal (#1093); per-thread CPU for the performance profile (#1135); two-plane NV12 encode targets (GpuFrame::planar) for Metal, which has no NV12 texture format (#1767); the GPU interop on Metal with ScreenCaptureKit frames as IOSurface textures (#1761), webcams on the same path (#1765), and VideoToolbox encoding the IOSurface encode targets (#1769); all built; spike S6 ran clean on a CI virtual Mac (#1780). There is no Mac hardware, so CI macOS runners are the test bed; untested on real hardware: Apple Silicon timings, webcam buffer-pool starvation, VideoToolbox reading a rewritten target"
 
 [[item]]
 id = "LNX1"
@@ -1423,10 +1422,10 @@ needs = ["build"]
 id = "F7"
 milestone = "M3"
 title = "Direct NVENC and AMF encoders, if measurements justify them"
-status = "planned"
-prs = []
-note = "ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so"
-needs = ["build"]
+status = "review"
+prs = [1764]
+note = "ADR-0217: the maintainer chose to build them for alpha.13 and measure alongside: NVENC and AMF first on the Windows GPU path, the MFT as fallback, off by default per vendor until its hw-tests run passes (JSTREAM_DIRECT_ENCODERS=on to try one); AMF passed on a Radeon 780M and is on by default (0.52 ms vs the MFT's 0.98 ms per frame at 1080p30); NVENC still needs its NVIDIA run"
+needs = ["hardware"]
 
 [[item]]
 id = "CL2"
@@ -1678,3 +1677,12 @@ release = "alpha.4"
 gate = true
 prs = [1179]
 note = "Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build"
+
+[[item]]
+id = "SHW1"
+milestone = "M3"
+title = "Shows: a saved run order of scenes, with overlays, keyframes, sequences, audio, bookmarks and loops, run from the Show panel, keys, MIDI or an agent (ADR-0210)"
+status = "review"
+prs = [1716, 1750, 1757, 1763, 1773]
+note = "on the alpha.13 train (#1745): the protocol and ADR-0210 (#1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance (#1773)"
+needs = ["wave"]

@@ -138,6 +138,42 @@ fn gpu_frame(context: &GpuContext, hold: &Arc<dyn FrameSync>, index: i64) -> Vid
     GpuFrame::new(texture, info, Arc::clone(hold)).into()
 }
 
+/// A two-plane NV12 frame (`GpuFrame::planar`, a Metal encode target's shape): an
+/// `R8Unorm` Y texture and a half-size `Rg8Unorm` CbCr texture on `context` with `hold`,
+/// at frame `index`.
+fn planar_frame(context: &GpuContext, hold: &Arc<dyn FrameSync>, index: i64) -> VideoSurface {
+    let plane = |format, width, height| {
+        context.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("planar encode target stand-in"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
+    };
+    let (w, h) = (size().width(), size().height());
+    let info = VideoFrameInfo {
+        size: size(),
+        format: PixelFormat::Nv12,
+        color: ColorInfo::default(),
+        pts: MediaTime::new(index, fps()),
+    };
+    GpuFrame::planar(
+        plane(wgpu::TextureFormat::R8Unorm, w, h),
+        plane(wgpu::TextureFormat::Rg8Unorm, w / 2, h / 2),
+        info,
+        Arc::clone(hold),
+    )
+    .into()
+}
+
 fn cpu_frame(index: i64) -> VideoSurface {
     VideoFrame::zeroed(VideoFrameInfo {
         size: size(),
@@ -362,6 +398,26 @@ fn a_gpu_session_encodes_nv12_targets_and_lets_go_of_each() {
     let (packets, end) = run(&session, frames);
     assert_eq!((packets, end), (6, StreamEnd::Finished));
     // The producer holds the only clone again, so it may write the targets.
+    for hold in &ring {
+        assert_eq!(Arc::strong_count(hold), 1);
+    }
+}
+
+/// Two-plane encode targets (`GpuFrame::planar`) go through a GPU session as native
+/// NV12 ones do: each is encoded, and its one hold let go of.
+#[test]
+fn a_gpu_session_encodes_planar_targets_and_lets_go_of_each() {
+    let Some(gpu) = context() else { return };
+    let context = &gpu.context;
+    let codecs = DualCodecs::new(GpuMode::Deliver);
+    let session = VideoSession::open_on(&codecs, Some(context), config(), options()).expect("open");
+    assert_eq!(session.path(), &VideoPath::Gpu);
+    let ring: [Arc<dyn FrameSync>; 2] = [Arc::new(NoSync), Arc::new(NoSync)];
+    let frames = (0..6)
+        .map(|i| planar_frame(context, &ring[i as usize % 2], i))
+        .collect();
+    let (packets, end) = run(&session, frames);
+    assert_eq!((packets, end), (6, StreamEnd::Finished));
     for hold in &ring {
         assert_eq!(Arc::strong_count(hold), 1);
     }

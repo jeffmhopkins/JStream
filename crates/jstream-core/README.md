@@ -149,7 +149,8 @@ covers = ["crates/jstream-core/src/activity_log.rs", "crates/jstream-core/src/au
   slows and then stops the audience reads as it runs low. A refresh token Google
   refuses signs the engine out.
 - **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action
-  (but `live.set` and `live.cancel`), and one per gesture that ends without a commit, sent to
+  (but `live.set`, `live.cancel`, `values.set`, `preview.report` and `preview.request_keyframe`),
+  and one per gesture that ends without a commit, sent to
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
@@ -583,7 +584,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/lan.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/ptz/controller.rs", "crates/jstream-core/src/ptz/mod.rs", "crates/jstream-core/src/quality.rs", "crates/jstream-core/src/runtime/**"]
 -->
 
-- **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
+- **Preview** (`preview/`): `preview.subscribe`, `preview.unsubscribe`, `preview.show`
+  (another scene on an open stream) and `preview.request_keyframe`, the program
   mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a `jstream-encode` session (software, or for one stream the program stage draws the hardware encoder) when the
@@ -908,7 +910,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   fallback, and failing at
   once when the context's device is lost, on a software device that stands in for the
   platform's (`src/tests/gpu_capture.rs`; the last four skip without
-  `TEXTURE_FORMAT_NV12`), an effect-pack filter that runs too long on the GPU being
+  `TEXTURE_FORMAT_NV12`), the same output getting two-plane encode targets
+  (`GpuFrame::planar`, an `R8Unorm` and an `Rg8Unorm` texture as on Metal) whose planes
+  then hold the program's colour (the same file), an effect-pack filter that runs too long on the GPU being
   quarantined with no device loss (the same file; it skips on a GPU without timestamp
   queries, and draws 64 times the pixels on a hardware GPU, #1723), a page's
   GPU frame drawing only on its own context in
@@ -1025,7 +1029,12 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   source refused; an H.264 stream of the program and one of a scene off program, and a
   JPEG scene stream beside a PNG program stream, drawn by the program stage, which
   opens for them with no output and stops once they close, with the preview thread's
-  own drawing failing), the
+  own drawing failing; `preview.show` moving a staged H.264 stream to another scene and
+  back on the same encoder session, then into the session of another stream showing that
+  scene, and a hub stream to another scene, each going on with a keyframe and its times,
+  and refusing a channel not open, a source's stream and a missing scene;
+  `preview.request_keyframe` making the next picture a keyframe, and succeeding on a channel not
+  open), the
   collection file (`src/tests/collection.rs`: created when missing with the sample
   labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
@@ -1936,12 +1945,15 @@ scene draws a `media` file is timed: a jump into it, or within it, seeks every s
 the scene's family draws to that spot (`source.seek`'s `LiveSources::seek`, as of the
 effect's time), and so does an overlay put up partway through its clip (ADR-0210
 decision 9). After each tick the scene of the program clip after the one under the play
-head is the upcoming scene (`State::set_upcoming`, see *Program scene*), so its file is
+head is the upcoming scene (`State::set_upcoming`, see *Program scene*), or at a loop's
+last clip, unless the runner is leaving it (`Runner::leaving`), the clip at the loop's
+start, which the wrap runs to; so its file is
 held at its first frame and the cut to it starts nothing; it clears when the show
 stops. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
-it. A show that starts on the scene already on program restarts every `timer` source
+it, taking its overlays down and stopping its sequences (a deleted show by the plan it
+ran, `Run::plan`). A show that starts on the scene already on program restarts every `timer` source
 that scene draws (`source.restart`), as the cut to it would have.
 `studio.get`'s `show` reports it, and `show.changed` says what it did. `show.play` with
 `rehearse` runs the show on preview instead (ADR-0210 decision 13, `rehearse` in the
@@ -1957,7 +1969,8 @@ a show running, put a scene over program through the internal show scene
 makes the show scene if the collection has none ("Show overlays"), a `scene` source of
 the overlay scene unless one exists ("Overlay: <name>"), and a hidden item of it in the
 show scene, as one engine change that is no client's undo step, and saves the
-collection. Showing or hiding it then goes through `State::set_show_scene_item_shown`,
+collection (if the show scene can't be marked, the change is still logged and announced,
+and no item is returned). Showing or hiding it then goes through `State::set_show_scene_item_shown`,
 so it fades over program on its own, apart from any scene switch: a clip's
 `fade_in_ms` or `fade_out_ms` is a plain fade of that length, and 0 uses the item's own
 show or hide transition. `studio.get`'s `overlays` lists the scenes shown over program.
@@ -1972,8 +1985,9 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 `show.pause` holding show time until `show.continue` or `show.play` plays on,
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
-span and taken down when an edit removes it, the overlay actions with no show, the
-show scene refusing a delete and being heard, the next program clip named upcoming, and
+span and taken down when an edit removes it or the show is deleted, the overlay actions with no show, the
+show scene refusing a delete and being heard, the next program clip named upcoming (the
+loop's first at its last clip), and
 a rehearsal on preview leaving program, its cues and off script alone.
 `src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
 seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
@@ -3483,8 +3497,10 @@ the live values changed, a transition is running in it (its picture changes with
 one of the displays or windows it shows took a new frame,
 a keyframe was asked for, or 2 s passed since its last keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
 `VideoSession` that avoids hardware when the hub draws the stream itself (a source, a
-draft, or no program stage), VBR at about half a bit per pixel per frame (at most 32 Mbit/s, so text in an
-editing view stays sharp, #1203), with a keyframe every 2 s, reopened when the picture size changes; its
+draft, or no program stage), VBR at about half a bit per pixel per frame (at most 32 Mbit/s in software and 64 Mbit/s
+on a hardware encoder, so 1080p keeps that rate at 30 and at 60 fps and text in an
+editing view stays sharp, #1203; `preview_kbps`, a session `Prefer` opened in software
+above the software cap opens again with `Avoid`), with a keyframe every 2 s, reopened when the picture size changes; its
 packets go out with the `rev` of the picture they encode. If it can't be opened the
 stream falls back to JPEG (quality 95) when the client accepts JPEG, and ends with an end frame
 otherwise, as it does when more than 30 draws in a row fail, or after a panic on the thread. When a
@@ -3497,24 +3513,35 @@ program or of a scene, in H.264, JPEG or PNG, isn't drawn by the hub: once the e
 program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
 under the start lock but never waiting for a start, asking again 200 ms later while an
 output is starting and 5 s later after a stage that failed to open) and holds it while
-such a stream is open. It opens the stream's encoder session (as above, but on the
-hardware encoder for one stream at a time, #1691: a software H.264 encoder can cost a
-whole core for one canvas. `open_staged_h264` asks for hardware `Prefer` while the hub's
-`HardwareSlot` is free and keeps the slot while the session it got is a hardware one;
-every other stream, and any stream when `Prefer` opens software or fails to open, as
-VA-API's does without a software fallback, is opened with `Avoid`. So previews hold at
-most one hardware session, and outputs come first
+such a stream is open. It opens the stream's encoder session, or joins the one another
+stream of the same picture already has: streams of the same scene, or of the program,
+at the same size and rate share one session (`SharedEncode`, listed on the stage in
+`Program::preview_encodes`), so three views of one scene are drawn, read back and
+encoded once. Each stream sends the packets on from its own subscription, which
+starts on a keyframe the session is asked for when it joins, with its own times and
+its own queue; a keyframe one of them asks for goes to all of them. The session
+closes when its last stream lets go, and each stream's sender ends within 20 ms of its
+stream closing (`send_packets`). In `profile.get` each stream reports the shared
+encoder's frames and time, as outputs on one session do
+(`streams_of_the_same_picture_share_one_encoder_session`). The session opens as
+above, but on a hardware encoder for up to four pictures at a time
+(`PREVIEW_HARDWARE_SESSIONS`, #1691): a software H.264 encoder can cost a
+whole core for one canvas. `open_staged_h264` asks for hardware `Prefer` while the stage's
+`HardwareSlot` has a session free and keeps it while the session it got is a hardware one;
+a picture past the four, and any when `Prefer` opens software or fails to open, as
+VA-API's does without a software fallback, is opened with `Avoid`. Outputs come first
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3): the slot
 is the stage's (`Program::preview_hardware`), and an output whose own open wanted a
-hardware encoder and got none, an error or a software one, takes it back
-(`HardwareSlot::reclaim` in `Program::encoders`). The stream holding it sees that on
-the hub's next pass (`Staged::gives_way`), closes its session and opens again with
-`Avoid`, starting on a keyframe; the output waits for that, at most 2 s
-(`PREVIEW_RECLAIM_WAIT`), and opens again, and no stream takes the slot until it has.
-An output that got its hardware encoder the first time leaves the preview's alone, so
-on an encoder with sessions to spare both stay on hardware. While a stream holds the
-slot, `output.status` counts its session in `encoder_sessions` and
-`hardware_sessions`. `one_staged_preview_at_a_time_encodes_on_hardware`,
+hardware encoder and got none, an error or a software one, takes every preview
+hardware session back (`HardwareSlot::reclaim` in `Program::encoders`). The streams
+holding them see that on the hub's next pass (`Staged::gives_way`), close their sessions
+and open again with `Avoid`, sharing as before and starting on a keyframe; the output
+waits for that, at most 2 s (`PREVIEW_RECLAIM_WAIT`), and opens again, and no stream
+takes a hardware session until it has. An output that got its hardware encoder the
+first time leaves the previews' alone, so on an encoder with sessions to spare all
+stay on hardware. `output.status` counts the previews' hardware sessions in
+`encoder_sessions` and `hardware_sessions`.
+`staged_previews_encode_on_hardware_up_to_the_cap`,
 `a_refused_hardware_encoder_falls_back_to_software`,
 `an_output_takes_the_hardware_session_back_from_a_preview`,
 `a_reclaim_of_a_free_or_stuck_slot_returns_at_once_or_at_its_wait`. And for NV12
@@ -3539,6 +3566,27 @@ preview shows what goes out, and costs no second composite, no second device and
 second capture of the program's displays. Outputs that start while the preview holds the
 stage share it, as they share each other's. A stage only the hub holds is let go of
 once the canvas differs from the size it opened at, and reopened at the new one.
+
+**Moving a stream** (`preview.show`, 0.188). A stream of the program or a scene changes
+the scene it shows on its channel: `SessionPreviews::show` sets the stream's scene and
+its keyframe flag, wakes the hub, and re-plans when what the streams show changed, as a
+subscription does (a channel not open, or a source's or draft's stream, is
+`invalid_argument` naming `channel`; a scene the collection doesn't have, `not_found`).
+The hub moves it on its first pass once the new scene is planned, sending the old one
+until then. A staged H.264 stream that has its `SharedEncode` alone, when no open
+session already encodes the new picture, keeps that session (`Staged::show`,
+`SharedEncode::show`): the tap the render thread feeds it is cut (`VideoTap::cut`, set
+before the new tap is sent, so no tick pushes both; `Frames::prune` hands a cut tap to
+the collector even if its mix isn't due), a tap of the new picture is attached in its
+place, and the session is asked for a keyframe, so the encoder, a hardware session it
+holds, the sender and the stream's times carry on. Otherwise it opens again on the new
+picture, joining its session if one is open; a JPEG or PNG stream always does. The
+hub's own streams draw the new scene as a keyframe.
+`preview_show_moves_a_stream_to_another_scene_on_its_encoder`,
+`preview_show_moves_a_hub_stream_to_another_scene`, `preview_show_is_checked`,
+`a_cut_preview_tap_goes_and_its_new_tap_stays`. `preview.request_keyframe` sets a stream's
+keyframe flag and wakes the hub (`preview_keyframe_asks_for_a_keyframe_at_once`); the
+audit log leaves it out, as it does `preview.report`.
 
 A scene stream's session is handed over the same way, with its scene: a **monitored
 scene**. The engine publishes the scenes it plans for streams (`RenderHub::publish_scenes`,
@@ -3612,7 +3660,7 @@ one sent (a repeated frame is the same buffer, so that costs no compare), a keyf
 hub's), or 2 s passed, and only while the stream's queue has room. A staged stream's
 `pts_us` go on from the hub's own across stages and sizes (`StreamClock`): its first
 picture on a stage is timed by how long the stream has been open, later ones by their
-media time past that one's, never back past the last time the stream sent, whether
+media time past that one's, always after the last time the stream sent (never the same, so a decoder never gets two pictures at one time), whether
 the hub, this stage's sender or an earlier one sent it (`Work::last_pts`, shared). The hub doesn't wait for that thread when it closes the stream:
 it sees the close within its 100 ms wait, sends nothing more and ends, and the render
 thread then lets go of the queue. A JPEG or PNG stream the stage can't take is drawn by
@@ -4040,9 +4088,9 @@ session is held. An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
 `prefer` still falls back to software when hardware refuses (ADR-0031). Before either
 answer stands, a new video session that wanted a hardware encoder and got none, a
-refusal or a software one, takes back the hardware session a preview stream holds, if
-one does, and opens once more ([Preview streams](#preview-streams)); `output.status`
-counts that preview session with the outputs' until then. A new video
+refusal or a software one, takes back the hardware sessions preview streams hold, if
+any do, and opens once more ([Preview streams](#preview-streams)); `output.status`
+counts those preview sessions with the outputs' until then. A new video
 session that `prefer` opens in software, because the machine lists no hardware encoder
 for the codec or the listed one refused the session at configure, logs a warning
 naming the output it opens for, the encoder and why (`why_software`; #443 case 1), so
@@ -4801,7 +4849,8 @@ A timeline that a `starts` or `stops` trigger or the end of a `delay_ms` plays o
 for pages, not a change to the studio, and may be set many times a second (ADR-0102
 decision 7, [Shared values](#shared-values)). Nor does `preview.report`: it carries
 a client view's counts once a second, and only `profile.get` reads them
-([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)).
+([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)). Nor does
+`preview.request_keyframe`, a client's decoder catching up, which changes nothing in the studio.
 
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection
@@ -4975,6 +5024,8 @@ read or dropped. When frames still hold every target (the encoder has fallen beh
 the tick's frame is dropped for that mix's GPU sessions and counted in
 `encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
+A target is a native NV12 texture or a two-plane frame (`GpuFrame::planar`, on a
+backend with no NV12 format), and `Nv12Target::gpu_frame` picks the planes to write.
 Nothing else would hold these composites back: an encoder lets go of a target once its
 copy is queued, and a full session queue drops a frame already drawn. So the draw
 counts each tick's conversions out, and back in when wgpu reports their submit done
