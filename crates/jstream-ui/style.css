@@ -921,7 +921,11 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
   gap: 0 0.35rem;
   margin-bottom: 0.6rem;
 }
-.field label { display: grid; gap: 0.25rem; }
+.field label, .field .label-row { display: grid; gap: 0.25rem; }
+/* A descriptor's number is the shared click-drag field (#1734): 88 px, its unit inside
+   its box, or 64 px after a slider. */
+.field .control > .number-field { flex: 0 0 88px; width: 88px; }
+.field .control > input[type="range"] + .number-field { flex-basis: 64px; width: 64px; }
 .field .label { color: var(--muted); font-size: 0.85rem; }
 .field .control { display: flex; gap: 0.35rem; align-items: center; min-width: 0; }
 .field .control input, .field .control select { flex: 1; min-width: 0; }
@@ -1267,7 +1271,8 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .profile-field input, .profile-field select { min-width: 0; }
 .profile-field.size-pair { grid-template-columns: 120px minmax(0, 174px) minmax(0, 174px); }
 .profile-field.size-pair::before { content: ""; }
-.profile-field.size-pair label { display: grid; gap: 4px; }
+.profile-field.size-pair > div { display: grid; gap: 4px; }
+.profile-field > .number-field { max-width: 140px; }
 .profile-field.size-pair .label { color: var(--muted); font-size: 12px; }
 .badge {
   padding: 0.1rem 0.5rem;
@@ -1487,7 +1492,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .sends { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
 .send { display: flex; align-items: center; gap: 0.4rem; }
 .send .check { flex: 1; }
-.send-gain { width: 5rem; padding: 0.15rem 0.3rem; }
+.send-gain { flex: none; width: 6rem; }
 .new-bus { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
 .new-bus input { flex: 1; min-width: 0; }
 @media (max-width: 800px) {
@@ -1600,7 +1605,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 /* A canvas side: its W or H caption inside the field's left edge. */
 .size-side { position: relative; display: inline-flex; }
 .size-side > span { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--dim); font-size: 11px; pointer-events: none; }
-.settings-size .size-side > input { width: 88px; padding-left: 24px; }
+.settings-size .size-side > .number-field { width: 88px; }
 .prop-control.wide { max-width: none; }
 .video-settings .prop-section + .prop-section { margin-top: 16px; }
 .settings-error { margin: 8px 0 0; color: var(--danger, #e5484d); font-size: 12px; }
@@ -1892,13 +1897,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
   max-width: 8rem;
 }
 .camera-number .label { flex: none; color: var(--dim); font-size: 12px; }
-.camera-number input {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
-  height: 30px;
-  padding: 0 6px;
-}
+.camera-number > .number-field { flex: 1 1 auto; width: 100%; min-width: 0; }
 .camera-control {
   display: flex;
   align-items: center;
@@ -2045,7 +2044,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .filter-pane-title { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 600; }
 .filter-pane .filter-dialog-body { max-height: none; flex: 1 1 auto; }
 /* In the pane a slider takes the row's width, its number after it. */
-.filter-pane .field.prop > label { grid-template-columns: 120px minmax(0, 1fr); }
+.filter-pane .field.prop > :is(label, .label-row) { grid-template-columns: 120px minmax(0, 1fr); }
 .filter-pane .field.prop .control:has(> input[type="range"]) { max-width: none; }
 .filter-pane .field.prop .control > input[type="range"] { flex: 1 1 auto; }
 /* The ⋯ menu beside the switch: Defaults and Remove. */
@@ -2476,7 +2475,7 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
   column-gap: 8px;
   margin-bottom: 12px;
 }
-.modal .field.prop > label,
+.modal .field.prop > :is(label, .label-row),
 .modal .props-name {
   display: grid;
   grid-template-columns: 120px minmax(0, 360px);
@@ -2486,8 +2485,6 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
 .modal .field.prop .label,
 .modal .props-name .label { padding-top: 6px; color: var(--muted); font-size: 12px; line-height: 16px; }
 .modal .props-name input { width: 100%; max-width: 360px; }
-.modal .field.prop .control input[type="number"] { flex: 0 0 88px; width: 88px; text-align: right; }
-.modal .field.prop .control input[type="range"] + input[type="number"] { flex-basis: 64px; width: 64px; }
 .modal .field.prop .control input[type="checkbox"] { margin-top: 7px; }
 .modal .field.prop .control:has(> input[type="checkbox"]) { align-items: flex-start; }
 .modal .field.prop .reset { width: 20px; height: 28px; padding: 0; }
@@ -2567,7 +2564,7 @@ input[type="checkbox"].toggle:checked::after { left: 14px; background: #fff; }
 .looks { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .looks-head, .looks-row { display: grid; grid-template-columns: 1.4fr 1.2fr 0.8fr 0.8fr auto; gap: 4px; align-items: center; }
 .looks-head { color: var(--muted); font-size: 0.8rem; }
-.looks-row input[type="text"], .looks-row input[type="number"] { min-width: 0; width: 100%; }
+.looks-row input[type="text"], .looks-row .number-field { min-width: 0; width: 100%; }
 .looks-color { display: flex; gap: 4px; align-items: center; }
 .looks-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 /* Camera mode's text buttons in a 3D scene's tool bar. */

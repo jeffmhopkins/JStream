@@ -717,7 +717,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
-  shows in them once it is dropped.
+  shows in them once it is dropped. A drag on a box, 3D or crop field shows on output
+  as it goes, through `live.set`, and is one undo step (#1734).
 - **Number fields** (`NumberField`, spec-panels.md G10) show the number with its unit
   in one box, with no − and + steppers but on the mixer's gain fields; an inline field's
   short caption (X, W, L) sits inside the box before the number, and a drag on it
@@ -727,7 +728,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   unfocused field steps once per 3 px (Shift a tenth, Ctrl four times, per move so a
   modifier never makes the value jump) and is sent once on release, so it is one edit
   and one undo step; a drag whose release the field never saw ends unsent at the next
-  move with no button held. Values are kept to the field's range and rounded, and
+  move with no button held. A field given `live` also hands the dragged value on at
+  most once per animation frame while the drag goes (#1734), then says how it ended
+  (released, or lost with its start to put back): the Inspector's box, 3D and crop
+  fields send those values as a gesture's `live.set` and the release's batch ends the
+  gesture (ADR-0032), so the output follows the drag and the drag is one undo step; a
+  dialog's field puts them in its draft, which in the Properties dialog shows each live
+  setting as before (ADR-0091). Every numeric input is this field: a kind
+  descriptor's whole and decimal numbers (`number_spec`: the step, places and range),
+  the encoder and video mix forms, the scene camera, Video settings' size, a
+  transition preset's settings, looks, sends, webcam controls. A value the engine takes
+  no live value for (a filter's settings, opacity, a send, a preset) is sent on release
+  only. Values are kept to the field's range and rounded, and
   negatives are written with `−`. A value its panel doesn't send, because the edit
   would change nothing, puts the committed value back in the field.
 - **The Arrange panel** ([UI features › transform](../../docs/UI-FEATURES.md#transform))
