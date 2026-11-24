@@ -88,7 +88,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
-  `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
+  `source.restart`, `source.seek`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
@@ -384,7 +384,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.176 because `profile.get`'s drawers report
+`PROTOCOL_VERSION` is 0.177 because of `source.seek`, which plays a `media` file on
+from a point into it and holds through the program showing it (a placeholder number the
+release queue sets); 0.176 because `profile.get`'s drawers report
 `preview_skipped`, the pictures only preview streams take that the program skipped,
 which `stats.tick`'s `render_ticks` no longer counts (#1690); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
@@ -2647,7 +2649,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
-  `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, and `channel.set_value`,
+  `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, `source.seek`, and `channel.set_value`,
   `channel.nudge` and `channel.switch`, ADR-0183) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
@@ -3224,6 +3226,14 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+- **`source.seek {source_id, at_ms}`** (since 0.177) plays a `media` file on from
+  `at_ms` into its timeline: past the end of a looping file it lands where that many
+  plays would reach, and on one that doesn't loop on its last frame. A kind with nothing
+  to seek starts over as `source.restart` starts it, and others do nothing. A seek
+  made before the program shows the source holds through the show, so the source isn't
+  started again from its start by `restart_on_show`: a switch and a seek can come in
+  either order. Like `source.restart` it is runtime state, bindable to a hotkey, not a
+  timeline cue, and needs the `live` class from a plugin.
 
 <a id="media-clock"></a>
 ## Holding the media clock
