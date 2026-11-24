@@ -6941,6 +6941,11 @@ impl State {
         self.render.publish_warm(warm);
         self.render.publish_warm_models(self.warm.models());
         self.live.set_warm(self.warm.sources());
+        // Their stills too, so a switch to one draws them at once (ADR-0212).
+        let stills = self
+            .live
+            .warm_stills(&self.frames, &mut self.frame_versions);
+        self.render.publish_warm_stills(stills);
         // A source that left the warm scenes rests now if nothing drew it in the
         // latest plans, as it would after one.
         self.live.rest_undrawn();
@@ -7043,6 +7048,7 @@ impl State {
         render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));
         render.publish_warm_models(warm.models());
         live.set_warm(warm.sources());
+        render.publish_warm_stills(live.warm_stills(frames, frame_versions));
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
         let previewed: BTreeSet<SourceId> = previews

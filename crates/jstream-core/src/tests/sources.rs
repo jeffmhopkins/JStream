@@ -2386,3 +2386,70 @@ fn a_page_at_fps_0_follows_the_programs_frame_rate() {
         "only the following page opened again"
     );
 }
+
+/// ADR-0212 (#1737): a warm scene's still image is published for the program stage to
+/// keep uploaded, before any plan shows it, as the same frame the program draws once
+/// the scene is switched to, so the upload the stage made is the one it draws.
+#[test]
+fn a_warm_scenes_still_is_published_as_the_frame_the_program_draws() {
+    let dir = temp_dir("warm-still");
+    let rgba = [0u8, 0xff, 0, 0xff].repeat(4 * 4);
+    let png = crate::snapshot::encode_png(4, 4, &rgba).expect("a PNG");
+    fs::write(dir.join("pic.png"), png).expect("the image");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "pic.png".into(),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("main"),
+            create("b"),
+            source("pic", "image", settings(&[("file", file.to_value())])),
+            add("b", "i1", "pic"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the image was built");
+    let key = crate::snapshot::GpuKey::Frame(SourceId::new("pic"));
+    let warm = || {
+        hub.load_warm_stills()
+            .iter()
+            .find(|(at, _)| *at == key)
+            .map(|(_, frame)| frame.version())
+    };
+    assert_eq!(warm(), None, "b is neither preview nor shown");
+
+    let act = |action| {
+        block_on(control.call(Call::Action { action })).expect("the action applies");
+    };
+    act(Action::StudioSetPreview {
+        scene_id: SceneId::new("b"),
+    });
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while warm().is_none() && Instant::now() < deadline {
+        engine.replan();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let published = warm().expect("the Preview scene's still is published");
+
+    act(Action::SceneSwitch {
+        scene_id: SceneId::new("b"),
+        preset_id: None,
+        via: Vec::new(),
+    });
+    assert_eq!(
+        hub.load()
+            .shot()
+            .frame(&SourceId::new("pic"))
+            .map(crate::snapshot::Frame::version),
+        Some(published),
+        "the program draws the frame that was kept uploaded"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

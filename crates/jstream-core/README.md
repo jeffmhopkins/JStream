@@ -2011,7 +2011,14 @@ keeps the still's upload while no mix draws it, for as long as the still is show
 is deleted or rebuilt), so a cut back to it draws it at once. A program-stage draw that
 needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none, which it logs once
 per shown still: #1562) until the thread has decoded the file again
-(`jstream_sources::Still::frame`, logged at info); the
+(`jstream_sources::Still::frame`, logged at info). So that a cut to a warm scene never
+draws its stills as nothing, the engine also publishes the still each warm scene's
+source shows (`LiveSources::warm_stills`, the same frame a plan of the scene draws,
+showing one no plan showed yet), and after each tick's draws the program stage uploads
+whole each one its cache holds no texture of, at most two a tick, asking for the pixels
+when they are gone, and keeps it as it keeps a drawn still's upload
+(`snapshot::keep_warm_stills`, ADR-0212, #1737;
+`a_warm_still_draws_on_the_first_program_frame_after_the_cut`); the
 render thread only reads atomics and unparks the thread, never decodes, and never frees
 the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). The
 decode takes the still's own decode lock, never the one `frame_if_held` takes, so a
@@ -3322,7 +3329,15 @@ plan replaces only when a model changed;
 the render thread's draw uploads and keeps them (`Chains::keep_models`), so a switch
 to a warm scene uploads nothing
 (`a_warm_scenes_model_is_published_for_the_program_stage`). The limit's estimate
-doesn't count them. The set is also published after `studio.set_warm`
+doesn't count them. Their still images are published the same way
+(`RenderHub::publish_warm_stills`, a `WarmStills` list that `LiveSources::warm_stills`
+replaces only when a still changed, each the frame a plan of its scene draws; a source
+with a stored frame is left out; ADR-0212): the render thread uploads each one its cache
+holds no texture of after its draws (`snapshot::keep_warm_stills`, see *Snapshots*), so
+a switch to a warm scene draws its stills on its first frame, even on a program stage
+that opened since they were last drawn
+(`a_warm_scenes_still_is_published_as_the_frame_the_program_draws`). The limit counts
+each one as it counts any source's frame. The set is also published after `studio.set_warm`
 changes the budget, and after each plan when an edit kept a scene warm or bound one.
 The GPU-memory limit (ADR-0150) is applied to what was planned on every update, since
 the sizes it reads change without a new plan (`WarmCaptures::trim`): each source a
@@ -4999,10 +5014,12 @@ frame and publishes one snapshot of its totals about once a second, the meter's 
 allocation, handing the totals it replaces to the collector (*Profile* in
 [Purpose](#purpose)). The render thread uploads no 3D model: its draw's `Chains` asks the
 `jstream-models` thread for each (`Chains::upload_models_aside`, see *Snapshots*;
-[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). None of those threads lock the collection: the render thread reads the
+[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). After its draws it
+uploads the warm scenes' stills its cache holds no texture of, from held pixels only
+(`snapshot::keep_warm_stills`, see *Snapshots*; ADR-0212). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
-values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a
+values, the warm scenes' replaced lists of captures, models and stills, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a
 mix no session needs any more, replaced lists of bus and source scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer

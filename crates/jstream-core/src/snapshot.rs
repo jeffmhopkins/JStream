@@ -341,6 +341,11 @@ impl Frame {
         Self { probe, ..self }
     }
 
+    /// Which frame it is: two with the same version are the same bytes.
+    pub(crate) fn version(&self) -> u64 {
+        self.version
+    }
+
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
     pub(crate) fn with_version(self, version: u64) -> Self {
         Self { version, ..self }
@@ -6220,6 +6225,60 @@ fn upload_still(
     Ok(())
 }
 
+/// How many of the warm scenes' stills one tick of the program stage uploads at most
+/// ([`keep_warm_stills`]): a stage that opens with many to upload spreads them over
+/// its first ticks.
+const WARM_STILLS_PER_TICK: usize = 2;
+
+/// Gets the program stage's cache ready to draw each of the warm scenes' stills `warm`
+/// (ADR-0212): one it holds no texture of is uploaded whole from its pixels if they
+/// are held, and its pixels are asked for if they are not, so a later tick uploads
+/// it. So a switch to a warm scene finds its stills on the GPU and draws them on its
+/// first frame. Called on the program stage's render thread after the tick's draws, so
+/// a still a mix drew this tick is left as that draw left it; it reads only held
+/// pixels and never decodes ([`crate::still`]).
+///
+/// # Errors
+/// What the compositor reports for an upload.
+pub(crate) fn keep_warm_stills(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    warm: &crate::runtime::WarmStills,
+) -> Result<(), RenderError> {
+    let mut uploads = 0;
+    for (key, frame) in warm {
+        let Pixels::Still(still) = &frame.pixels else {
+            continue;
+        };
+        if cache.get(key).is_some() {
+            continue;
+        }
+        let Some(pixels) = still.held() else {
+            still.want();
+            continue;
+        };
+        if uploads == WARM_STILLS_PER_TICK {
+            continue;
+        }
+        uploads += 1;
+        let size = (frame.width, frame.height);
+        let uploaded = cache
+            .upload_if_needed(compositor, key, frame.version, size, || {
+                Some(Packed(pixels))
+            })?
+            .is_some();
+        if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+            cache.set_extent(key, extent);
+        }
+        // Kept while its scene isn't drawn, as a drawn still's upload is.
+        cache.keep_while(key, still.alive());
+        if uploaded {
+            still.uploaded();
+        }
+    }
+    Ok(())
+}
+
 /// A still's packed pixels, as an upload reads them.
 struct Packed(Arc<VideoFrame>);
 
@@ -11811,6 +11870,123 @@ pub(crate) mod tests {
         let mut snapshot = ResourceCache::new();
         assert_eq!(draw(&mut compositor, &mut snapshot, false), Some(GREEN));
         assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 2);
+    }
+
+    /// #1737 (ADR-0212): a warm scene's still is on the program stage's GPU before the
+    /// cut to it, so the first program frame after the cut draws it, never nothing: one
+    /// shown for the first time, and one whose pixels were let go of on another program
+    /// stage (as a stage opened again finds them), whose cache has no texture of it.
+    #[test]
+    fn a_warm_still_draws_on_the_first_program_frame_after_the_cut() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let size = FrameSize::new(64, 36).expect("invariant: non-zero");
+        let pixels = || {
+            let info = jstream_media::VideoFrameInfo {
+                size: FrameSize::new(512, 512).expect("invariant: non-zero"),
+                format: jstream_media::PixelFormat::Rgba8,
+                color: jstream_media::ColorInfo::default(),
+                pts: zero(),
+            };
+            let rgba = std::iter::repeat_n(GREEN, 512 * 512).flatten().collect();
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 512 * 4)])
+                .expect("invariant: a packed frame")
+        };
+        let stills = crate::still::Stills::default();
+        let key = GpuKey::Frame(SourceId::new("still"));
+        let on = |shown: &Arc<crate::still::ShownStill>| {
+            let mut planned = shot(vec![(
+                "program",
+                vec![
+                    fill("red"),
+                    placed(SourceRef::Frame(SourceId::new("still")), FULL),
+                ],
+            )]);
+            let frame = Frame::from_still(Arc::clone(shown), 3);
+            planned.frames.insert(SourceId::new("still"), frame.clone());
+            planned.uploads.push((key.clone(), SourceId::new("still")));
+            (planned, vec![(key.clone(), frame)])
+        };
+        let away = shot(vec![("program", vec![fill("red")])]);
+        // One tick of the program stage: the program, then the warm scenes' stills.
+        let tick = |compositor: &mut Compositor,
+                    cache: &mut ResourceCache<GpuKey>,
+                    shot: &Shot,
+                    warm: &crate::runtime::WarmStills| {
+            cache.begin_frame();
+            let output = compose(
+                compositor,
+                (cache, &mut Chains::default()),
+                (shot, zero()),
+                View {
+                    program: true,
+                    ..View::default()
+                },
+                &LiveParams::default(),
+                &Every(None),
+                super::DrawAt::read(size),
+            )
+            .expect("compose");
+            super::keep_warm_stills(compositor, cache, warm).expect("the warm stills");
+            drop(cache.end_frame(compositor));
+            output.pixels().expect("invariant: read back").pixel(32, 18)
+        };
+        let wait = |done: &dyn Fn() -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !done() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            done()
+        };
+
+        // Shown for the first time on a warm scene: uploaded while the program shows
+        // another scene, and its pixels let go of.
+        let first = stills.show(Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels()),
+            "first.png".into(),
+            move || Ok(pixels()),
+        )));
+        let (planned, warm) = on(&first);
+        let mut program = ResourceCache::new();
+        program.draw_uploads_small(true);
+        assert_eq!(tick(&mut compositor, &mut program, &away, &warm), Some(RED));
+        assert!(program.get(&key).is_some(), "uploaded while warm");
+        assert!(wait(&|| first.held().is_none()), "and let go of");
+        assert_eq!(
+            tick(&mut compositor, &mut program, &planned, &warm),
+            Some(GREEN),
+            "drawn on the first frame after the cut"
+        );
+
+        // Its pixels let go of on another program stage: a new stage's cache has no
+        // texture of it, so its pixels are asked for while it is warm.
+        let again = stills.show(Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels()),
+            "again.png".into(),
+            move || Ok(pixels()),
+        )));
+        let (planned, warm) = on(&again);
+        let mut before = ResourceCache::new();
+        before.draw_uploads_small(true);
+        assert_eq!(
+            tick(&mut compositor, &mut before, &planned, &Vec::new()),
+            Some(GREEN)
+        );
+        assert!(wait(&|| again.held().is_none()), "let go of");
+        let mut stage = ResourceCache::new();
+        stage.draw_uploads_small(true);
+        assert_eq!(tick(&mut compositor, &mut stage, &away, &warm), Some(RED));
+        assert!(stage.get(&key).is_none(), "no pixels to upload yet");
+        assert!(wait(&|| again.held().is_some()), "decoded again while warm");
+        assert_eq!(tick(&mut compositor, &mut stage, &away, &warm), Some(RED));
+        assert!(stage.get(&key).is_some(), "uploaded while warm");
+        assert_eq!(
+            tick(&mut compositor, &mut stage, &planned, &warm),
+            Some(GREEN),
+            "drawn on the first frame after the cut, never nothing"
+        );
     }
 
     /// A shot measures how much each frame it draws is enlarged, against the frame's
