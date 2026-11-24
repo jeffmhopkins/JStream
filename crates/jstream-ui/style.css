@@ -2672,3 +2672,22 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .seq-delete { background: none; color: var(--danger-text); }
 .control-menu .menuitem.danger, .seq-panel .menuitem.danger, .chan-delete.menuitem.danger { background: transparent; border-color: transparent; color: var(--danger-text); font-weight: 400; }
 .control-menu .menuitem.danger:hover:not(:disabled), .seq-panel .menuitem.danger:hover:not(:disabled), .chan-delete.menuitem.danger:hover:not(:disabled) { background: var(--menu-hover); border-color: transparent; }
+
+/* The Show panel (panels/show): its two views share the bar, the picker and the Edit / Run
+   switch. Bookmarks are yellow, loops violet, the play head white. */
+:root {
+  --show-bookmark: #f5d142;
+  --show-bookmark-ink: #1a1204;
+  --show-loop: #a78bfa;
+  --show-loop-fill: rgba(167, 139, 250, 0.08);
+  --show-head: #ffffff;
+}
+.show-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.show-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.show-picker-group { display: flex; align-items: center; gap: 10px; }
+.show-picker { height: 30px; font-weight: 600; }
+.show-mode { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.show-mode button { height: 28px; padding: 0 14px; border: none; background: var(--app); color: var(--muted); }
+.show-mode button.on { background: var(--selected); color: var(--text); font-weight: 600; }
+.show-empty { margin: auto; text-align: center; color: var(--muted); }
+.show-empty-title { color: var(--text); font-weight: 600; margin-bottom: 4px; }

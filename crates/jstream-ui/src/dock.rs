@@ -184,11 +184,13 @@ pub enum PanelId {
     Channels,
     /// The open sequence: its lanes and triggers (ADR-0184).
     Sequence,
+    /// A show: its timeline (Edit) or its show-time controls (Run).
+    Show,
 }
 
 impl PanelId {
     /// Every panel, in the View menu's order.
-    pub const ALL: [PanelId; 13] = [
+    pub const ALL: [PanelId; 14] = [
         PanelId::Scenes,
         PanelId::Objects,
         PanelId::Inspector,
@@ -202,6 +204,7 @@ impl PanelId {
         PanelId::Transitions,
         PanelId::Channels,
         PanelId::Sequence,
+        PanelId::Show,
     ];
 
     /// The panel's title, on its tab and in the View menu.
@@ -220,6 +223,7 @@ impl PanelId {
             PanelId::Agent => "Agent activity",
             PanelId::Channels => "Channels",
             PanelId::Sequence => "Sequence",
+            PanelId::Show => "Show",
         }
     }
 
@@ -239,6 +243,7 @@ impl PanelId {
             PanelId::Agent => "agent",
             PanelId::Channels => "channels",
             PanelId::Sequence => "sequence",
+            PanelId::Show => "show",
         }
     }
 
@@ -253,9 +258,11 @@ impl PanelId {
             | PanelId::Stats
             | PanelId::Agent
             | PanelId::Channels => Zone::Right,
-            PanelId::Mixer | PanelId::Outputs | PanelId::Transitions | PanelId::Sequence => {
-                Zone::Bottom
-            }
+            PanelId::Mixer
+            | PanelId::Outputs
+            | PanelId::Transitions
+            | PanelId::Sequence
+            | PanelId::Show => Zone::Bottom,
         }
     }
 
