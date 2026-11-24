@@ -1535,10 +1535,14 @@ on D3D11 into a texture of their own, fence-synchronized both ways, and
 Step 4's NV12 pass is built too: it reads the sRGB output and writes the Y and CbCr
 planes, either plane views of a native NV12 texture or an `R8Unorm` and an `Rg8Unorm`
 texture where planar render targets are missing, in BT.709 limited or full range with
-left-sited chroma. The render thread (in `jstream-core`) runs it: a video session
+left-sited chroma. A platform encode target is one of two shapes: a native NV12
+texture, or a two-plane frame whose `R8Unorm` and `Rg8Unorm` textures the platform
+made over the planes of one surface (where wgpu has no NV12 format, as on Metal), and
+the pass writes the plane views or the two textures. The render thread (in
+`jstream-core`) runs it: a video session
 opened on the context gets each composite of its video mix converted into the next of
 that mix's ring of the platform's encode targets, which it is pushed as a GPU frame, in
-its own submit that stages the target's fence and hands it back in `PRESENT`. Sessions
+its own submit that stages the target's fence and hands its textures back in `PRESENT`. Sessions
 on the CPU path and the virtual cameras still get their mix read back, through a ring
 of map-read buffers the render thread collects without waiting for the GPU (§4 of the
 ADR): converted to NV12 on the GPU first when only encoder sessions opened in NV12 take
