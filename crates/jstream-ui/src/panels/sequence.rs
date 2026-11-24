@@ -16,13 +16,15 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::panels::channels::{ChannelSearch, live_values, new_channel, open_channel};
 use crate::panels::number::NumberField;
+use crate::session::Session;
 use crate::store::{Collection, Studio, now_ms};
 use jstream_control::protocol::{
     Action, ChannelEdge, ChannelValueInfo, Edit, Finite32, KeyframeEdge, LaneCurve, LanePoint,
-    LaneTarget, SceneEdge, SceneId, TimelineEdge, TimelineId, TimelineInfo, TimelineLane,
+    LaneTarget, Rev, SceneEdge, SceneId, TimelineEdge, TimelineId, TimelineInfo, TimelineLane,
     TimelineLoop, TimelineTrigger,
 };
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos::wasm_bindgen::JsCast;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -296,6 +298,82 @@ struct PointMenu {
     y: f64,
 }
 
+/// The edits the panel sent that the engine hasn't shown back yet: the open sequence as
+/// they leave it, so the panel draws it, and builds the next edit on it, at once.
+///
+/// Each edit is a whole `timeline.set`, so one built on the collection's copy while an
+/// earlier one is still on its way (the engine answers, then the panel reads the
+/// collection again) would send that copy back and undo the earlier one: a second point
+/// added quickly took the first away, and a second click on M put the lane back. The
+/// draft goes once every edit has been answered and the collection has caught up with
+/// the last, or at once when one is refused, which the problem bar shows.
+#[derive(Clone, Copy)]
+struct Pending {
+    /// The open sequence as the edits leave it, with the scene that holds it.
+    draft: RwSignal<Option<(SceneId, TimelineInfo)>>,
+    /// How many edits are on their way.
+    sent: StoredValue<u32>,
+    /// The revision the last answered edit made.
+    rev: StoredValue<Rev>,
+}
+
+impl Pending {
+    fn new(studio: Studio) -> Self {
+        let pending = Pending {
+            draft: RwSignal::new(None),
+            sent: StoredValue::new(0),
+            rev: StoredValue::new(Rev(0)),
+        };
+        // The collection caught up: draw from it again.
+        Effect::new(move |_| {
+            let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
+            if rev.is_some_and(|rev| pending.settled(rev)) {
+                pending.draft.set(None);
+            }
+        });
+        pending
+    }
+
+    /// Whether nothing is on its way and the collection at `rev` holds the last edit.
+    fn settled(self, rev: Rev) -> bool {
+        self.sent.get_value() == 0 && rev >= self.rev.get_value()
+    }
+
+    /// Sends `edits`, the last of which leaves the sequence as `draft` (in `scene`), and
+    /// draws the draft until the engine shows it back.
+    fn send(
+        self,
+        studio: Studio,
+        session: &Session,
+        scene: SceneId,
+        draft: TimelineInfo,
+        edits: Vec<Edit>,
+    ) {
+        self.draft.set(Some((scene, draft)));
+        self.sent.update_value(|n| *n += 1);
+        let session = session.clone();
+        spawn_local(async move {
+            let answer = crate::store::apply(&session, edits, None).await;
+            self.sent.update_value(|n| *n = n.saturating_sub(1));
+            match answer {
+                Ok(rev) => {
+                    self.rev.update_value(|r| *r = (*r).max(rev));
+                    let now = studio
+                        .collection
+                        .with_untracked(|c| c.as_ref().map(|c| c.rev));
+                    if now.is_some_and(|now| self.settled(now)) {
+                        self.draft.set(None);
+                    }
+                }
+                Err(error) => {
+                    studio.report(&error);
+                    self.draft.set(None);
+                }
+            }
+        });
+    }
+}
+
 /// The Sequence panel.
 #[component]
 pub fn Sequence() -> impl IntoView {
@@ -330,10 +408,12 @@ pub fn Sequence() -> impl IntoView {
                 .unwrap_or_default()
         })
     };
-    // The open sequence: the one picked, or this scene's first.
+    let pending = Pending::new(studio);
+    // The open sequence: the one picked, or this scene's first; as the panel's edits on
+    // their way leave it, so it shows them at once.
     let open = Memo::new(move |_| {
         let picked = studio.sequence.get();
-        let found = picked.and_then(|id| {
+        let found = picked.clone().and_then(|id| {
             studio.collection.with(|c| {
                 c.as_ref().and_then(|c| {
                     c.timeline(&id)
@@ -341,14 +421,24 @@ pub fn Sequence() -> impl IntoView {
                 })
             })
         });
-        found.or_else(|| {
+        let found = found.or_else(|| {
             let scene = family_id()?;
             list().into_iter().next().map(|t| (scene, t))
-        })
+        });
+        let draft = pending.draft.get().filter(|(_, d)| match &found {
+            Some((_, t)) => t.timeline_id == d.timeline_id,
+            // A sequence just made, not in the collection yet.
+            None => picked.as_ref() == Some(&d.timeline_id),
+        });
+        draft.or(found)
     });
-    let apply = move |scene_id: SceneId, timeline: TimelineInfo| {
+    let apply = move |scene_id: SceneId, timeline: TimelineInfo, mut edits: Vec<Edit>| {
         if let Some(s) = session.0.get_value() {
-            studio.apply(&s, vec![Edit::TimelineSet { scene_id, timeline }]);
+            edits.push(Edit::TimelineSet {
+                scene_id: scene_id.clone(),
+                timeline: timeline.clone(),
+            });
+            pending.send(studio, &s, scene_id, timeline, edits);
         }
     };
     let change = move |f: &dyn Fn(&mut TimelineInfo)| {
@@ -361,7 +451,7 @@ pub fn Sequence() -> impl IntoView {
         if t == before {
             return false;
         }
-        apply(scene, t);
+        apply(scene, t, Vec::new());
         true
     };
     let act = move |action: Action| {
@@ -383,7 +473,7 @@ pub fn Sequence() -> impl IntoView {
             return;
         };
         studio.sequence.set(Some(id.clone()));
-        apply(scene, empty_sequence(id, name));
+        apply(scene, empty_sequence(id, name), Vec::new());
     };
     let pick = move |e: leptos::ev::Event| {
         let v = event_target_value(&e);
@@ -455,6 +545,7 @@ pub fn Sequence() -> impl IntoView {
         };
         if let Some(s) = session.0.get_value() {
             studio.sequence.set(None);
+            pending.draft.set(None);
             studio.apply(
                 &s,
                 vec![Edit::TimelineDelete {
@@ -478,9 +569,6 @@ pub fn Sequence() -> impl IntoView {
         let Some((scene, mut t)) = open.get_untracked() else {
             return;
         };
-        let Some(s) = session.0.get_value() else {
-            return;
-        };
         let channel = studio.collection.with_untracked(|c| {
             new_channel(
                 &name,
@@ -500,16 +588,7 @@ pub fn Sequence() -> impl IntoView {
             }],
             on: true,
         });
-        studio.apply(
-            &s,
-            vec![
-                Edit::ChannelSet { channel },
-                Edit::TimelineSet {
-                    scene_id: scene,
-                    timeline: t,
-                },
-            ],
-        );
+        apply(scene, t, vec![Edit::ChannelSet { channel }]);
     };
 
     let none = move || open.with(Option::is_none);
@@ -620,6 +699,11 @@ fn Triggers(
     let starts = chips(false, timeline.starts.clone());
     let stops = chips(true, timeline.stops.clone());
     let own = timeline.timeline_id.clone();
+    let driven: Vec<String> = timeline
+        .lanes
+        .iter()
+        .map(|l| l.target.channel.clone())
+        .collect();
     view! {
         <div class="seq-triggers">
             <span class="eyebrow">"Starts when"</span>
@@ -630,6 +714,7 @@ fn Triggers(
             <button type="button" class="seq-plus" aria-label="Add a trigger that stops it" on:click=move |_| editing.set(Some(true))>"+"</button>
             {move || editing.get().map(|stop| {
                 let own = own.clone();
+                let driven = driven.clone();
                 let done = move |trigger: Option<TimelineTrigger>| {
                     editing.set(None);
                     if let Some(trigger) = trigger {
@@ -641,7 +726,7 @@ fn Triggers(
                 };
                 view! {
                     <div class="ctx-catcher" on:pointerdown=move |_| editing.set(None)></div>
-                    <TriggerEditor stop=stop own=own done=done />
+                    <TriggerEditor stop=stop own=own driven=driven done=done />
                 }
             })}
         </div>
@@ -665,6 +750,9 @@ fn TriggerEditor(
     stop: bool,
     /// The sequence itself, which a trigger can't name.
     own: TimelineId,
+    /// The channels its own lanes drive, which can't start or stop it: the engine
+    /// refuses them.
+    driven: Vec<String>,
     /// Takes the new trigger, or `None` when cancelled.
     done: impl Fn(Option<TimelineTrigger>) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
@@ -675,6 +763,7 @@ fn TriggerEditor(
     let level = RwSignal::new(50.0_f64);
     let wait = RwSignal::new(0.0_f64);
     let own = StoredValue::new(own);
+    let driven = StoredValue::new(driven);
     // The objects for each kind: (value, name).
     let objects = move || -> Vec<(String, String)> {
         studio.collection.with(|c| {
@@ -685,6 +774,7 @@ fn TriggerEditor(
                 When::Channel => c
                     .channels
                     .iter()
+                    .filter(|ch| driven.with_value(|d| !d.contains(&ch.channel_id)))
                     .map(|ch| (ch.channel_id.clone(), c.channel_name(&ch.channel_id)))
                     .collect(),
                 When::Scene => c

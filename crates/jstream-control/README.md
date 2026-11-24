@@ -211,8 +211,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   source, scene or hotkey binding carries (with the graph's `blockers`; scenes carry labels since
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md), bindings since
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)). `label.members`
-  lists a label's scenes, sources and bindings as the graph does; the mock has no
-  timelines, so it lists none. Reads report the folders, labels and
+  lists a label's scenes, sources and bindings as the graph does, but not timelines. Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
 - scene cameras (`scene.set_camera`, in `mock/organise.rs`,
@@ -398,9 +397,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   missing scene) except that the mock, which keeps no families, doesn't check that a
   stop is in the destination's family, and the
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
-  `internal`. So do timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
-  the `timeline.*` edits and actions and `source.restart` answer `internal`, and
-  `studio.get` lists no timeline playing. So do keyframe tracks
+  `internal`. Timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)) are
+  stored and checked as the graph checks them (`timeline.set`: the scene exists,
+  `TimelineInfo::problem`, an ID no other scene holds and at most `MAX_TIMELINES` in a
+  scene; `timeline.delete`; undoing a scene's delete restores its timelines), and
+  `timeline.play`, `timeline.seek` and `timeline.stop` send `timeline.changed` and list
+  what plays in `studio.get`. The mock keeps no clock: a timeline it plays stays where
+  it started until it is stopped or deleted (`removed`), never ending, looping or firing
+  a cue, and a play's delay and the triggers are ignored. `source.restart` answers
+  `internal`. So do keyframe tracks
   ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): `scene.set_keyframe` answers
   `internal`, and `studio.get` lists no placed keyframe;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
