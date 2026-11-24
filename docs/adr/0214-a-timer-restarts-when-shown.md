@@ -44,8 +44,8 @@ needs an action it can call to start that scene's countdowns.
 3. The engine restarts a timer by moving its time zero to the restart's time, both
    for the running instance and for any build in flight that keeps it, and paints it at
    once. A later rebuild for its look keeps the restarted count. A source says it
-   counts this way through `Source::counts_from_zero`. The engine then calls none of
-   its `show`, `restart` or `seek`.
+   counts this way through `Source::counts_from_zero`. The engine then calls neither
+   its `restart` nor its `seek`, and calls its `show` only after the zero has moved.
 4. The protocol minor version goes up for the new behaviour of `source.restart` and
    `source.seek`.
 

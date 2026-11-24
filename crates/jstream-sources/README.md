@@ -50,8 +50,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   goes there; the default restarts it as `restart` does, so a kind with nothing to seek
   starts over. `counts_from_zero()` (default `false`; `true` for a `timer`) says the
   source counts from its time zero, so the engine restarts it for a show,
-  `source.restart` and `source.seek` by moving that zero instead of calling `show`,
-  `restart` or `seek`, and a build that keeps its time keeps the restart
+  `source.restart` and `source.seek` by moving that zero instead of calling `restart`
+  or `seek` (it still calls `show`, after the zero moved), and a build that keeps its time keeps the restart
   ([ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). `duration()` is one play's length, for `SourceSize`'s `duration_ms`: a
   `media` file's, when known; the default is `None`. `sound()` gives a kind's sound that
   plays while the program shows it (`MediaAudio`, a `media` file's), for the engine to
