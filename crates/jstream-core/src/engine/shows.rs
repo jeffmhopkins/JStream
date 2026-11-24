@@ -10,8 +10,8 @@
 use std::task::Waker;
 
 use jstream_anim::show::{
-    Bookmark, Effect, EndOfShow, KeyframeMark, Landing, Leave, LoopRegion, OverlayClip, Plan,
-    ProgramClip, Runner, SequenceClip, ShowEvent, ShowKeys, Status, Step,
+    AudioClip, Bookmark, Effect, EndOfShow, KeyframeMark, Landing, Leave, LoopRegion, OverlayClip,
+    Plan, ProgramClip, Runner, SequenceClip, ShowEvent, ShowKeys, Status, Step,
 };
 use jstream_graph::Graph;
 use jstream_protocol::{
@@ -33,6 +33,7 @@ impl ShowKeys for Keys {
     type Bookmark = String;
     type Loop = String;
     type Track = String;
+    type Source = SourceId;
     type Preset = TransitionPresetId;
     type Action = CueAct;
 }
@@ -85,6 +86,22 @@ pub(super) fn plan(info: &ShowInfo, graph: &Graph) -> Plan<Keys> {
         })
         .collect();
     overlays.sort_by_key(|clip| clip.start_ms);
+    let mut audio: Vec<AudioClip<Keys>> = info
+        .audio
+        .iter()
+        .flat_map(|track| {
+            track.clips.iter().map(|clip| AudioClip {
+                track: track.track_id.clone(),
+                source: clip.source_id.clone(),
+                start_ms: clip.start_ms,
+                length_ms: clip.length_ms,
+                fade_in_ms: clip.fade_in_ms,
+                fade_out_ms: clip.fade_out_ms,
+                gain_db: clip.gain_db.get(),
+            })
+        })
+        .collect();
+    audio.sort_by_key(|clip| clip.start_ms);
     let keyframes = info
         .keyframes
         .iter()
@@ -150,6 +167,7 @@ pub(super) fn plan(info: &ShowInfo, graph: &Graph) -> Plan<Keys> {
     Plan {
         program,
         overlays,
+        audio,
         keyframes,
         sequences,
         events,
@@ -183,14 +201,14 @@ fn sources_of_kind(state: &jstream_graph::State, scene: &SceneId, kind: &str) ->
 
 impl State {
     /// The running show's plan, or `None` with no show running or its show gone.
-    fn show_plan(&self) -> Option<Plan<Keys>> {
+    pub(super) fn show_plan(&self) -> Option<Plan<Keys>> {
         let run = self.show.as_ref()?;
         let info = self.graph.show(&run.show_id)?;
         Some(plan(info, &self.graph))
     }
 
     /// The animation clock now, in nanoseconds.
-    fn show_now(&self) -> i64 {
+    pub(super) fn show_now(&self) -> i64 {
         crate::timelines::ns(self.action_now())
     }
 
@@ -402,6 +420,9 @@ impl State {
             self.emit_stopped(&run, change, wake);
         }
         let _ = self.set_upcoming(None);
+        // The faders its audio tracks held go back, once the clips it had up fade down.
+        self.show_audio_tick(wake);
+        self.start_ticker();
     }
 
     fn emit_stopped(&mut self, run: &Run, change: ShowChange, wake: &mut Vec<Waker>) {
@@ -637,6 +658,12 @@ impl State {
                     self.set_overlay_shown(&item_id, false, fade_ms, wake);
                 }
             }
+            Effect::AudioOn {
+                source, offset_ms, ..
+            } => self.show_audio_on(&source, offset_ms, wake),
+            Effect::AudioOff {
+                source, fade_ms, ..
+            } => self.show_audio_off(&source, fade_ms, wake),
             Effect::SequencePlay {
                 timeline,
                 offset_ms,
@@ -735,6 +762,8 @@ impl State {
             | Effect::Ended => self.run_show_report(plan, effect, wake),
             Effect::Seek { .. }
             | Effect::OverlayOn { .. }
+            | Effect::AudioOn { .. }
+            | Effect::AudioOff { .. }
             | Effect::OverlayOff { .. }
             | Effect::SequencePlay { .. }
             | Effect::SequenceStop { .. }
@@ -775,6 +804,7 @@ impl State {
         let show = state.scene(state.show_scene()?)?;
         show.items()
             .iter()
+            .filter(|item| !Self::is_audio_item(item.id()))
             .find(|item| {
                 state.source(item.source_id()).is_some_and(|source| {
                     matches!(source.kind(), SourceKind::Scene { scene_id } if scene_id == scene)
@@ -801,20 +831,7 @@ impl State {
                 .unwrap_or_default()
         };
         let mut edits = Vec::new();
-        let show_scene = match state.show_scene() {
-            Some(id) => id.clone(),
-            None => {
-                let id = SceneId::new(free("show-scene", &|id| {
-                    state.scene(&SceneId::new(id)).is_some()
-                }));
-                edits.push(Edit::SceneCreate {
-                    scene_id: id.clone(),
-                    name: "Show overlays".into(),
-                    role: None,
-                });
-                id
-            }
-        };
+        let show_scene = self.show_scene_for_items(&mut edits);
         let source_id = state
             .sources()
             .find(|source| {
@@ -856,12 +873,47 @@ impl State {
             scene_id: None,
             visible: false,
         });
+        self.apply_show_scene_edits(show_scene, &edits, wake)
+            .then_some(item_id)
+    }
+
+    /// The show scene's ID, adding the edit that makes it to `edits` if there is none
+    /// yet: the engine makes it the first time it needs it.
+    pub(super) fn show_scene_for_items(&self, edits: &mut Vec<Edit>) -> SceneId {
+        let state = self.graph.state();
+        if let Some(id) = state.show_scene() {
+            return id.clone();
+        }
+        let id = SceneId::new(
+            (1u32..)
+                .map(|n| format!("show-scene-{n}"))
+                .find(|id| state.scene(&SceneId::new(id)).is_none())
+                .unwrap_or_default(),
+        );
+        edits.push(Edit::SceneCreate {
+            scene_id: id.clone(),
+            name: "Show overlays".into(),
+            role: None,
+        });
+        id
+    }
+
+    /// Applies `edits` to the show scene and its items as one batch of the engine's own
+    /// (`engine` in the history, never an undo step), marking `show_scene` as the show
+    /// scene if they made it. Returns whether they applied and the show scene is
+    /// marked; edits that applied are logged and announced even when marking fails.
+    pub(super) fn apply_show_scene_edits(
+        &mut self,
+        show_scene: SceneId,
+        edits: &[Edit],
+        wake: &mut Vec<Waker>,
+    ) -> bool {
         let running = self.outputs.running();
-        let applied = match self.graph.apply_with_running(&edits, None, &running) {
+        let applied = match self.graph.apply_with_running(edits, None, &running) {
             Ok(applied) => applied,
             Err(error) => {
-                tracing::debug!(code = error.code(), "an overlay could not be set up");
-                return None;
+                tracing::debug!(code = error.code(), "the show scene could not be set up");
+                return false;
             }
         };
         let made_scene = self.graph.state().show_scene().is_none();
@@ -872,13 +924,13 @@ impl State {
         self.changed(
             &engine,
             &RequestId::new("show"),
-            &edits,
+            edits,
             applied.rev,
             None,
             wake,
         );
         self.save_pending = true;
-        marked.then_some(item_id)
+        marked
     }
 
     /// The scenes up as overlays now, bottom first, as `studio.get` reports them.

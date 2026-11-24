@@ -26,6 +26,8 @@ pub struct Spanning<T: Ord> {
     pub keyframe: Option<usize>,
     /// The overlay clips spanning it, and how far into each, by index.
     pub overlays: BTreeMap<usize, u32>,
+    /// The audio clips spanning it, and how far into each, by index.
+    pub audio: BTreeMap<usize, u32>,
     /// The sequence clips spanning it, and how far into each, by their sequence; if two
     /// clips of one sequence span it, the later-starting one.
     pub sequences: BTreeMap<T, (usize, u32)>,
@@ -37,6 +39,7 @@ impl<T: Ord> Default for Spanning<T> {
             program: None,
             keyframe: None,
             overlays: BTreeMap::new(),
+            audio: BTreeMap::new(),
             sequences: BTreeMap::new(),
         }
     }
@@ -78,6 +81,11 @@ pub fn spanning<K: ShowKeys>(plan: &Plan<K>, at_ms: u32, edge: Edge) -> Spanning
     for (i, clip) in plan.overlays.iter().enumerate() {
         if spans(clip.start_ms, clip.length_ms, at_ms, edge) {
             out.overlays.insert(i, at_ms.saturating_sub(clip.start_ms));
+        }
+    }
+    for (i, clip) in plan.audio.iter().enumerate() {
+        if spans(clip.start_ms, clip.length_ms, at_ms, edge) {
+            out.audio.insert(i, at_ms.saturating_sub(clip.start_ms));
         }
     }
     for (i, clip) in plan.sequences.iter().enumerate() {

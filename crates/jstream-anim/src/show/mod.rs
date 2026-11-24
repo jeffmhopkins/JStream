@@ -14,7 +14,8 @@
 //!
 //! # Spanning things and events
 //!
-//! A program clip, an overlay clip and a sequence clip *span* `[start, start + length)`.
+//! A program clip, an overlay clip, an audio clip and a sequence clip *span*
+//! `[start, start + length)`.
 //! A keyframe marker spans from its time to the end of the program clip it sits in. What
 //! spans a point is worked out by [`resolve::spanning`], and the runner puts it up by
 //! diffing that against what it last put up ([`Applied`]), so a jump, a loop wrap and
@@ -59,8 +60,19 @@
 //! up, so the sequences play again from where they were. Program runs on through a
 //! pause, so its clip is not sought back.
 //!
+//! # Audio clips
+//!
+//! An audio clip brings its source up for its span ([`Effect::AudioOn`]), and its fader
+//! follows [`AudioClip::gain_db_at`]: up to its level over its fade in, down over its
+//! fade out. The engine works the level out from the play head as it ticks; the runner
+//! only says when a clip comes up and goes. One that ends while playing goes with no
+//! fade, as its own fade out has brought it down; one a jump, a wrap or a stop cuts off
+//! goes over a short fade (300 ms, ADR-0210 decision 6). One that stays up through a jump
+//! or a wrap is brought up again at its new place, so its media seeks there.
+//!
 //! **Jump equals play:** after landing at `t`, what the show owns (program clip and its
-//! media position, keyframe, overlays, sequences and their positions, state-event values)
+//! media position, keyframe, overlays, audio clips and their positions, sequences and
+//! their positions, state-event values)
 //! equals what playing from the start to `t` leaves. Property tests hold this.
 
 mod plan;
@@ -70,8 +82,8 @@ mod runner;
 mod tests;
 
 pub use plan::{
-    Bookmark, EndOfShow, InvalidPlan, KeyframeMark, Leave, LoopRegion, OverlayClip, Plan,
-    ProgramClip, SequenceClip, ShowEvent, ShowKeys,
+    AUDIO_FLOOR_DB, AudioClip, Bookmark, EndOfShow, InvalidPlan, KeyframeMark, Leave, LoopRegion,
+    OverlayClip, Plan, ProgramClip, SequenceClip, ShowEvent, ShowKeys, fade_db,
 };
 pub use resolve::{Edge, Spanning, spanning, state_events_before};
 pub use runner::{Applied, Effect, Landing, Next, Runner, Status, Step};

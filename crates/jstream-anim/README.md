@@ -117,7 +117,7 @@ Contents:
   or put NaN on the render thread.
 - Shows (`show`, ADR-0210): the pure schedule of a show, generic over the caller's IDs
   and actions through `ShowKeys`. A `Plan` holds program clips end to end from 0,
-  overlay, sequence and keyframe entries, one-off events, bookmarks (pausing or not,
+  overlay, audio, sequence and keyframe entries, one-off events, bookmarks (pausing or not,
   with an arrive transition and an optional wait limit), loops (`Leave::AtOnce` or
   `FinishPass`) and an `EndOfShow`. `spanning` gives what spans a point on either
   `Edge` (just before it, or at it) and `state_events_before` the last state event per
@@ -138,7 +138,13 @@ Contents:
   new plan (clips by scene, track or timeline, state events by key) and puts up what
   spans the play head there, so an overlay whose clip no longer covers the head goes
   off and one that now does comes on; a play head past the new end ends the show. It
-  returns `Step`s: each `Effect` with the exact clock time it fell due.
+  returns `Step`s: each `Effect` with the exact clock time it fell due. An audio clip
+  (`AudioClip`, by source) comes up with `AudioOn` and goes with `AudioOff`; the caller
+  works its fader out from the play head with `AudioClip::gain_db_at` (its level, with
+  fades in and out linear in amplitude, `fade_db`, down to `AUDIO_FLOOR_DB`). One that
+  ends while playing goes with no fade of its own; one a jump, a wrap or a stop cuts off
+  goes over a short fade of 300 ms; one that stays up through a jump or a wrap comes up
+  again at its new place, so its media seeks there.
 
 **Tests** (in `keyframe.rs`, `switch.rs`, `modifier.rs`, `audio.rs`, `timeline.rs` and `show/`): live follow of absent fields, each
 write and clear inverse, the no-op clear, refused opacities, reset and its restore,
@@ -167,7 +173,9 @@ bookmarks, `go_to`, Back, Skip, early Continue, an armed spot, loops (passes, cl
 spanning a wrap staying up, a sequence clip ending at the loop's end stopped and played again on each wrap, a bookmark at a loop's start pausing once and one at its
 end never pausing a pass, both ways of leaving), every end of show, the pause limit, a pause by hand holding show time and its sequences and playing on from there, a re-plan carrying what is up over to an edited plan,
 off script, `stop`, one-shots never replayed and hand-set values left alone, exact
-step times on a late tick, `next` and `next_due`; and property tests that a jump to a
-random bookmark or point leaves the same program, keyframe, overlays, sequences and
-state values as playing there, with and without loops, and that 40 random operations
+step times on a late tick, `next` and `next_due`, an audio clip up for its span and down
+at its end with no fade, a jump cutting one off over the short fade and seeking one that
+stays up, and an audio clip's level through its fades; and property tests that a jump to a
+random bookmark or point leaves the same program, keyframe, overlays, audio clips and
+their places, sequences and state values as playing there, with and without loops, and that 40 random operations
 never panic and keep steps in time order.
