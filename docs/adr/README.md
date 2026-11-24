@@ -225,4 +225,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0215](0215-the-edit-views-ruler-moves-the-play-head.md) | The Show panel's Edit view ruler moves the play head; the Run view's strip arms | accepted | agent |  |
 | [ADR-0216](0216-a-scene-clips-audio-is-drawn-linked-under-it.md) | A scene clip's audio is drawn linked under it on the show timeline, derived, not stored | accepted | agent |  |
 | [ADR-0217](0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md) | Direct NVENC and AMF encoders on the Windows GPU path, before the Media Foundation MFTs | accepted | agent |  |
+| [ADR-0218](0218-autofocus-meets-a-model-at-its-surface.md) | Autofocus meets a 3D model at the surface it draws | accepted | agent |  |
 <!-- @generated end adr-index -->

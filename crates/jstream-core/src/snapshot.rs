@@ -1302,6 +1302,19 @@ impl Shot {
         self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
     }
 
+    /// What the model item whose layer (or effects' output) is `image` shows this frame:
+    /// its model, as posed now. `None` for another layer, or a model with no frame yet.
+    fn shown_model(&self, image: &GpuKey) -> Option<&ShownModel> {
+        let (scene, item) = image.boxed_item()?;
+        let boxed = self
+            .boxes
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))?;
+        let SourceRef::Frame(source) = &boxed.source else {
+            return None;
+        };
+        self.frames.get(source)?.model.as_ref()
+    }
+
     /// Whether `image` is the layer of an item that shows a 3D model (ADR-0107): drawn
     /// in the canvas's pixels, so placed flat as [`Placement::Layer`].
     fn is_model_box(&self, image: &GpuKey) -> bool {
@@ -9680,9 +9693,12 @@ fn moved_camera(
 }
 
 /// How far along `camera`'s viewing axis the nearest item that the passes of scene family
-/// `family` draw meets it, at `at` with each item's motion: what autofocus focuses on
+/// `family` draw meets it (the program's, a mix's, the show scene's, or a chain phase's,
+/// which draws a scene with a video chain), at `at` with each item's motion: what autofocus focuses on
 /// (ADR-0176 decision 5). An item placed through a 3D group, or with no opacity left, is
-/// passed over; a model is met at its box. `None` when the axis meets none.
+/// passed over; a model is met at the surface it draws (ADR-0218), and a model whose
+/// mesh this frame doesn't have, or whose search isn't built yet, isn't met. `None` when
+/// the axis meets none.
 fn centre_distance(
     shot: &Shot,
     family: &SceneId,
@@ -9692,7 +9708,12 @@ fn centre_distance(
     let view = camera.view(shot.canvas).ok()?;
     let (origin, forward) = (view.position(), view.axes()[2]);
     let mut nearest: Option<f64> = None;
-    for pass in &shot.passes {
+    // A scene with a video chain is drawn by a chain phase's pass, not the program's.
+    let chain_passes = shot.chain_steps.iter().filter_map(|step| match step {
+        ChainStep::Pass(pass) => Some(&**pass),
+        ChainStep::Run(_) | ChainStep::Box(_) => None,
+    });
+    for pass in shot.drawn_passes().chain(chain_passes) {
         if pass.camera.as_ref().is_none_or(|c| c.family != *family) {
             continue;
         }
@@ -9707,13 +9728,90 @@ fn centre_distance(
             if opacity <= 0.0 {
                 continue;
             }
-            if let Some(t) = crate::follow::ray_meets(origin, forward, geometry.corners_in_scene())
-            {
+            let met = if layer.boxed.is_some_and(|boxed| boxed.model) {
+                shot.shown_model(&layer.image)
+                    .and_then(|shown| model_distance(shown, geometry, &view))
+            } else {
+                crate::follow::ray_meets(origin, forward, geometry.corners_in_scene())
+            };
+            if let Some(t) = met {
                 nearest = Some(nearest.map_or(t, |n| n.min(t)));
             }
         }
     }
     nearest
+}
+
+/// How far along `view`'s viewing axis the surface the model `shown` draws, placed by
+/// `geometry`, first meets it (ADR-0218): the axis carried into the model's own space
+/// through the inverse of the map that places it, met against its triangles as posed
+/// now. `None` when it meets none, or the placement can't be inverted (a model scaled
+/// flat).
+fn model_distance(shown: &ShownModel, geometry: ItemGeometry, view: &CameraView) -> Option<f64> {
+    let model = &shown.model;
+    let bounds = model.bounds();
+    let bounds = jstream_protocol::SolidBounds {
+        min: bounds.min,
+        max: bounds.max,
+    };
+    // Without a view, a solid maps a model point into the scene less the item's centre
+    // in x and y; a billboard is first turned to face the camera, as it draws.
+    let solid = geometry.facing(view).solid(bounds, None).ok()?;
+    let centre = [
+        f64::from(geometry.center.x.get()),
+        f64::from(geometry.center.y.get()),
+        0.0,
+    ];
+    let at = |p: [f32; 3]| {
+        let seen = solid.in_view(p);
+        [0, 1, 2].map(|i| seen[i] + centre[i])
+    };
+    let origin = at([0.0; 3]);
+    let unit = |axis: usize| {
+        let mut p = [0.0f32; 3];
+        p[axis] = 1.0;
+        let to = at(p);
+        [0, 1, 2].map(|i| to[i] - origin[i])
+    };
+    let columns = [unit(0), unit(1), unit(2)];
+    let inverse = invert(columns)?;
+    let camera = view.position();
+    let forward = view.axes()[2];
+    let from = [0, 1, 2].map(|i| camera[i] - origin[i]);
+    let into = |v: [f64; 3]| {
+        [0, 1, 2].map(|r| inverse[r][0] * v[0] + inverse[r][1] * v[1] + inverse[r][2] * v[2])
+    };
+    // The map takes the model-space direction back to the unit `forward`, so the hit's
+    // parameter is its distance along the viewing axis in scene pixels; as for a box
+    // (`follow::ray_meets`), a surface must be more than 1 px ahead to be met. Which side
+    // of a face is its front is decided in the model's own space, so a placement that
+    // mirrors the model (a flip) changes nothing: it still draws its outward faces.
+    let palette = shown.pose.as_deref();
+    model.ray_hit(into(from), into(forward), palette, 1.0)
+}
+
+/// The determinant of the matrix whose columns are `c`.
+fn determinant(c: [[f64; 3]; 3]) -> f64 {
+    c[0][0] * (c[1][1] * c[2][2] - c[2][1] * c[1][2])
+        - c[1][0] * (c[0][1] * c[2][2] - c[2][1] * c[0][2])
+        + c[2][0] * (c[0][1] * c[1][2] - c[1][1] * c[0][2])
+}
+
+/// The inverse, by rows, of the matrix whose columns are `c`; `None` when it is
+/// singular.
+fn invert(c: [[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
+    let det = determinant(c);
+    if !(det.is_finite() && det.abs() > 1e-12) {
+        return None;
+    }
+    // m[r][k] = c[k][r]; the inverse is the adjugate over the determinant.
+    let m = |r: usize, k: usize| c[k][r];
+    let cof = |r: usize, k: usize| {
+        let (r1, r2) = ((r + 1) % 3, (r + 2) % 3);
+        let (k1, k2) = ((k + 1) % 3, (k + 2) % 3);
+        m(r1, k1) * m(r2, k2) - m(r1, k2) * m(r2, k1)
+    };
+    Some([0, 1, 2].map(|r| [0, 1, 2].map(|k| cof(k, r) / det)))
 }
 
 /// Where a transition track of `image` is placed at `geometry`: a model's layer
