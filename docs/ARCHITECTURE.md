@@ -1241,12 +1241,12 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 2 MB
-  of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
-  of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
-  `hotkey` and `binding` each carry every action's, because `hotkey.set` and
-  `binding.set` take any action), and `describe_api` returns the whole protocol schema. Shrinking
-  the tools is an open question in
+  Part of this is built: each group tool carries its own ops' full schemas, but where an
+  op holds an action or edit (`hotkey.set`, a cue, `live.set`, `batch`'s `edits`), the
+  tool carries only a stub naming the variants, since the two unions refer to each other
+  and copying them whole made `tools/list` about 2 MB. `describe_api` returns the whole
+  protocol schema, or with `name` one definition or op of it. Shrinking the group tools
+  further is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
