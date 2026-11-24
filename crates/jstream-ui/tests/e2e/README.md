@@ -519,16 +519,22 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
 - **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
-  fader's row opening its menu, Map control… opening the dialog, a Mod picked there
+  fader's number or anywhere on its row opening its menu, Map control… opening the dialog, a Mod picked there
   changing nothing until Use, which is one edit and names the Mod on the control button;
-  Cancel changing nothing; the menu's Learn taking the one MIDI control that moves
+  Cancel changing nothing; at a UI scale of 150% the row's menu opening at the pointer;
+  the menu's Learn taking the one MIDI control that moves
   after it opened, as one edit; and mapping mode from the dialog's "Map by dragging":
   the bar naming the armed Mod, a click on a setting mapping nothing, a 20 px drag up
   showing "+10 %" and sending one edit when let go, a second drag moving the far end
-  as one more edit, and Escape leaving the mode; and an item's properties from the
+  as one more edit, and Escape closing a menu in front first and then leaving the mode, then the dialog listing that mapping as
+  an Offset, Bypass striking it through and back as an edit each, and a second Mod used
+  as Override sitting beside it, named on the button with "and 1 more" in the menu; the
+  Audio tab's "Follow the program mix" mapping the level as one edit, named Audio on the
+  button; and an item's properties from the
   Inspector: the crop edges marked as targets, a right-click on Rotation opening its menu and the dialog on it, a 50 px
   drag tagging the field "+90°" and sending one edit while the field keeps its stored
-  value, the same armed Mod mapping X as one more edit, and the menu's Remove taking the
+  value, the same armed Mod mapping X as one more edit, and the menu naming the mapping by its
+  source and offset, its Bypass ticked after one edit, and its Remove taking the
   rotation mapping off.
 - **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
   is mapped, then listing a channel made in the Channels panel as a group with
