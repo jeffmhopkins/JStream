@@ -21,8 +21,8 @@ pub trait ShowKeys {
     /// A transition preset.
     type Preset: Clone + Debug + PartialEq;
     /// An event's action. Its [`CueAction::state_key`] tells a state event from a
-    /// one-shot.
-    type Action: Clone + Debug + PartialEq + CueAction;
+    /// one-shot; the key is rendered with `Debug` in [`super::Applied::states`].
+    type Action: Clone + Debug + PartialEq + CueAction<Key: Debug>;
 }
 
 /// A clip on the program track (V1). Program clips sit end to end from show time 0, so
@@ -65,8 +65,8 @@ pub struct OverlayClip<K: ShowKeys> {
 pub struct KeyframeMark<K: ShowKeys> {
     /// Its time in show time, in milliseconds.
     pub at_ms: u32,
-    /// The keyframe scene it loads.
-    pub keyframe: K::Scene,
+    /// The keyframe scene it loads; `None` for the scene's own values (no keyframe).
+    pub keyframe: Option<K::Scene>,
     /// The Move's preset; `None` for the engine's.
     pub preset: Option<K::Preset>,
 }
@@ -184,24 +184,94 @@ pub enum InvalidPlan {
 }
 
 impl<K: ShowKeys> Plan<K> {
-    /// Where program clip `clip` starts, in show time.
+    /// Where program clip `clip` starts, in show time. Past the last clip, the end of the
+    /// program track.
     pub fn program_start(&self, clip: usize) -> u32 {
-        todo!("sum of the lengths before it, saturating")
+        self.program
+            .iter()
+            .take(clip)
+            .fold(0u32, |sum, c| sum.saturating_add(c.length_ms))
+    }
+
+    /// Where the program track ends, in show time.
+    pub fn program_end(&self) -> u32 {
+        self.program_start(self.program.len())
     }
 
     /// The show's length: the latest end or time of anything on it.
     pub fn length_ms(&self) -> u32 {
-        todo!()
+        let overlays = self
+            .overlays
+            .iter()
+            .map(|c| c.start_ms.saturating_add(c.length_ms));
+        let sequences = self
+            .sequences
+            .iter()
+            .map(|c| c.start_ms.saturating_add(c.length_ms));
+        let keyframes = self.keyframes.iter().map(|m| m.at_ms);
+        let events = self.events.iter().map(|e| e.at_ms);
+        let bookmarks = self.bookmarks.iter().map(|b| b.at_ms);
+        let loops = self.loops.iter().map(|l| l.to_ms);
+        overlays
+            .chain(sequences)
+            .chain(keyframes)
+            .chain(events)
+            .chain(bookmarks)
+            .chain(loops)
+            .fold(self.program_end(), u32::max)
     }
 
     /// The first problem with it, or `Ok`.
     pub fn check(&self) -> Result<(), InvalidPlan> {
-        todo!()
+        let checks = [
+            self.program.iter().position(|c| c.length_ms == 0),
+            self.overlays.iter().position(|c| c.length_ms == 0),
+            self.sequences.iter().position(|c| c.length_ms == 0),
+        ];
+        if let Some(i) = checks.into_iter().flatten().next() {
+            return Err(InvalidPlan::EmptyClip(i));
+        }
+        let unsorted = |times: &[u32]| times.windows(2).position(|w| w[1] < w[0]).map(|i| i + 1);
+        let lists: [Vec<u32>; 5] = [
+            self.overlays.iter().map(|c| c.start_ms).collect(),
+            self.keyframes.iter().map(|m| m.at_ms).collect(),
+            self.sequences.iter().map(|c| c.start_ms).collect(),
+            self.events.iter().map(|e| e.at_ms).collect(),
+            self.bookmarks.iter().map(|b| b.at_ms).collect(),
+        ];
+        if let Some(i) = lists.iter().find_map(|l| unsorted(l)) {
+            return Err(InvalidPlan::Unsorted(i));
+        }
+        for (j, later) in self.overlays.iter().enumerate() {
+            let overlaps = self.overlays[..j].iter().any(|earlier| {
+                earlier.track == later.track
+                    && earlier.start_ms.saturating_add(earlier.length_ms) > later.start_ms
+            });
+            if overlaps {
+                return Err(InvalidPlan::OverlayOverlap(j));
+            }
+        }
+        let mut previous_end = None;
+        for (i, region) in self.loops.iter().enumerate() {
+            let overlaps = previous_end.is_some_and(|end| region.from_ms < end);
+            if region.from_ms >= region.to_ms || overlaps {
+                return Err(InvalidPlan::Loop(i));
+            }
+            previous_end = Some(region.to_ms);
+        }
+        if let EndOfShow::GoTo(id) = &self.end
+            && self.bookmark(id).is_none()
+        {
+            return Err(InvalidPlan::EndBookmark);
+        }
+        Ok(())
     }
 
     /// The loop that `at_ms` is inside (`from_ms <= at_ms < to_ms`), by index.
     pub fn loop_at(&self, at_ms: u32) -> Option<usize> {
-        todo!()
+        self.loops
+            .iter()
+            .position(|l| l.from_ms <= at_ms && at_ms < l.to_ms)
     }
 
     /// The index of the bookmark with this ID.

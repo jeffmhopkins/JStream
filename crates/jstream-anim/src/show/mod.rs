@@ -19,7 +19,7 @@
 //! spans a point is worked out by [`resolve::spanning`], and the runner puts it up by
 //! diffing that against what it last put up ([`Applied`]), so a jump, a loop wrap and
 //! plain playing all go through one path. An event fires once, at its time, when playing
-//! reaches it. A state event (an action with a [`CueAction::state_key`]) is also state: a
+//! reaches it. A state event (an action with a [`CueAction::state_key`](crate::CueAction::state_key)) is also state: a
 //! jump re-applies the last one per key before the landing point; a one-shot is never
 //! replayed.
 //!
@@ -64,5 +64,3 @@ pub use plan::{
 };
 pub use resolve::{Edge, Spanning, spanning, state_events_before};
 pub use runner::{Applied, Effect, Landing, Next, Runner, Status, Step};
-
-use crate::CueAction;

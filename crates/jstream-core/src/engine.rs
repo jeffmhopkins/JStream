@@ -7,6 +7,8 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+mod shows;
+
 use crate::activity_log::{self, Activity};
 use crate::audio::{AudioRouting, MixerHandles};
 use crate::audio_sources::AudioSources;
@@ -4924,6 +4926,11 @@ struct State {
     fired: crate::motion::Fired,
     /// The timelines playing (ADR-0115): studio state, like the program scene.
     timelines: crate::timelines::Timelines,
+    /// The show running (ADR-0210): studio state, like the program scene.
+    show: Option<shows::Run>,
+    /// Whether the running show is switching scenes, so the switch isn't taken as a
+    /// hand switch that sends it off script.
+    show_switching: bool,
     /// While a timeline's cue runs, its exact time on the animation clock, which a
     /// transition, a fire or a `source.restart` it starts takes as its start
     /// (ADR-0099 decision 4).
@@ -5257,6 +5264,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.reconcile_timelines(wake);
+        self.reconcile_show(wake);
         self.reconcile_keyframes(client_id, request_id, wake);
         self.refresh_shown();
         self.name_jtunnel_params();
@@ -5343,6 +5351,7 @@ impl State {
             );
         }
         self.sequences.restart();
+        self.show_stop(jstream_protocol::ShowChange::Stopped, wake);
         for timeline_id in self.timelines.ids() {
             if let Some(playing) = self.timelines.stop(&timeline_id) {
                 self.subscribers.emit(
@@ -5562,6 +5571,7 @@ impl State {
         self.live.clock_moved();
         if self.cue_at.is_none() {
             self.timeline_tick(wake);
+            self.show_tick(wake);
             self.start_ticker();
         }
     }
@@ -5875,7 +5885,7 @@ impl State {
     /// Starts the live ticker if a timeline plays and it isn't running, so the timeline's
     /// cues fire when they fall due.
     fn start_ticker(&mut self) {
-        if !self.timelines.is_empty() && !self.ticking {
+        if (!self.timelines.is_empty() || self.show_ticking()) && !self.ticking {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
     }
@@ -6071,6 +6081,10 @@ impl State {
         }
         if let Some((field, reason)) = action.play_problem() {
             return Err(ProtocolError::invalid_argument(field, reason));
+        }
+        if let Some(done) = self.show_action(client_id, request_id, &action, wake) {
+            done?;
+            return Ok(CallResult::action());
         }
         if jstream_protocol::camera_aim_scene(&action).is_some() {
             self.aim_camera(client_id, &action)?;
@@ -6385,8 +6399,7 @@ impl State {
                     }
                 }
                 Query::StudioGet => QueryResult::StudioGet {
-                    // No show runs until the engine has a show runner (ADR-0210).
-                    show: None,
+                    show: self.show_report(),
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                     warm_scenes: Some(
@@ -6530,6 +6543,7 @@ impl State {
             _ => None,
         };
         self.studio.switch(scene_id, running);
+        self.show_hand_switch(wake);
         let end_ms = self.publish_render();
         // The new scene's `when_shown` audio follows at the switch, ramping over one
         // mixer block; it doesn't follow the transition's timing yet (D29).
@@ -7355,7 +7369,11 @@ impl State {
         for event in self.gestures.due(now) {
             self.subscribers.emit(&event, wake);
         }
-        let cues = self.timeline_tick(wake).map(|due| {
+        let cues = [self.timeline_tick(wake), self.show_tick(wake)]
+            .into_iter()
+            .flatten()
+            .min();
+        let cues = cues.map(|due| {
             let wait = crate::timelines::ns(due)
                 .saturating_sub(crate::timelines::ns(self.live.now()))
                 .max(0);

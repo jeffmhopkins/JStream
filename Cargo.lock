@@ -2767,6 +2767,9 @@ dependencies = [
 [[package]]
 name = "jstream-anim"
 version = "0.0.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "jstream-audio"
