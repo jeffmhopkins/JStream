@@ -143,7 +143,8 @@ Contents ([Design](#design) explains the choices):
   in either mode, and `followed_preview`, the scene the canvas moves to when the preview
   scene changes in studio mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`, and a
-  3D model's depth, `SourceDepths`, from the same;
+  3D model's depth, `SourceDepths`, from the same; a media file's `duration_ms` isn't
+  kept, since nothing in the UI shows it yet;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
   and the kind descriptors read so far, the last failed call, the toast's confirmation
@@ -307,11 +308,13 @@ Contents ([Design](#design) explains the choices):
   line and an (i), then a Probe resolution select (Up to 128, 256 or 512 px,
   `max_probe_resolution`, sent with `probe_cap`) and a Reflection quality select (Low,
   Medium or High: 16, 32 or 64 steps, `screen_space_steps`, sent with
-  `reflection_steps`). It reads the switches with
+  `reflection_steps`) and a 3D model resolution select (Automatic, Full, 85%, 75%, 67%
+  or 50%, `model_resolution`, sent with `model_resolution`,
+  [ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
-  `read`, `set`, each `Switch`'s change, the probe cap and the reflection steps are
+  `read`, `set`, each `Switch`'s change, the probe cap, the reflection steps and the model resolution are
   tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Audio plugins section of
   the Settings dialog's Audio page: the CLAP scan's folders, the effects found and the files that failed
@@ -1585,15 +1588,15 @@ beside it ([Design › Studio mode](#design)).
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
   on the source's runtime size, which the canvas doesn't evaluate a legacy transform
   against yet (ADR-0022 decision 5), and a note top left counts such items. Over the live
-  picture only the selected items, the box under the pointer and hidden items (which
-  aren't in the picture but still take clicks) are outlined, so an unselected source
-  shows no box; without the picture every box gets a faint outline and
-  its name. The name sits just inside the box's top-left corner and runs along its
+  picture only the selected items and the box under the pointer are outlined, so an
+  unselected source shows no box; without the picture every visible box gets a faint
+  outline and its name. A hidden item draws nothing and isn't hit, marqueed or snapped
+  to unless it is selected (`Layout::seen_boxes`, `seen_shapes`, #1732). The name sits just inside the box's top-left corner and runs along its
   top edge, so it turns with the box; a flip mirrors the picture and not the box, and
   the name stays on that corner. On a mirrored box the glyphs still grow into the
   box, so the name sits about one line deeper. When that corner or the far end of
   the edge is behind the viewer, or the edge has no direction, the name stays
-  upright on the box's bounds. Hidden items are drawn dashed, and the box
+  upright on the box's bounds. A selected hidden item is drawn dashed, and the box
   under the pointer gets a light outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they

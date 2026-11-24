@@ -548,6 +548,15 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "model_resolution": {
+              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "reflection_probes": {
               "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
               "type": [
@@ -1307,6 +1316,31 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+          "properties": {
+            "at_ms": {
+              "description": "Where to play on from, in milliseconds from the start of its timeline.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to seek."
+            },
+            "type": {
+              "const": "source.seek",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "at_ms"
           ],
           "type": "object"
         },
@@ -4410,6 +4444,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "default": 0,
           "description": "The frames it drew.",
           "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_frames_reduced": {
+          "default": 0,
+          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.178).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 100,
+          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.178): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
+          "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
@@ -7553,6 +7601,15 @@ source: crates/jstream-protocol/src/fixtures.rs
             "depth": {
               "description": "Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it\n(0.157): a change of depth alone is a size change too.",
               "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "duration_ms": {
+              "description": "Its length, as [`SourceSize::duration_ms`](crate::SourceSize::duration_ms)\nreports it (since 0.177): the length becoming known is a size change too.",
+              "format": "uint64",
               "minimum": 0,
               "type": [
                 "integer",
@@ -15897,7 +15954,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "RenderFeatures": {
-      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]).",
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.147).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch but `screen_space_reflections` is on until `studio.set_rendering` changes it\n([`RenderFeatures::DEFAULT`]). `model_resolution` is not a switch of an effect: it\nsets how many pixels 3D models are drawn with (ADR-0197).",
       "properties": {
         "ambient_occlusion": {
           "default": true,
@@ -15912,6 +15969,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         "max_probe_resolution": {
           "default": 512,
           "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.165). A probe set larger captures at this.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model_resolution": {
+          "default": 0,
+          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.178): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -16750,6 +16814,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         "depth": {
           "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.",
           "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long one play of it lasts, in milliseconds, for a `media` file whose length\nis known: from its container, or once a play has reached its end (since 0.177).\nA file with only audio reports it beside its 1x1 `size`. Omitted for every other\nsource and while the length isn't known.",
+          "format": "uint64",
           "minimum": 0,
           "type": [
             "integer",
@@ -19006,5 +19079,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.176"
+  "title": "JStream protocol 0.178"
 }
