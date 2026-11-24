@@ -50,7 +50,13 @@ protocol's types (`Overrides`).
   and the `transitions`: the presets, keyed by ID, and the default. A hotkey or
   controller binding always names objects that exist. A new state holds one preset, `cut`, as its default.
   Each `Output` has its own `Chains` too: a video chain, and an audio chain when it
-  carries audio.
+  carries audio. `State::show_scene` names the internal show scene, an ordinary scene of
+  `scenes` the engine draws over program (ARCH › Data model): `Graph::set_show_scene`
+  sets it, refusing a scene that doesn't exist or that a `scene` source, a settings
+  reference or a video mix already shows; it is not a revision, a batch keeps it, a
+  batch that deletes its scene clears it, and the collection file saves it (see Shows). While it is set, `source.create` of a `scene`
+  source, a settings value referencing it and a video mix showing it are
+  `invalid_argument` (`not_the_show_scene`), and `scene.list` and `state.get` leave it out.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -539,7 +545,7 @@ that does not want to change the graph it has.
   read them; the collection file saves them in `shows` (schema version 22) and loads them
   after the channels, before the replayed bindings. The file's `show_scene` marks the
   engine's internal show scene (`State::show_scene`, set by `Graph::set_show_scene`), and
-  is dropped on load when it names no scene.
+  is dropped on load when it names no scene, or one `set_show_scene` refuses (one something shows).
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its
