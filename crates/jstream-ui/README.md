@@ -720,7 +720,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   generic menu never opens over the app, and an element that keeps a right-click from
   the menu behind it (a dialog, a panel's tool bar) swallows it with `chrome::swallow`.
   Text keeps the browser's menu and its selection: `chrome::TEXT` lists text fields,
-  code, links, errors (toasts and settings errors too), the connection details, About's
+  code, links, errors (a toast's text, not its buttons, and settings errors too), the connection details, About's
   facts and the agent's activity log, the style sheet
   turns `user-select` off elsewhere, and `Menus::open` leaves a right-click in a text
   field to the browser. A `selectstart` outside text is cancelled, and a press on the

@@ -111,7 +111,7 @@ body {
    Text fields and readable text keep it: the same list as `chrome::TEXT`. */
 body { -webkit-user-select: none; user-select: none; }
 input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, a[href], .problem,
-.problem-bar > span, .settings-error, .toast, .connection dd, .about-facts dd, .activity-log,
+.problem-bar > span, .settings-error, .toast-text, .connection dd, .about-facts dd, .activity-log,
 .selectable { -webkit-user-select: text; user-select: text; }
 input[type="checkbox"], input[type="radio"], input[type="range"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="color"], input[type="file"],
@@ -197,15 +197,17 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .app-header .brand-mark { width: 22px; height: 22px; border-radius: 5px; }
 .app-header .spacer { flex: 1 1 auto; }
 .app-header .readout { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
-/* Stretched to the bar's full height, so its dropdown can hang flush under it. */
-.top-menu { position: relative; align-self: stretch; display: flex; align-items: center; }
+.top-menu { position: relative; }
 .menu-button { position: relative; z-index: 2; padding: 6px 10px; border: none; border-radius: 5px; background: transparent; color: var(--muted); }
 .menu-button:hover:not(:disabled), .menu-button.open { background: var(--hover); color: var(--text); }
+/* An open menu's button joins its dropdown, which starts at the button's foot: the menu's
+   colour, square at the foot, so the two read as one shape, as a desktop menu bar's do. */
+.menu-button.open, .menu-button.open:hover:not(:disabled) { background: var(--menu); border-radius: 5px 5px 0 0; }
 .menu-catcher { position: fixed; inset: 0; z-index: 1; }
 .dropdown {
   position: absolute;
-  /* Flush under the bar: the header's bottom padding and border below the button. */
-  top: calc(100% + 9px);
+  /* Straight from the button's foot, its top-left corner square where the two meet. */
+  top: 100%;
   left: 0;
   z-index: 3;
   min-width: 240px;
@@ -213,7 +215,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   background: var(--menu);
   border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 8px 8px 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 .menu-head { margin: 4px 8px 6px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }

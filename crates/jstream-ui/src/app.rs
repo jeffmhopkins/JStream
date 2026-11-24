@@ -294,7 +294,7 @@ fn Toast() -> impl IntoView {
                                 }
                             })
                             .collect_view();
-                        view! { <div class="toast">{toast.text}{buttons}</div> }
+                        view! { <div class="toast"><span class="toast-text">{toast.text}</span>{buttons}</div> }
                     })
             }}
         </div>
