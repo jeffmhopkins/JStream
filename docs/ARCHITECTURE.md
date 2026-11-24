@@ -511,7 +511,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), controller bindings (protocol 0.96,
-  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20) and shows with the show scene marker (protocol 0.178, schema version 22), as the organisation bullet above describes.
+  schema version 9) and value bindings (protocol 0.168, schema version 19) and channels (protocol 0.169, schema version 20) and shows with the show scene marker (protocol 0.179, schema version 22), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions for built-in kinds (a source or
   preset saved at another version is refused on load; a source or filter of an effect
   pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
@@ -782,7 +782,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
   A chord or trigger runs several actions in the order they were bound, and a clear can
-  name the one action to unbind (protocol 0.179,
+  name the one action to unbind (protocol 0.180,
   [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
   `output.toggle`, the start-or-stop a "go live" key binds.
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
@@ -798,7 +798,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   into one live value, 0 to 1, that a `channel` modifier or value binding follows and an
   `amount` scales by; `channel.set_value`, `channel.nudge` and `channel.switch` move it
   with no `rev`, and `channel.values` reads every channel's level.
-  `show.set` and `show.delete` (protocol 0.178,
+  `show.set` and `show.delete` (protocol 0.179,
   [ADR-0210](adr/0210-shows-a-run-order-with-bookmarks.md)) set and remove a show: a
   saved run order of scenes on program, overlay, keyframe, sequence and audio tracks in
   show time, with pausing and non-pausing bookmarks and loops; the `show.*` actions
@@ -844,7 +844,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   kind's boxes, and since 0.172 its lit models also reflect what is on screen;
   `studio.set_rendering` turns probes off and screen-space reflections (off by default)
   on app-wide, caps the
-  probes' face size, sets the screen-space steps, and since 0.180 says how many pixels
+  probes' face size, sets the screen-space steps, and since 0.178 says how many pixels
   3D models are drawn with or leaves that to the engine
   ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol

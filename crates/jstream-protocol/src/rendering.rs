@@ -51,7 +51,7 @@ pub struct RenderFeatures {
     #[serde(default = "screen_space_steps")]
     pub screen_space_steps: u32,
     /// How many pixels 3D models are drawn with, as a percentage of their canvas's width
-    /// and of its height (ADR-0197, since 0.180): one of [`MODEL_RESOLUTIONS`]. 0, the
+    /// and of its height (ADR-0197, since 0.178): one of [`MODEL_RESOLUTIONS`]. 0, the
     /// default, lets the engine choose, lowering it while the GPU is short of time; 100
     /// always draws them whole; a smaller one always draws them at that size.
     #[serde(default)]
@@ -186,7 +186,7 @@ pub struct RenderFeaturesChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screen_space_steps: Option<u32>,
     /// How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets
-    /// the engine choose), or left out to keep it (since 0.180). `studio.set_rendering`
+    /// the engine choose), or left out to keep it (since 0.178). `studio.set_rendering`
     /// refuses any other value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_resolution: Option<u32>,

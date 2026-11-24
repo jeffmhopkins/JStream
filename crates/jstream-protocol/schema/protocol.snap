@@ -43,7 +43,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Starts an output that is stopped or failed, and stops one that is starting,\nrunning or reconnecting (since 0.179, ADR-0208), so one key or pad can go live and\nend the stream. The engine runs it as the `output.start` or `output.stop` it\nresolves to, with that action's events, audit entry and errors.",
+          "description": "Starts an output that is stopped or failed, and stops one that is starting,\nrunning or reconnecting (since 0.180, ADR-0208), so one key or pad can go live and\nend the stream. The engine runs it as the `output.start` or `output.stop` it\nresolves to, with that action's events, audit entry and errors.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -567,7 +567,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               ]
             },
             "model_resolution": {
-              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.180). `studio.set_rendering`\nrefuses any other value.",
+              "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -1320,7 +1320,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Runs a show (ADR-0210, since 0.178) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+          "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
           "properties": {
             "bookmark_id": {
               "description": "The bookmark to start at. Omitted for the show's start.",
@@ -1349,7 +1349,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Stops the running show where it is (ADR-0210, since 0.178): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+          "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
           "properties": {
             "type": {
               "const": "show.stop",
@@ -1362,7 +1362,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.178): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+          "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
           "properties": {
             "type": {
               "const": "show.pause",
@@ -1375,7 +1375,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Continues the running show (ADR-0210 decision 5, since 0.178). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+          "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
           "properties": {
             "type": {
               "const": "show.continue",
@@ -1388,7 +1388,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.178), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+          "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
           "properties": {
             "type": {
               "const": "show.back",
@@ -1401,7 +1401,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.178), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+          "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
           "properties": {
             "type": {
               "const": "show.skip",
@@ -1414,7 +1414,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.178):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+          "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
           "properties": {
             "bookmark_id": {
               "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -1437,7 +1437,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.178), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+          "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
           "properties": {
             "number": {
               "description": "The bookmark's place in the show, 1 to 8.",
@@ -1458,7 +1458,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.178),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+          "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
           "properties": {
             "at_ms": {
               "description": "Where to, in milliseconds of show time.",
@@ -1500,7 +1500,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.178), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+          "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1518,7 +1518,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.178).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+          "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1536,7 +1536,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.178). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+          "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -4776,14 +4776,14 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "model_frames_reduced": {
           "default": 0,
-          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.180).",
+          "description": "The frames of the window drawn with 3D models at less than 100 (since 0.178).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "model_resolution": {
           "default": 100,
-          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.180): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
+          "description": "The percentage of their canvas's width and of its height the drawer drew 3D\nmodels with at the end of the window (ADR-0197, since 0.178): 100 unless the\nprogram's render thread lowered it, or `RenderFeatures::model_resolution` set it.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -6871,7 +6871,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nSince 0.179 (ADR-0208) a chord can run several actions: binding a chord that is\nalready bound adds this action after its others, and a press runs them all, in\nthe order they were bound. Rejected with `invalid_argument` for a chord that isn't\nvalid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose\nstream key is never stored in the collection), with `already_exists` (entity\n`hotkey`) for a chord already bound to an equal action (before 0.179, for any chord\nalready bound), and with `not_found` for a scene or output the action names that\ndoesn't exist. Deleting that object later removes that action's binding with it\n(ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the\naction.",
+          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nSince 0.180 (ADR-0208) a chord can run several actions: binding a chord that is\nalready bound adds this action after its others, and a press runs them all, in\nthe order they were bound. Rejected with `invalid_argument` for a chord that isn't\nvalid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose\nstream key is never stored in the collection), with `already_exists` (entity\n`hotkey`) for a chord already bound to an equal action (before 0.180, for any chord\nalready bound), and with `not_found` for a scene or output the action names that\ndoesn't exist. Deleting that object later removes that action's binding with it\n(ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the\naction.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6905,7 +6905,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The one action to unbind (since 0.179, ADR-0208). Omitted unbinds them all."
+              "description": "The one action to unbind (since 0.180, ADR-0208). Omitted unbinds them all."
             },
             "chord": {
               "$ref": "#/$defs/Chord",
@@ -6949,7 +6949,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound to an equal\naction (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Since 0.179 (ADR-0208) a trigger can\nrun several actions, as a chord can: binding a trigger that is already bound adds\nthis action after its others, the engine runs them all in that order, and\n`already_exists` is only for a trigger already bound to an equal action. Inverse:\n`binding.clear` naming the action.",
+          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound to an equal\naction (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Since 0.180 (ADR-0208) a trigger can\nrun several actions, as a chord can: binding a trigger that is already bound adds\nthis action after its others, the engine runs them all in that order, and\n`already_exists` is only for a trigger already bound to an equal action. Inverse:\n`binding.clear` naming the action.",
           "properties": {
             "action": {
               "$ref": "#/$defs/Action",
@@ -6983,7 +6983,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The one action to unbind (since 0.179, ADR-0208). Omitted unbinds them all."
+              "description": "The one action to unbind (since 0.180, ADR-0208). Omitted unbinds them all."
             },
             "trigger": {
               "$ref": "#/$defs/Trigger",
@@ -7073,7 +7073,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets a show (ADR-0210, since 0.178): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+          "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
           "properties": {
             "show": {
               "$ref": "#/$defs/ShowInfo",
@@ -8682,7 +8682,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A show started, paused, continued, jumped, looped, went off script, ended or\nstopped (ADR-0210, since 0.178): never once a frame. Running a show is studio\nstate, so it carries no `rev`; `studio.get` reports the running show in full.",
+          "description": "A show started, paused, continued, jumped, looped, went off script, ended or\nstopped (ADR-0210, since 0.179): never once a frame. Running a show is studio\nstate, so it carries no `rev`; `studio.get` reports the running show in full.",
           "properties": {
             "at_ms": {
               "description": "Where its play head is now, in milliseconds of show time.",
@@ -15223,7 +15223,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "array"
             },
             "shows": {
-              "description": "Every show (ADR-0210), ordered by ID. Omitted when there are none, and\nmissing (from a server older than 0.178) parses as empty.",
+              "description": "Every show (ADR-0210), ordered by ID. Omitted when there are none, and\nmissing (from a server older than 0.179) parses as empty.",
               "items": {
                 "$ref": "#/$defs/ShowInfo"
               },
@@ -15465,7 +15465,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "array"
             },
             "overlays": {
-              "description": "The scenes up over program as overlays (ADR-0210, since 0.178), bottom first,\nwhether a show or `overlay.show` put them there. Omitted when none is.",
+              "description": "The scenes up over program as overlays (ADR-0210, since 0.179), bottom first,\nwhether a show or `overlay.show` put them there. Omitted when none is.",
               "items": {
                 "$ref": "#/$defs/SceneId"
               },
@@ -15513,7 +15513,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The show running (ADR-0210, since 0.178), where its play head is and what it\nis doing. Omitted when no show runs."
+              "description": "The show running (ADR-0210, since 0.179), where its play head is and what it\nis doing. Omitted when no show runs."
             },
             "timelines": {
               "description": "The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where\nit is now. Omitted when none is.",
@@ -16645,7 +16645,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "model_resolution": {
           "default": 0,
-          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.180): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
+          "description": "How many pixels 3D models are drawn with, as a percentage of their canvas's width\nand of its height (ADR-0197, since 0.178): one of [`MODEL_RESOLUTIONS`]. 0, the\ndefault, lets the engine choose, lowering it while the GPU is short of time; 100\nalways draws them whole; a smaller one always draws them at that size.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"

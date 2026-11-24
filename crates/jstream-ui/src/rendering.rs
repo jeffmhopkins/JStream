@@ -4,7 +4,7 @@
 //! `studio.set_rendering`; the engine keeps them on its machine, whatever collection is
 //! open. Since 0.165 it also has the reflection probes' switch and the face size they
 //! capture at, at most (ADR-0170 decision 3), and since 0.172 the screen-space
-//! reflections' switch and the steps their rays take (decision 4), and since 0.180 how
+//! reflections' switch and the steps their rays take (decision 4), and since 0.178 how
 //! many pixels 3D models are drawn with (ADR-0197). An engine older than
 //! the version that added one reports it as on (screen-space reflections as off,
 //! ADR-0185), at the largest size or the fewest steps (models as Automatic, where it

@@ -73,14 +73,14 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
-  `Action` (`output.start`, `output.stop`, `output.toggle` (0.179, ADR-0208), `output.set_key`, `output.clear_key`,
+  `Action` (`output.start`, `output.stop`, `output.toggle` (0.180, ADR-0208), `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
   `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
   cap since 0.165, with `PROBE_RESOLUTIONS`, and its screen-space reflection switch and
-  steps since 0.172, with `SCREEN_SPACE_STEPS`, and its `model_resolution` since 0.180,
+  steps since 0.172, with `SCREEN_SPACE_STEPS`, and its `model_resolution` since 0.178,
   with `MODEL_RESOLUTIONS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
@@ -142,7 +142,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch`, and
   `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
   [Controller bindings](#bindings).
-- **Shows** (`show.rs`, since 0.178,
+- **Shows** (`show.rs`, since 0.179,
   [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)): `ShowInfo`, a
   saved run order of scenes on tracks in show time: the program track's `ProgramClip`s end
   to end, `OverlayTrack`s, `KeyframeMarker`s, `SequenceTrack`s of `ShowCue`s and
@@ -211,7 +211,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
   (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets, and
-  since 0.178 `state.get` the `shows` and `studio.get` the running `show` and the
+  since 0.179 `state.get` the `shows` and `studio.get` the running `show` and the
   `overlays` up ([Shows](#shows)). `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
@@ -297,7 +297,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `plugin.uninstalled` (0.163),
-  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, `show.changed` (with `ShowChange`, since 0.178), and `timeline.changed` (with `TimelineChange`)
+  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, `show.changed` (with `ShowChange`, since 0.179), and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
   `KindsCause`, 0.107), `agent.approval_requested` and `agent.approval_resolved`
@@ -407,20 +407,20 @@ again when the program shows it again, and `source.restart` and `source.seek` st
 move its count (ADR-0214); 0.181 because a value binding can drive one axis of a PTZ
 camera's position: `ValueTarget`'s `ptz_axis {camera, axis}` with `PtzAxis` (`pan`,
 `tilt`, `zoom` or `focus`), in the head's own counts, which the engine sends as aims
-([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)); 0.180 because the
+([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)); 0.180 because a key chord or a controller trigger can run several
+actions: `hotkey.set` and `binding.set` add an action to a chord or trigger already
+bound (refusing only an equal one), `hotkey.clear` and `binding.clear` take an optional
+`action`, and `output.toggle` starts a stopped output and stops a running one
+([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)); 0.179 because a
+collection holds shows: `show.set` and `show.delete`, `state.get`'s `shows`, the `show.*`
+actions that run one, `studio.get`'s `show` and `overlays`, the `overlay.*` actions and
+the `show.changed` event ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md));
+0.178 because the
 rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
 ([ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md));
-0.179 because a key chord or a controller trigger can run several
-actions: `hotkey.set` and `binding.set` add an action to a chord or trigger already
-bound (refusing only an equal one), `hotkey.clear` and `binding.clear` take an optional
-`action`, and `output.toggle` starts a stopped output and stops a running one
-([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)); 0.178 because a
-collection holds shows: `show.set` and `show.delete`, `state.get`'s `shows`, the `show.*`
-actions that run one, `studio.get`'s `show` and `overlays`, the `overlay.*` actions and
-the `show.changed` event ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md));
 0.177 because of `source.seek`, which plays a `media` file on
 from a point into it and holds through the program showing it, and `SourceSize`'s and
 `source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
@@ -1325,7 +1325,7 @@ covers = ["crates/jstream-protocol/src/output.rs"]
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
 `output.start`; `output.delete` removes one, and is refused with `invalid_argument`
-while it runs. `output.toggle` (0.179,
+while it runs. `output.toggle` (0.180,
 [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)) starts an output
 that is stopped or failed and stops any other, and is run as the `output.start` or
 `output.stop` it resolves to, with that action's events and errors: it is what a "go
@@ -1430,7 +1430,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   what one notch zooms). Bound to any other action, `hotkey.set` is `invalid_argument`
   on `action.type`.
 - **`hotkey.set {chord, action}`** binds a chord to an action; its inverse is
-  `hotkey.clear` naming that action. A chord runs several actions (0.179,
+  `hotkey.clear` naming that action. A chord runs several actions (0.180,
   [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)), in the order
   they were bound: `hotkey.set` on a bound chord adds the action after its others, and
   is refused with `already_exists` (entity `hotkey`, the chord as `id`) only for an
@@ -1575,7 +1575,7 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   `trigger.<field>`, with `Trigger::problem`'s reason.
 - **`binding.set {trigger, action}`** binds a trigger to an action; its inverse is
   `binding.clear` naming that action. Like a chord, a trigger runs several actions in
-  bind order (0.179, ADR-0208): it is refused with `already_exists` (entity `binding`,
+  bind order (0.180, ADR-0208): it is refused with `already_exists` (entity `binding`,
   the trigger as `Display` writes it, such as `MIDI note 36 on channel 10`, as `id`)
   only for an action the trigger runs already. The action is checked as `hotkey.set`
   checks it: the same actions can't be bound, and an object it names must exist.
@@ -1850,7 +1850,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   floor_reflections?, reflection_probes?, max_probe_resolution?,
   screen_space_reflections?, screen_space_steps?, model_resolution?}` (0.147,
   `reflection_probes` and `max_probe_resolution` since 0.165, the two screen-space ones
-  since 0.172, `model_resolution` since 0.180,
+  since 0.172, `model_resolution` since 0.178,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -1940,7 +1940,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   missing, also from a pre-0.168 server, parses as empty), every channel (`channels`,
   ordered by ID; omitted when there are none, so missing, also from a pre-0.169 server,
   parses as empty), every show (`shows`, ordered by ID; omitted when there are none, so
-  missing, also from a pre-0.178 server, parses as empty), the
+  missing, also from a pre-0.179 server, parses as empty), the
   master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
@@ -1998,7 +1998,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
   sets, since 0.165 the probe switch and face-size cap, since 0.172 the screen-space
-  reflection switch and steps, and since 0.180 `model_resolution`. Since 0.178 `show` is the running show (`RunningShow`:
+  reflection switch and steps, and since 0.178 `model_resolution`. Since 0.179 `show` is the running show (`RunningShow`:
   its play head `at_ms`, its `state` `playing`, `paused` or `off_script`, the bookmark it
   waits at and `waited_ms`, the scene that took it `off_script`, its `loop_id` and
   `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs, and
@@ -2078,7 +2078,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   thread's (`program`, `preview`) frames, their average, 95th percentile and longest
   time, the frames over `frame_budget_ms`, the program's skipped ticks, since 0.176 the
   pictures only preview streams take that the program skipped (`preview_skipped`, which
-  `stats.tick`'s `drops` leave out), since 0.180 the
+  `stats.tick`'s `drops` leave out), since 0.178 the
   size its 3D models were drawn at when the window ended (`model_resolution`, a
   percentage, 100 from an older server) and the frames drawn with them below 100
   (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
@@ -2656,7 +2656,7 @@ After `welcome`, the server pushes every event to every client.
 - `timeline.changed {timeline_id, scene_id, change, playing, position_ms, pass}` and
   `timeline.cue_fired {timeline_id, cue, pass, at_ms, error?}` (0.87) are described
   under [Timelines](#timelines). Neither is sent once a frame: a cue fires once a pass.
-- `show.changed {show_id, change, running, at_ms, bookmark_id?, loop_id?}` (0.178,
+- `show.changed {show_id, change, running, at_ms, bookmark_id?, loop_id?}` (0.179,
   [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)) says the running
   show `started`, `paused` at a bookmark, `continued`, `jumped`, `looped`, went
   `off_script`, `ended` or `stopped`. Runtime state, so no `rev`, and never once a frame.
@@ -3085,7 +3085,7 @@ after 1.0:
   `collection.save_as` names it.
   0.96 adds `binding` the same way, named only by an error answering a `binding.*`
   edit. 0.169 adds `channel` the same way, named only by an error answering a
-  `channel.*` edit or action. 0.178 adds `show` the same way, named only by an error
+  `channel.*` edit or action. 0.179 adds `show` the same way, named only by an error
   answering a `show.*` edit or action, or a binding naming a show; a show's cue holds its
   action as plain JSON, as a timeline's does, and its enums (`ShowEnd`, `LoopLeave`,
   `NextMonitor`, `ShowState`, `ShowChange`) parse an unknown value as `Unknown`, which
@@ -3352,7 +3352,7 @@ covers = ["crates/jstream-protocol/src/show.rs"]
 depends_on = ["docs/adr/0210-shows-a-run-order-with-bookmarks.md"]
 -->
 
-A show (since 0.178, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md))
+A show (since 0.179, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md))
 is a saved run order of scenes in show time, in milliseconds. `show.set` stores a whole
 `ShowInfo` (new, or in place of the one with its `show_id`) and `show.delete` removes it;
 `state.get` lists `shows`. A collection holds at most 64.

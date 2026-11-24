@@ -1277,7 +1277,7 @@ unlocks, and it settles `active` only while that generation is the one in flight
 dropped any threads it opened, then settles `stopped`. The start answers
 `action_failed` and does not settle `active`. Once the pipeline is `active`, stop
 takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
-`output.toggle` (0.179, ADR-0208) reads whether the output runs under the state lock,
+`output.toggle` (0.180, ADR-0208) reads whether the output runs under the state lock,
 then runs as the `output.start` or `output.stop` that resolves to, with its events,
 audit entry and errors.
 
