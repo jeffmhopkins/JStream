@@ -4,9 +4,11 @@
 //! trigger bar lists what starts and stops it as sentences, with "+ Trigger" to add one.
 //!
 //! Each lane is one channel over the timeline's length: a double-click adds a point
-//! (snapped to a tenth of a second, Shift for free), a drag moves one, and a right-click
-//! sets the curve into it or deletes it. Each gesture is one `timeline.set`, so one undo
-//! step. A lane with no point at 0 starts from the channel's value, drawn dashed from
+//! (snapped to a tenth of a second, Shift for free), a drag moves one, and a click or a
+//! right-click opens its menu (its curve, time and value, delete). A switch lane is its
+//! on bars instead: a double-click in a gap adds one, a drag moves a bar or one of its
+//! ends, and a click or a right-click opens its menu (on at, off at, delete). Each
+//! gesture is one `timeline.set`, so one undo step. A lane with no point at 0 starts from the channel's value, drawn dashed from
 //! where the channel is now. The play head follows `timeline.changed`, and a click on
 //! the ruler seeks there.
 //!
@@ -18,8 +20,8 @@ use crate::icons::Icon;
 use crate::menu::{Entry, Menus};
 use crate::panels::channels::{live_values, new_channel, open_channel, search};
 use crate::panels::lane_offers::{
-    self, Offer, add_bar, followed_channel, is_switch, kinds_needed, offers, switch_bars,
-    switch_points,
+    self, Grip, Offer, bar_points, drag_bar, followed_channel, insert_bar, is_switch, kinds_needed,
+    offers, switch_bars, switch_points,
 };
 use crate::panels::learn::follows;
 use crate::panels::number::NumberField;
@@ -405,13 +407,47 @@ fn curve_name(curve: LaneCurve) -> &'static str {
     }
 }
 
-/// A point being dragged: its lane and index, and where it is now.
+/// A point being dragged: its lane and index, where it is now, where the pointer went
+/// down, and whether it has moved past a click's few pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Drag {
     lane: usize,
     point: usize,
     at_ms: u32,
     value: f32,
+    x0: f64,
+    y0: f64,
+    moved: bool,
+}
+
+/// A switch lane's bars, as `(on_ms, off_ms)` in time order.
+type Bars = Vec<(u32, u32)>;
+
+/// How far a pointer goes, in px, before a press is a drag and not a click.
+const CLICK_SLOP: f64 = 3.0;
+
+/// A switch lane's bar being dragged (by its body or one end): the lane's bars as they
+/// were, which one, where it is now, how far into it the pointer went down, and whether
+/// it has moved past a click's few pixels.
+#[derive(Clone, Debug, PartialEq)]
+struct BarDrag {
+    lane: usize,
+    bar: usize,
+    grip: Grip,
+    held: Vec<(u32, u32)>,
+    now: (u32, u32),
+    offset_ms: i64,
+    x0: f64,
+    moved: bool,
+}
+
+/// The menu a click or right-click on a switch lane's bar opens.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BarMenu {
+    lane: usize,
+    bar: usize,
+    x: f64,
+    y: f64,
 }
 
 /// The menu a right-click on a point opens, at a point in the window.
@@ -897,7 +933,7 @@ pub fn Sequence() -> impl IntoView {
                             </div>
                         })}
                     </div>
-                    <Info text="Double-click a lane to add a point there (snapped to a tenth of a second; Shift for free), drag a point to move it, and right-click it for its curve, time and value. Double-click the Events lane to add a one-off event. A control moved by hand takes its lane over until the sequence plays again." />
+                    <Info text="Double-click a lane to add a point there (snapped to a tenth of a second; Shift for free), drag a point to move it, and click or right-click it for its curve, time and value. On a switch lane, double-click a gap to add a bar, drag a bar or one of its ends, and click it for its times. Double-click the Events lane to add a one-off event. A control moved by hand takes its lane over until the sequence plays again." />
                 </Show>
             </div>
             <div class="seq-scroll">
@@ -1436,6 +1472,8 @@ fn Lanes(
     let id = StoredValue::new(timeline.timeline_id.clone());
     let drag = RwSignal::new(None::<Drag>);
     let menu = RwSignal::new(None::<PointMenu>);
+    let bar_drag = RwSignal::new(None::<BarDrag>);
+    let bar_menu = RwSignal::new(None::<BarMenu>);
     let live = move |channel: &str| values.with(|v| v.get(channel).map(|c| c.value.get()));
     let ticks = {
         let step = match duration {
@@ -1526,25 +1564,132 @@ fn Lanes(
                 let from = ch.with_value(|c| live(c)).unwrap_or(0.0);
                 lane_path(&shown(), duration, from)
             };
+            // A switch lane's bars: where it is on, as drawn from its points (off before
+            // the first, whatever the channel was), with the dragged one where it is now.
+            let held_bars = move || lane.with_value(|l| switch_bars(&l.points, duration, false));
+            let set_bars = move |bars: Vec<(u32, u32)>| {
+                change(&|t| {
+                    let duration = t.duration_ms;
+                    if let Some(l) = t.lanes.get_mut(n) {
+                        l.points = bar_points(&bars, duration);
+                    }
+                })
+            };
+            let grab = move |grip: Grip, b: usize, e: leptos::ev::PointerEvent| {
+                if e.button() != 0 {
+                    return;
+                }
+                e.stop_propagation();
+                e.prevent_default();
+                let Some(el) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
+                    return;
+                };
+                el.set_pointer_capture(e.pointer_id()).ok();
+                let Some(area) = el.closest(".seq-area").ok().flatten() else {
+                    return;
+                };
+                let (ms, _) = at(&e, &area);
+                let held = held_bars();
+                let Some(&now) = held.get(b) else {
+                    return;
+                };
+                bar_drag.set(Some(BarDrag {
+                    lane: n,
+                    bar: b,
+                    grip,
+                    held,
+                    now,
+                    offset_ms: i64::from(ms) - i64::from(now.0),
+                    x0: f64::from(e.client_x()),
+                    moved: false,
+                }));
+            };
+            // Drawn once per edit; a drag moves its bar's style, so the bar it holds
+            // stays put and keeps the pointer.
             let bars = move || {
-                let from = ch.with_value(|c| live(c)).unwrap_or(0.0) >= 0.5;
-                switch_bars(&shown().points, duration, from)
+                held_bars()
                     .into_iter()
-                    .map(|(a, b)| {
-                        let x = f64::from(a) / f64::from(duration) * 1000.0;
-                        let w = f64::from(b - a) / f64::from(duration) * 1000.0;
-                        view! { <rect x=format!("{x:.2}") y="8" width=format!("{w:.2}") height="84" class="seq-bar" /> }
+                    .enumerate()
+                    .map(|(b, (from, to))| {
+                        let span = move || {
+                            bar_drag.with(|d| {
+                                d.as_ref().filter(|d| d.lane == n && d.bar == b).map_or((from, to), |d| d.now)
+                            })
+                        };
+                        let left = move || format!("{:.3}%", f64::from(span().0) / f64::from(duration) * 100.0);
+                        let width = move || {
+                            let (a, z) = span();
+                            format!("{:.3}%", f64::from(z - a) / f64::from(duration) * 100.0)
+                        };
+                        let label = format!("On from {} to {}", seconds(from), seconds(to));
+                        // From the keyboard: Enter, Space, the Menu key or Shift+F10
+                        // open the bar's menu beside it, and Delete removes it.
+                        let key = move |e: leptos::ev::KeyboardEvent| {
+                            let k = e.key();
+                            if k == "Enter" || k == " " || crate::menu::asks_for_menu(&e) {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                let Some(el) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
+                                    return;
+                                };
+                                let r = crate::ui_scale::rect(&el);
+                                bar_menu.set(Some(BarMenu { lane: n, bar: b, x: r.left(), y: r.bottom() }));
+                            } else if k == "Delete" || k == "Backspace" {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                let mut bars = held_bars();
+                                if b < bars.len() {
+                                    bars.remove(b);
+                                    set_bars(bars);
+                                }
+                            }
+                        };
+                        let context = move |e: leptos::ev::MouseEvent| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                            let (x, y) = crate::ui_scale::pointer(&e);
+                            bar_menu.set(Some(BarMenu { lane: n, bar: b, x, y }));
+                        };
+                        let title = format!("{label} · drag to move, drag an end to change it, click for more");
+                        view! {
+                            <div
+                                class="seq-switch-bar"
+                                class:dragging=move || bar_drag.with(|d| d.as_ref().is_some_and(|d| d.lane == n && d.bar == b && d.moved))
+                                role="button"
+                                tabindex="0"
+                                aria-haspopup="menu"
+                                aria-label=label
+                                title=title
+                                style:left=left style:width=width
+                                on:pointerdown=move |e| grab(Grip::Body, b, e)
+                                on:keydown=key
+                                on:contextmenu=context
+                                on:dblclick=|e: leptos::ev::MouseEvent| e.stop_propagation()
+                            >
+                                <span class="seq-bar-end start" title="Drag to change where it switches on"
+                                    on:pointerdown=move |e| grab(Grip::Start, b, e)></span>
+                                <span class="seq-bar-end end" title="Drag to change where it switches off"
+                                    on:pointerdown=move |e| grab(Grip::End, b, e)></span>
+                            </div>
+                        }
                     })
                     .collect_view()
             };
+            // Drawn once per edit; a drag moves its dot's style, so the dot it holds
+            // stays put and keeps the pointer.
             let dots = move || {
-                shown()
+                lane.get_value()
                     .points
                     .iter()
                     .enumerate()
                     .map(|(p, point)| {
-                        let left = f64::from(point.at_ms) / f64::from(duration) * 100.0;
-                        let top = (1.0 - f64::from(point.value.get())) * 100.0;
+                        let place = move || {
+                            shown().points.get(p).map_or((0.0, 0.0), |q| {
+                                (f64::from(q.at_ms) / f64::from(duration) * 100.0, (1.0 - f64::from(q.value.get())) * 100.0)
+                            })
+                        };
+                        let left = move || format!("{:.3}%", place().0);
+                        let top = move || format!("{:.3}%", place().1);
                         let title = format!(
                             "{} · {:.0} % · {}",
                             seconds(point.at_ms),
@@ -1571,6 +1716,9 @@ fn Lanes(
                                 point: p,
                                 at_ms: pt.at_ms,
                                 value: pt.value.get(),
+                                x0: f64::from(e.client_x()),
+                                y0: f64::from(e.client_y()),
+                                moved: false,
                             }));
                         };
                         let context = move |e: leptos::ev::MouseEvent| {
@@ -1622,7 +1770,7 @@ fn Lanes(
                                 aria-label=label
                                 on:keydown=key
                                 class:dragging=move || drag.get().is_some_and(|d| d.lane == n && d.point == p)
-                                style:left=format!("{left:.3}%") style:top=format!("{top:.3}%")
+                                style:left=left style:top=top
                                 title=title
                                 on:pointerdown=down
                                 on:contextmenu=context
@@ -1637,35 +1785,75 @@ fn Lanes(
                     return;
                 };
                 let (ms, v) = at(&e, &el);
-                let from = ch.with_value(|c| live(c)).unwrap_or(0.0) >= 0.5;
-                change(&|t| {
-                    let duration = t.duration_ms;
-                    if let Some(l) = t.lanes.get_mut(n) {
-                        if switch {
-                            // A one-second bar from here, then back to what it was.
-                            add_bar(&mut l.points, ms, 1000, duration, from);
-                        } else {
-                            add_point(&mut l.points, ms, v);
+                if switch {
+                    // A one-second bar from here, cut short before the next one.
+                    match insert_bar(&held_bars(), ms, 1000, duration) {
+                        Some((bars, _)) => {
+                            set_bars(bars);
                         }
+                        None => studio.problem.set(Some(
+                            "There's no room for a bar there: it needs a tenth of a second before the next one.".into(),
+                        )),
+                    }
+                    return;
+                }
+                change(&|t| {
+                    if let Some(l) = t.lanes.get_mut(n) {
+                        add_point(&mut l.points, ms, v);
                     }
                 });
             };
             let moving = move |e: leptos::ev::PointerEvent| {
-                let Some(d) = drag.get_untracked().filter(|d| d.lane == n) else {
-                    return;
-                };
                 let Some(el) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
                     return;
                 };
                 let (ms, v) = at(&e, &el);
-                // A switch lane's point is on or off, nothing between.
-                let v = if switch { v.round() } else { v };
-                drag.set(Some(Drag { at_ms: ms, value: v, ..d }));
-            };
-            let up = move |_| {
+                if let Some(d) = bar_drag.get_untracked().filter(|d| d.lane == n) {
+                    // A few pixels are still a click.
+                    if !d.moved && (f64::from(e.client_x()) - d.x0).abs() <= CLICK_SLOP {
+                        return;
+                    }
+                    let to = match d.grip {
+                        Grip::Body => (i64::from(ms) - d.offset_ms).clamp(0, i64::from(duration)) as u32,
+                        _ => ms,
+                    };
+                    let now = drag_bar(&d.held, d.bar, d.grip, to, duration);
+                    bar_drag.set(Some(BarDrag { now, moved: true, ..d }));
+                    return;
+                }
                 let Some(d) = drag.get_untracked().filter(|d| d.lane == n) else {
                     return;
                 };
+                if !d.moved
+                    && (f64::from(e.client_x()) - d.x0).hypot(f64::from(e.client_y()) - d.y0) <= CLICK_SLOP
+                {
+                    return;
+                }
+                drag.set(Some(Drag { at_ms: ms, value: v, moved: true, ..d }));
+            };
+            // Letting go ends a drag as one edit; a press that didn't move is a click,
+            // which opens the point's or bar's menu where it was clicked.
+            let up = move |e: leptos::ev::PointerEvent| {
+                let (x, y) = crate::ui_scale::pointer(&e);
+                if let Some(d) = bar_drag.get_untracked().filter(|d| d.lane == n) {
+                    bar_drag.set(None);
+                    if !d.moved {
+                        bar_menu.set(Some(BarMenu { lane: n, bar: d.bar, x, y }));
+                    } else if d.held.get(d.bar) != Some(&d.now) {
+                        let mut bars = d.held;
+                        bars[d.bar] = d.now;
+                        set_bars(bars);
+                    }
+                    return;
+                }
+                let Some(d) = drag.get_untracked().filter(|d| d.lane == n) else {
+                    return;
+                };
+                drag.set(None);
+                if !d.moved {
+                    menu.set(Some(PointMenu { lane: n, point: d.point, x, y }));
+                    return;
+                }
                 let moved = lane
                     .with_value(|l| l.points.get(d.point).is_some_and(|p| p.at_ms != d.at_ms || (p.value.get() - d.value).abs() > 1e-4));
                 if moved {
@@ -1675,7 +1863,10 @@ fn Lanes(
                         }
                     });
                 }
+            };
+            let cancel = move |_| {
                 drag.set(None);
+                bar_drag.set(None);
             };
             let on = lane.with_value(|l| l.on);
             let mute = move |_| {
@@ -1727,11 +1918,11 @@ fn Lanes(
                         on:dblclick=add
                         on:pointermove=moving
                         on:pointerup=up
-                        on:pointercancel=up
+                        on:pointercancel=cancel
                     >
                         <svg viewBox="0 0 1000 100" preserveAspectRatio="none" class="seq-svg" aria-hidden="true">
                             {move || if switch {
-                                bars().into_any()
+                                ().into_any()
                             } else {
                                 let (lead, path) = paths();
                                 view! {
@@ -1742,7 +1933,7 @@ fn Lanes(
                                 .into_any()
                             }}
                         </svg>
-                        {dots}
+                        {move || if switch { bars().into_any() } else { dots().into_any() }}
                     </div>
                 </div>
             }
@@ -1783,6 +1974,9 @@ fn Lanes(
         };
         let node = NodeRef::<leptos::html::Div>::new();
         crate::menu::focus_first(node);
+        // Beside the click, kept in the window: a point near the bottom or the right
+        // edge opens it above or to the left.
+        let (left, top) = crate::panels::events::place(m.x, m.y, 300.0);
         let set_curve = move |curve: LaneCurve| {
             menu.set(None);
             change(&|t| {
@@ -1808,7 +2002,7 @@ fn Lanes(
         Some(view! {
             <div class="ctx-catcher" on:pointerdown=move |_| menu.set(None)></div>
             <div class="context-menu" role="menu" aria-label="Point" node_ref=node on:keydown=point_keys
-                style:left=format!("{}px", m.x) style:top=format!("{}px", m.y)>
+                style:left=left style:top=top>
                 <div class="seq-point-fields" on:keydown=field_keys>
                     <span class="seq-label">"Time"</span>
                     <NumberField named=Signal::derive(|| "Point time".to_owned()) unit="s"
@@ -1840,6 +2034,71 @@ fn Lanes(
             </div>
         })
     };
+    // A switch lane's bar: where it switches on and off, typed, and Delete. No curves:
+    // a switch only jumps.
+    let close_bar_menu = move || bar_menu.set(None);
+    let bar_keys = crate::menu::keys(close_bar_menu);
+    let bar_menu_view = move || {
+        let m = bar_menu.get()?;
+        let (from, to) = snapshot.with_value(|t| {
+            t.lanes
+                .get(m.lane)
+                .map(|l| switch_bars(&l.points, t.duration_ms.max(1), false))
+                .and_then(|b| b.get(m.bar).copied())
+        })?;
+        // Edits the bar as it is in the sequence now, kept between its neighbours.
+        let edit = move |f: &dyn Fn(&mut Bars, u32)| {
+            bar_menu.set(None);
+            change(&|t| {
+                let duration = t.duration_ms.max(1);
+                if let Some(l) = t.lanes.get_mut(m.lane) {
+                    let mut bars = switch_bars(&l.points, duration, false);
+                    if m.bar < bars.len() {
+                        f(&mut bars, duration);
+                        l.points = bar_points(&bars, duration);
+                    }
+                }
+            })
+        };
+        let set_end = move |grip: Grip, ms: u32| {
+            edit(&|bars, duration| bars[m.bar] = drag_bar(bars, m.bar, grip, ms, duration))
+        };
+        let field_keys = |e: leptos::ev::KeyboardEvent| {
+            if e.key() != "Escape" {
+                e.stop_propagation();
+            }
+        };
+        let node = NodeRef::<leptos::html::Div>::new();
+        crate::menu::focus_first(node);
+        let (left, top) = crate::panels::events::place(m.x, m.y, 140.0);
+        Some(view! {
+            <div class="ctx-catcher" on:pointerdown=move |_| bar_menu.set(None)></div>
+            <div class="context-menu" role="menu" aria-label="Bar" node_ref=node on:keydown=bar_keys
+                style:left=left style:top=top>
+                <div class="seq-point-fields" on:keydown=field_keys>
+                    <span class="seq-label">"On at"</span>
+                    <NumberField named=Signal::derive(|| "Switches on at".to_owned()) unit="s"
+                        value=Signal::derive(move || Some(f64::from(from) / 1000.0))
+                        step=0.1 decimals=2 min=0.0 max=3600.0
+                        send=move |v| set_end(Grip::Start, snap(v * 1000.0, true)) />
+                    <span class="seq-label">"Off at"</span>
+                    <NumberField named=Signal::derive(|| "Switches off at".to_owned()) unit="s"
+                        value=Signal::derive(move || Some(f64::from(to) / 1000.0))
+                        step=0.1 decimals=2 min=0.0 max=3600.0
+                        send=move |v| set_end(Grip::End, snap(v * 1000.0, true)) />
+                </div>
+                <div class="menu-sep"></div>
+                <button type="button" class="menuitem danger" role="menuitem" on:click=move |_| {
+                    edit(&|bars, _| {
+                        bars.remove(m.bar);
+                    });
+                }>
+                    <span class="ctx-check"></span>
+                    <span class="ctx-label">"Delete bar"</span>
+                </button>
+            </div>
+        })
+    };
     let empty = timeline.lanes.is_empty();
     view! {
         <div class="seq-lanes">
@@ -1856,6 +2115,7 @@ fn Lanes(
                 <div class="seq-head-layer">{head}</div>
             </div>
             {point_menu}
+            {bar_menu_view}
         </div>
     }
 }

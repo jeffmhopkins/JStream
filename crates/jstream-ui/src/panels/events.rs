@@ -1,7 +1,7 @@
 //! The Sequence panel's Events lane (ADR-0184, UI-FEATURES SQ-04): a sequence's cues,
 //! one-off actions at a time, as chips on the lanes' ruler. A double-click on the lane
-//! adds one there through a small editor (what happens, and to what); a click on a chip
-//! edits it, a drag moves it (snapped to a tenth of a second, Shift for free), and the
+//! adds one there through a small editor (what happens, and to what); a click or a
+//! right-click on a chip edits it, a drag moves it (snapped to a tenth of a second, Shift for free), and the
 //! editor deletes it. Each gesture is one `timeline.set`, so one undo step.
 //!
 //! The events offered are the cue actions an operator reaches for: show, hide or toggle
@@ -304,12 +304,15 @@ struct Editing {
 }
 
 /// A chip being dragged: its place among the chips, the cue as it was drawn, where it
-/// is now, and whether it moved.
+/// is now, how far into it the pointer went down (so it doesn't jump to the pointer),
+/// where the pointer went down, and whether it moved past a click's few pixels.
 #[derive(Clone, Debug, PartialEq)]
 struct Moving {
     cue: usize,
     held: TimelineCue,
     at_ms: u32,
+    offset_ms: i64,
+    x0: f64,
     moved: bool,
 }
 
@@ -367,9 +370,13 @@ pub fn Events(
         let Some(m) = moving.get_untracked() else {
             return;
         };
+        // A few pixels are still a click.
+        if !m.moved && (f64::from(e.client_x()) - m.x0).abs() <= 3.0 {
+            return;
+        }
         let Some(el) = area_of(&e) else { return };
-        let at_ms = at(&e, &el);
-        if at_ms != m.at_ms {
+        let at_ms = (i64::from(at(&e, &el)) - m.offset_ms).clamp(0, i64::from(duration)) as u32;
+        if at_ms != m.at_ms || !m.moved {
             moving.set(Some(Moving {
                 at_ms,
                 moved: true,
@@ -382,12 +389,12 @@ pub fn Events(
             return;
         };
         moving.set(None);
-        if m.moved {
+        if m.moved && m.at_ms != m.held.at_ms {
             on_cue(&m.held, &|t, n| {
                 t.cues[n].at_ms = m.at_ms;
                 t.cues.sort_by_key(|c| c.at_ms);
             });
-        } else {
+        } else if !m.moved {
             editing.set(Some(Editing {
                 cue: Some(m.held),
                 at_ms: m.at_ms,
@@ -425,6 +432,18 @@ pub fn Events(
                 let at_ms = cue.at_ms;
                 let held = cue.clone();
                 let keyed = cue.clone();
+                let clicked = cue.clone();
+                // A right-click opens the editor too, as it opens a point's menu.
+                let context = move |e: leptos::ev::MouseEvent| {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    editing.set(Some(Editing {
+                        cue: Some(clicked.clone()),
+                        at_ms,
+                        x: crate::ui_scale::pointer(&e).0,
+                        y: crate::ui_scale::pointer(&e).1,
+                    }));
+                };
                 // From the keyboard: Enter, Space, the Menu key or Shift+F10 open the
                 // editor under the chip, and Delete removes the event.
                 let key = move |e: leptos::ev::KeyboardEvent| {
@@ -459,16 +478,24 @@ pub fn Events(
                     }
                     e.stop_propagation();
                     e.prevent_default();
-                    if let Some(chip) = e
+                    let Some(chip) = e
                         .current_target()
                         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
-                    {
-                        chip.set_pointer_capture(e.pointer_id()).ok();
-                    }
+                    else {
+                        return;
+                    };
+                    chip.set_pointer_capture(e.pointer_id()).ok();
+                    let offset_ms = chip
+                        .closest(".seq-events-area")
+                        .ok()
+                        .flatten()
+                        .map_or(0, |area| i64::from(at(&e, &area)) - i64::from(at_ms));
                     moving.set(Some(Moving {
                         cue: n,
                         held: held.clone(),
                         at_ms,
+                        offset_ms,
+                        x0: f64::from(e.client_x()),
                         moved: false,
                     }));
                 };
@@ -481,6 +508,7 @@ pub fn Events(
                         title=title
                         on:pointerdown=down
                         on:keydown=key
+                        on:contextmenu=context
                         on:dblclick=|e: leptos::ev::MouseEvent| e.stop_propagation()
                     >
                         {words}

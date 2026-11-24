@@ -2672,7 +2672,15 @@ button.seq-lane-name:hover:not(:disabled) { background: none; color: var(--link)
 .seq-line { fill: none; stroke: var(--lane); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .seq-lead { fill: none; stroke: var(--lane); stroke-width: 1.5; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 .seq-fill { fill: var(--lane); fill-opacity: 0.08; stroke: none; }
-.seq-svg .seq-bar { fill: var(--lane); fill-opacity: 0.35; stroke: var(--lane); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.seq-switch-bar { position: absolute; top: 8%; height: 84%; min-width: 6px; box-sizing: border-box; border: 1.5px solid var(--lane); border-radius: 3px; background: color-mix(in srgb, var(--lane) 35%, transparent); cursor: grab; touch-action: none; }
+.seq-switch-bar:hover, .seq-switch-bar.dragging { background: color-mix(in srgb, var(--lane) 55%, transparent); }
+.seq-switch-bar.dragging { cursor: grabbing; }
+.seq-switch-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seq-bar-end { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
+.seq-bar-end.start { left: -4px; }
+.seq-bar-end.end { right: -4px; }
+.seq-bar-end::after { content: ""; position: absolute; top: 30%; bottom: 30%; left: 3px; width: 2px; border-radius: 1px; background: var(--lane); opacity: 0; }
+.seq-switch-bar:hover .seq-bar-end::after, .seq-bar-end:hover::after { opacity: 1; }
 .seq-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 2px solid var(--lane); border-radius: 50%; background: var(--panel); cursor: grab; }
 .seq-dot:hover, .seq-dot.dragging, .seq-dot:focus-visible { background: var(--lane); }
 .seq-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

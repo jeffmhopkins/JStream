@@ -1,6 +1,7 @@
 // The Sequence panel against the mock engine, which stores and plays timelines but
 // keeps no clock (jstream-control's README): making a sequence, its lanes and points,
-// Play and Stop, and clicks that come before the engine has answered the last one.
+// Play and Stop, clicks that come before the engine has answered the last one, and the
+// on/off gestures: a switch lane's bars and the Events lane's chips.
 import { test, expect, connect, showPanel } from '../fixtures.js';
 
 /** Routes the page's WebSocket: every request it sends is recorded, and every message
@@ -124,5 +125,126 @@ test.describe('Sequence panel', () => {
     await expect(editor.getByRole('combobox', { name: 'Which' }).locator('option')).toHaveText(['Dim']);
     await editor.getByRole('button', { name: 'Add trigger' }).click();
     await expect(panel.locator('.seq-chip')).toHaveText([/Dim rises/]);
+  });
+
+  // A switch lane's bars (docs/UI-FEATURES.md SQ-02): a double-click in a gap adds one,
+  // its body moves it, its ends change it, a click or a right-click opens its menu, and
+  // Delete removes it. Each gesture is one timeline.set, and the lane stays a switch.
+  test('a switch lane bar is added, moved, stretched and deleted by hand', async ({ page, daemon }) => {
+    const calls = await slowEngine(page, 0);
+    await connect(page, daemon);
+    const panel = await sequenceWithLane(page, 'Lamp');
+    const lane = panel.locator('.seq-lane:not(.seq-events)').first();
+    // The mock's scene has no on/off settings to offer: make the lane a switch by
+    // hand, its one point held at 0. A click on a point opens its menu.
+    await lane.locator('.seq-dot').click();
+    const pointMenu = page.getByRole('menu', { name: 'Point' });
+    await pointMenu.getByRole('textbox', { name: 'Point value' }).fill('0');
+    await pointMenu.getByRole('textbox', { name: 'Point value' }).press('Enter');
+    await lane.locator('.seq-dot').click();
+    await pointMenu.getByRole('menuitem', { name: 'Hold, then jump' }).click();
+    await expect(lane.locator('.seq-lane-meta')).toContainText('Switch');
+    await expect(lane.locator('.seq-dot')).toHaveCount(0);
+    const bars = lane.locator('.seq-switch-bar');
+    await expect(bars).toHaveCount(0);
+
+    const area = await lane.locator('.seq-area').boundingBox();
+    const x = (ms) => area.x + (area.width * ms) / 6000;
+    const y = area.y + area.height / 2;
+    // A double-click in a gap adds a one-second bar there.
+    await page.mouse.dblclick(x(1000), y);
+    await expect(bars).toHaveCount(1);
+    await expect(bars.first()).toHaveAccessibleName('On from 1 s to 2 s');
+    // In a bar, it adds nothing.
+    let sets = calls.sent('timeline.set').length;
+    await page.mouse.dblclick(x(1500), y);
+    await page.waitForTimeout(300);
+    expect(calls.sent('timeline.set')).toHaveLength(sets);
+    await expect(bars).toHaveCount(1);
+
+    // Its body moves it, keeping its length, as one edit.
+    const drag = async (from, to) => {
+      await page.mouse.move(from, y);
+      await page.mouse.down();
+      await page.mouse.move(to, y, { steps: 6 });
+      await page.mouse.up();
+    };
+    sets = calls.sent('timeline.set').length;
+    await drag(x(1500), x(3500));
+    await expect(bars.first()).toHaveAccessibleName('On from 3 s to 4 s');
+    expect(calls.sent('timeline.set')).toHaveLength(sets + 1);
+    // Its ends change where it switches on and off.
+    const box = await bars.first().boundingBox();
+    await drag(box.x + box.width - 1, x(5000));
+    await expect(bars.first()).toHaveAccessibleName('On from 3 s to 5 s');
+    await drag(box.x + 1, x(2000));
+    await expect(bars.first()).toHaveAccessibleName('On from 2 s to 5 s');
+    // Dragged past the end, it stops there.
+    await drag(x(3000), x(5900));
+    await expect(bars.first()).toHaveAccessibleName('On from 3 s to 6 s');
+    // What was sent: off from the start, on at 3 s, held on to the end.
+    const points = calls.sent('timeline.set').at(-1).timeline.lanes[0].points;
+    expect(points.map((p) => [p.at_ms, p.value, p.curve])).toEqual([[0, 0, 'hold'], [3000, 1, 'hold']]);
+
+    // A second bar stops a tenth of a second short of the first: two bars never join.
+    await page.mouse.dblclick(x(500), y);
+    await expect(bars).toHaveCount(2);
+    await drag(x(1000), x(4000));
+    await expect(bars.first()).toHaveAccessibleName('On from 1.9 s to 2.9 s');
+
+    // A click opens its menu; typed times are kept between its neighbours.
+    await bars.first().click();
+    const barMenu = page.getByRole('menu', { name: 'Bar' });
+    await expect(barMenu.getByRole('menuitem')).toHaveText(['Delete bar']);
+    await barMenu.getByRole('textbox', { name: 'Switches off at' }).fill('9');
+    await barMenu.getByRole('textbox', { name: 'Switches off at' }).press('Enter');
+    await expect(bars.first()).toHaveAccessibleName('On from 1.9 s to 2.9 s');
+    await bars.first().click();
+    await barMenu.getByRole('textbox', { name: 'Switches on at' }).fill('0.5');
+    await barMenu.getByRole('textbox', { name: 'Switches on at' }).press('Enter');
+    await expect(bars.first()).toHaveAccessibleName('On from 0.5 s to 2.9 s');
+    // A right-click opens it too, and deletes from it.
+    await bars.first().click({ button: 'right' });
+    await barMenu.getByRole('menuitem', { name: 'Delete bar' }).click();
+    await expect(bars).toHaveCount(1);
+    // Delete removes a focused bar; the lane stays a switch with none.
+    await bars.first().focus();
+    await page.keyboard.press('Delete');
+    await expect(bars).toHaveCount(0);
+    await expect(lane.locator('.seq-lane-meta')).toContainText('Switch');
+  });
+
+  // An on/off event (docs/UI-FEATURES.md SQ-04) answers the same gestures as a point:
+  // a click or a right-click opens it, a drag moves it, Delete removes it.
+  test('an on/off event opens on a click or a right-click and moves on a drag', async ({ page, daemon }) => {
+    await connect(page, daemon);
+    const panel = await sequenceWithLane(page, 'Lamp');
+    const events = panel.locator('.seq-events-area');
+    const area = await events.boundingBox();
+    const x = (ms) => area.x + (area.width * ms) / 6000;
+    const y = area.y + area.height / 2;
+    await page.mouse.dblclick(x(1000), y);
+    const editor = page.getByRole('dialog', { name: 'Event' });
+    await editor.getByRole('combobox').first().selectOption({ label: 'Switch a channel on' });
+    await editor.getByRole('button', { name: /Add/ }).click();
+    const chip = panel.locator('.seq-event');
+    await expect(chip).toHaveText([/Lamp/]);
+    await chip.click({ button: 'right' });
+    await expect(editor).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(editor).toHaveCount(0);
+    await chip.click();
+    await expect(editor).toBeVisible();
+    await page.keyboard.press('Escape');
+    const box = await chip.boundingBox();
+    await page.mouse.move(box.x + 4, y);
+    await page.mouse.down();
+    await page.mouse.move(x(3000) + 4, y, { steps: 6 });
+    await page.mouse.up();
+    await expect(editor).toHaveCount(0);
+    await expect(chip).toHaveAttribute('title', /at 3 s/);
+    await chip.focus();
+    await page.keyboard.press('Delete');
+    await expect(chip).toHaveCount(0);
   });
 });

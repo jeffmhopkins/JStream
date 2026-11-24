@@ -846,30 +846,46 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).
   The Sequence panel (`PanelId::Sequence`, in the bottom dock from the View menu) edits a
   timeline with lanes of the selected scene (a keyframe's parent): the one in
-  `Studio::sequence`, else the scene's first. Its bar picks one or makes `seq_N`, plays or
-  stops it (`timeline.play`, `timeline.stop`), loops it (`next_loop`: off, the whole
+  `Studio::sequence`, else the scene's first. Its bar, which stays at the top while the
+  lanes scroll, picks one or makes `seq_N`, renames or deletes it from its ⋯ menu (the
+  picker turning into the name's field), plays or stops it (`timeline.play`,
+  `timeline.stop`, which `Studio::act` shows at once, `store::optimistic_timeline`, so a
+  second click stops what the first started), loops it (`next_loop`: off, the whole
   sequence, then a range, `TimelineLoop::Range`, whose ends `fit_range` keeps within the
   length and shaded on the ruler), sets its length and adds a lane by `AddLaneSearch`: the
   channels, then the scene's settings and switches (`lane_offers::offers`, from the
   sources' and filters' kind descriptors it reads as it opens), a setting picked making a
   channel it follows (`learn::follows`) unless it follows one already, in the same batch
   as the lane; its trigger bar shows `starts` and `stops` as sentences
-  (`trigger_text`) and "+ Trigger" opens an editor for each kind. Each lane is an SVG path
+  (`trigger_text`) and each group's "+ Trigger" opens an editor beside it for each kind,
+  which never offers a channel the sequence's own lanes drive (the engine refuses one).
+  Every edit is built on the sequence as the panel's edits still on their way leave it
+  (`Pending`): the panel draws that draft at once and drops it once every edit is
+  answered and the collection has caught up, or at once when one is refused. Built on
+  the collection's copy instead, a second click before the engine answered sent that
+  copy back and undid the first. Each lane is an SVG path
   in a `0 0 1000 100` box stretched over the lane (`lane_path`, dashed from the channel's
   value when the first point is after 0) with its points as HTML dots placed with `style:`
   properties. A double-click adds a point, a drag moves one, kept between its neighbours,
-  and a right-click sets its curve, its time and value typed, or deletes it. A switch
-  lane (`lane_offers::is_switch`: every point `hold` at 0 or 1) is drawn as bars
-  (`switch_bars`), a double-click adding a one-second bar (`add_bar`) and a drag keeping a
-  point at 0 or 1; each gesture sends one `timeline.set`,
-  and one that changes nothing sends none. A point takes the focus: Enter, Space, the Menu
-  key or Shift+F10 open its menu beside it, and Delete removes it.
+  and a click that doesn't move (a few pixels' slop) or a right-click opens its menu: its
+  curve, its time and value typed, or delete. A switch lane (`lane_offers::is_switch`:
+  every point `hold` at 0 or 1) is its bars instead, drawn as HTML bars with no dots: off
+  from 0 to the first bar whatever the channel was (`switch_bars` from off), and written
+  back as points from the bars (`bar_points`), so an edit never turns it into a curve. A
+  double-click in a gap adds a one-second bar cut short before the next (`insert_bar`), a
+  drag on a bar moves it and a drag on one of its ends moves that end, each kept 0.1 s
+  from its neighbours so two never join (`drag_bar`), and a click or a right-click opens
+  its menu (on at, off at, Delete bar; no curves). The dragged dot or bar only restyles,
+  so it keeps the pointer. Each gesture sends one `timeline.set`, and one that changes
+  nothing sends none. The menus open beside the click, kept inside the window
+  (`events::place`). A point or a bar takes the focus: Enter, Space, the Menu key or
+  Shift+F10 open its menu beside it, and Delete removes it.
   The play head runs from `Studio::playing`, kept from `studio.get`'s `timelines` and each
   `timeline.changed`, and a click on the ruler sends `timeline.seek`. Above the lanes, the
   Events lane (`panels/events.rs`) draws the timeline's `cues` as chips on the same
   ruler: a double-click opens an editor there (what happens, which item, keyframe, scene,
-  channel, sequence or source, from `objects`), a click on a chip edits it, a drag moves
-  it with the pointer captured, and the editor deletes it; each is one `timeline.set`,
+  channel, sequence or source, from `objects`), a click or a right-click on a chip edits
+  it, a drag moves it with the pointer captured and the grabbed spot kept under it, and the editor deletes it; each is one `timeline.set`,
   with the cues kept in time order. The editor edits a cue only when it can build the
   same action again (`editable`), and keeps an object that is gone as "(missing)"; each
   edit finds its cue by time and action (`position`), and one another client changed
