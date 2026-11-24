@@ -7815,7 +7815,7 @@ stamp = { hash = "b3:687b0e945a2dbef3", by = "agent:bindings", note = "Checked k
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/map-control.spec.js"]
-stamp = { hash = "b3:51c479aeca735d00", by = "agent:claude", note = "Re-read: the harness (mock daemon, fixtures) is unchanged by the two spec edits" }
+stamp = { hash = "b3:bd6b1e63aa1b86d2", by = "agent:a13-train", note = "Re-read: the harness (fixtures, mock daemon, config) is unchanged; only map-control.spec.js's fader helper and one menu text changed" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/mappings.spec.js"]
 stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds | merge: Merged #1697's head 9b0b36f0 (item targets, map_target, channel_reader) with #1708 and the Mappings panel: specs only; harness unchanged" }
@@ -7908,7 +7908,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:95cad9814d9b7207", by = "agent:claude", note = "Map control: right-click on the fader or its number opens the fader's menu, its control button is the row's second; the menu names a Mod by number and offset without the sender (ADR-0221). Inspector: Behaviour shows four hotkey rows with the item's Control row (#1711)" }
+stamp = { hash = "b3:77424871a935b1a6", by = "agent:a13-train", note = "Map control: the fader's button is found by its data-map (the row also holds the mute's and the mute keys' buttons); the Override menu line has no sender name (ADR-0221); all 221 specs pass locally" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7980,7 +7980,7 @@ stamp = { hash = "b3:687b0e945a2dbef3", by = "agent:bindings", note = "Re-read: 
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/map-control.spec.js"]
-stamp = { hash = "b3:51c479aeca735d00", by = "agent:claude", note = "Map control: right-click on the fader or its number opens the fader's menu, its control button is the row's second; the menu names a Mod by number and offset without the sender (ADR-0221). Inspector: Behaviour shows four hotkey rows with the item's Control row (#1711)" }
+stamp = { hash = "b3:bd6b1e63aa1b86d2", by = "agent:a13-train", note = "Map control: the fader's button is found by its data-map (the row also holds the mute's and the mute keys' buttons); the Override menu line has no sender name (ADR-0221); all 221 specs pass locally" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/mappings.spec.js"]
 stamp = { hash = "b3:aaf7fc7be9160d3f", by = "agent:mappings-panel", note = "mappings.spec.js's Triggers test now waits for the key capture's focus before F8, as keys-and-midi.spec does; the section's description holds | merge: Merged #1697's head 9b0b36f0 (item targets, map_target, channel_reader) with #1708 and the Mappings panel: map-control bullet's Inspector item test kept, then the Mappings bullet" }

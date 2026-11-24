@@ -10,13 +10,14 @@ const mods = (moved = {}) => {
 };
 
 /** Shows the mixer with the master's rows open, and returns the first fader's control
- * button and a point on the fader. The row also holds its mute's control button, first,
- * so the fader names its own setting. */
+ * button and a point on the fader. The row also holds its mute's control button and its
+ * mute keys, so the fader names its own setting (`data-map`), which is its button's. */
 async function fader(page) {
   await showPanel(page, 'Audio mixer');
   await page.locator('.mixer-panel').getByRole('button', { name: /^Master Program output/ }).click();
   const row = page.locator('.mix-row').first();
-  const button = row.locator(':scope > button.learn').nth(1);
+  const setting = await row.locator('input.fader').getAttribute('data-map');
+  const button = row.locator(`:scope > button.learn[data-learn="${setting}"]`);
   await expect(button).toBeVisible();
   const box = await row.locator('input.fader').boundingBox();
   return { button, x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -26,7 +27,7 @@ test('a right-click on a setting maps it to a Mod from the Map control dialog', 
   const live = await liveSources(page);
   live({ senders: { Bitwig: { params: mods({ 20: 0.62 }) } } });
   await connect(page, daemon);
-  const { button, x, y } = await fader(page);
+  const { button } = await fader(page);
   const before = await rev(page);
 
   // A right-click on the fader's number opens the setting's menu, not the browser's.
@@ -36,7 +37,8 @@ test('a right-click on a setting maps it to a Mod from the Map control dialog', 
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
-  await page.mouse.click(x, y, { button: 'right' });
+  // So does one on the fader, wherever the row has laid it out since.
+  await page.locator('.mix-row').first().locator('input.fader').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Map control…' }).click();
   const dialog = page.getByRole('dialog', { name: /^Map control/ });
   await expect(dialog).toBeVisible();
@@ -186,7 +188,7 @@ test('mapping mode maps the armed source by the amount dragged on a setting', as
   await expect.poll(() => rev(page)).toBe(before + 5);
   await expect(button).toContainText('Mod 3');
   await number.click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: 'Control' })).toContainText('Mapped to Mod 3 · Bitwig and 1 more');
+  await expect(page.getByRole('menu', { name: 'Control' })).toContainText('Mapped to Mod 3 and 1 more');
   await page.getByRole('menuitem', { name: 'Edit mapping…' }).click();
   await expect(row).toHaveCount(2);
   await expect(row.filter({ hasText: 'Override' })).toContainText('Mod 3');

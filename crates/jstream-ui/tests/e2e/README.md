@@ -523,8 +523,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
 - **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
-  fader's number or on the fader itself opening the fader's menu (its row's second
-  control button, after the mute's), Map control… opening the dialog, a Mod picked there
+  fader's number or on the fader itself opening the fader's menu (the row's control
+  button for the setting the fader names, beside the mute's and the mute keys'), Map control… opening the dialog, a Mod picked there
   changing nothing until Use, which is one edit and names the Mod on the control button;
   Cancel changing nothing; at a UI scale of 150% the row's menu opening at the pointer;
   the menu's Learn taking the one MIDI control that moves
@@ -533,7 +533,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   showing "+10 %" and sending one edit when let go, a second drag moving the far end
   as one more edit, and Escape closing a menu in front first and then leaving the mode, then the dialog listing that mapping as
   an Offset, Bypass striking it through and back as an edit each, and a second Mod used
-  as Override sitting beside it, named on the button with "and 1 more" in the menu; the
+  as Override sitting beside it, named on the button with "and 1 more" in the menu (no
+  sender name); the
   Audio tab's "Follow the program mix" mapping the level as one edit, named Audio on the
   button; and an item's properties from the
   Inspector: the crop edges marked as targets, a right-click on Rotation opening its menu and the dialog on it, a 50 px
