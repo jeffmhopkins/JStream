@@ -847,7 +847,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   platform's (`src/tests/gpu_capture.rs`; the last four skip without
   `TEXTURE_FORMAT_NV12`), an effect-pack filter that runs too long on the GPU being
   quarantined with no device loss (the same file; it skips on a GPU without timestamp
-  queries), a page's
+  queries, and draws 64 times the pixels on a hardware GPU, #1723), a page's
   GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
