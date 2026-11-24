@@ -545,12 +545,13 @@ pub fn Show() -> impl IntoView {
         <div class="show-panel" class:run=move || mode.get() == Mode::Run>
             {move || match has_show.get() {
                 false => view! {
-                    <div class="show-empty">
-                        <p class="show-empty-title">"No show yet"</p>
-                        <p class="show-empty-hint">
+                    <div class="empty-state">
+                        <crate::icons::Icon name="flag" size=18 />
+                        <p class="empty-title">"No show yet"</p>
+                        <p class="empty-note">
                             "A show puts scenes on program in order, with bookmarks that wait for Continue."
                         </p>
-                        <button type="button" class="show-btn show-new"
+                        <button type="button" class="primary"
                             on:click=move |_| panel.new_show()>"+ New show"</button>
                     </div>
                 }.into_any(),
@@ -652,11 +653,11 @@ pub fn ModeSwitch() -> impl IntoView {
             {picker}
             <button type="button" class="show-btn show-picker-menu" title="Shows: new, duplicate, rename, delete"
                 aria-label="Show menu" on:click=show_menu>"⋯"</button>
-            <div class="show-mode" role="group" aria-label="View">
-                <button type="button" class:on=move || panel.mode.get() == Mode::Edit
+            <div class="segmented" role="group" aria-label="View">
+                <button type="button"
                     aria-pressed=move || (panel.mode.get() == Mode::Edit).to_string()
                     on:click=pick(Mode::Edit)>"Edit"</button>
-                <button type="button" class:on=move || panel.mode.get() == Mode::Run
+                <button type="button"
                     aria-pressed=move || (panel.mode.get() == Mode::Run).to_string()
                     on:click=pick(Mode::Run)>"Run"</button>
             </div>
