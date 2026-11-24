@@ -327,8 +327,33 @@ pub fn Workspace() -> impl IntoView {
     // studio controls between them; the canvas re-fits to its half.
     let studio = expect_context::<Studio>();
     let studio_mode = move || studio.studio_mode.get();
+    // A portrait canvas stacks them instead (preview over the controls over program)
+    // when that shows both pictures larger, in a stage much taller than wide. The stage is measured at each resize, which
+    // every dock and studio change also sends (`nudge_canvas`).
+    let stage_row = NodeRef::<html::Div>::new();
+    let stage = RwSignal::new((0.0_f64, 0.0_f64));
+    let measure = move || {
+        if let Some(row) = stage_row.get_untracked() {
+            let size = (
+                f64::from(row.client_width()),
+                f64::from(row.client_height()),
+            );
+            if stage.get_untracked() != size {
+                stage.set(size);
+            }
+        }
+    };
+    let resized = window_event_listener(leptos::ev::resize, move |_| measure());
+    on_cleanup(move || resized.remove());
+    let stacked = Memo::new(move |_| {
+        let stage = stage.get();
+        studio
+            .collection
+            .with(|c| c.as_ref().is_some_and(|c| stacks(c.canvas, stage)))
+    });
     Effect::new(move |_| {
         studio.studio_mode.track();
+        stacked.track();
         nudge_canvas();
     });
     share(dock);
@@ -389,7 +414,7 @@ pub fn Workspace() -> impl IntoView {
                     {zone(Zone::Left)}
                     <div class="ws-centre">
                         {zone(Zone::CanvasTop)}
-                        <div class="stage-row" class:two-up=studio_mode>
+                        <div class="stage-row" node_ref=stage_row class:two-up=studio_mode class:stacked=move || stacked.get()>
                             <div class="stage-pane">
                                 <Show when=studio_mode>
                                     <StageLabel side=Side::Preview />
@@ -415,6 +440,38 @@ pub fn Workspace() -> impl IntoView {
             {zone(Zone::OuterRight)}
         </div>
     }
+}
+
+/// The studio controls' width between preview and program side by side (style.css).
+const SIDE_CONTROLS: f64 = 168.0;
+/// Their height as one row between stacked pictures, about.
+const STACKED_CONTROLS: f64 = 64.0;
+/// A picture's label over it.
+const LABEL: f64 = 24.0;
+/// The margin round each picture, across and down (the monitor's padding).
+const PAD: (f64, f64) = (56.0, 48.0);
+/// How much larger stacked pictures must come out before the stage stacks, so a stage
+/// near the turning point stays side by side, the familiar layout.
+const STACK_GAIN: f64 = 1.1;
+
+/// Whether studio mode stacks preview over program rather than putting them side by
+/// side, in a stage of `stage` CSS pixels (width, height): for a portrait canvas
+/// (taller than wide), when stacked pictures come out larger, which takes a stage much
+/// taller than wide, such as a window on a portrait monitor. A landscape or square
+/// canvas stays side by side, as before. Side by side while the stage is unmeasured.
+pub fn stacks(canvas: jstream_control::protocol::Canvas, stage: (f64, f64)) -> bool {
+    let (width, height) = stage;
+    if canvas.height <= canvas.width || width <= 0.0 || height <= 0.0 {
+        return false;
+    }
+    let fit = |w: f64, h: f64| {
+        ((w - PAD.0) / f64::from(canvas.width))
+            .min((h - LABEL - PAD.1) / f64::from(canvas.height))
+            .max(0.0)
+    };
+    let side = fit((width - SIDE_CONTROLS) / 2.0, height);
+    let stacked = fit(width, (height - STACKED_CONTROLS) / 2.0);
+    stacked > side * STACK_GAIN
 }
 
 /// One zone with its splitter, on the canvas side.
@@ -737,5 +794,31 @@ fn Divider(ui: Ui, zone: Zone, id: u32, zone_ref: NodeRef<html::Section>) -> imp
             on:pointercancel=move |_| end()
             on:lostpointercapture=move |_| end()
         ></button>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stacks;
+    use jstream_control::protocol::Canvas;
+
+    #[test]
+    fn studio_mode_stacks_when_the_pictures_come_out_larger() {
+        let canvas = |width, height| Canvas { width, height };
+        let portrait = canvas(1080, 1920);
+        let landscape = canvas(1920, 1080);
+        // A widescreen stage: side by side, whatever the canvas's shape.
+        assert!(!stacks(landscape, (1300.0, 700.0)));
+        assert!(!stacks(portrait, (1300.0, 700.0)));
+        // A portrait canvas stays side by side in a stage a little taller than wide, where
+        // two tall pictures still fit larger beside each other, and stacks in a tall one.
+        assert!(!stacks(portrait, (900.0, 1100.0)));
+        assert!(stacks(portrait, (700.0, 1800.0)));
+        // A landscape canvas stays side by side, as before, whatever the stage.
+        assert!(!stacks(landscape, (1000.0, 900.0)));
+        assert!(!stacks(landscape, (700.0, 1800.0)));
+        assert!(!stacks(canvas(1080, 1080), (700.0, 1800.0)));
+        // Unmeasured, side by side.
+        assert!(!stacks(portrait, (0.0, 0.0)));
     }
 }

@@ -28,6 +28,7 @@ mod projects;
 mod ptz;
 mod rendering;
 mod sequences;
+mod show_scene;
 mod source_sizes;
 mod sources;
 mod timelines;
