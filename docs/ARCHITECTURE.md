@@ -1383,7 +1383,10 @@ before they were written (82 to 437 stale exports and 7 or 8 garbled frames per 
 the `completion` wait, the `event` design built here, or `event-strict`, there were none,
 and no sync timeouts. Every output decoded. `event` kept the render tick's own work at a
 p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms. A paravirtual GPU's
-timings say nothing about real Apple Silicon, so the run on a Mac is still to come.
+timings say nothing about real Apple Silicon. There is no Mac hardware to run on, so CI's
+macOS runners are the test bed. Three things they can't show stay untested: those
+timings, whether holding webcam buffers starves AVFoundation's pool, and whether
+VideoToolbox still reads a target the ring rewrites (its own retain isn't counted).
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
