@@ -169,7 +169,7 @@ test('Save as pack… writes the shader under a new ID and moves the filter to i
   await editor.getByRole('button', { name: 'Done' }).click();
   await expect(editor).toBeHidden();
   const window = page.getByRole('dialog', { name: 'Filters', exact: true });
-  const amount = window.getByRole('spinbutton').first();
+  const amount = window.locator('.number-field input').first();
   await amount.fill('0.25');
   await amount.press('Tab');
   await window.getByRole('button', { name: 'Edit shader…' }).click();
