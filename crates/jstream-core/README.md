@@ -1936,12 +1936,15 @@ scene draws a `media` file is timed: a jump into it, or within it, seeks every s
 the scene's family draws to that spot (`source.seek`'s `LiveSources::seek`, as of the
 effect's time), and so does an overlay put up partway through its clip (ADR-0210
 decision 9). After each tick the scene of the program clip after the one under the play
-head is the upcoming scene (`State::set_upcoming`, see *Program scene*), so its file is
+head is the upcoming scene (`State::set_upcoming`, see *Program scene*), or at a loop's
+last clip, unless the runner is leaving it (`Runner::leaving`), the clip at the loop's
+start, which the wrap runs to; so its file is
 held at its first frame and the cut to it starts nothing; it clears when the show
 stops. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
-it. A show that starts on the scene already on program restarts every `timer` source
+it, taking its overlays down and stopping its sequences (a deleted show by the plan it
+ran, `Run::plan`). A show that starts on the scene already on program restarts every `timer` source
 that scene draws (`source.restart`), as the cut to it would have.
 `studio.get`'s `show` reports it, and `show.changed` says what it did. `show.play` with
 `rehearse` runs the show on preview instead (ADR-0210 decision 13, `rehearse` in the
@@ -1957,7 +1960,8 @@ a show running, put a scene over program through the internal show scene
 makes the show scene if the collection has none ("Show overlays"), a `scene` source of
 the overlay scene unless one exists ("Overlay: <name>"), and a hidden item of it in the
 show scene, as one engine change that is no client's undo step, and saves the
-collection. Showing or hiding it then goes through `State::set_show_scene_item_shown`,
+collection (if the show scene can't be marked, the change is still logged and announced,
+and no item is returned). Showing or hiding it then goes through `State::set_show_scene_item_shown`,
 so it fades over program on its own, apart from any scene switch: a clip's
 `fade_in_ms` or `fade_out_ms` is a plain fade of that length, and 0 uses the item's own
 show or hide transition. `studio.get`'s `overlays` lists the scenes shown over program.
@@ -1972,8 +1976,9 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 `show.pause` holding show time until `show.continue` or `show.play` plays on,
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
-span and taken down when an edit removes it, the overlay actions with no show, the
-show scene refusing a delete and being heard, the next program clip named upcoming, and
+span and taken down when an edit removes it or the show is deleted, the overlay actions with no show, the
+show scene refusing a delete and being heard, the next program clip named upcoming (the
+loop's first at its last clip), and
 a rehearsal on preview leaving program, its cues and off script alone.
 `src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
 seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
@@ -3497,24 +3502,35 @@ program or of a scene, in H.264, JPEG or PNG, isn't drawn by the hub: once the e
 program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
 under the start lock but never waiting for a start, asking again 200 ms later while an
 output is starting and 5 s later after a stage that failed to open) and holds it while
-such a stream is open. It opens the stream's encoder session (as above, but on the
-hardware encoder for one stream at a time, #1691: a software H.264 encoder can cost a
-whole core for one canvas. `open_staged_h264` asks for hardware `Prefer` while the hub's
-`HardwareSlot` is free and keeps the slot while the session it got is a hardware one;
-every other stream, and any stream when `Prefer` opens software or fails to open, as
-VA-API's does without a software fallback, is opened with `Avoid`. So previews hold at
-most one hardware session, and outputs come first
+such a stream is open. It opens the stream's encoder session, or joins the one another
+stream of the same picture already has: streams of the same scene, or of the program,
+at the same size and rate share one session (`SharedEncode`, listed on the stage in
+`Program::preview_encodes`), so three views of one scene are drawn, read back and
+encoded once. Each stream sends the packets on from its own subscription, which
+starts on a keyframe the session is asked for when it joins, with its own times and
+its own queue; a keyframe one of them asks for goes to all of them. The session
+closes when its last stream lets go, and each stream's sender ends within 20 ms of its
+stream closing (`send_packets`). In `profile.get` each stream reports the shared
+encoder's frames and time, as outputs on one session do
+(`streams_of_the_same_picture_share_one_encoder_session`). The session opens as
+above, but on a hardware encoder for up to four pictures at a time
+(`PREVIEW_HARDWARE_SESSIONS`, #1691): a software H.264 encoder can cost a
+whole core for one canvas. `open_staged_h264` asks for hardware `Prefer` while the stage's
+`HardwareSlot` has a session free and keeps it while the session it got is a hardware one;
+a picture past the four, and any when `Prefer` opens software or fails to open, as
+VA-API's does without a software fallback, is opened with `Avoid`. Outputs come first
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3): the slot
 is the stage's (`Program::preview_hardware`), and an output whose own open wanted a
-hardware encoder and got none, an error or a software one, takes it back
-(`HardwareSlot::reclaim` in `Program::encoders`). The stream holding it sees that on
-the hub's next pass (`Staged::gives_way`), closes its session and opens again with
-`Avoid`, starting on a keyframe; the output waits for that, at most 2 s
-(`PREVIEW_RECLAIM_WAIT`), and opens again, and no stream takes the slot until it has.
-An output that got its hardware encoder the first time leaves the preview's alone, so
-on an encoder with sessions to spare both stay on hardware. While a stream holds the
-slot, `output.status` counts its session in `encoder_sessions` and
-`hardware_sessions`. `one_staged_preview_at_a_time_encodes_on_hardware`,
+hardware encoder and got none, an error or a software one, takes every preview
+hardware session back (`HardwareSlot::reclaim` in `Program::encoders`). The streams
+holding them see that on the hub's next pass (`Staged::gives_way`), close their sessions
+and open again with `Avoid`, sharing as before and starting on a keyframe; the output
+waits for that, at most 2 s (`PREVIEW_RECLAIM_WAIT`), and opens again, and no stream
+takes a hardware session until it has. An output that got its hardware encoder the
+first time leaves the previews' alone, so on an encoder with sessions to spare all
+stay on hardware. `output.status` counts the previews' hardware sessions in
+`encoder_sessions` and `hardware_sessions`.
+`staged_previews_encode_on_hardware_up_to_the_cap`,
 `a_refused_hardware_encoder_falls_back_to_software`,
 `an_output_takes_the_hardware_session_back_from_a_preview`,
 `a_reclaim_of_a_free_or_stuck_slot_returns_at_once_or_at_its_wait`. And for NV12
@@ -4040,9 +4056,9 @@ session is held. An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
 `prefer` still falls back to software when hardware refuses (ADR-0031). Before either
 answer stands, a new video session that wanted a hardware encoder and got none, a
-refusal or a software one, takes back the hardware session a preview stream holds, if
-one does, and opens once more ([Preview streams](#preview-streams)); `output.status`
-counts that preview session with the outputs' until then. A new video
+refusal or a software one, takes back the hardware sessions preview streams hold, if
+any do, and opens once more ([Preview streams](#preview-streams)); `output.status`
+counts those preview sessions with the outputs' until then. A new video
 session that `prefer` opens in software, because the machine lists no hardware encoder
 for the codec or the listed one refused the session at configure, logs a warning
 naming the output it opens for, the encoder and why (`why_software`; #443 case 1), so

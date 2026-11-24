@@ -126,7 +126,8 @@ Contents:
   could pause, a pausing bookmark pauses before anything at its time but a program clip
   starting there, which goes up as it pauses, then the spanning state, then the events), and `continue_`, `back`, `skip`, `go_to`, `jump`, `arm`,
   `off_script`, `back_to_script` and `stop` move it; `start_at_bookmark` starts as a
-  jump to a bookmark would land, with its arrive transition. `pause` holds show time
+  jump to a bookmark would land, with its arrive transition; `looping` and `leaving` say
+  which loop it is in and whether this pass leaves it. `pause` holds show time
   where the play head is by hand (`held`) and stops the sequences it started;
   Continue, or `unpause`, plays on from there, playing them again from where they
   were; program runs on through it and is not sought back. Every move puts up state by

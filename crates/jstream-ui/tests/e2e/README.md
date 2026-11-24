@@ -271,8 +271,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   panel menu; in Connection details the header swallows and a value doesn't, and in About
   a version value and a link don't. A drag from
   a dock tab across the panels, and a double-click on a tab or a caption, select no text,
-  while a double-click in the search field selects its word. File, Edit and View hang
-  flush under the header.
+  while a double-click in the search field selects its word. File, Edit and View drop
+  straight from their buttons, each open button the same colour as its menu.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off, Select all, and New group, which
   groups the selection into "Group 1") and on the margin, which Escape closes; the arrow keys move through a menu, skipping a disabled

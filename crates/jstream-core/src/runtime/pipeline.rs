@@ -1076,6 +1076,8 @@ pub(crate) struct Program {
     /// The one hardware encoder session this stage's preview streams may hold, which
     /// an output takes back when its own open got no hardware encoder.
     preview_hardware: crate::preview::HardwareSlot,
+    /// The encoder sessions this stage's preview streams share, one per picture.
+    preview_encodes: crate::preview::SharedEncodes,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -1107,6 +1109,11 @@ impl Program {
     /// The hardware encoder slot this stage's preview streams share.
     pub(crate) fn preview_hardware(&self) -> &crate::preview::HardwareSlot {
         &self.preview_hardware
+    }
+
+    /// The encoder sessions this stage's preview streams share.
+    pub(crate) fn preview_encodes(&self) -> &crate::preview::SharedEncodes {
+        &self.preview_encodes
     }
 
     /// The encoder sessions for `key`: the open ones, or new ones not yet fed. Call
@@ -2925,6 +2932,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         format,
         latency,
         preview_hardware: crate::preview::HardwareSlot::default(),
+        preview_encodes: crate::preview::SharedEncodes::default(),
         video_taps,
         audio_taps,
         vcam_taps,
