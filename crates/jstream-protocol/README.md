@@ -415,7 +415,8 @@ bound (refusing only an equal one), `hotkey.clear` and `binding.clear` take an o
 collection holds shows: `show.set` and `show.delete`, `state.get`'s `shows`, the `show.*`
 actions that run one, `studio.get`'s `show` and `overlays`, the `overlay.*` actions and
 the `show.changed` event ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md));
-0.178 because the
+0.179 because `profile.get` counts each drawing thread's GPU submits per frame
+(`DrawerProfile`'s `submits`); 0.178 because the
 rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
@@ -2081,7 +2082,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `stats.tick`'s `drops` leave out), since 0.178 the
   size its 3D models were drawn at when the window ended (`model_resolution`, a
   percentage, 100 from an older server) and the frames drawn with them below 100
-  (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  (`model_frames_reduced`), since 0.179 the GPU submits it made per frame (`submits`:
+  each costs the thread a fixed time however little work it carries, and only the
+  compositor's own are counted), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the

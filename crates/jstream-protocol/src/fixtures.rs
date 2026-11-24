@@ -2808,6 +2808,7 @@ fn profile_info() -> ProfileInfo {
             model_resolution: 85,
             model_frames_reduced: 120,
             preview_skipped: 4,
+            submits: ms(42.5),
             phases: PhaseProfile {
                 uploads_ms: ms(1.25),
                 captures_ms: ms(0.5),
