@@ -835,3 +835,19 @@ relied_on = "DXC v1.8.2502's release zip dxc_2025_02_20.zip (SHA-256 70b1913a…
 review_every = "365d"
 status = "ok"
 checked_note = "Downloaded the zip, checked its SHA-256 and the DLLs' hashes, and read the three licence files and ReleaseNotes.md"
+
+[[external]]
+id = "tears-of-steel"
+url = "https://mango.blender.org"
+relied_on = "Tears of Steel, the Blender Foundation's open film, credited as the source of the feature tour's three film stills"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox; the stills' license was read on their Wikimedia Commons pages"
+
+[[external]]
+id = "cc-by-3"
+url = "https://creativecommons.org/licenses/by/3.0/"
+relied_on = "CC BY 3.0, the license of the feature tour's Tears of Steel stills: reuse and adaptation allowed with credit and a link to the license"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"

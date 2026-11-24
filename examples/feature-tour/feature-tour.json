@@ -1516,64 +1516,24 @@
       "items": []
     },
     {
-      "id": "s_make",
-      "name": "Tour 3 · What you make",
-      "folder": "f_tour",
+      "id": "s_feed_lt",
+      "name": "Tour · Feed lower third",
+      "folder": "f_overlays",
       "labels": [
         "tour"
       ],
-      "camera": {
-        "position": {
-          "x": 1074.7506,
-          "y": 494.09976,
-          "z": 1147.5059
-        },
-        "target": {
-          "x": 960.0,
-          "y": 540.0,
-          "z": 0.0
-        },
-        "fov_deg": 45.0,
-        "roll_deg": 0.0
-      },
       "items": [
         {
-          "id": "s_make_i_bd",
-          "source_id": "bd",
+          "id": "flt_i_plate",
+          "source_id": "flt_plate",
           "geometry": {
             "center": {
-              "x": 960.0,
-              "y": 540.0
+              "x": 464.0,
+              "y": 900.0
             },
             "size": {
-              "width": 6144.0,
-              "height": 3456.0
-            },
-            "fit_mode": "fill",
-            "rotation_deg": 0.0,
-            "tilt_deg": 0.0,
-            "turn_deg": 0.0,
-            "depth_px": -2400.0
-          },
-          "crop": {
-            "left": 0,
-            "top": 0,
-            "right": 0,
-            "bottom": 0
-          },
-          "visible": true
-        },
-        {
-          "id": "s_make_i_talk",
-          "source_id": "img_talk_show",
-          "geometry": {
-            "center": {
-              "x": 960.0,
-              "y": 540.0
-            },
-            "size": {
-              "width": 1300.0,
-              "height": 731.25
+              "width": 800.0,
+              "height": 120.0
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -1585,6 +1545,162 @@
             "left": 0,
             "top": 0,
             "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "flt_i_bar",
+          "source_id": "flt_bar",
+          "geometry": {
+            "center": {
+              "x": 88.0,
+              "y": 900.0
+            },
+            "size": {
+              "width": 4.0,
+              "height": 88.0
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "flt_i_kick",
+          "source_id": "flt_kick",
+          "geometry": {
+            "center": {
+              "x": 241.23,
+              "y": 876.0
+            },
+            "size": {
+              "width": 258.45,
+              "height": 30.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "flt_i_title",
+          "source_id": "flt_title",
+          "geometry": {
+            "center": {
+              "x": 389.22,
+              "y": 920.0
+            },
+            "size": {
+              "width": 554.44,
+              "height": 52.0
+            },
+            "fit_mode": "fit",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        }
+      ]
+    },
+    {
+      "id": "s_make",
+      "name": "Tour 3 · Depth of field",
+      "folder": "f_tour",
+      "labels": [
+        "tour"
+      ],
+      "camera": {
+        "position": {
+          "x": 933.6969,
+          "y": 217.96541,
+          "z": 1640.692
+        },
+        "target": {
+          "x": 620.0,
+          "y": 330.0,
+          "z": -600.0
+        },
+        "fov_deg": 45.0,
+        "roll_deg": 0.0,
+        "focus_px": 1662.0,
+        "blur_px": 10.0
+      },
+      "items": [
+        {
+          "id": "mk_i_bd",
+          "source_id": "bd",
+          "geometry": {
+            "center": {
+              "x": 960.0,
+              "y": 540.0
+            },
+            "size": {
+              "width": 7680.0,
+              "height": 4320.0
+            },
+            "fit_mode": "fill",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": -3200.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "mk_i_sky",
+          "source_id": "img_sky",
+          "geometry": {
+            "center": {
+              "x": -560.0,
+              "y": -260.0
+            },
+            "size": {
+              "width": 1500.0,
+              "height": 843.75
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": -1500.0
+          },
+          "crop": {
+            "left": 100,
+            "top": 0,
+            "right": 398,
             "bottom": 0
           },
           "visible": true,
@@ -1613,22 +1729,22 @@
           ]
         },
         {
-          "id": "s_make_c0_i_dim",
-          "source_id": "s_make_c0_dim",
+          "id": "mk_i_tag_sky",
+          "source_id": "mk_tag_sky",
           "geometry": {
             "center": {
-              "x": 960.0,
-              "y": 540.0
+              "x": -1156.77,
+              "y": -711.875
             },
             "size": {
-              "width": 6500.0,
-              "height": 3656.25
+              "width": 258.45,
+              "height": 30.0
             },
-            "fit_mode": "stretch",
+            "fit_mode": "fit",
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 1.0
+            "depth_px": -1500.0
           },
           "crop": {
             "left": 0,
@@ -1636,140 +1752,74 @@
             "right": 0,
             "bottom": 0
           },
-          "visible": false
+          "visible": true
         },
         {
-          "id": "s_make_c0_i_lit",
-          "source_id": "img_talk_show",
+          "id": "mk_i_lab",
+          "source_id": "img_lab",
           "geometry": {
             "center": {
-              "x": 960.0,
-              "y": 540.0
+              "x": 1720.0,
+              "y": 300.0
             },
             "size": {
-              "width": 1300.0,
-              "height": 731.25
+              "width": 960.0,
+              "height": 540.0
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 2.0
+            "depth_px": -700.0
           },
           "crop": {
-            "left": 0,
+            "left": 210,
             "top": 0,
-            "right": 0,
+            "right": 288,
             "bottom": 0
           },
-          "visible": false,
+          "visible": true,
           "effects": [
             {
               "id": "round",
               "kind": "rounded_corners",
               "kind_version": 1,
               "settings": {
-                "border_color": "#00000000",
-                "border_width": 0.0,
-                "radius": 12.0
+                "border_color": "#ffffff12",
+                "border_width": 1.0,
+                "radius": 14.0
               }
-            }
-          ]
-        },
-        {
-          "id": "s_make_c0_i_box",
-          "source_id": "s_make_c0_box",
-          "geometry": {
-            "center": {
-              "x": 960.0,
-              "y": 540.0
             },
-            "size": {
-              "width": 1318.0555,
-              "height": 749.30554
-            },
-            "fit_mode": "stretch",
-            "rotation_deg": 0.0,
-            "tilt_deg": 0.0,
-            "turn_deg": 0.0,
-            "depth_px": 3.0
-          },
-          "crop": {
-            "left": 0,
-            "top": 0,
-            "right": 0,
-            "bottom": 0
-          },
-          "visible": false,
-          "effects": [
-            {
-              "id": "glow",
-              "kind": "glow",
-              "kind_version": 1,
-              "settings": {
-                "color": "#4c8dff59",
-                "radius": 28.0,
-                "strength": 0.5
-              }
-            }
-          ]
-        },
-        {
-          "id": "s_make_c0_i_panel",
-          "source_id": "s_make_c0_panel",
-          "geometry": {
-            "center": {
-              "x": 603.4028,
-              "y": 1051.875
-            },
-            "size": {
-              "width": 586.80554,
-              "height": 229.30556
-            },
-            "fit_mode": "stretch",
-            "rotation_deg": 0.0,
-            "tilt_deg": 0.0,
-            "turn_deg": 0.0,
-            "depth_px": 70.0
-          },
-          "crop": {
-            "left": 0,
-            "top": 0,
-            "right": 0,
-            "bottom": 0
-          },
-          "visible": false,
-          "effects": [
             {
               "id": "shadow",
               "kind": "drop_shadow",
               "kind_version": 1,
               "settings": {
-                "blur": 32.0,
-                "color": "#00000080",
+                "blur": 100.0,
+                "color": "#000000b3",
                 "offset_x": 0.0,
-                "offset_y": 12.0
+                "offset_y": 40.0
               }
             }
           ]
         },
         {
-          "id": "s_make_c0_i_t",
-          "source_id": "s_make_c0_t",
+          "id": "mk_i_tag_lab",
+          "source_id": "mk_tag_lab",
           "geometry": {
             "center": {
-              "x": 497.54,
-              "y": 977.8472
+              "x": 1393.23,
+              "y": 0.0
             },
             "size": {
-              "width": 320.91,
-              "height": 45.14
+              "width": 258.45,
+              "height": 30.0
             },
             "fit_mode": "fit",
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 71.0
+            "depth_px": -700.0
           },
           "crop": {
             "left": 0,
@@ -1777,25 +1827,74 @@
             "right": 0,
             "bottom": 0
           },
-          "visible": false
+          "visible": true
         },
         {
-          "id": "s_make_c0_i_b",
-          "source_id": "s_make_c0_b",
+          "id": "mk_i_robot",
+          "source_id": "img_robot",
           "geometry": {
             "center": {
-              "x": 603.4,
-              "y": 1076.7014
+              "x": 760.0,
+              "y": 520.0
             },
             "size": {
-              "width": 532.64,
-              "height": 101.56
+              "width": 1100.0,
+              "height": 618.75
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 210,
+            "top": 0,
+            "right": 288,
+            "bottom": 0
+          },
+          "visible": true,
+          "effects": [
+            {
+              "id": "round",
+              "kind": "rounded_corners",
+              "kind_version": 1,
+              "settings": {
+                "border_color": "#ffffff12",
+                "border_width": 1.0,
+                "radius": 14.0
+              }
+            },
+            {
+              "id": "shadow",
+              "kind": "drop_shadow",
+              "kind_version": 1,
+              "settings": {
+                "blur": 100.0,
+                "color": "#000000b3",
+                "offset_x": 0.0,
+                "offset_y": 40.0
+              }
+            }
+          ]
+        },
+        {
+          "id": "mk_i_tag_robot",
+          "source_id": "mk_tag_robot",
+          "geometry": {
+            "center": {
+              "x": 378.43,
+              "y": 180.625
+            },
+            "size": {
+              "width": 288.86,
+              "height": 30.0
             },
             "fit_mode": "fit",
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 71.0
+            "depth_px": 0.0
           },
           "crop": {
             "left": 0,
@@ -1803,54 +1902,100 @@
             "right": 0,
             "bottom": 0
           },
-          "visible": false
+          "visible": true
+        },
+        {
+          "id": "mk_i_lt",
+          "source_id": "src_feed_lt",
+          "geometry": {
+            "center": {
+              "x": 990.0,
+              "y": 819.375
+            },
+            "size": {
+              "width": 800.0,
+              "height": 120.0
+            },
+            "fit_mode": "stretch",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 160.0
+          },
+          "crop": {
+            "left": 64,
+            "top": 840,
+            "right": 1056,
+            "bottom": 120
+          },
+          "visible": true
         }
       ]
     },
     {
       "id": "s_make_k0",
-      "name": "Talk show",
+      "name": "Main feed in focus",
       "camera": {
         "position": {
-          "x": 960.0,
-          "y": 670.4514,
-          "z": 1471.1614
+          "x": 878.8246,
+          "y": 484.35263,
+          "z": 1188.2457
         },
         "target": {
-          "x": 960.0,
-          "y": 670.4514,
+          "x": 760.0,
+          "y": 520.0,
           "z": 0.0
         },
         "fov_deg": 45.0,
-        "roll_deg": 0.0
+        "roll_deg": 0.0,
+        "focus_px": 1195.0,
+        "blur_px": 16.0
       },
       "variant_of": "s_make",
-      "overrides": [
-        {
-          "item_id": "s_make_c0_i_b",
-          "visible": true
+      "items": []
+    },
+    {
+      "id": "s_make_k1",
+      "name": "Lab cam in focus",
+      "camera": {
+        "position": {
+          "x": 1533.2756,
+          "y": 316.97495,
+          "z": 148.74695
         },
-        {
-          "item_id": "s_make_c0_i_box",
-          "visible": true
+        "target": {
+          "x": 1720.0,
+          "y": 300.0,
+          "z": -700.0
         },
-        {
-          "item_id": "s_make_c0_i_dim",
-          "visible": true
+        "fov_deg": 45.0,
+        "roll_deg": 0.0,
+        "focus_px": 869.0,
+        "blur_px": 16.0
+      },
+      "variant_of": "s_make",
+      "items": []
+    },
+    {
+      "id": "s_make_k2",
+      "name": "Sky cam in focus",
+      "camera": {
+        "position": {
+          "x": -340.0048,
+          "y": -186.66826,
+          "z": -277.80438
         },
-        {
-          "item_id": "s_make_c0_i_lit",
-          "visible": true
+        "target": {
+          "x": -560.0,
+          "y": -260.0,
+          "z": -1500.0
         },
-        {
-          "item_id": "s_make_c0_i_panel",
-          "visible": true
-        },
-        {
-          "item_id": "s_make_c0_i_t",
-          "visible": true
-        }
-      ],
+        "fov_deg": 45.0,
+        "roll_deg": 0.0,
+        "focus_px": 1244.0,
+        "blur_px": 16.0
+      },
+      "variant_of": "s_make",
       "items": []
     },
     {
@@ -1931,11 +2076,11 @@
           "source_id": "kf_frame_l",
           "geometry": {
             "center": {
-              "x": 845.76,
+              "x": 861.95,
               "y": 862.25
             },
             "size": {
-              "width": 291.52,
+              "width": 323.91,
               "height": 24.0
             },
             "fit_mode": "fit",
@@ -1954,7 +2099,7 @@
         },
         {
           "id": "kf_i_slide",
-          "source_id": "img_talk_show",
+          "source_id": "img_robot",
           "geometry": {
             "center": {
               "x": 1080.5209,
@@ -1962,7 +2107,7 @@
             },
             "size": {
               "width": 673.2292,
-              "height": 378.6914
+              "height": 378.75058
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -1971,10 +2116,10 @@
             "depth_px": 0.0
           },
           "crop": {
-            "left": 64,
-            "top": 100,
-            "right": 448,
-            "bottom": 188
+            "left": 210,
+            "top": 0,
+            "right": 288,
+            "bottom": 0
           },
           "visible": true,
           "effects": [
@@ -1992,7 +2137,7 @@
         },
         {
           "id": "kf_i_host",
-          "source_id": "img_talk_show",
+          "source_id": "img_lab",
           "geometry": {
             "center": {
               "x": 1607.3959,
@@ -2000,7 +2145,7 @@
             },
             "size": {
               "width": 351.25,
-              "height": 197.81937
+              "height": 197.60901
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -2009,10 +2154,10 @@
             "depth_px": 0.0
           },
           "crop": {
-            "left": 852,
-            "top": 100,
-            "right": 64,
-            "bottom": 415
+            "left": 210,
+            "top": 0,
+            "right": 288,
+            "bottom": 0
           },
           "visible": true,
           "effects": [
@@ -2030,7 +2175,7 @@
         },
         {
           "id": "kf_i_guest",
-          "source_id": "img_talk_show",
+          "source_id": "img_sky",
           "geometry": {
             "center": {
               "x": 1607.3959,
@@ -2038,7 +2183,7 @@
             },
             "size": {
               "width": 351.25,
-              "height": 196.8544
+              "height": 197.60901
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -2047,10 +2192,10 @@
             "depth_px": 0.0
           },
           "crop": {
-            "left": 852,
-            "top": 328,
-            "right": 64,
-            "bottom": 188
+            "left": 100,
+            "top": 0,
+            "right": 398,
+            "bottom": 0
           },
           "visible": true,
           "effects": [
@@ -2068,7 +2213,7 @@
         },
         {
           "id": "kf_i_lower",
-          "source_id": "img_talk_show",
+          "source_id": "src_feed_lt",
           "geometry": {
             "center": {
               "x": 975.1458,
@@ -2076,7 +2221,7 @@
             },
             "size": {
               "width": 444.91666,
-              "height": 84.61022
+              "height": 66.7375
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -2086,9 +2231,9 @@
           },
           "crop": {
             "left": 64,
-            "top": 556,
-            "right": 748,
-            "bottom": 75
+            "top": 840,
+            "right": 1056,
+            "bottom": 120
           },
           "visible": true
         },
@@ -2253,11 +2398,11 @@
           "source_id": "kf_row0",
           "geometry": {
             "center": {
-              "x": 198.66,
+              "x": 215.49,
               "y": 520.0
             },
             "size": {
-              "width": 117.31,
+              "width": 150.98,
               "height": 35.0
             },
             "fit_mode": "fit",
@@ -2565,11 +2710,11 @@
           "source_id": "kf_row3",
           "geometry": {
             "center": {
-              "x": 193.02,
+              "x": 221.18,
               "y": 688.0
             },
             "size": {
-              "width": 58.05,
+              "width": 114.36,
               "height": 35.0
             },
             "fit_mode": "fit",
@@ -2838,11 +2983,11 @@
           "source_id": "kf_c2t",
           "geometry": {
             "center": {
-              "x": 155.08,
+              "x": 188.05,
               "y": 847.6
             },
             "size": {
-              "width": 70.16,
+              "width": 136.09,
               "height": 40.0
             },
             "fit_mode": "fit",
@@ -2913,7 +3058,7 @@
             },
             "size": {
               "width": 515.1667,
-              "height": 288.7198
+              "height": 289.82654
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -2939,7 +3084,7 @@
             },
             "size": {
               "width": 515.1667,
-              "height": 290.13507
+              "height": 289.82654
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -2957,7 +3102,7 @@
             },
             "size": {
               "width": 444.91666,
-              "height": 84.61022
+              "height": 66.7375
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -2975,7 +3120,7 @@
             },
             "size": {
               "width": 526.875,
-              "height": 296.3672
+              "height": 296.4135
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3014,7 +3159,7 @@
             },
             "size": {
               "width": 257.58334,
-              "height": 144.3599
+              "height": 144.91327
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3043,7 +3188,7 @@
             },
             "size": {
               "width": 1030.3334,
-              "height": 580.27014
+              "height": 579.6531
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3061,7 +3206,7 @@
             },
             "size": {
               "width": 444.91666,
-              "height": 84.61022
+              "height": 66.7375
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3080,7 +3225,7 @@
             },
             "size": {
               "width": 526.875,
-              "height": 296.3672
+              "height": 296.4135
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3095,7 +3240,7 @@
     },
     {
       "id": "s_kf_k2",
-      "name": "Slide",
+      "name": "Main feed",
       "variant_of": "s_kf",
       "overrides": [
         {
@@ -3119,7 +3264,7 @@
             },
             "size": {
               "width": 222.45833,
-              "height": 124.67445
+              "height": 125.15237
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3145,7 +3290,7 @@
             },
             "size": {
               "width": 222.45833,
-              "height": 125.2856
+              "height": 125.15237
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3163,7 +3308,7 @@
             },
             "size": {
               "width": 444.91666,
-              "height": 84.61022
+              "height": 66.7375
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -3182,7 +3327,7 @@
             },
             "size": {
               "width": 1053.75,
-              "height": 592.7344
+              "height": 592.827
             },
             "fit_mode": "stretch",
             "rotation_deg": 0.0,
@@ -12471,7 +12616,7 @@
     },
     {
       "id": "cap_make",
-      "name": "Lower third · Graphics, built in",
+      "name": "Lower third · Depth of field",
       "folder": "f_overlays",
       "items": [
         {
@@ -12479,11 +12624,11 @@
           "source_id": "cap_make_plate",
           "geometry": {
             "center": {
-              "x": 332.6,
+              "x": 287.8,
               "y": 924.3
             },
             "size": {
-              "width": 473.2,
+              "width": 383.6,
               "height": 119.4
             },
             "fit_mode": "stretch",
@@ -12570,11 +12715,11 @@
           "source_id": "cap_make_eb",
           "geometry": {
             "center": {
-              "x": 251.38,
+              "x": 221.42,
               "y": 896.6
             },
             "size": {
-              "width": 177.97,
+              "width": 118.05,
               "height": 24.0
             },
             "fit_mode": "fit",
@@ -12596,11 +12741,11 @@
           "source_id": "cap_make_t",
           "geometry": {
             "center": {
-              "x": 279.66,
+              "x": 247.15,
               "y": 939.0
             },
             "size": {
-              "width": 315.31,
+              "width": 250.3,
               "height": 52.0
             },
             "fit_mode": "fit",
@@ -14865,7 +15010,7 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 18.0,
-        "text": "WHAT YOU MAKE",
+        "text": "3D SCENES",
         "wrap_width": 0
       }
     },
@@ -14918,7 +15063,7 @@
         "height": 119,
         "radius": 10.0,
         "shape": "rectangle",
-        "width": 473
+        "width": 384
       }
     },
     {
@@ -14948,7 +15093,7 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 40.0,
-        "text": "Graphics, built in",
+        "text": "Depth of field",
         "wrap_width": 0
       }
     },
@@ -15502,6 +15647,110 @@
       "kind_version": 1
     },
     {
+      "id": "flt_bar",
+      "name": "Feed lower third: bar",
+      "kind": {
+        "type": "builtin",
+        "kind": "shape"
+      },
+      "kind_version": 1,
+      "settings": {
+        "angle": 90.0,
+        "border_color": "#ffffffff",
+        "border_width": 0.0,
+        "color": "#4c8dffff",
+        "color2": "#000000ff",
+        "fill": "solid",
+        "height": 88,
+        "radius": 2.0,
+        "shape": "rectangle",
+        "width": 4
+      }
+    },
+    {
+      "id": "flt_kick",
+      "name": "Feed lower third: kicker",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "left",
+        "background": "#00000000",
+        "color": "#8ab4ffff",
+        "face": "bold",
+        "font": {
+          "path": "fonts/IBMPlexMono-SemiBold-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 2.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 22.0,
+        "text": "LIVE  ·  SECTOR 4",
+        "wrap_width": 0
+      }
+    },
+    {
+      "id": "flt_plate",
+      "name": "Feed lower third: plate",
+      "kind": {
+        "type": "builtin",
+        "kind": "shape"
+      },
+      "kind_version": 1,
+      "settings": {
+        "angle": 90.0,
+        "border_color": "#2e333bff",
+        "border_width": 1.0,
+        "color": "#16191edb",
+        "color2": "#000000ff",
+        "fill": "solid",
+        "height": 120,
+        "radius": 10.0,
+        "shape": "rectangle",
+        "width": 800
+      }
+    },
+    {
+      "id": "flt_title",
+      "name": "Feed lower third: title",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "left",
+        "background": "#00000000",
+        "color": "#e6e8ebff",
+        "face": "bold",
+        "font": {
+          "path": "fonts/IBMPlexSans-SemiBold-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 0.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 40.0,
+        "text": "Hover-carrier over the old city",
+        "wrap_width": 0
+      }
+    },
+    {
       "id": "hold_eb",
       "name": "hold: eyebrow",
       "kind": {
@@ -15764,6 +16013,22 @@
       }
     },
     {
+      "id": "img_lab",
+      "name": "Footage: Lab cam (Tears of Steel)",
+      "kind": {
+        "type": "builtin",
+        "kind": "image"
+      },
+      "kind_version": 1,
+      "settings": {
+        "file": {
+          "path": "media/tos-lab.jpg",
+          "root": "collection",
+          "type": "asset"
+        }
+      }
+    },
+    {
       "id": "img_plugin_grant",
       "name": "Screenshot: plugin-grant.jpg",
       "kind": {
@@ -15790,6 +16055,22 @@
       "settings": {
         "file": {
           "path": "media/ptz-panel.jpg",
+          "root": "collection",
+          "type": "asset"
+        }
+      }
+    },
+    {
+      "id": "img_robot",
+      "name": "Footage: Main feed (Tears of Steel)",
+      "kind": {
+        "type": "builtin",
+        "kind": "image"
+      },
+      "kind_version": 1,
+      "settings": {
+        "file": {
+          "path": "media/tos-robot.jpg",
           "root": "collection",
           "type": "asset"
         }
@@ -15844,6 +16125,22 @@
       }
     },
     {
+      "id": "img_sky",
+      "name": "Footage: Sky cam (Tears of Steel)",
+      "kind": {
+        "type": "builtin",
+        "kind": "image"
+      },
+      "kind_version": 1,
+      "settings": {
+        "file": {
+          "path": "media/tos-hovercraft.jpg",
+          "root": "collection",
+          "type": "asset"
+        }
+      }
+    },
+    {
       "id": "img_stream_panel",
       "name": "Screenshot: stream-panel.jpg",
       "kind": {
@@ -15854,22 +16151,6 @@
       "settings": {
         "file": {
           "path": "media/stream-panel.jpg",
-          "root": "collection",
-          "type": "asset"
-        }
-      }
-    },
-    {
-      "id": "img_talk_show",
-      "name": "Screenshot: talk-show.jpg",
-      "kind": {
-        "type": "builtin",
-        "kind": "image"
-      },
-      "kind_version": 1,
-      "settings": {
-        "file": {
-          "path": "media/talk-show.jpg",
           "root": "collection",
           "type": "asset"
         }
@@ -15954,7 +16235,7 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 22.0,
-        "text": "A keyframe overrides each item's place, size, crop, opacity, visibility and effects. Here the slide steps aside.",
+        "text": "A keyframe overrides each item's place, size, crop, opacity, visibility and effects. Here the main feed steps aside.",
         "wrap_width": 512
       }
     },
@@ -16151,7 +16432,7 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 30.0,
-        "text": "Slide",
+        "text": "Main feed",
         "wrap_width": 0
       }
     },
@@ -16255,7 +16536,7 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 18.0,
-        "text": "PROGRAM  ·  scene Interview",
+        "text": "PROGRAM  ·  scene Mission feed",
         "wrap_width": 0
       }
     },
@@ -16323,7 +16604,7 @@
     },
     {
       "id": "kf_row0",
-      "name": "Keyframes: row Interview",
+      "name": "Keyframes: row Mission feed",
       "kind": {
         "type": "builtin",
         "kind": "text"
@@ -16348,13 +16629,13 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 26.0,
-        "text": "Interview",
+        "text": "Mission feed",
         "wrap_width": 0
       }
     },
     {
       "id": "kf_row0k",
-      "name": "Keyframes: row Interview kind",
+      "name": "Keyframes: row Mission feed kind",
       "kind": {
         "type": "builtin",
         "kind": "text"
@@ -16509,7 +16790,7 @@
     },
     {
       "id": "kf_row3",
-      "name": "Keyframes: row Slide",
+      "name": "Keyframes: row Main feed",
       "kind": {
         "type": "builtin",
         "kind": "text"
@@ -16534,13 +16815,13 @@
         "shadow_x": 0.0,
         "shadow_y": 0.0,
         "size": 26.0,
-        "text": "Slide",
+        "text": "Main feed",
         "wrap_width": 0
       }
     },
     {
       "id": "kf_row3k",
-      "name": "Keyframes: row Slide kind",
+      "name": "Keyframes: row Main feed kind",
       "kind": {
         "type": "builtin",
         "kind": "text"
@@ -17191,6 +17472,99 @@
         "radius": 0.0,
         "shape": "rectangle",
         "width": 4
+      }
+    },
+    {
+      "id": "mk_tag_lab",
+      "name": "What you make: Lab cam label",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "left",
+        "background": "#00000000",
+        "color": "#c9ced6ff",
+        "face": "bold",
+        "font": {
+          "path": "fonts/IBMPlexMono-SemiBold-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 2.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 22.0,
+        "text": "CAM 2  ·  LAB CAM",
+        "wrap_width": 0
+      }
+    },
+    {
+      "id": "mk_tag_robot",
+      "name": "What you make: Main feed label",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "left",
+        "background": "#00000000",
+        "color": "#c9ced6ff",
+        "face": "bold",
+        "font": {
+          "path": "fonts/IBMPlexMono-SemiBold-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 2.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 22.0,
+        "text": "CAM 1  ·  MAIN FEED",
+        "wrap_width": 0
+      }
+    },
+    {
+      "id": "mk_tag_sky",
+      "name": "What you make: Sky cam label",
+      "kind": {
+        "type": "builtin",
+        "kind": "text"
+      },
+      "kind_version": 1,
+      "settings": {
+        "align": "left",
+        "background": "#00000000",
+        "color": "#c9ced6ff",
+        "face": "bold",
+        "font": {
+          "path": "fonts/IBMPlexMono-SemiBold-Latin1.ttf",
+          "root": "collection",
+          "type": "asset"
+        },
+        "letter_spacing": 2.0,
+        "outline_color": "#000000ff",
+        "outline_width": 0,
+        "padding": 0,
+        "shadow_blur": 0.0,
+        "shadow_color": "#00000000",
+        "shadow_x": 0.0,
+        "shadow_y": 0.0,
+        "size": 22.0,
+        "text": "CAM 3  ·  SKY CAM",
+        "wrap_width": 0
       }
     },
     {
@@ -19170,131 +19544,6 @@
       }
     },
     {
-      "id": "s_make_c0_b",
-      "name": "Callout: Built-in sources only (text)",
-      "kind": {
-        "type": "builtin",
-        "kind": "text"
-      },
-      "kind_version": 1,
-      "settings": {
-        "align": "left",
-        "background": "#00000000",
-        "color": "#9aa1acff",
-        "face": "regular",
-        "font": {
-          "path": "fonts/IBMPlexSans-Regular-Latin1.ttf",
-          "root": "collection",
-          "type": "asset"
-        },
-        "letter_spacing": 0.0,
-        "outline_color": "#000000ff",
-        "outline_width": 0,
-        "padding": 0,
-        "shadow_blur": 0.0,
-        "shadow_color": "#00000000",
-        "shadow_x": 0.0,
-        "shadow_y": 0.0,
-        "size": 22.0,
-        "text": "A screen share, two guest frames, a lower third, a live clock and a scrolling ticker, with no browser source.",
-        "wrap_width": 472
-      }
-    },
-    {
-      "id": "s_make_c0_box",
-      "name": "Spotlight ring: Built-in sources only",
-      "kind": {
-        "type": "builtin",
-        "kind": "shape"
-      },
-      "kind_version": 1,
-      "settings": {
-        "angle": 90.0,
-        "border_color": "#4c8dffff",
-        "border_width": 2.0,
-        "color": "#00000000",
-        "color2": "#000000ff",
-        "fill": "solid",
-        "height": 664,
-        "radius": 12.0,
-        "shape": "rectangle",
-        "width": 1168
-      }
-    },
-    {
-      "id": "s_make_c0_dim",
-      "name": "Spotlight dim: Built-in sources only",
-      "kind": {
-        "type": "builtin",
-        "kind": "shape"
-      },
-      "kind_version": 1,
-      "settings": {
-        "angle": 90.0,
-        "border_color": "#ffffffff",
-        "border_width": 0.0,
-        "color": "#0506089e",
-        "color2": "#000000ff",
-        "fill": "solid",
-        "height": 36,
-        "radius": 0.0,
-        "shape": "rectangle",
-        "width": 64
-      }
-    },
-    {
-      "id": "s_make_c0_panel",
-      "name": "Callout chip: Built-in sources only",
-      "kind": {
-        "type": "builtin",
-        "kind": "shape"
-      },
-      "kind_version": 1,
-      "settings": {
-        "angle": 90.0,
-        "border_color": "#2e333bff",
-        "border_width": 1.0,
-        "color": "#1f232aff",
-        "color2": "#000000ff",
-        "fill": "solid",
-        "height": 203,
-        "radius": 10.0,
-        "shape": "rectangle",
-        "width": 520
-      }
-    },
-    {
-      "id": "s_make_c0_t",
-      "name": "Callout: Built-in sources only",
-      "kind": {
-        "type": "builtin",
-        "kind": "text"
-      },
-      "kind_version": 1,
-      "settings": {
-        "align": "left",
-        "background": "#00000000",
-        "color": "#e6e8ebff",
-        "face": "bold",
-        "font": {
-          "path": "fonts/IBMPlexSans-SemiBold-Latin1.ttf",
-          "root": "collection",
-          "type": "asset"
-        },
-        "letter_spacing": 0.0,
-        "outline_color": "#000000ff",
-        "outline_width": 0,
-        "padding": 0,
-        "shadow_blur": 0.0,
-        "shadow_color": "#00000000",
-        "shadow_x": 0.0,
-        "shadow_y": 0.0,
-        "size": 30.0,
-        "text": "Built-in sources only",
-        "wrap_width": 0
-      }
-    },
-    {
       "id": "s_plug_c0_b",
       "name": "Callout: Plugins ask, you grant (text)",
       "kind": {
@@ -21066,6 +21315,14 @@
       }
     },
     {
+      "id": "src_feed_lt",
+      "name": "Scene: feed lower third",
+      "kind": {
+        "type": "scene",
+        "scene_id": "s_feed_lt"
+      }
+    },
+    {
       "id": "sting_line",
       "name": "Sting: line",
       "kind": {
@@ -21678,7 +21935,7 @@
         {
           "clip_id": "c_make",
           "scene_id": "s_make",
-          "length_ms": 12500,
+          "length_ms": 23500,
           "preset_id": "fade"
         },
         {
@@ -21778,7 +22035,7 @@
             {
               "clip_id": "cap_sequences",
               "scene_id": "cap_sequences",
-              "start_ms": 115300,
+              "start_ms": 126300,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -21786,7 +22043,7 @@
             {
               "clip_id": "cap_shows",
               "scene_id": "cap_shows",
-              "start_ms": 138800,
+              "start_ms": 149800,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -21794,7 +22051,7 @@
             {
               "clip_id": "cap_cockpit",
               "scene_id": "cap_cockpit",
-              "start_ms": 178800,
+              "start_ms": 189800,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -21802,7 +22059,7 @@
             {
               "clip_id": "cap_keys",
               "scene_id": "cap_keys",
-              "start_ms": 223800,
+              "start_ms": 234800,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -21810,7 +22067,7 @@
             {
               "clip_id": "cap_effects",
               "scene_id": "cap_effects",
-              "start_ms": 241800,
+              "start_ms": 252800,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -21818,7 +22075,7 @@
             {
               "clip_id": "cap_plugins",
               "scene_id": "cap_plugins",
-              "start_ms": 259800,
+              "start_ms": 270800,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -21826,7 +22083,7 @@
             {
               "clip_id": "cap_cameras",
               "scene_id": "cap_cameras",
-              "start_ms": 272300,
+              "start_ms": 283300,
               "length_ms": 3600,
               "fade_in_ms": 500,
               "fade_out_ms": 300
@@ -21855,7 +22112,7 @@
               "clip_id": "bug",
               "scene_id": "s_bug",
               "start_ms": 32000,
-              "length_ms": 283000,
+              "length_ms": 294000,
               "fade_in_ms": 600,
               "fade_out_ms": 300
             }
@@ -21905,198 +22162,210 @@
           "preset_id": "glide"
         },
         {
-          "marker_id": "k_make_home",
+          "marker_id": "k_make_1",
           "at_ms": 70500,
+          "keyframe_id": "s_make_k1",
+          "preset_id": "glide"
+        },
+        {
+          "marker_id": "k_make_2",
+          "at_ms": 76000,
+          "keyframe_id": "s_make_k2",
+          "preset_id": "glide"
+        },
+        {
+          "marker_id": "k_make_home",
+          "at_ms": 81500,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_keyframes_0",
-          "at_ms": 77500,
+          "at_ms": 88500,
           "keyframe_id": "s_kf_k0",
           "preset_id": "layout"
         },
         {
           "marker_id": "k_keyframes_1",
-          "at_ms": 83000,
+          "at_ms": 94000,
           "keyframe_id": "s_kf_k1",
           "preset_id": "layout"
         },
         {
           "marker_id": "k_keyframes_2",
-          "at_ms": 88500,
+          "at_ms": 99500,
           "keyframe_id": "s_kf_k2",
           "preset_id": "layout"
         },
         {
           "marker_id": "k_keyframes_home",
-          "at_ms": 94000,
+          "at_ms": 105000,
           "preset_id": "layout"
         },
         {
           "marker_id": "k_sequences_0",
-          "at_ms": 119000,
+          "at_ms": 130000,
           "keyframe_id": "s_seq_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_sequences_1",
-          "at_ms": 124500,
+          "at_ms": 135500,
           "keyframe_id": "s_seq_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_sequences_2",
-          "at_ms": 130000,
+          "at_ms": 141000,
           "keyframe_id": "s_seq_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_sequences_home",
-          "at_ms": 135500,
+          "at_ms": 146500,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_0",
-          "at_ms": 142500,
+          "at_ms": 153500,
           "keyframe_id": "s_show_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_1",
-          "at_ms": 148000,
+          "at_ms": 159000,
           "keyframe_id": "s_show_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_2",
-          "at_ms": 153500,
+          "at_ms": 164500,
           "keyframe_id": "s_show_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_3",
-          "at_ms": 159000,
+          "at_ms": 170000,
           "keyframe_id": "s_show_k3",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_4",
-          "at_ms": 164500,
+          "at_ms": 175500,
           "keyframe_id": "s_show_k4",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_5",
-          "at_ms": 170000,
+          "at_ms": 181000,
           "keyframe_id": "s_show_k5",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_shows_home",
-          "at_ms": 175500,
+          "at_ms": 186500,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_0",
-          "at_ms": 182500,
+          "at_ms": 193500,
           "keyframe_id": "s_3d_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_1",
-          "at_ms": 188000,
+          "at_ms": 199000,
           "keyframe_id": "s_3d_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_2",
-          "at_ms": 193500,
+          "at_ms": 204500,
           "keyframe_id": "s_3d_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_3",
-          "at_ms": 199000,
+          "at_ms": 210000,
           "keyframe_id": "s_3d_k3",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cockpit_home",
-          "at_ms": 204500,
+          "at_ms": 215500,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_keys_0",
-          "at_ms": 227500,
+          "at_ms": 238500,
           "keyframe_id": "s_keys_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_keys_1",
-          "at_ms": 233000,
+          "at_ms": 244000,
           "keyframe_id": "s_keys_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_keys_home",
-          "at_ms": 238500,
+          "at_ms": 249500,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_effects_0",
-          "at_ms": 245500,
+          "at_ms": 256500,
           "keyframe_id": "s_fx_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_effects_1",
-          "at_ms": 251000,
+          "at_ms": 262000,
           "keyframe_id": "s_fx_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_effects_home",
-          "at_ms": 256500,
+          "at_ms": 267500,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_plugins_0",
-          "at_ms": 263500,
+          "at_ms": 274500,
           "keyframe_id": "s_plug_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_plugins_home",
-          "at_ms": 269000,
+          "at_ms": 280000,
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_0",
-          "at_ms": 276000,
+          "at_ms": 287000,
           "keyframe_id": "s_cam_k0",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_1",
-          "at_ms": 281500,
+          "at_ms": 292500,
           "keyframe_id": "s_cam_k1",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_2",
-          "at_ms": 287000,
+          "at_ms": 298000,
           "keyframe_id": "s_cam_k2",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_3",
-          "at_ms": 292500,
+          "at_ms": 303500,
           "keyframe_id": "s_cam_k3",
           "preset_id": "glide"
         },
         {
           "marker_id": "k_cameras_home",
-          "at_ms": 298000,
+          "at_ms": 309000,
           "preset_id": "glide"
         }
       ],
@@ -22115,7 +22384,7 @@
             },
             {
               "cue_id": "q_link",
-              "at_ms": 207800,
+              "at_ms": 218800,
               "action": {
                 "timeline_id": "link_build",
                 "type": "timeline.play"
@@ -22123,7 +22392,7 @@
             },
             {
               "cue_id": "q_built",
-              "at_ms": 301300,
+              "at_ms": 312300,
               "action": {
                 "timeline_id": "built_build",
                 "type": "timeline.play"
@@ -22131,7 +22400,7 @@
             },
             {
               "cue_id": "q_outro",
-              "at_ms": 315000,
+              "at_ms": 326000,
               "action": {
                 "timeline_id": "outro_glow",
                 "type": "timeline.play"
@@ -22145,7 +22414,7 @@
           "cues": [
             {
               "cue_id": "e_kick0",
-              "at_ms": 103000,
+              "at_ms": 114000,
               "action": {
                 "item_id": "mo_i_impulse",
                 "modifier_id": "kick",
@@ -22154,7 +22423,7 @@
             },
             {
               "cue_id": "e_kick1",
-              "at_ms": 107000,
+              "at_ms": 118000,
               "action": {
                 "item_id": "mo_i_impulse",
                 "modifier_id": "kick",
@@ -22163,7 +22432,7 @@
             },
             {
               "cue_id": "e_kick2",
-              "at_ms": 111000,
+              "at_ms": 122000,
               "action": {
                 "item_id": "mo_i_impulse",
                 "modifier_id": "kick",
@@ -22172,7 +22441,7 @@
             },
             {
               "cue_id": "e_glow_off",
-              "at_ms": 314500,
+              "at_ms": 325500,
               "action": {
                 "channel_id": "glow",
                 "fade_ms": 400,
@@ -22200,7 +22469,7 @@
             {
               "clip_id": "a_motion",
               "source_id": "desk",
-              "start_ms": 99000,
+              "start_ms": 110000,
               "length_ms": 16000,
               "fade_in_ms": 1000,
               "fade_out_ms": 1000,
@@ -22209,7 +22478,7 @@
             {
               "clip_id": "a_thanks",
               "source_id": "desk",
-              "start_ms": 315000,
+              "start_ms": 326000,
               "length_ms": 20000,
               "fade_in_ms": 3000,
               "fade_out_ms": 3000,
@@ -22241,85 +22510,85 @@
         },
         {
           "bookmark_id": "make",
-          "name": "What you make",
+          "name": "Depth of field",
           "at_ms": 61000,
           "pausing": false,
-          "note": "This is the kind of scene you can make. It's the app's own program output.\n\nEverything here is a built-in source: the clock is a timer, and the ticker is text with a scroll filter. No browser source needed."
+          "note": "Not every scene is flat. This one is a 3D scene: three camera feeds on cards at different depths, and the lower third floating in front.\n\nThe scene camera has a depth of field. Watch the focus: the show loads three camera keyframes, and each one moves the camera and pulls focus to a different feed. The others go soft.\n\nThe camera can also autofocus on whatever is in the middle of the frame.\n\n*The footage is from Tears of Steel, the Blender Foundation's open film, under CC BY.*"
         },
         {
           "bookmark_id": "keyframes",
           "name": "Keyframes",
-          "at_ms": 73500,
-          "note": "Now the part I'm most excited about: keyframes.\n\nThis is one scene, called Interview. A keyframe is a saved arrangement of that same scene. It can change where each item sits, its size, crop, opacity, whether it shows, and its effects.\n\nWatch: Two-up. Close-up. Slide. Every item glides at once, and each item can have its own delay. See the small picture land a beat late?\n\nThe show is loading these keyframes right now. A sequence, a hotkey or a MIDI pad can load them too."
+          "at_ms": 84500,
+          "note": "Now the part I'm most excited about: keyframes.\n\nThis is one scene, called Mission feed. A keyframe is a saved arrangement of that same scene. It can change where each item sits, its size, crop, opacity, whether it shows, and its effects.\n\nWatch: Two-up. Close-up. Main feed. Every item glides at once, and each item can have its own delay. See the small picture land a beat late?\n\nThe show is loading these keyframes right now. A sequence, a hotkey or a MIDI pad can load them too."
         },
         {
           "bookmark_id": "motion",
           "name": "Motion",
-          "at_ms": 99000,
+          "at_ms": 110000,
           "pausing": false,
           "note": "Items can also move on their own, with no keyframes at all. These are motion modifiers.\n\nWiggle is seeded noise. Oscillate follows a waveform. Drift is a steady rate. Impulse fires on a cue, and the show is kicking it right now. Audio follows a sound level.\n\nMIDI, live data and channels can drive them too. They work on position, scale, rotation, opacity and effect settings, and on scene cameras."
         },
         {
           "bookmark_id": "sequences",
           "name": "Sequences & channels",
-          "at_ms": 115000,
+          "at_ms": 126000,
           "note": "Sequences move values over time.\n\nA channel is one number. MIDI, live data, keys, cues or a lane on a sequence can move it, and positions, cameras, effects and live settings can follow it.\n\nA sequence has lanes, which are curves on channels, and cues, which are actions on a clock. It can even start itself: when a channel rises, a keyframe loads, a scene shows, or you press a key."
         },
         {
           "bookmark_id": "shows",
           "name": "Shows",
-          "at_ms": 138500,
+          "at_ms": 149500,
           "preset_id": "sting",
           "note": "And this is what's running the whole presentation: a show.\n\nOne timeline, with program, overlay, keyframe, sequence and audio tracks, saved with the project. Bookmarks pause or play through. Loops hold, like a waiting room, until I press Continue.\n\nI can jump to any bookmark, and the studio is set the way playing there would have left it.\n\nAnd the notes I'm reading right now? They're this bookmark's note."
         },
         {
           "bookmark_id": "cockpit",
           "name": "3D cockpit",
-          "at_ms": 178500,
+          "at_ms": 189500,
           "note": "Scenes can be 3D. It's opt in, per scene: give a scene a camera and its items get depth. Most scenes stay 2D.\n\nHere's one example, a glTF cockpit rendered in JStream. Any 2D scene, like a camera feed, can play on the model's monitor.\n\nThe screens show Bitwig, live, over JTunnel. Here the session is simulated. Bitwig sends the clock and tempo, transport, clip grid and scenes, track meters, notes, mixer, device, clip and markers. Pages draw it, and data modifiers map any of it onto the scene. Here the meters drive the cabin lights."
         },
         {
           "bookmark_id": "connected",
           "name": "DAW & web pages",
-          "at_ms": 207500,
+          "at_ms": 218500,
           "note": "JStream connects to your music setup.\n\nJTunnel is a CLAP plugin. It sends a track's audio and MIDI over the local network, and JStream takes the audio as a source and the MIDI as bindings. You accept each sender first.\n\nIn Bitwig, JTunnel also sends the clip grid, transport and device. And a browser source's page can read JStream's clock, scenes, levels, tempo, MIDI and DAW data, each behind its own switch."
         },
         {
           "bookmark_id": "keys",
           "name": "Keys & MIDI",
-          "at_ms": 223500,
+          "at_ms": 234500,
           "continue_after_ms": 12000,
           "note": "Control works one way for everything. Hotkeys, MIDI controllers and tempo sync share one binding system.\n\nA key or a pad runs the same actions the buttons do: switch scenes, load keyframes, play sequences, go live.\n\n*This bookmark continues by itself after 12 seconds.*"
         },
         {
           "bookmark_id": "effects",
           "name": "Effects",
-          "at_ms": 241500,
+          "at_ms": 252500,
           "pausing": false,
           "note": "Effects, quickly. Built-in filters work on sources, items, scenes and outputs. And for anything beyond those, you can write shader sources and filters as WGSL effect packs."
         },
         {
           "bookmark_id": "plugins",
           "name": "Plugins",
-          "at_ms": 259500,
+          "at_ms": 270500,
           "note": "Automation plugins run sandboxed. A plugin only gets the access its manifest asks for and you grant. And if an update asks for more, it stays off until you grant it again."
         },
         {
           "bookmark_id": "cameras",
           "name": "Cameras & going live",
-          "at_ms": 272000,
+          "at_ms": 283000,
           "note": "PTZ cameras: drive them from the panel, recall shots from a key, and map pan, tilt, zoom and focus to MIDI. A scene can carry each camera's shot, so switching the scene aims the cameras.\n\nGoing live: RTMP or RTMPS to YouTube or any service with a stream key, a recording at the same time, and a virtual camera on Windows and Linux. Each stream or recording gets its own encoder, mix and bus.\n\n*The stats panel is from a test engine, so its numbers are illustrative.*"
         },
         {
           "bookmark_id": "built",
           "name": "Under the hood",
-          "at_ms": 301000,
+          "at_ms": 312000,
           "note": "Under the hood.\n\nEverything is an API. The app is just one client of the protocol, so a script, the command line, or an AI agent over MCP can drive almost anything a person can.\n\nIt's Rust, and the real-time audio thread never allocates, locks or blocks. Tests enforce that. It runs headless too. And it's open source, MIT or Apache-2.0."
         },
         {
           "bookmark_id": "thanks",
           "name": "Thanks",
-          "at_ms": 315000,
+          "at_ms": 326000,
           "note": "Thank you! Happy to take questions.\n\n*The Outro loop finishes its pass when you press Continue. Then the show goes back to the Pre-show, ready to run again.*"
         }
       ],
@@ -22334,8 +22603,8 @@
         {
           "loop_id": "outro_loop",
           "name": "Outro",
-          "start_ms": 319000,
-          "end_ms": 331000,
+          "start_ms": 330000,
+          "end_ms": 342000,
           "preset_id": "fade",
           "leave": "finish_pass"
         }
