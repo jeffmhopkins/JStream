@@ -2087,6 +2087,21 @@ changes.
   `scene.drive_camera` for their axis alone while held and 0 on release, Home sends
   `scene.aim_camera` to the stored camera, and a readout reads `scene.camera_aim` every
   300 ms while camera mode is on; none of it is an edit.
+- **Fly mode** (`fly.rs`), camera mode's look-around mode, on F or its button. The stage
+  takes the fly keys (`fly::Move::of_code`, by `KeyboardEvent.code`) before any tool's,
+  holds them in `fly::Keys` until keyup or blur, and while one moves the camera runs a
+  `requestAnimationFrame` loop: each frame `fly::step` moves camera and target together
+  along the view's forward and right axes and the scene's up, and rolls it by
+  `ROLL_DEG_PER_S` (R, outside the held keys, levels it through `fly::level`), at `fly::base_speed` (the
+  scene's `fly::extent`, models first, crossed in `CROSS_SECONDS`) times Shift+wheel's scale
+  (`fly::rescale`; the plain wheel zooms), each frame no longer than `MAX_STEP_S`. A left press locks the pointer
+  on the canvas area, and pointer moves (`movementX`, `movementY`) turn the camera through
+  `fly::look`; unlocked, a left drag does. Both go through the canvas's `turn_camera`,
+  which the wheel uses too: the camera live on output through one `Wheeling` gesture,
+  committed as one undo step once it rests for `WHEEL_SETTLE`. Shift is `Move::Sink`,
+  apart from Z's `Move::Down`: once Shift+wheel shows it is a modifier, it sinks nothing
+  until released, and the camera goes back to where Shift found it if only Shift had
+  moved it since. Fly mode ends with camera mode, letting the keys and the pointer go.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos

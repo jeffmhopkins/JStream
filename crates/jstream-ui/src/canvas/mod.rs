@@ -19,6 +19,7 @@
 
 pub mod camera;
 pub mod crop;
+pub mod fly;
 pub mod group;
 pub mod live;
 pub mod live_aim;
@@ -88,6 +89,33 @@ fn load_camera_controls() -> camera::CameraControls {
         .flatten()
         .and_then(|storage| storage.get_item(CAMERA_CONTROLS_KEY).ok().flatten());
     camera::CameraControls::from_stored(stored.as_deref())
+}
+
+/// Lets the pointer go if the page has locked it, as fly mode does to turn the camera.
+fn release_pointer() {
+    let document = document();
+    if document.pointer_lock_element().is_some() {
+        document.exit_pointer_lock();
+    }
+}
+
+/// Whether the page has locked the pointer.
+fn pointer_locked() -> bool {
+    document().pointer_lock_element().is_some()
+}
+
+/// The page's clock in milliseconds.
+fn now_ms() -> f64 {
+    window().performance().map_or(0.0, |p| p.now())
+}
+
+/// Runs `tick` with the time once a frame for as long as it returns `true`.
+fn each_frame(tick: impl Fn(f64) -> bool + Copy + 'static) {
+    request_animation_frame(move || {
+        if tick(now_ms()) {
+            each_frame(tick);
+        }
+    });
 }
 
 /// Keeps camera mode's mouse bindings in this browser.
@@ -264,6 +292,33 @@ pub fn Canvas() -> impl IntoView {
     Effect::new(move |_| store_camera_controls(camera_controls.get()));
     // What a drag on an item does in a 3D scene besides sliding it on its depth plane.
     let item_pose = RwSignal::new(None::<camera::Pose>);
+    // Fly mode, camera mode's look-around mode (`fly.rs`): the keys fly the camera and
+    // the mouse turns it. The keys held, the wheel's scale of the scene's own speed, the
+    // time of the last frame while the keys fly (`None` when no frame is coming), and
+    // whether a left button is down, which turns the camera when the pointer isn't locked.
+    let flying = RwSignal::new(false);
+    let fly_keys = StoredValue::new(fly::Keys::default());
+    let fly_scale = RwSignal::new(1.0_f32);
+    let fly_frame = StoredValue::new(None::<f64>);
+    let fly_look = StoredValue::new(false);
+    // Whether Shift, held now, has turned the wheel, which makes it a modifier; and the
+    // camera when Shift was pressed, while it alone has moved it since, so a Shift that
+    // turns out to be Shift+wheel's puts back the little it sank.
+    let fly_shifted = StoredValue::new(false);
+    let fly_shift_from = StoredValue::new(None::<SceneCamera>);
+    // Fly mode is part of camera mode: it ends with it, letting the keys and the mouse go.
+    Effect::new(move |_| {
+        if !camera_mode.get() && flying.get_untracked() {
+            flying.set(false);
+        }
+    });
+    Effect::new(move |_| {
+        if !flying.get() {
+            fly_keys.set_value(fly::Keys::default());
+            fly_look.set_value(false);
+            release_pointer();
+        }
+    });
     // A 2D scene has neither: leave them when the canvas stops showing a 3D scene, so
     // Escape and the move tool there work as ever.
     Effect::new(move |_| {
@@ -880,6 +935,186 @@ pub fn Canvas() -> impl IntoView {
             }));
         };
 
+    // Moves the shown 3D scene's camera by `change`, live on output, as one turn that
+    // commits as one undo step once the camera rests for `WHEEL_SETTLE`: a wheel turn, or
+    // a flight in fly mode. `false` when no 3D scene is shown.
+    let turn_camera = move |change: &dyn Fn(
+        SceneCamera,
+        jstream_control::protocol::Canvas,
+    ) -> SceneCamera|
+          -> bool {
+        let Some(current) = layout.get_untracked() else {
+            return false;
+        };
+        let Some(scene) = shown_scene(&current).cloned() else {
+            return false;
+        };
+        let Some(camera) = camera_preview.with_untracked(|p| {
+            camera::Preview::camera_in(p.as_ref(), Some(&scene), current.camera)
+        }) else {
+            return false;
+        };
+        if wheeling.with_value(|w| w.as_ref().is_some_and(|w| w.scene != scene)) {
+            settle_wheel();
+        }
+        let moved = change(camera, current.canvas);
+        if moved == camera {
+            return true;
+        }
+        if wheeling.with_value(Option::is_none) {
+            let gesture = session.and_then(|session| {
+                session.get().map(|open| {
+                    let id = GestureId::new(studio.fresh_id(&open, "wheel"));
+                    live::Live::new(id, scene.clone(), session, problem)
+                })
+            });
+            wheeling.set_value(Some(Wheeling {
+                scene: scene.clone(),
+                start: camera,
+                live: gesture,
+                turn: 0,
+            }));
+        }
+        camera_preview.set(Some(camera::Preview {
+            scene,
+            camera: moved,
+        }));
+        let turn = wheeling
+            .try_update_value(|w| {
+                w.as_mut().map(|w| {
+                    if let Some(l) = &w.live {
+                        l.show_camera(moved);
+                    }
+                    w.turn += 1;
+                    w.turn
+                })
+            })
+            .flatten();
+        set_timeout(
+            move || {
+                if wheeling.with_value(|w| w.as_ref().map(|w| w.turn)) == turn {
+                    settle_wheel();
+                }
+            },
+            WHEEL_SETTLE,
+        );
+        true
+    };
+
+    // In camera mode the wheel zooms or dollies the camera, live on output, and the
+    // turn commits as one undo step once the wheel rests. In fly mode it sets how fast
+    // the camera flies.
+    let on_wheel = move |event: ev::WheelEvent| {
+        if !camera_mode.get_untracked() || drag.with_value(Option::is_some) {
+            return;
+        }
+        // A line or a page of scrolling, as pixels.
+        let delta = match event.delta_mode() {
+            1 => event.delta_y() * 16.0,
+            2 => event.delta_y() * 400.0,
+            _ => event.delta_y(),
+        } as f32;
+        // In fly mode the wheel zooms and Shift+wheel sets the speed. That Shift is a
+        // modifier, not a key that sinks the camera: let it go until Shift is released.
+        if flying.get_untracked() {
+            if event.shift_key() {
+                event.prevent_default();
+                fly_shifted.set_value(true);
+                fly_keys.update_value(|keys| keys.release(fly::Move::Sink));
+                if let Some(from) = fly_shift_from.try_update_value(Option::take).flatten() {
+                    turn_camera(&|_, _| from);
+                }
+                // Some systems turn Shift+wheel into a sideways scroll.
+                let delta = if delta == 0.0 {
+                    event.delta_x() as f32
+                } else {
+                    delta
+                };
+                fly_scale.update(|scale| *scale = fly::rescale(*scale, delta));
+                return;
+            }
+            if turn_camera(&|camera, _| camera::zoom(camera, delta)) {
+                event.prevent_default();
+            }
+            return;
+        }
+        let kind = camera_controls.get_untracked().wheel(event.shift_key());
+        if turn_camera(&|camera, _| camera::wheel(kind, camera, delta)) {
+            event.prevent_default();
+        }
+    };
+
+    // One frame of flight: the held keys move the camera for the time since the last
+    // frame, at the scene's own speed scaled by the wheel. `false` once no key moves it,
+    // which ends the frames.
+    let fly_tick = move |now: f64| -> bool {
+        let keys = fly_keys.get_value();
+        let Some(last) = fly_frame.get_value() else {
+            return false;
+        };
+        if !flying.get_untracked() || !keys.moving() || drag.with_value(Option::is_some) {
+            fly_frame.set_value(None);
+            return false;
+        }
+        fly_frame.set_value(Some(now));
+        let seconds = ((now - last) / 1000.0) as f32;
+        let Some(speed) = layout.with_untracked(|l| {
+            let l = l.as_ref()?;
+            let extent = fly::extent(
+                l.items
+                    .iter()
+                    .filter(|item| item.visible)
+                    .filter_map(|item| Some((item.geometry.as_ref()?, &item.shape))),
+            );
+            Some(fly::base_speed(extent, l.canvas))
+        }) else {
+            fly_frame.set_value(None);
+            return false;
+        };
+        let speed = speed * fly_scale.get_untracked();
+        if !turn_camera(&|camera, canvas| fly::step(camera, canvas, keys, speed, seconds)) {
+            fly_frame.set_value(None);
+            return false;
+        }
+        true
+    };
+    // Holds or lets go a fly key, starting the frames when one starts moving the camera.
+    let fly_key = move |key: fly::Move, down: bool| {
+        // Shift that has set the speed sinks nothing until it is released.
+        if key == fly::Move::Sink {
+            if !down {
+                fly_shifted.set_value(false);
+                fly_shift_from.set_value(None);
+            } else if fly_shifted.get_value() {
+                return;
+            } else if !fly_keys.get_value().moving() && fly_shift_from.with_value(Option::is_none) {
+                turn_camera(&|camera, _| {
+                    fly_shift_from.set_value(Some(camera));
+                    camera
+                });
+            }
+        } else if down {
+            fly_shift_from.set_value(None);
+        }
+        fly_keys.update_value(|keys| {
+            if down {
+                keys.press(key);
+            } else {
+                keys.release(key);
+            }
+        });
+        if down && fly_keys.get_value().moving() && fly_frame.get_value().is_none() {
+            fly_frame.set_value(Some(now_ms()));
+            each_frame(fly_tick);
+        }
+    };
+    // Turns the camera where it stands by a mouse move in fly mode.
+    let fly_turn = move |dx: f32, dy: f32| {
+        if dx != 0.0 || dy != 0.0 {
+            turn_camera(&|camera, _| fly::look(camera, dx, dy));
+        }
+    };
+
     let on_down = move |event: ev::PointerEvent| {
         let Some((fit, point)) = pointer_at(&event) else {
             return;
@@ -887,6 +1122,23 @@ pub fn Canvas() -> impl IntoView {
         let Some(current) = layout.get_untracked() else {
             return;
         };
+        // In fly mode a left press locks the pointer, so the mouse turns the camera;
+        // where the page may not lock it, a left drag turns it.
+        if flying.get_untracked() && current.camera.is_some() {
+            event.prevent_default();
+            if let Some(element) = stage.get_untracked() {
+                let _focused = element.focus();
+            }
+            if event.button() == 0 {
+                fly_look.set_value(true);
+                if !pointer_locked()
+                    && let Some(element) = area.get_untracked()
+                {
+                    element.request_pointer_lock();
+                }
+            }
+            return;
+        }
         // A wheel turn still settling is committed before anything else moves.
         settle_wheel();
         // In camera mode in a 3D scene every button drags the camera.
@@ -1116,6 +1368,14 @@ pub fn Canvas() -> impl IntoView {
     };
 
     let on_move = move |event: ev::PointerEvent| {
+        // In fly mode the mouse turns the camera while the pointer is locked, or while
+        // the left button is down where it isn't.
+        if flying.get_untracked() {
+            if pointer_locked() || (fly_look.get_value() && event.buttons() & 1 != 0) {
+                fly_turn(event.movement_x() as f32, event.movement_y() as f32);
+            }
+            return;
+        }
         let Some((fit, point)) = pointer_at(&event) else {
             return;
         };
@@ -1326,74 +1586,6 @@ pub fn Canvas() -> impl IntoView {
         }
     };
 
-    // In camera mode the wheel zooms or dollies the camera, live on output, and the
-    // turn commits as one undo step once the wheel rests.
-    let on_wheel = move |event: ev::WheelEvent| {
-        if !camera_mode.get_untracked() || drag.with_value(Option::is_some) {
-            return;
-        }
-        let Some(current) = layout.get_untracked() else {
-            return;
-        };
-        let Some(scene) = shown_scene(&current).cloned() else {
-            return;
-        };
-        let Some(camera) = camera_preview.with_untracked(|p| {
-            camera::Preview::camera_in(p.as_ref(), Some(&scene), current.camera)
-        }) else {
-            return;
-        };
-        event.prevent_default();
-        if wheeling.with_value(|w| w.as_ref().is_some_and(|w| w.scene != scene)) {
-            settle_wheel();
-        }
-        // A line or a page of scrolling, as pixels.
-        let delta = match event.delta_mode() {
-            1 => event.delta_y() * 16.0,
-            2 => event.delta_y() * 400.0,
-            _ => event.delta_y(),
-        } as f32;
-        let kind = camera_controls.get_untracked().wheel(event.shift_key());
-        let moved = camera::wheel(kind, camera, delta);
-        if wheeling.with_value(Option::is_none) {
-            let gesture = session.and_then(|session| {
-                session.get().map(|open| {
-                    let id = GestureId::new(studio.fresh_id(&open, "wheel"));
-                    live::Live::new(id, scene.clone(), session, problem)
-                })
-            });
-            wheeling.set_value(Some(Wheeling {
-                scene: scene.clone(),
-                start: camera,
-                live: gesture,
-                turn: 0,
-            }));
-        }
-        camera_preview.set(Some(camera::Preview {
-            scene,
-            camera: moved,
-        }));
-        let turn = wheeling
-            .try_update_value(|w| {
-                w.as_mut().map(|w| {
-                    if let Some(l) = &w.live {
-                        l.show_camera(moved);
-                    }
-                    w.turn += 1;
-                    w.turn
-                })
-            })
-            .flatten();
-        set_timeout(
-            move || {
-                if wheeling.with_value(|w| w.as_ref().map(|w| w.turn)) == turn {
-                    settle_wheel();
-                }
-            },
-            WHEEL_SETTLE,
-        );
-    };
-
     // Saves the camera the canvas shows as a new keyframe scene of the shown scene (or,
     // on a keyframe, of its parent) with that camera as its own, in one undo step, and
     // selects it: frame a shot, save it, frame the next.
@@ -1467,6 +1659,20 @@ pub fn Canvas() -> impl IntoView {
     let on_key = move |event: ev::KeyboardEvent| {
         let key = event.key();
         let command = event.ctrl_key() || event.meta_key();
+        // In fly mode the fly keys fly, before any tool's key (D is the Depth tool's),
+        // and R levels the camera (not the Turn tool).
+        if flying.get_untracked() && in_3d() && !command && !event.alt_key() {
+            if let Some(fly_move) = fly::Move::of_code(&event.code()) {
+                event.prevent_default();
+                fly_key(fly_move, true);
+                return;
+            }
+            if event.code() == "KeyR" {
+                event.prevent_default();
+                turn_camera(&|camera, _| fly::level(camera));
+                return;
+            }
+        }
         match key.as_str() {
             // Ctrl+D duplicates as a reference, Ctrl+Shift+D as a clone (KB-04).
             "d" | "D" if command => {
@@ -1527,6 +1733,17 @@ pub fn Canvas() -> impl IntoView {
             "k" | "K" if !command && !event.alt_key() && in_3d() => {
                 camera_mode.update(|on| *on = !*on);
             }
+            // Fly mode, in camera mode: F turns it on or off.
+            "f" | "F" if !command && !event.alt_key() && in_3d() => {
+                if flying.get_untracked() {
+                    flying.set(false);
+                } else {
+                    camera_mode.set(true);
+                    flying.set(true);
+                }
+            }
+            // Enter saves the view as a keyframe while flying.
+            "Enter" if flying.get_untracked() && in_3d() => save_view(),
             "d" | "D" if !command && !event.alt_key() && in_3d() => {
                 camera_mode.set(false);
                 item_pose.set(Some(camera::Pose::Depth));
@@ -1536,6 +1753,9 @@ pub fn Canvas() -> impl IntoView {
                 item_pose.set(Some(camera::Pose::Turn));
             }
             "Escape" if drag.with_value(Option::is_some) => end(false),
+            // Esc leaves fly mode before camera mode. A locked pointer's Esc only frees
+            // the pointer: the browser keeps that one.
+            "Escape" if flying.get_untracked() && in_3d() => flying.set(false),
             "Escape" if camera_mode.get_untracked() && in_3d() => camera_mode.set(false),
             "Escape" => {
                 crop_mode.set(false);
@@ -1565,6 +1785,14 @@ pub fn Canvas() -> impl IntoView {
             _ => return,
         }
         event.prevent_default();
+    };
+
+    // A fly key let go stops its move. Released whatever mode is on, so leaving fly
+    // mode with a key held never leaves it held.
+    let on_key_up = move |event: ev::KeyboardEvent| {
+        if let Some(fly_move) = fly::Move::of_code(&event.code()) {
+            fly_key(fly_move, false);
+        }
     };
 
     // A double click on an item selects it alone and opens its properties.
@@ -2003,7 +2231,13 @@ pub fn Canvas() -> impl IntoView {
             })
         }) {
             let (width, height) = canvas_size();
-            let text = if camera_mode.get() {
+            let text = if flying.get() {
+                format!(
+                    "{}  · fly ×{:.2} · W A S D, Space up, Shift down, Q E roll, R level, Shift+wheel speed, click to look, Enter saves the view",
+                    camera::readout(camera),
+                    fly_scale.get()
+                )
+            } else if camera_mode.get() {
                 format!("{}  · camera mode", camera::readout(camera))
             } else {
                 camera::readout(camera)
@@ -2229,7 +2463,10 @@ pub fn Canvas() -> impl IntoView {
                     hovered.set(None);
                 }
             }
-            on:pointerup=move |_| end(true)
+            on:pointerup=move |_| {
+                fly_look.set_value(false);
+                end(true)
+            }
             on:pointercancel=move |_| end(false)
             on:lostpointercapture=move |_| end(true)
             on:dblclick=on_double
@@ -2242,6 +2479,8 @@ pub fn Canvas() -> impl IntoView {
                 tabindex="0"
                 aria-label=move || format!("Scene canvas, {}", scene_name())
                 on:keydown=on_key
+                on:keyup=on_key_up
+                on:blur=move |_| fly_keys.set_value(fly::Keys::default())
             >
                 <canvas
                     node_ref=screen
@@ -2404,7 +2643,33 @@ pub fn Canvas() -> impl IntoView {
                             <span class="canvas-tool-gap" aria-hidden="true"></span>
                             <button
                                 class="canvas-tool canvas-tool-text"
-                                title="Save this view as a new keyframe scene with its own camera"
+                                aria-label="Fly mode"
+                                aria-pressed=move || pressed(flying.get())
+                                title="Fly (F) · look around: W A S D move, Space goes up and Shift (or Z) down, Q and E roll, R levels, the wheel zooms and Shift+wheel sets the speed · click to look with the mouse, Esc frees it, Esc again leaves fly mode"
+                                on:click=move |_| {
+                                    flying.update(|on| *on = !*on);
+                                    if let Some(element) = stage.get_untracked() {
+                                        let _focused = element.focus();
+                                    }
+                                }
+                            >
+                                "Fly"
+                            </button>
+                            {move || flying.get().then(|| view! {
+                                <button
+                                    class="canvas-tool canvas-tool-text"
+                                    title="Level (R) · roll the camera back to 0, so the scene's up is up again"
+                                    on:click=move |_| {
+                                        turn_camera(&|camera, _| fly::level(camera));
+                                    }
+                                >
+                                    "Level"
+                                </button>
+                            })}
+                            <span class="canvas-tool-gap" aria-hidden="true"></span>
+                            <button
+                                class="canvas-tool canvas-tool-text"
+                                title="Save this view as a new keyframe scene with its own camera (Enter while flying)"
                                 on:click=move |_| save_view()
                             >
                                 "◆ Save view"
