@@ -63,6 +63,10 @@ pub enum Event {
         /// (0.157): a change of depth alone is a size change too.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         depth: Option<u32>,
+        /// Its length, as [`SourceSize::duration_ms`](crate::SourceSize::duration_ms)
+        /// reports it (since 0.177): the length becoming known is a size change too.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
     },
     /// The scene on program or on preview changed: after a `scene.switch` or a
     /// `studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives
@@ -343,7 +347,7 @@ pub enum Event {
         pass: u64,
     },
     /// A show started, paused, continued, jumped, looped, went off script, ended or
-    /// stopped (ADR-0210, since 0.177): never once a frame. Running a show is studio
+    /// stopped (ADR-0210, since 0.179): never once a frame. Running a show is studio
     /// state, so it carries no `rev`; `studio.get` reports the running show in full.
     #[serde(rename = "show.changed")]
     ShowChanged {

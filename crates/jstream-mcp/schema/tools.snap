@@ -648,6 +648,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -1393,7 +1402,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -1422,7 +1431,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+                "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
                 "properties": {
                   "type": {
                     "const": "show.stop",
@@ -1435,7 +1444,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.pause",
@@ -1448,7 +1457,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -1461,7 +1470,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.back",
@@ -1474,7 +1483,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.skip",
@@ -1487,7 +1496,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -1510,7 +1519,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
                 "properties": {
                   "number": {
                     "description": "The bookmark's place in the show, 1 to 8.",
@@ -1531,7 +1540,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to, in milliseconds of show time.",
@@ -1551,7 +1560,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -1573,7 +1582,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1591,7 +1600,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1609,7 +1618,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1641,6 +1650,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -5237,7 +5271,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+                "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
                 "properties": {
                   "show": {
                     "$ref": "#/$defs/ShowInfo",
@@ -6268,7 +6302,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -8415,7 +8449,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "note": {
-                "description": "A note for the operator, at most 1024 bytes. Omitted means empty.",
+                "description": "The bookmark's show notes for the operator, in Markdown (CommonMark), at most\n16 KiB, which the Run view shows in an expandable panel. Omitted means empty.",
                 "type": "string"
               },
               "pausing": {
@@ -8546,7 +8580,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -10599,6 +10633,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -11344,7 +11387,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -11373,7 +11416,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+                "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
                 "properties": {
                   "type": {
                     "const": "show.stop",
@@ -11386,7 +11429,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.pause",
@@ -11399,7 +11442,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -11412,7 +11455,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.back",
@@ -11425,7 +11468,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.skip",
@@ -11438,7 +11481,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -11461,7 +11504,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
                 "properties": {
                   "number": {
                     "description": "The bookmark's place in the show, 1 to 8.",
@@ -11482,7 +11525,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to, in milliseconds of show time.",
@@ -11502,7 +11545,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -11524,7 +11567,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -11542,7 +11585,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -11560,7 +11603,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -11592,6 +11635,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -15188,7 +15256,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+                "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
                 "properties": {
                   "show": {
                     "$ref": "#/$defs/ShowInfo",
@@ -16219,7 +16287,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -18366,7 +18434,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "note": {
-                "description": "A note for the operator, at most 1024 bytes. Omitted means empty.",
+                "description": "The bookmark's show notes for the operator, in Markdown (CommonMark), at most\n16 KiB, which the Run view shows in an expandable panel. Omitted means empty.",
                 "type": "string"
               },
               "pausing": {
@@ -18497,7 +18565,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -23397,6 +23465,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -24142,7 +24219,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -24171,7 +24248,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+                "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
                 "properties": {
                   "type": {
                     "const": "show.stop",
@@ -24184,7 +24261,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.pause",
@@ -24197,7 +24274,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -24210,7 +24287,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.back",
@@ -24223,7 +24300,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.skip",
@@ -24236,7 +24313,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -24259,7 +24336,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
                 "properties": {
                   "number": {
                     "description": "The bookmark's place in the show, 1 to 8.",
@@ -24280,7 +24357,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to, in milliseconds of show time.",
@@ -24300,7 +24377,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -24322,7 +24399,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -24340,7 +24417,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -24358,7 +24435,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -24390,6 +24467,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -27986,7 +28088,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+                "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
                 "properties": {
                   "show": {
                     "$ref": "#/$defs/ShowInfo",
@@ -29017,7 +29119,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -31164,7 +31266,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "note": {
-                "description": "A note for the operator, at most 1024 bytes. Omitted means empty.",
+                "description": "The bookmark's show notes for the operator, in Markdown (CommonMark), at most\n16 KiB, which the Run view shows in an expandable panel. Omitted means empty.",
                 "type": "string"
               },
               "pausing": {
@@ -31295,7 +31397,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -35790,6 +35892,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -36535,7 +36646,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -36564,7 +36675,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+                "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
                 "properties": {
                   "type": {
                     "const": "show.stop",
@@ -36577,7 +36688,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.pause",
@@ -36590,7 +36701,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -36603,7 +36714,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.back",
@@ -36616,7 +36727,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.skip",
@@ -36629,7 +36740,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -36652,7 +36763,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
                 "properties": {
                   "number": {
                     "description": "The bookmark's place in the show, 1 to 8.",
@@ -36673,7 +36784,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to, in milliseconds of show time.",
@@ -36693,7 +36804,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -36715,7 +36826,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -36733,7 +36844,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -36751,7 +36862,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -36783,6 +36894,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -40379,7 +40515,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+                "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
                 "properties": {
                   "show": {
                     "$ref": "#/$defs/ShowInfo",
@@ -41406,7 +41542,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -43547,7 +43683,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "note": {
-                "description": "A note for the operator, at most 1024 bytes. Omitted means empty.",
+                "description": "The bookmark's show notes for the operator, in Markdown (CommonMark), at most\n16 KiB, which the Run view shows in an expandable panel. Omitted means empty.",
                 "type": "string"
               },
               "pausing": {
@@ -43678,7 +43814,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -45723,7 +45859,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `overlay` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -45741,7 +45877,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -45759,7 +45895,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -49032,6 +49168,15 @@ source: crates/jstream-mcp/src/tests.rs
                       "null"
                     ]
                   },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "reflection_probes": {
                     "description": "Whether reflection probes capture, or left out to keep it (since 0.165).",
                     "type": [
@@ -49777,7 +49922,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -49806,7 +49951,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+                "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
                 "properties": {
                   "type": {
                     "const": "show.stop",
@@ -49819,7 +49964,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.pause",
@@ -49832,7 +49977,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -49845,7 +49990,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.back",
@@ -49858,7 +50003,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.skip",
@@ -49871,7 +50016,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -49894,7 +50039,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
                 "properties": {
                   "number": {
                     "description": "The bookmark's place in the show, 1 to 8.",
@@ -49915,7 +50060,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to, in milliseconds of show time.",
@@ -49935,7 +50080,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -49957,7 +50102,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -49975,7 +50120,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -49993,7 +50138,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -50025,6 +50170,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -53621,7 +53791,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+                "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
                 "properties": {
                   "show": {
                     "$ref": "#/$defs/ShowInfo",
@@ -54652,7 +54822,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -56799,7 +56969,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "note": {
-                "description": "A note for the operator, at most 1024 bytes. Omitted means empty.",
+                "description": "The bookmark's show notes for the operator, in Markdown (CommonMark), at most\n16 KiB, which the Run view shows in an expandable panel. Omitted means empty.",
                 "type": "string"
               },
               "pausing": {
@@ -56930,7 +57100,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -58405,7 +58575,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `show` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+                "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
                 "properties": {
                   "show": {
                     "$ref": "#/$defs/ShowInfo",
@@ -58441,7 +58611,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -58470,7 +58640,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+                "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
                 "properties": {
                   "type": {
                     "const": "show.stop",
@@ -58483,7 +58653,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.pause",
@@ -58496,7 +58666,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -58509,7 +58679,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.back",
@@ -58522,7 +58692,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.skip",
@@ -58535,7 +58705,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -58558,7 +58728,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
                 "properties": {
                   "number": {
                     "description": "The bookmark's place in the show, 1 to 8.",
@@ -58579,7 +58749,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to, in milliseconds of show time.",
@@ -58599,7 +58769,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -58637,7 +58807,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.restart` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.restart` (action), `source.seek` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioFollow": {
@@ -58993,6 +59163,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Lists the collection's sources, ordered by ID. Sources have no display order of\ntheir own.",
                 "properties": {
                   "type": {
@@ -59149,6 +59344,15 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "max_probe_resolution": {
                     "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -59774,6 +59978,15 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "max_probe_resolution": {
                     "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.165). `studio.set_rendering` refuses any other size.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "model_resolution": {
+                    "description": "How many pixels 3D models are drawn with, one of [`MODEL_RESOLUTIONS`] (0 lets\nthe engine choose), or left out to keep it (since 0.178). `studio.set_rendering`\nrefuses any other value.",
                     "format": "uint32",
                     "minimum": 0,
                     "type": [
@@ -60526,7 +60739,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
+                "description": "Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,\nas a jump there would land. Of the show that runs, paused by `show.pause`, with no\n`bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one\nrunning, which emits `show.changed` (`stopped`). Running is studio state like the\nprogram scene: it changes no `rev`, is never undone or saved, `studio.get` reports\nit in `show`, and it emits `show.changed` (`started`). Fails with `not_found`\n(entity `show`) for a show the collection doesn't hold, and with\n`invalid_argument` at `bookmark_id` for one the show doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark to start at. Omitted for the show's start.",
@@ -60555,7 +60768,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops the running show where it is (ADR-0210, since 0.177): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
+                "description": "Stops the running show where it is (ADR-0210, since 0.179): program keeps what is\non it, and the sequences the show started stop, while ones started by hand or a\ntrigger play on. Emits `show.changed` (`stopped`). With no show running it\nsucceeds and emits nothing.",
                 "properties": {
                   "type": {
                     "const": "show.stop",
@@ -60568,7 +60781,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
+                "description": "Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play\nhead holds, and program keeps what is on it, as at a pausing bookmark.\n`show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on\nfrom there. `studio.get` reports it `paused` with no `bookmark_id`. Emits\n`show.changed` (`paused`). With no show running, or one already paused or off\nscript, it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.pause",
@@ -60581,7 +60794,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
+                "description": "Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a\npausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;\noff script, it goes on to the next clip; in a loop, it leaves as the loop's\n`leave` says; playing, it jumps to the next pausing bookmark, applying state as any\njump does. Ignored while a transition plays, so a double press can't skip a\nbookmark. Emits `show.changed`. With no show running it succeeds and does\nnothing.",
                 "properties": {
                   "type": {
                     "const": "show.continue",
@@ -60594,7 +60807,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show back to the pausing bookmark before its play head\n(ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits\n`show.changed` (`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.back",
@@ -60607,7 +60820,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.177), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
+                "description": "Jumps the running show to the next pausing bookmark without playing what is\nbetween (ADR-0210, since 0.179), and waits there. Emits `show.changed`\n(`jumped`). With no show running it succeeds and does nothing.",
                 "properties": {
                   "type": {
                     "const": "show.skip",
@@ -60620,7 +60833,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
+                "description": "Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):\nthe state there is what playing there would have left (decision 6), and the\ntransition is the bookmark's own. It acts only while that show runs, so a key\nbound to a bookmark does nothing during another show; with that show not running\nit succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with\n`not_found` (entity `show`) for a show the collection doesn't hold.",
                 "properties": {
                   "bookmark_id": {
                     "description": "The bookmark. One the show doesn't hold does nothing.",
@@ -60643,7 +60856,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
+                "description": "Jumps the running show to its bookmark number `number`, 1 to 8, counted in show\norder (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when\nbookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it\nsucceeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to\n8.",
                 "properties": {
                   "number": {
                     "description": "The bookmark's place in the show, 1 to 8.",
@@ -60664,7 +60877,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),\nas a jump to a bookmark there would: for scrubbing, and for an agent. A spot\ninside a video seeks it. Emits `show.changed` (`jumped`). With no show running it\nsucceeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to, in milliseconds of show time.",
@@ -60684,7 +60897,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -60706,7 +60919,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.177), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
+                "description": "Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with\nor without a show running: on the internal show scene's top layer, through its\nfade, and steady while program transitions under it. Runtime state like the\nprogram scene: no `rev`, never undone or saved; `studio.get` lists it in\n`overlays`. Showing one already up does nothing. Fails with `not_found` for a\nscene the collection doesn't hold.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -60724,7 +60937,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.177).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
+                "description": "Takes a scene down from over program, through its fade (ADR-0210, since 0.179).\nHiding one that isn't up does nothing. Fails as `overlay.show` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -60742,7 +60955,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.177). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
+                "description": "`overlay.show` if the scene isn't up as an overlay, else `overlay.hide`\n(ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry\nsends `overlay.show` or `overlay.hide`.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -60774,6 +60987,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), and a kind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+                "properties": {
+                  "at_ms": {
+                    "description": "Where to play on from, in milliseconds from the start of its timeline.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to seek."
+                  },
+                  "type": {
+                    "const": "source.seek",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "at_ms"
                 ],
                 "type": "object"
               },
@@ -64370,7 +64608,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
+                "description": "Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same\n`show_id` in its place. A show running when it is set again runs on with the new\none from where its play head is. Rejected with `invalid_argument` at\n`show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th\nshow ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,\nkeyframe or preset that doesn't exist is taken, as a timeline's cue is, and does\nnothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the\nshow it replaced.",
                 "properties": {
                   "show": {
                     "$ref": "#/$defs/ShowInfo",
@@ -65401,7 +65639,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -67548,7 +67786,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "note": {
-                "description": "A note for the operator, at most 1024 bytes. Omitted means empty.",
+                "description": "The bookmark's show notes for the operator, in Markdown (CommonMark), at most\n16 KiB, which the Run view shows in an expandable panel. Omitted means empty.",
                 "type": "string"
               },
               "pausing": {
@@ -67679,7 +67917,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },

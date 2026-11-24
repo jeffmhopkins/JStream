@@ -181,11 +181,19 @@ mod tests {
         }
     }
 
+    /// A window's start just before the reports that follow. A report counts only after
+    /// `since`, and an `Instant` taken a few instructions later can equal one taken now
+    /// (Windows' clock ticks every 100 ns), which made these tests flaky (#1722).
+    fn a_moment_ago() -> Instant {
+        let now = Instant::now();
+        now.checked_sub(Duration::from_millis(1)).unwrap_or(now)
+    }
+
     #[test]
     fn a_window_is_the_growth_since_its_base_and_a_restart_counts_from_zero() {
         let meters = ViewMeters::default();
         let a = ClientId::new("client_1");
-        let start = Instant::now();
+        let start = a_moment_ago();
         meters
             .report(&a, "ui", "canvas", counts(30, 1))
             .expect("reported");
@@ -250,7 +258,7 @@ mod tests {
     fn an_ended_session_stays_while_a_window_reaches_it() {
         let meters = ViewMeters::default();
         let a = ClientId::new("client_1");
-        let start = Instant::now();
+        let start = a_moment_ago();
         meters
             .report(&a, "ui", "canvas", counts(5, 1))
             .expect("reported");
