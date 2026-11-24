@@ -6896,6 +6896,7 @@ pub(crate) fn compose_metered(
                 (at, canvas),
                 (live, captures),
             );
+            meter.drew_camera(&pass.scene, camera);
             under_sky(&mut items, (cache, chains), pass, canvas, camera);
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
             let took = meter.phase_since(Phase::Passes, started);
@@ -6924,6 +6925,7 @@ pub(crate) fn compose_metered(
                     (at, canvas),
                     (live, captures),
                 );
+                meter.drew_camera(&root.scene, camera);
                 under_sky(&mut items, (cache, chains), root, canvas, camera);
                 root.background
             }
@@ -6946,6 +6948,7 @@ pub(crate) fn compose_metered(
                 (at, canvas),
                 (live, captures),
             );
+            meter.drew_camera(&show_root.scene, camera);
             under_sky(&mut over, (cache, chains), show_root, canvas, camera);
             items.clear();
             items.push(fitted(under, canvas, canvas));
@@ -7157,6 +7160,7 @@ fn run_chains(
                     (at, canvas),
                     (live, captures),
                 );
+                meter.drew_camera(&pass.scene, camera);
                 under_sky(&mut items, (&*cache, &*chains), pass, canvas, camera);
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;

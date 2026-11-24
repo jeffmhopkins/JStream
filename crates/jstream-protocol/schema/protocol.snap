@@ -15032,6 +15032,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The camera a 3D scene was drawn through last (since 0.192): its camera as its\ncamera motion, follow camera, live aim, the 3D group it rides with and autofocus\nmoved it for the latest picture that drew the scene, which is where its items\nare seen. What an editor outlines and hits the scene's items through. Runtime\nstate, so no `rev`; `camera` is omitted while no picture has drawn the scene\nthrough a camera in the last second.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene, as a picture draws it: a keyframe scene by its own ID."
+            },
+            "type": {
+              "const": "scene.drawn_camera",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file\nin the OS's font folders that parses, as a family and style to show and the\nabsolute path an `asset` setting names it by. Runtime state, so no `rev`. The\nengine reads the folders once, on the first `font.list`; a font installed after\nthat shows once it restarts.",
           "properties": {
             "type": {
@@ -16254,6 +16272,30 @@ source: crates/jstream-protocol/src/fixtures.rs
             "tilt_deg",
             "zoom",
             "moving"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `scene.drawn_camera` (since 0.192).",
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneCamera"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The camera the scene was drawn through last, or `None` (omitted) while no\npicture has drawn it through one in the last second."
+            },
+            "type": {
+              "const": "scene.drawn_camera",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         },
@@ -20690,5 +20732,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.191"
+  "title": "JStream protocol 0.192"
 }

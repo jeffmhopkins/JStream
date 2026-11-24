@@ -1927,6 +1927,11 @@ impl State {
                     },
                 }
             }
+            // The mock draws no pictures, so no scene has been drawn through a camera.
+            Query::SceneDrawnCamera { scene_id } => {
+                self.collection.existing_scene(&scene_id)?;
+                QueryResult::SceneDrawnCamera { camera: None }
+            }
             Query::CaptureTargets => QueryResult::CaptureTargets {
                 targets: vec![
                     CaptureTargetInfo {

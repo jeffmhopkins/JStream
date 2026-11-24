@@ -252,6 +252,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)) are checked
   with `camera_aim_check`, then `not_found` or `action_failed` for a scene that draws
   through no camera, and keep nothing, so `scene.camera_aim` always answers the home aim;
+  the mock draws no pictures, so `scene.drawn_camera` answers no camera (`not_found` for
+  a missing scene);
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
   keyframe scene, which write its override of an item in its parent's tree (its own,

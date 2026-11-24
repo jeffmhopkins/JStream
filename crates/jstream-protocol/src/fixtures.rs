@@ -2794,6 +2794,9 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::SceneCameraAim {
             scene_id: SceneId::new("scn_1"),
         },
+        Query::SceneDrawnCamera {
+            scene_id: SceneId::new("scn_1"),
+        },
         Query::JtunnelSenders,
         Query::FontList,
         Query::ValuesList { prefix: None },
@@ -3964,6 +3967,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 moving: false,
             },
         },
+        QueryResult::SceneDrawnCamera {
+            camera: Some(SceneCamera::framing(CameraCanvas::DEFAULT)),
+        },
+        QueryResult::SceneDrawnCamera { camera: None },
         QueryResult::JtunnelSenders {
             on: true,
             senders: vec![

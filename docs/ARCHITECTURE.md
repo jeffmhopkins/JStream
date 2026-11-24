@@ -883,6 +883,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0153](adr/0153-ptz-controller-idle-stop-counters-and-setting.md)), and
   `ptz_cameras` (0.121) how each head's link is doing
   ([ADR-0155](adr/0155-ptz-cameras-counters-in-profile-get.md)).
+- **The camera a scene was drawn through** (protocol 0.192): the query
+  `scene.drawn_camera` answers the camera the latest picture drew a 3D scene through,
+  after its camera motion, follow camera, live aim, group anchor and autofocus moved it.
+  The program stage and the preview hub publish their frames' cameras beside their
+  `profile.get` totals; an editor outlines and hits the scene's items through it.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -1404,7 +1409,8 @@ Spike S6 has run once, on a CI virtual Mac (Apple M1 with Metal's paravirtual GP
 before they were written (82 to 437 stale exports and 7 or 8 garbled frames per 20 s). With
 the `completion` wait, the `event` design built here, or `event-strict`, there were none,
 and no sync timeouts. Every output decoded. `event` kept the render tick's own work at a
-p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms. A paravirtual GPU's
+p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms; at load 1024 `event`
+dropped 36 to 57 frames per 20 s to a full ring instead. A paravirtual GPU's
 timings say nothing about real Apple Silicon. There is no Mac hardware to run on, so CI's
 macOS runners are the test bed. Three things they can't show stay untested: those
 timings, whether holding webcam buffers starves AVFoundation's pool, and whether
