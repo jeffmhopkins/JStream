@@ -20,8 +20,8 @@
 //! - **A hand takes over.** A source whose fader a person sets while the show drives it
 //!   is left alone until its next clip comes up (latest wins).
 //!
-//! When the show stops, the clips it had up fade down, then the sources go back to their
-//! own faders. A show rehearsed on preview moves no fader and puts no source up.
+//! When the show stops, the clips it had up fade down, then each source's fader goes
+//! back to its own level over the same short fade, and the show lets go of it. A show rehearsed on preview moves no fader and puts no source up.
 //!
 //! Docs: docs/adr/0210-shows-a-run-order-with-bookmarks.md
 
@@ -36,6 +36,10 @@ use super::State;
 
 /// How often the fader moves while a fade runs.
 const FADE_STEP: Duration = Duration::from_millis(33);
+
+/// How long a stopped show takes to hand a fader back to its own level, in
+/// milliseconds: the short fade a jump cuts a clip off with (ADR-0210 decision 6).
+const RELEASE_MS: u32 = 300;
 
 /// The prefix of the show scene's items that put an audio clip's source up.
 const ITEM_PREFIX: &str = "show-audio";
@@ -57,16 +61,20 @@ struct Driven {
     base_db: Option<f32>,
     /// A hand moved its fader: the show leaves it until its next clip comes up.
     hand: bool,
-    /// A fade down in progress, after a clip went.
+    /// A fade in progress: down to the floor after a clip went, or, once the show has
+    /// stopped, back to the collection's own fader (`releasing`).
     fading: Option<Fade>,
+    /// The show stopped and is handing the fader back over [`Fade`].
+    releasing: bool,
     /// The level it set last.
     level_db: f32,
 }
 
-/// A fade down to the floor, on the animation clock.
+/// A fade, on the animation clock.
 #[derive(Debug, Clone, Copy)]
 struct Fade {
     from_db: f32,
+    to_db: f32,
     start_ns: i64,
     length_ns: i64,
 }
@@ -79,7 +87,7 @@ impl Fade {
             return None;
         }
         let fraction = gone as f32 / self.length_ns as f32;
-        Some(fade_db(self.from_db, AUDIO_FLOOR_DB, fraction))
+        Some(fade_db(self.from_db, self.to_db, fraction))
     }
 }
 
@@ -109,6 +117,7 @@ impl State {
                 base_db,
                 hand: false,
                 fading: None,
+                releasing: false,
                 level_db,
             },
         );
@@ -146,13 +155,15 @@ impl State {
         };
         driven.fading = (fade_ms > 0).then(|| Fade {
             from_db: driven.level_db,
+            to_db: AUDIO_FLOOR_DB,
             start_ns,
             length_ns: i64::from(fade_ms).saturating_mul(1_000_000),
         });
-        if driven.fading.is_none() {
-            self.hide_audio_item(source_id, wake);
-        } else {
+        if driven.fading.is_some() {
             self.start_ticker();
+        } else if !self.show_audio_up(source_id) {
+            // Another clip of the same source, on another track, may still have it up.
+            self.hide_audio_item(source_id, wake);
         }
     }
 
@@ -200,6 +211,7 @@ impl State {
                             base_db,
                             hand: false,
                             fading: None,
+                            releasing: false,
                             level_db: AUDIO_FLOOR_DB,
                         },
                     );
@@ -226,10 +238,28 @@ impl State {
                     moving = true;
                     level
                 }
-                // A stopped show lets go of a source once its fade is done.
+                // A stopped show hands a source back once its fade down is done: over
+                // the short fade from where it is to its own fader, then lets go.
                 (None, None) if running.is_none() => {
-                    gone.push(source_id.clone());
-                    continue;
+                    let own = fader(state, source_id);
+                    match own {
+                        Some(to_db) if !driven.releasing && !driven.hand => {
+                            driven.releasing = true;
+                            let fade = Fade {
+                                from_db: driven.level_db,
+                                to_db,
+                                start_ns: now_ns,
+                                length_ns: i64::from(RELEASE_MS) * 1_000_000,
+                            };
+                            driven.fading = Some(fade);
+                            moving = true;
+                            driven.level_db
+                        }
+                        _ => {
+                            gone.push(source_id.clone());
+                            continue;
+                        }
+                    }
                 }
                 (None, None) => AUDIO_FLOOR_DB,
             };
@@ -263,6 +293,18 @@ impl State {
             .into_iter()
             .flatten()
             .min()
+    }
+
+    /// Whether a clip of `source_id` is up in the running show.
+    fn show_audio_up(&self, source_id: &SourceId) -> bool {
+        let (Some(run), Some(plan)) = (self.show.as_ref(), self.show_plan()) else {
+            return false;
+        };
+        run.runner
+            .applied()
+            .audio
+            .iter()
+            .any(|&clip| plan.audio.get(clip).is_some_and(|c| &c.source == source_id))
     }
 
     /// Hides `source_id`'s item of the show scene, if it has one up.

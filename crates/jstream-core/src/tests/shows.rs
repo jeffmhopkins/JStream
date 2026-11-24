@@ -895,6 +895,60 @@ fn a_jump_fades_a_cut_off_audio_clip_down() {
         -100.0,
         "down once the fade is done"
     );
+    // Stopped, the show hands the fader back to its own level over the short fade.
+    act(&control, Action::ShowStop).expect("stop");
+    step(&control, 150);
+    let back = heard(&engine, "webcam");
+    assert!(back > -100.0 && back < 0.0, "going back: {back}");
+    step(&control, 200);
+    assert_eq!(heard(&engine, "webcam"), 0.0, "its own fader");
+}
+
+/// Two clips of one source on two tracks: when the first ends, the second keeps the
+/// source up (heard), and its fader at the second clip's level (#1763 B1).
+#[test]
+fn a_clip_ending_leaves_its_source_up_while_another_track_holds_it() {
+    let (engine, control) = engine_with_show();
+    apply(&control, vec![super::webcam()]);
+    let mut show = match query(&control, Query::StateGet) {
+        Ok(QueryResult::StateGet { shows, .. }) => shows[0].clone(),
+        other => panic!("not state.get: {other:?}"),
+    };
+    show.bookmarks.clear();
+    let track =
+        |track: &str, start_ms: u32, length_ms: u32, gain_db: f32| jstream_protocol::AudioTrack {
+            track_id: track.into(),
+            name: String::new(),
+            clips: vec![jstream_protocol::AudioClip {
+                clip_id: format!("{track}-clip"),
+                source_id: jstream_protocol::SourceId::new("webcam"),
+                start_ms,
+                length_ms,
+                fade_in_ms: 0,
+                fade_out_ms: 0,
+                gain_db: jstream_protocol::Finite32::new(gain_db).expect("finite"),
+            }],
+        };
+    show.audio = vec![track("a1", 0, 500, 0.0), track("a2", 200, 1000, -10.0)];
+    apply(&control, vec![Edit::ShowSet { show }]);
+    let shown = |engine: &Engine| {
+        engine.drawn(|state| {
+            crate::activity::activity_gains(state, Some(&SceneId::new("a")))
+                .get(&jstream_protocol::SourceId::new("webcam"))
+                .copied()
+                .unwrap_or(0.0)
+        })
+    };
+    act(&control, play()).expect("play");
+    step(&control, 300);
+    assert_eq!(shown(&engine), 1.0, "up");
+    step(&control, 400);
+    assert_eq!(shown(&engine), 1.0, "still up on the second track");
+    assert_eq!(
+        heard(&engine, "webcam"),
+        -10.0,
+        "at the second clip's level"
+    );
 }
 
 /// At a loop's last clip the wrap runs back to the clip at the loop's start, so that

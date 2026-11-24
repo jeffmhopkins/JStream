@@ -1966,7 +1966,8 @@ the item hides. The levels are live values the collection is drawn and heard wit
 fader is never written; the live ticker moves them a frame at a time while a fade runs,
 and wakes at the next fade out. A source whose fader is set while the show drives it is
 left to that until its next clip comes up. When the show stops, its faders go back to
-the collection's once the clips it had up have faded. A rehearsal moves no fader.
+the collection's over the same short fade, once the clips it had up have faded. A clip
+that ends while another clip of the same source (on another track) is up leaves it up. A rehearsal moves no fader.
 `src/tests/shows.rs` checks playing through, pausing before a pausing bookmark's
 point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
 going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
@@ -1980,7 +1981,9 @@ show scene refusing a delete and being heard, the next program clip named upcomi
 loop's first at its last clip), a rehearsal on preview leaving program, its cues and off
 script alone, a webcam's audio clip held at the floor before it, heard and rising,
 level, falling and down again over its clip, a hand on its fader taking over until the
-show stops, and a jump fading a cut-off clip down over the short fade.
+show stops, a jump fading a cut-off clip down over the short fade, the stopped show
+handing a source at the floor back to its own fader over that fade, and a source kept up
+by its clip on a second track when the first ends.
 `src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
 seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
 timeline played while the ticker waits for a later cue fires on time.
