@@ -1725,6 +1725,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Answers a device's ask to pair (0.193, ADR-0235): `allow` pairs it, as a code\nwould, and its held `POST /api/v1/pair/ask` gets its device token; otherwise it\nis turned away. Every client gets `pairing.ask_ended`. Any admitted client may\nanswer, as any may start pairing. Fails with `not_found` for an ask that isn't\nopen (answered, timed out, or the device went away), and `action_failed` when\nthe device file can't be written (nothing is paired then). Answered by the\nserver, like `pairing.start`.",
+          "properties": {
+            "allow": {
+              "description": "Whether to pair it.",
+              "type": "boolean"
+            },
+            "ask_id": {
+              "description": "The ask, as `pairing.asked` names it.",
+              "type": "string"
+            },
+            "type": {
+              "const": "pairing.answer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ask_id",
+            "allow"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
           "properties": {
             "approval_id": {
@@ -8068,6 +8091,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "show",
           "description": "A show (0.180, ADR-0210). Only an error answering a `show.*` command names it, so\na client that sends none never reads it.",
           "type": "string"
+        },
+        {
+          "const": "pairing_ask",
+          "description": "A device's ask to pair (0.193, ADR-0235). Only an error answering\n`pairing.answer` names it, so a client that sends none never reads it.",
+          "type": "string"
         }
       ]
     },
@@ -9073,6 +9101,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "approval_id",
+            "outcome"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A device asked to pair and waits for the person's answer (0.193, ADR-0235). A UI\nshows a prompt with Allow and Deny and answers with `pairing.answer`. Runtime\nstate, so no `rev`.",
+          "properties": {
+            "ask": {
+              "$ref": "#/$defs/PairingAsk",
+              "description": "The ask."
+            },
+            "type": {
+              "const": "pairing.asked",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ask"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A device's ask to pair ended (0.193, ADR-0235): answered, timed out, or the\ndevice went away. A UI closes its prompt.",
+          "properties": {
+            "ask_id": {
+              "description": "The ask, as `pairing.asked` named it.",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/PairingAskOutcome",
+              "description": "How it ended."
+            },
+            "type": {
+              "const": "pairing.ask_ended",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ask_id",
             "outcome"
           ],
           "type": "object"
@@ -12674,6 +12743,54 @@ source: crates/jstream-protocol/src/fixtures.rs
         "loaded"
       ],
       "type": "object"
+    },
+    "PairingAsk": {
+      "description": "A device that asked to pair and waits for the person's answer.",
+      "properties": {
+        "address": {
+          "description": "The address it asked from, as the host shows it (`192.168.1.57`).",
+          "type": "string"
+        },
+        "ask_id": {
+          "description": "Names this ask, for `pairing.answer`. Unique while the server runs.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name the device gave: its own text, never an instruction.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ask_id",
+        "name",
+        "address"
+      ],
+      "type": "object"
+    },
+    "PairingAskOutcome": {
+      "description": "How a device's ask to pair ended (`pairing.ask_ended`).",
+      "oneOf": [
+        {
+          "const": "allowed",
+          "description": "Allowed: the device is paired.",
+          "type": "string"
+        },
+        {
+          "const": "denied",
+          "description": "Denied.",
+          "type": "string"
+        },
+        {
+          "const": "timed_out",
+          "description": "No one answered in time.",
+          "type": "string"
+        },
+        {
+          "const": "closed",
+          "description": "The device went away first.",
+          "type": "string"
+        }
+      ]
     },
     "ParamDescriptor": {
       "description": "One parameter of a kind.",
@@ -20732,5 +20849,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.192"
+  "title": "JStream protocol 0.193"
 }

@@ -2172,6 +2172,14 @@ pub(crate) fn actions() -> Vec<Action> {
             preset_id: None,
         },
         Action::PairingStart,
+        Action::PairingAnswer {
+            ask_id: "ask_1".into(),
+            allow: true,
+        },
+        Action::PairingAnswer {
+            ask_id: "ask_2".into(),
+            allow: false,
+        },
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
@@ -4631,6 +4639,20 @@ pub(crate) fn events() -> Vec<Event> {
             outcome,
         });
     }
+    events.push(Event::PairingAsked {
+        ask: crate::PairingAsk::new("ask_1", "Stream Deck (Studio PC)", "192.168.1.57"),
+    });
+    for outcome in [
+        crate::PairingAskOutcome::Allowed,
+        crate::PairingAskOutcome::Denied,
+        crate::PairingAskOutcome::TimedOut,
+        crate::PairingAskOutcome::Closed,
+    ] {
+        events.push(Event::PairingAskEnded {
+            ask_id: "ask_1".into(),
+            outcome,
+        });
+    }
     events.push(Event::JtunnelSendersChanged {});
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
@@ -4954,6 +4976,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Pack,
         EntityKind::File,
         EntityKind::Approval,
+        EntityKind::PairingAsk,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

@@ -60,13 +60,20 @@ Contents (a first cut; [Design](#design) explains the choices):
   client, such as the web UI's dock, and the file that keeps them
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 - **Pairing** (`pair.rs`): `POST /api/v1/pair` (`PAIR_PATH`), which trades the open code
-  for a device token, or for the device cookie in a browser.
+  for a device token, or for the device cookie in a browser, and `POST /api/v1/pair/ask`
+  (`PAIR_ASK_PATH`), where a device asks the person to pair it.
+- **Asks** (`asks.rs`,
+  [ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)): the
+  devices waiting for the person to answer their ask, `pairing.asked` and
+  `pairing.ask_ended`, which every admitted session hears, and `pairing.answer`, which
+  `Admitted` answers.
 - **Pairing page** (`pair_page.rs`, `pair.html`): `GET /pair` (`PAIR_PAGE_PATH`), the
   token-free page a browser pairs on, on a TLS listener only
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
-  unless `ServerConfig::pairing` is off, and the agent approval calls, and holds a
+  unless `ServerConfig::pairing` is off, `pairing.answer`, and the agent approval calls,
+  and holds a
   `hello` for approval
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections with Nagle's algorithm off,
@@ -324,6 +331,36 @@ its own from a short code instead of the control token.
 | The open code, `"browser": true`, on a TLS listener | 200, `Cache-Control: no-store`, `{"device_id": "dev_…"}` and `Set-Cookie: __Host-jstream_device=<token>; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000` |
 | The device file can't be written | 500, and nothing is paired |
 
+- **Asking instead of a code**
+  ([ADR-0235](../../docs/adr/0235-pair-a-device-by-approving-it-on-the-host.md)).
+  `POST /api/v1/pair/ask` (`PAIR_ASK_PATH`) with `{"name": "..."}` is answered without a
+  token, after the same `Host` and `Origin` checks, and only while the server pairs
+  devices (`ServerConfig::pairing` on or the network listener open). It opens an ask
+  (`asks.rs`): every admitted session hears `pairing.asked` with the ask's ID, the name
+  and the address it came from, and the request is held until a session answers with
+  `pairing.answer {ask_id, allow}`, for at most 2 minutes (`ASK_TIMEOUT`). At most 4
+  asks are open at once (`MAX_OPEN`), and one per address (IPv4-mapped addresses
+  compared as IPv4). A device that closes its connection ends its ask. So does closing
+  the network listener (for an ask held on it) or stopping the server: the ask ends as
+  `closed` with `503`, so a close never waits for the person's answer, and an Allow
+  that arrives as network access is turned off pairs nothing. Every session hears `pairing.ask_ended` with how it ended.
+  Allowed, the device is paired as with a code (`Devices::add`): no attempt is used up
+  and no code needs to be open. The device keeps the certificate it saw (trust on first
+  use, ADR-0235 decision 4).
+
+| Ask | Answer |
+|---|---|
+| A method other than `POST` | 405 with `Allow: POST` |
+| The server pairs no device, or a plain listener off loopback | 404 |
+| A body that isn't `Content-Type: application/json` | 415 |
+| A body over 4 KiB, one that isn't `{"name"}`, or a name that isn't allowed | 400 |
+| 4 asks open, or one from this address | 429 |
+| Allowed in JStream | 200, `Cache-Control: no-store`, `{"device_id": "dev_…", "token": "<64 hex digits>"}` |
+| Denied in JStream | 403 |
+| No answer in 2 minutes | 408 |
+| The network listener closed, or the server stopped, first | 503 |
+| The device file can't be written | 500, and nothing is paired |
+
 - **Device tokens.** A device token is 32 bytes from `getrandom` as 64 hex digits,
   presented exactly like the control token (or, in a browser, as the device cookie, see
   below). The server keeps only its BLAKE3 digest,
@@ -500,7 +537,7 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
 Each accepted connection gets a fresh session from the `Connector`
 (`Arc<dyn Fn() -> Box<dyn Control>>`), dropped when the connection ends, wrapped in the
 server's own `Control` (`admitted.rs`), which answers `pairing.start`, `device.list` and
-`device.revoke` from the device store and `ui_settings.get` and `ui_settings.set` from
+`device.revoke` from the device store, `pairing.answer` from the open asks, and `ui_settings.get` and `ui_settings.set` from
 the UI settings (after a successful `hello`, like any call),
 renames a device's `hello` to `device:<name>`, and passes everything else through. The connection
 task speaks the envelope

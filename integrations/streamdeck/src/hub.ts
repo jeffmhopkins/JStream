@@ -12,7 +12,7 @@ import { discover } from "./jstream/discovery.ts";
 import { DEFAULT_PORT } from "./jstream/protocol.ts";
 import { Studio } from "./jstream/studio.ts";
 import { lists } from "./lists.ts";
-import { normalizeFingerprint, pair, probeFingerprint } from "./jstream/tls.ts";
+import { askToPair, normalizeFingerprint, pair, probeFingerprint } from "./jstream/tls.ts";
 
 /** The plugin's global settings: where JStream is and what pairing gave. */
 export type GlobalSettings = {
@@ -31,6 +31,12 @@ export const client = new JStreamClient(`Stream Deck (${hostname()})`);
 export const studio = new Studio(client);
 
 let settings: GlobalSettings = {};
+
+/**
+ * The ask to pair (ADR-0235) waiting for the person's answer in JStream, if any. Pairing
+ * with a code meanwhile aborts it, which ends the ask in JStream too.
+ */
+let asking: AbortController | undefined;
 
 /** Reads the saved pairing and connects. */
 export async function start(): Promise<void> {
@@ -83,6 +89,7 @@ type InspectorRequest =
 	| { type: "discover" }
 	| { type: "probe"; host: string; port: number }
 	| { type: "pair"; host: string; port: number; fingerprint: string; code: string; name: string }
+	| { type: "ask"; host: string; port: number; fingerprint: string; name: string }
 	| { type: "forget" }
 	| { type: "retry" };
 
@@ -108,6 +115,18 @@ export async function onInspectorMessage(payload: JsonValue): Promise<boolean> {
 			}
 			return true;
 		case "pair":
+		case "ask":
+			if (request.type === "ask") {
+				// One ask at a time: pressing Connect again keeps waiting on the first.
+				if (asking || settings.token) {
+					return true;
+				}
+				asking = new AbortController();
+			} else {
+				asking?.abort();
+			}
+			// "ask" pairs once the person presses Allow in JStream (ADR-0235), trusting the
+			// certificate the probe saw; "pair" trades the code the person typed (ADR-0044).
 			try {
 				const fingerprint = normalizeFingerprint(String(request.fingerprint));
 				if (!fingerprint) {
@@ -116,12 +135,19 @@ export async function onInspectorMessage(payload: JsonValue): Promise<boolean> {
 				const host = String(request.host).trim();
 				const port = Number(request.port) || DEFAULT_PORT;
 				const name = String(request.name || `Stream Deck (${hostname()})`).trim().slice(0, 64);
-				const result = await pair(host, port, fingerprint, String(request.code), name);
+				const result =
+					request.type === "ask"
+						? await askToPair(host, port, fingerprint, name, asking?.signal)
+						: await pair(host, port, fingerprint, String(request.code), name);
 				await save({ host, port, fingerprint, token: result.token, deviceId: result.deviceId, deviceName: name });
 				await reply({ type: "paired" });
 				await pushConnection();
 			} catch (err) {
-				await reply({ type: "failed", step: "pair", message: reason(err) });
+				await reply({ type: "failed", step: request.type, message: reason(err) });
+			} finally {
+				if (request.type === "ask") {
+					asking = undefined;
+				}
 			}
 			return true;
 		case "forget":

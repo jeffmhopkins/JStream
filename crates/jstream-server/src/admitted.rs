@@ -32,6 +32,7 @@
 //! and the answer goes only to the client that asked (R-SEC-001).
 
 use crate::approvals::{Approvals, Ticket};
+use crate::asks::Asks;
 use crate::devices::{CODE_LIFETIME, Devices, Now};
 use crate::gate::Credential;
 use crate::network_state::NetworkState;
@@ -70,6 +71,8 @@ pub(crate) struct Admitted {
     answered: AtomicU64,
     /// The agent approvals (ADR-0131).
     approvals: Arc<Approvals>,
+    /// The devices asking to pair (ADR-0235).
+    asks: Arc<Asks>,
     /// How this session reaches the server, for its approval.
     transport: AgentTransport,
     /// This session's approval request, once its first `hello` opened one.
@@ -92,6 +95,8 @@ pub(crate) struct Served {
     pub(crate) ui_settings: Arc<UiSettings>,
     /// The agent approvals (ADR-0131).
     pub(crate) approvals: Arc<Approvals>,
+    /// The devices asking to pair (ADR-0235).
+    pub(crate) asks: Arc<Asks>,
 }
 
 impl Admitted {
@@ -108,6 +113,7 @@ impl Admitted {
             network,
             ui_settings,
             approvals,
+            asks,
         } = served;
         Admitted {
             inner,
@@ -120,6 +126,7 @@ impl Admitted {
             greeted: Arc::new(AtomicBool::new(false)),
             answered: AtomicU64::new(0),
             approvals,
+            asks,
             transport,
             ticket: Mutex::new(None),
         }
@@ -147,6 +154,12 @@ impl Admitted {
             Call::Action {
                 action: Action::PairingStart,
             } => self.start_pairing(),
+            Call::Action {
+                action: Action::PairingAnswer { ask_id, allow },
+            } => self
+                .asks
+                .answer(ask_id, *allow)
+                .map(|()| CallResult::action()),
             Call::Action {
                 action: Action::DeviceRevoke { device_id },
             } => match self.devices.revoke(device_id) {
@@ -263,11 +276,30 @@ fn about_devices(call: &Call) -> bool {
     matches!(
         call,
         Call::Action {
-            action: Action::PairingStart | Action::DeviceRevoke { .. }
+            action: Action::PairingStart
+                | Action::PairingAnswer { .. }
+                | Action::DeviceRevoke { .. }
         } | Call::Query {
             query: Query::DeviceList
         }
     )
+}
+
+/// The events the server itself sends (agent approvals, devices asking to pair), as a
+/// stream of `Some`. A session that falls behind misses some: `agent.approved` lists the
+/// approvals still open, and an ask missed is asked again by its device.
+fn server_events(
+    rx: tokio::sync::broadcast::Receiver<Event>,
+) -> impl futures_util::Stream<Item = Option<Event>> {
+    futures_util::stream::unfold(rx, |mut rx| async {
+        loop {
+            match rx.recv().await {
+                Ok(event) => return Some((Some(event), rx)),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    })
 }
 
 /// Whether `call` is about agent approval: `agent.approve`, `agent.forget` and
@@ -339,16 +371,10 @@ impl Control for Admitted {
             .events()
             .map(Some)
             .chain(futures_util::stream::once(std::future::ready(None)));
-        let approvals = futures_util::stream::unfold(self.approvals.subscribe(), |mut rx| async {
-            loop {
-                match rx.recv().await {
-                    Ok(event) => return Some((Some(event), rx)),
-                    // A session that fell behind misses some; `agent.approved` has them.
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
-                }
-            }
-        });
+        let approvals = futures_util::stream::select(
+            server_events(self.approvals.subscribe()),
+            server_events(self.asks.subscribe()),
+        );
         // Nothing reaches a session before its `hello` succeeds: a client held for the
         // person's answer, which MCP's HTTP transport subscribes for at `initialize`,
         // sees no state, no activity and no other agent's request (ADR-0131).
@@ -465,6 +491,7 @@ mod tests {
                     network: Arc::default(),
                     ui_settings,
                     approvals,
+                    asks: Arc::default(),
                 },
             ),
             name,

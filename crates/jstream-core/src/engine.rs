@@ -6570,6 +6570,7 @@ impl State {
                 return Ok(CallResult::action());
             }
             other @ (Action::PairingStart
+            | Action::PairingAnswer { .. }
             | Action::DeviceRevoke { .. }
             | Action::AgentApprove { .. }
             | Action::AgentForget { .. }

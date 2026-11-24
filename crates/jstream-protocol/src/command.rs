@@ -2428,6 +2428,20 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
+    /// Answers a device's ask to pair (0.193, ADR-0235): `allow` pairs it, as a code
+    /// would, and its held `POST /api/v1/pair/ask` gets its device token; otherwise it
+    /// is turned away. Every client gets `pairing.ask_ended`. Any admitted client may
+    /// answer, as any may start pairing. Fails with `not_found` for an ask that isn't
+    /// open (answered, timed out, or the device went away), and `action_failed` when
+    /// the device file can't be written (nothing is paired then). Answered by the
+    /// server, like `pairing.start`.
+    #[serde(rename = "pairing.answer")]
+    PairingAnswer {
+        /// The ask, as `pairing.asked` names it.
+        ask_id: String,
+        /// Whether to pair it.
+        allow: bool,
+    },
     /// Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it
     /// in, `always_allow` also adds it to the approved list, and `deny` turns it away
     /// with `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted
@@ -2702,6 +2716,7 @@ impl Action {
             Action::SceneSwitch { .. } => "scene.switch",
             Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
+            Action::PairingAnswer { .. } => "pairing.answer",
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::AgentApprove { .. } => "agent.approve",
             Action::AgentForget { .. } => "agent.forget",
@@ -2868,6 +2883,7 @@ impl Action {
             | Action::PreviewRequestKeyframe { .. }
             | Action::PreviewReport { .. }
             | Action::PairingStart
+            | Action::PairingAnswer { .. }
             | Action::DeviceRevoke { .. }
             | Action::AgentApprove { .. }
             | Action::AgentForget { .. }
@@ -2940,11 +2956,13 @@ impl Action {
                 "a live action can't be bound: its gesture belongs to the session that sends \
                  it (ADR-0032)",
             )),
-            Action::PairingStart | Action::DeviceRevoke { .. } => Some((
-                "type",
-                "a pairing or device action can't be bound: the server answers it for the \
+            Action::PairingStart | Action::PairingAnswer { .. } | Action::DeviceRevoke { .. } => {
+                Some((
+                    "type",
+                    "a pairing or device action can't be bound: the server answers it for the \
                  client that asks",
-            )),
+                ))
+            }
             Action::AgentApprove { .. } | Action::AgentForget { .. } => Some((
                 "type",
                 "an agent approval can't be bound: a person answers who may connect \
@@ -3157,6 +3175,7 @@ impl Action {
             | Action::SourceRestart { .. }
             | Action::SourceSeek { .. }
             | Action::PairingStart
+            | Action::PairingAnswer { .. }
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
             | Action::StudioSetWarm { .. }

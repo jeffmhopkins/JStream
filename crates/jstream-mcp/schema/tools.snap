@@ -357,6 +357,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "source.seek",
                   "pairing.start",
                   "device.revoke",
+                  "pairing.answer",
                   "agent.approve",
                   "agent.forget",
                   "ui_settings.set",
@@ -4664,6 +4665,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "source.seek",
                   "pairing.start",
                   "device.revoke",
+                  "pairing.answer",
                   "agent.approve",
                   "agent.forget",
                   "ui_settings.set",
@@ -8202,7 +8204,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `pairing` operation: set `op.type` to one of `pairing.start` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `pairing` operation: set `op.type` to one of `pairing.start` (action), `pairing.answer` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -8219,6 +8221,29 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Answers a device's ask to pair (0.193, ADR-0235): `allow` pairs it, as a code\nwould, and its held `POST /api/v1/pair/ask` gets its device token; otherwise it\nis turned away. Every client gets `pairing.ask_ended`. Any admitted client may\nanswer, as any may start pairing. Fails with `not_found` for an ask that isn't\nopen (answered, timed out, or the device went away), and `action_failed` when\nthe device file can't be written (nothing is paired then). Answered by the\nserver, like `pairing.start`.",
+                "properties": {
+                  "allow": {
+                    "description": "Whether to pair it.",
+                    "type": "boolean"
+                  },
+                  "ask_id": {
+                    "description": "The ask, as `pairing.asked` names it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "pairing.answer",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ask_id",
+                  "allow"
                 ],
                 "type": "object"
               }
@@ -10911,6 +10936,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "source.seek",
                   "pairing.start",
                   "device.revoke",
+                  "pairing.answer",
                   "agent.approve",
                   "agent.forget",
                   "ui_settings.set",
@@ -12540,6 +12566,7 @@ source: crates/jstream-mcp/src/tests.rs
                   "source.seek",
                   "pairing.start",
                   "device.revoke",
+                  "pairing.answer",
                   "agent.approve",
                   "agent.forget",
                   "ui_settings.set",

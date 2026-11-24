@@ -25,6 +25,7 @@ pub mod canvas;
 pub mod chrome;
 pub mod clap_plugins;
 pub mod clipboard;
+pub mod device_asks;
 pub mod dialog;
 pub mod dock;
 pub mod header;

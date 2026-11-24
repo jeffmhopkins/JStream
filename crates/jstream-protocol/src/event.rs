@@ -427,6 +427,23 @@ pub enum Event {
         /// How it ended.
         outcome: crate::ApprovalOutcome,
     },
+    /// A device asked to pair and waits for the person's answer (0.193, ADR-0235). A UI
+    /// shows a prompt with Allow and Deny and answers with `pairing.answer`. Runtime
+    /// state, so no `rev`.
+    #[serde(rename = "pairing.asked")]
+    PairingAsked {
+        /// The ask.
+        ask: crate::PairingAsk,
+    },
+    /// A device's ask to pair ended (0.193, ADR-0235): answered, timed out, or the
+    /// device went away. A UI closes its prompt.
+    #[serde(rename = "pairing.ask_ended")]
+    PairingAskEnded {
+        /// The ask, as `pairing.asked` named it.
+        ask_id: String,
+        /// How it ended.
+        outcome: crate::PairingAskOutcome,
+    },
     /// The JTunnel senders `jtunnel.senders` lists changed (0.114, ADR-0123 §3): one was
     /// heard for the first time, said goodbye, or went unheard for 35 s, or the host
     /// turned receiving on, off or started it again with other senders. Runtime state,
@@ -470,6 +487,8 @@ impl Event {
             Event::KindsChanged { .. } => Some("kinds.changed"),
             Event::AgentApprovalRequested { .. } => Some("agent.approval_requested"),
             Event::AgentApprovalResolved { .. } => Some("agent.approval_resolved"),
+            Event::PairingAsked { .. } => Some("pairing.asked"),
+            Event::PairingAskEnded { .. } => Some("pairing.ask_ended"),
             Event::JtunnelSendersChanged {} => Some("jtunnel.senders_changed"),
             Event::Unknown => None,
         }

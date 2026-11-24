@@ -961,7 +961,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own, and
   from 0.97 the network listener's addresses and certificate fingerprint when there is
   one ([ADR-0130](adr/0130-browsers-keep-no-certificate-pin-v2.md));
-  `device.list` and the action `device.revoke` manage the paired devices. They concern
+  `device.list` and the action `device.revoke` manage the paired devices. From 0.193 a
+  device may instead ask at `POST /api/v1/pair/ask` and wait while every client hears
+  `pairing.asked`, until one answers `pairing.answer` (allowed, it gets its token) and
+  all hear `pairing.ask_ended`
+  ([ADR-0235](adr/0235-pair-a-device-by-approving-it-on-the-host.md)). They concern
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).

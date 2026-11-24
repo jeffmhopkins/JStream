@@ -14,8 +14,8 @@ import { after, before, test } from "node:test";
 import { JStreamClient } from "../src/jstream/client.ts";
 import { discover } from "../src/jstream/discovery.ts";
 import { Studio, effectKey, findEffect } from "../src/jstream/studio.ts";
-import { FingerprintMismatch, pair, probeFingerprint } from "../src/jstream/tls.ts";
-import { call, fingerprint, lanHost, lanPort, skip, startDaemon, stopDaemon, until } from "./daemon.ts";
+import { FingerprintMismatch, askToPair, pair, probeFingerprint } from "../src/jstream/tls.ts";
+import { call, events, fingerprint, heard, lanHost, lanPort, skip, startDaemon, stopDaemon, until } from "./daemon.ts";
 
 before(async () => {
 	if (!skip) await startDaemon();
@@ -108,6 +108,41 @@ test("a Stream Deck pairs over the network and drives JStream", { skip }, async 
 	pinned.setEndpoint({ host, port: lanPort, fingerprint: wrong, token: paired.token });
 	await until("the certificate refused", () => pinned.status.state === "error" && /certificate has changed/.test(pinned.status.message), 8000);
 	assert.equal((pinned.status as { retryInMs?: number }).retryInMs, undefined, "a changed certificate is not retried");
+});
+
+test("a Stream Deck that asks to pair is let in when the person allows it", { skip }, async (t) => {
+	const host = lanHost();
+	// Denied on JStream's screen, the ask is refused.
+	let from = events.length;
+	const denied = askToPair(host, lanPort, fingerprint, "Stream Deck (asks)");
+	const asked = await heard("pairing.asked", from);
+	assert.equal(asked.ask.name, "Stream Deck (asks)");
+	await call({ kind: "action", action: { type: "pairing.answer", ask_id: asked.ask.ask_id, allow: false } });
+	await assert.rejects(denied, /Denied in JStream/);
+	assert.equal((await heard("pairing.ask_ended", from)).outcome, "denied");
+
+	// Allowed, it gets a device token that connects.
+	from = events.length;
+	const allowed = askToPair(host, lanPort, fingerprint, "Stream Deck (asks)");
+	const again = await heard("pairing.asked", from);
+	await call({ kind: "action", action: { type: "pairing.answer", ask_id: again.ask.ask_id, allow: true } });
+	const paired = await allowed;
+	assert.match(paired.token, /^[0-9a-f]{64}$/);
+	assert.equal((await heard("pairing.ask_ended", from)).outcome, "allowed");
+	const client = new JStreamClient("Stream Deck (asks)");
+	t.after(() => client.close());
+	client.setEndpoint({ host, port: lanPort, fingerprint, token: paired.token });
+	await until("connected", () => client.status.state === "connected", 8000);
+	await call({ kind: "action", action: { type: "device.revoke", device_id: paired.deviceId } });
+
+	// Abandoned (paired with a code meanwhile), the ask ends in JStream as closed.
+	from = events.length;
+	const abort = new AbortController();
+	const abandoned = askToPair(host, lanPort, fingerprint, "Stream Deck (asks)", abort.signal);
+	await heard("pairing.asked", from);
+	abort.abort();
+	await assert.rejects(abandoned);
+	assert.equal((await heard("pairing.ask_ended", from)).outcome, "closed");
 });
 
 test("show keys run a show, and the studio says when it plays and waits", { skip }, async (t) => {

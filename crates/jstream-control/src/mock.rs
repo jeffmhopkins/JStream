@@ -1566,6 +1566,7 @@ impl State {
             // module, and none is ever installed to grant, enable or remove. It hosts no CLAP
             // plugins either, so it has nothing to rescan.
             other @ (Action::PairingStart
+            | Action::PairingAnswer { .. }
             | Action::DeviceRevoke { .. }
             | Action::AgentApprove { .. }
             | Action::AgentForget { .. }

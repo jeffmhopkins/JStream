@@ -135,25 +135,14 @@ impl Harness {
         headers: &[(&str, &str)],
         body: &str,
     ) -> Result<HttpReply, String> {
-        let addr = self.network_addr();
-        let host = addr.to_string();
-        let mut all: Vec<(&str, &str)> = Vec::new();
-        if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
-            all.push(("Host", &host));
-        }
-        all.extend_from_slice(headers);
-        let connector = pinned(pin);
-        self.run(async {
-            let tcp = tokio::net::TcpStream::connect(addr)
-                .await
-                .map_err(|e| e.to_string())?;
-            let name = ServerName::try_from(NAME.to_owned()).map_err(|e| e.to_string())?;
-            let mut tls = connector
-                .connect(name, tcp)
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(http_to(&mut tls, method, path, &all, body).await)
-        })
+        self.run(tls_request_to(
+            self.network_addr(),
+            pin,
+            method,
+            path,
+            headers,
+            body,
+        ))
     }
 
     /// A WebSocket session on the network listener over TLS, pinning `pin`, with
@@ -208,6 +197,34 @@ impl Harness {
         assert_eq!(reply.status, 200, "{}", reply.body);
         format!("Bearer {}", reply.json()["token"].as_str().expect("token"))
     }
+}
+
+/// One HTTP/1.1 request to the network listener at `addr` over TLS, pinning `pin`, with
+/// `Host` set to `addr` unless `headers` sets one.
+async fn tls_request_to(
+    addr: SocketAddr,
+    pin: &str,
+    method: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: &str,
+) -> Result<HttpReply, String> {
+    let host = addr.to_string();
+    let mut all: Vec<(&str, &str)> = Vec::new();
+    if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
+        all.push(("Host", &host));
+    }
+    all.extend_from_slice(headers);
+    let connector = pinned(pin);
+    let tcp = tokio::net::TcpStream::connect(addr)
+        .await
+        .map_err(|e| e.to_string())?;
+    let name = ServerName::try_from(NAME.to_owned()).map_err(|e| e.to_string())?;
+    let mut tls = connector
+        .connect(name, tcp)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(http_to(&mut tls, method, path, &all, body).await)
 }
 
 type TlsSocket =
@@ -404,6 +421,25 @@ fn the_pairing_page_is_served_on_the_network_listener() {
     assert_ne!(local.status, 200);
 }
 
+/// ADR-0234 decision 3: with `ServerConfig::pairing` off, as the desktop app sets it, the
+/// server pairs while the network listener is open, so its `/pair` page is served there
+/// too, and the UI's challenge points a browser to it (#1745 B1).
+#[test]
+fn the_pairing_page_is_served_while_the_listener_is_open_with_pairing_off() {
+    let (harness, identity) = start_network(|config| config.pairing = false);
+    let reply = harness
+        .tls_request(
+            identity.fingerprint(),
+            "GET",
+            crate::PAIR_PAGE_PATH,
+            &[],
+            "",
+        )
+        .expect("tls");
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert!(reply.body.contains("fingerprint"), "{}", reply.body);
+}
+
 /// 0.97: `pairing.start` names where a device on the network reaches the listener, and
 /// the certificate's fingerprint, so the host can show them beside the code; without the
 /// network listener it names nothing.
@@ -501,4 +537,131 @@ fn the_network_listener_opens_and_closes_while_the_server_runs() {
         .expect("the listener reopens");
     assert!(harness.tls_session(pin, &device).is_ok());
     let _ = harness.pair_over_network(pin);
+}
+
+/// ADR-0235: a device asks to pair over the network listener; every session hears
+/// `pairing.asked` with its name and address; allowed, the held request gets a device
+/// token that the listener admits; denied, it gets `403`. Each ask ends with
+/// `pairing.ask_ended`, and an ask no one holds can't be answered.
+#[test]
+fn a_device_that_asks_is_paired_when_the_person_allows_it() {
+    use futures_util::StreamExt;
+    use jstream_control::protocol::{Action, Call, Event, PairingAskOutcome};
+    let (harness, identity) = start_network(|config| config.pairing = false);
+    let pin = identity.fingerprint();
+    let addr = harness.network_addr();
+    let origin = format!("https://{addr}");
+    let control = ok(harness.connect());
+    ok(harness.run(control.hello(hello())));
+    let mut events = control.events();
+    let body = serde_json::json!({"name": "Stream Deck"}).to_string();
+    let headers = [
+        ("Content-Type", "application/json"),
+        ("Origin", origin.as_str()),
+    ];
+
+    let mut ask = |allow: bool| {
+        harness.run(async {
+            let asking = tls_request_to(addr, pin, "POST", crate::PAIR_ASK_PATH, &headers, &body);
+            let answering = async {
+                let ask = loop {
+                    match events.next().await {
+                        Some(Event::PairingAsked { ask }) => break ask,
+                        Some(_) => {}
+                        None => panic!("the events ended"),
+                    }
+                };
+                assert_eq!(ask.name, "Stream Deck");
+                assert_eq!(ask.address, "127.0.0.1");
+                ok(control
+                    .call(Call::Action {
+                        action: Action::PairingAnswer {
+                            ask_id: ask.ask_id.clone(),
+                            allow,
+                        },
+                    })
+                    .await);
+                loop {
+                    match events.next().await {
+                        Some(Event::PairingAskEnded { ask_id, outcome }) => {
+                            assert_eq!(ask_id, ask.ask_id);
+                            break (ask.ask_id, outcome);
+                        }
+                        Some(_) => {}
+                        None => panic!("the events ended"),
+                    }
+                }
+            };
+            let (reply, ended) = tokio::join!(asking, answering);
+            (reply.expect("tls"), ended)
+        })
+    };
+
+    let (reply, (ask_id, outcome)) = ask(true);
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert_eq!(outcome, PairingAskOutcome::Allowed);
+    let token = format!("Bearer {}", reply.json()["token"].as_str().expect("token"));
+    assert!(
+        harness.tls_session(pin, &token).is_ok(),
+        "the token isn't admitted"
+    );
+    let late = harness.run(control.call(Call::Action {
+        action: Action::PairingAnswer {
+            ask_id,
+            allow: true,
+        },
+    }));
+    assert!(late.is_err(), "answered an ask that ended: {late:?}");
+
+    let (reply, (_, outcome)) = ask(false);
+    assert_eq!(reply.status, 403, "{}", reply.body);
+    assert_eq!(outcome, PairingAskOutcome::Denied);
+}
+
+/// ADR-0234 and ADR-0235: closing the network listener ends an ask held on it at once,
+/// as `closed`, with `503`, so the close doesn't wait for the person's answer and
+/// nothing pairs after network access is turned off (#1802 B1).
+#[test]
+fn closing_the_listener_ends_a_held_ask() {
+    use futures_util::StreamExt;
+    use jstream_control::protocol::{Event, PairingAskOutcome};
+    let (harness, identity) = start_network(|config| config.pairing = false);
+    let switch = harness.switch.clone();
+    let pin = identity.fingerprint();
+    let addr = harness.network_addr();
+    let origin = format!("https://{addr}");
+    let control = ok(harness.connect());
+    ok(harness.run(control.hello(hello())));
+    let mut events = control.events();
+    let body = serde_json::json!({"name": "Stream Deck"}).to_string();
+    let headers = [
+        ("Content-Type", "application/json"),
+        ("Origin", origin.as_str()),
+    ];
+    let (reply, outcome) = harness.run(async {
+        let asking = tls_request_to(addr, pin, "POST", crate::PAIR_ASK_PATH, &headers, &body);
+        let closing = async {
+            loop {
+                match events.next().await {
+                    Some(Event::PairingAsked { .. }) => break,
+                    Some(_) => {}
+                    None => panic!("the events ended"),
+                }
+            }
+            // Within `run`'s 10 s, far short of the ask's 2 minutes.
+            switch.close().await;
+            loop {
+                match events.next().await {
+                    Some(Event::PairingAskEnded { outcome, .. }) => break outcome,
+                    Some(_) => {}
+                    None => panic!("the events ended"),
+                }
+            }
+        };
+        let (reply, outcome) = tokio::join!(asking, closing);
+        (reply.expect("tls"), outcome)
+    });
+    assert_eq!(reply.status, 503, "{}", reply.body);
+    assert_eq!(outcome, PairingAskOutcome::Closed);
+    assert_eq!(switch.info(), None);
 }

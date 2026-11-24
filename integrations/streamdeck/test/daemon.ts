@@ -22,6 +22,8 @@ let loopbackUrl = "";
 export let fingerprint = "";
 let control: WebSocket;
 let nextId = 1;
+/** The events the host's own session heard, oldest first. */
+export const events: any[] = [];
 
 function freePort(): Promise<number> {
 	return new Promise((resolve) => {
@@ -31,6 +33,12 @@ function freePort(): Promise<number> {
 			server.close(() => resolve(port));
 		});
 	});
+}
+
+/** Waits for the host's session to hear an event of `type` after `from` events, and returns it. */
+export async function heard(type: string, from = 0, ms = 8000): Promise<any> {
+	await until(type, () => events.slice(from).some((e) => e.type === type), ms);
+	return events.slice(from).find((e) => e.type === type);
 }
 
 /** A call on the host's own loopback listener, with the control token. */
@@ -84,6 +92,10 @@ export async function startDaemon(): Promise<void> {
 		control.once("open", () => control.send(JSON.stringify({ type: "hello", protocol: { major: 0, minor: 169 }, client_name: "test-host" })));
 		control.once("message", () => resolve());
 		control.once("error", reject);
+	});
+	control.on("message", (data: WebSocket.RawData) => {
+		const m = JSON.parse(data.toString());
+		if (m.type === "event") events.push(m.event);
 	});
 	await call({
 		kind: "batch",
