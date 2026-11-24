@@ -71,7 +71,9 @@ pub fn copy_planar(
 /// [`copy_planar`] into the buffers of `spare`, a frame the caller is done with
 /// ([`CaptureStream::recycle`](crate::CaptureStream::recycle)), when it has any: a buffer
 /// that holds the plane is filled again, so a capture at a steady size allocates no
-/// plane after its first few frames. `spare`'s size and format don't matter.
+/// plane after its first few frames. `spare`'s size and format don't matter. A plane of
+/// `spare` whose bytes something else still holds (a frame two readers of one device
+/// both got) is left to them, and that plane is allocated.
 ///
 /// # Errors
 /// As for [`copy_planar`].
@@ -91,7 +93,7 @@ pub fn copy_planar_into(
     let mut planes = Vec::with_capacity(count);
     let mut offset = 0;
     for plane in 0..count {
-        let buffer = spare.pop().map(Plane::into_data).unwrap_or_default();
+        let buffer = spare.pop().and_then(Plane::into_data).unwrap_or_default();
         let Some(geometry) = info.plane(plane)? else {
             continue;
         };
@@ -299,6 +301,26 @@ mod tests {
         .expect("copy");
         assert_eq!(one.planes().len(), 1);
         assert_eq!(one.row(0, 1), Some(&[7; 8][..]));
+    }
+
+    #[test]
+    fn a_spare_frame_something_else_still_holds_is_left_alone() {
+        let src: Vec<u8> = (0..4 * 3).collect();
+        let nv12 = info(4, 2, PixelFormat::Nv12);
+        let first = copy_planar_into(CALL, &src, 4, nv12, None).expect("copy");
+        // Another reader of the device holds the same planes.
+        let other = first.clone();
+        let next: Vec<u8> = (100..100 + 4 * 3).collect();
+        let second = copy_planar_into(CALL, &next, 4, nv12, Some(first)).expect("copy");
+        for (new, held) in second.planes().iter().zip(other.planes()) {
+            assert_ne!(new.data().as_ptr(), held.data().as_ptr(), "a new buffer");
+        }
+        assert_eq!(
+            other.row(0, 1),
+            Some(&[4, 5, 6, 7][..]),
+            "the other reader's frame"
+        );
+        assert_eq!(second.row(0, 1), Some(&[104, 105, 106, 107][..]));
     }
 
     #[test]

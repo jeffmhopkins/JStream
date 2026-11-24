@@ -2181,6 +2181,10 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::SourceRestart {
             source_id: SourceId::new("src_1"),
         },
+        Action::SourceSeek {
+            source_id: SourceId::new("src_1"),
+            at_ms: 90_000,
+        },
         // The media clock, held and stepped to render frame by frame (ADR-0172).
         Action::ClockHold,
         Action::ClockStep { ms: 33 },
@@ -3488,11 +3492,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         height: 1080,
                     }),
                     depth: None,
+                    duration_ms: None,
                 },
                 SourceSize {
                     source_id: SourceId::new("mic"),
                     size: None,
                     depth: None,
+                    duration_ms: None,
                 },
                 SourceSize {
                     source_id: SourceId::new("teapot"),
@@ -3501,6 +3507,16 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         height: 256,
                     }),
                     depth: Some(320),
+                    duration_ms: None,
+                },
+                SourceSize {
+                    source_id: SourceId::new("intro"),
+                    size: Some(PixelSize {
+                        width: 1920,
+                        height: 1080,
+                    }),
+                    depth: None,
+                    duration_ms: Some(12_480),
                 },
             ],
         },
@@ -4298,11 +4314,22 @@ pub(crate) fn events() -> Vec<Event> {
             height: 720,
         }),
         depth: None,
+        duration_ms: None,
     });
     events.push(Event::SourceSizeChanged {
         source_id: SourceId::new("window"),
         size: None,
         depth: None,
+        duration_ms: None,
+    });
+    events.push(Event::SourceSizeChanged {
+        source_id: SourceId::new("theme"),
+        size: Some(PixelSize {
+            width: 1,
+            height: 1,
+        }),
+        depth: None,
+        duration_ms: Some(184_000),
     });
     events.push(Event::SourceSizeChanged {
         source_id: SourceId::new("teapot"),
@@ -4311,6 +4338,7 @@ pub(crate) fn events() -> Vec<Event> {
             height: 512,
         }),
         depth: Some(400),
+        duration_ms: None,
     });
     events.push(Event::YoutubeStats {
         stats: AudienceStatsInfo {

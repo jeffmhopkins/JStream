@@ -88,7 +88,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
-  `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
+  `source.restart`, `source.seek`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
@@ -384,8 +384,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.177 because `profile.get` counts each drawing thread's GPU
-submits per frame (`DrawerProfile`'s `submits`); 0.176 because `profile.get`'s drawers report
+`PROTOCOL_VERSION` is 0.178 because `profile.get` counts each drawing thread's GPU
+submits per frame (`DrawerProfile`'s `submits`); 0.177 because of `source.seek`, which plays a `media` file on
+from a point into it and holds through the program showing it, and `SourceSize`'s and
+`source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
+the release queue sets); 0.176 because `profile.get`'s drawers report
 `preview_skipped`, the pictures only preview streams take that the program skipped,
 which `stats.tick`'s `render_ticks` no longer counts (#1690); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
@@ -2001,7 +2004,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   thread's (`program`, `preview`) frames, their average, 95th percentile and longest
   time, the frames over `frame_budget_ms`, the program's skipped ticks, since 0.176 the
   pictures only preview streams take that the program skipped (`preview_skipped`, which
-  `stats.tick`'s `drops` leave out), since 0.177 the GPU submits it made per frame
+  `stats.tick`'s `drops` leave out), since 0.178 the GPU submits it made per frame
   (`submits`: each costs the thread a fixed time however little work it carries, and
   only the compositor's own are counted) and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
@@ -2099,7 +2102,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
   height are reported at (the larger 512), so an editor can outline and hit it by its 3D
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
-  other source.
+  other source. Since 0.177 a `media` file whose length is known also reports
+  `duration_ms`, one play's length in milliseconds: from its container, or once a play
+  has reached its end (`source.size_changed` announces it when it becomes known). A file
+  with no video stream reports it beside the 1×1 `size` above. Omitted for every other
+  source and while the length isn't known.
 - `activity.list {after_seq?, limit?}`: the engine's recent activity, newest first
   ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)): one
   `ActivityEntry` for each batch, undo, redo and action the audit log records (not
@@ -2449,13 +2456,15 @@ After `welcome`, the server pushes every event to every client.
 - `privacy.changed {on, client_id, request_id?}`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so the engine never sends it. Added in 0.33.
-- `source.size_changed {source_id, size?, depth?}` says a source's size changed: it became
+- `source.size_changed {source_id, size?, depth?, duration_ms?}` says a source's size changed: it became
   known (the first frame), changed, or became unknown (`size` omitted: the source
   stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
-  `depth`, as `source.sizes` reports it, since 0.157.
+  `depth`, as `source.sizes` reports it, since 0.157; `duration_ms`, likewise, since
+  0.177: a length becoming known (once a play reaches the end of a file whose container
+  didn't say) is a change too, even when the size stays the same.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -2650,7 +2659,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
-  `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, and `channel.set_value`,
+  `scene.aim_camera`, ADR-0152, `source.restart`, ADR-0115, `source.seek`, and `channel.set_value`,
   `channel.nudge` and `channel.switch`, ADR-0183) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
@@ -3227,6 +3236,14 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+- **`source.seek {source_id, at_ms}`** (since 0.177) plays a `media` file on from
+  `at_ms` into its timeline: past the end of a looping file it lands where that many
+  plays would reach, and on one that doesn't loop, on its last frame. A kind with nothing
+  to seek starts over as `source.restart` starts it, and others do nothing. A seek
+  made before the program shows the source holds through the show, so the source isn't
+  started again from its start by `restart_on_show`: a switch and a seek can come in
+  either order. Like `source.restart` it is runtime state, bindable to a hotkey, not a
+  timeline cue, and needs the `live` class from a plugin.
 
 <a id="media-clock"></a>
 ## Holding the media clock
