@@ -694,6 +694,33 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..value_bindings().remove(0)
             },
         },
+        // A show, then its delete (ADR-0210).
+        Edit::ShowSet { show: show() },
+        Edit::ShowDelete {
+            show_id: crate::ShowId::new("evening"),
+        },
+        // A bare show, then its other ends, loop leaves and Next monitors.
+        Edit::ShowSet {
+            show: crate::ShowInfo::new("blank"),
+        },
+        Edit::ShowSet {
+            show: crate::ShowInfo {
+                end: crate::ShowEnd::Loop,
+                next_monitor: crate::NextMonitor::Live,
+                ..show()
+            },
+        },
+        Edit::ShowSet {
+            show: crate::ShowInfo {
+                end: crate::ShowEnd::Stop,
+                next_monitor: crate::NextMonitor::Off,
+                loops: vec![crate::ShowLoop {
+                    leave: crate::LoopLeave::FinishPass,
+                    ..show().loops.remove(0)
+                }],
+                ..show()
+            },
+        },
         // A channel, then its delete (ADR-0183).
         Edit::ChannelSet {
             channel: channels().remove(0),
@@ -2185,7 +2212,143 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::ClockHold,
         Action::ClockStep { ms: 33 },
         Action::ClockRelease,
+        // Running a show (ADR-0210).
+        Action::ShowPlay {
+            show_id: crate::ShowId::new("evening"),
+            bookmark_id: None,
+            rehearse: false,
+        },
+        Action::ShowPlay {
+            show_id: crate::ShowId::new("evening"),
+            bookmark_id: Some("demo".into()),
+            rehearse: true,
+        },
+        Action::ShowContinue,
+        Action::ShowBack,
+        Action::ShowSkip,
+        Action::ShowGoTo {
+            show_id: crate::ShowId::new("evening"),
+            bookmark_id: "demo".into(),
+        },
+        Action::ShowGoToNumber { number: 2 },
+        Action::ShowSeek { at_ms: 95_000 },
+        Action::ShowArm {
+            at_ms: Some(120_000),
+        },
+        Action::ShowArm { at_ms: None },
+        Action::ShowStop,
     ]
+}
+
+/// A show with every track, two bookmarks, a loop, and an end that goes to a bookmark
+/// (ADR-0210).
+fn show() -> crate::ShowInfo {
+    crate::ShowInfo {
+        name: "Evening show".into(),
+        program: vec![
+            crate::ProgramClip {
+                clip_id: "intro".into(),
+                scene_id: SceneId::new("scn_1"),
+                length_ms: 30_000,
+                preset_id: None,
+            },
+            crate::ProgramClip {
+                clip_id: "main".into(),
+                scene_id: SceneId::new("scn_2"),
+                length_ms: 90_000,
+                preset_id: Some(crate::TransitionPresetId::new("fade")),
+            },
+        ],
+        overlays: vec![crate::OverlayTrack {
+            track_id: "v2".into(),
+            name: "Lower thirds".into(),
+            clips: vec![crate::OverlayClip {
+                clip_id: "logo".into(),
+                scene_id: SceneId::new("scn_panels"),
+                start_ms: 10_000,
+                length_ms: 60_000,
+                fade_in_ms: 500,
+                fade_out_ms: 0,
+            }],
+        }],
+        keyframes: vec![crate::KeyframeMarker {
+            marker_id: "wide".into(),
+            at_ms: 45_000,
+            keyframe_id: Some(SceneId::new("scn_panels_wide")),
+            preset_id: None,
+        }],
+        sequences: vec![crate::SequenceTrack {
+            track_id: "s1".into(),
+            name: String::new(),
+            cues: vec![
+                crate::ShowCue::new(
+                    "volley",
+                    30_000,
+                    &Action::TimelinePlay {
+                        timeline_id: TimelineId::new("tl_volley"),
+                        delay_ms: None,
+                    },
+                ),
+                crate::ShowCue::new(
+                    "lights_on",
+                    31_000,
+                    &Action::ChannelSwitch {
+                        channel_id: "power".into(),
+                        to: crate::ChannelSwitch::On,
+                    },
+                ),
+            ],
+        }],
+        audio: vec![crate::AudioTrack {
+            track_id: "a1".into(),
+            name: "Music".into(),
+            clips: vec![crate::AudioClip {
+                clip_id: "bed".into(),
+                source_id: SourceId::new("src_music"),
+                start_ms: 0,
+                length_ms: 30_000,
+                fade_in_ms: 2000,
+                fade_out_ms: 3000,
+                gain_db: Finite32::new(-6.0).expect("finite"),
+            }],
+        }],
+        bookmarks: vec![
+            crate::ShowBookmark {
+                bookmark_id: "start".into(),
+                name: "Start".into(),
+                at_ms: 30_000,
+                pausing: true,
+                preset_id: None,
+                continue_after_ms: Some(60_000),
+                note: "Wait for the host's cue".into(),
+            },
+            crate::ShowBookmark {
+                bookmark_id: "demo".into(),
+                name: "Demo".into(),
+                at_ms: 60_000,
+                pausing: false,
+                preset_id: Some(crate::TransitionPresetId::new("fade")),
+                continue_after_ms: None,
+                note: String::new(),
+            },
+        ],
+        loops: vec![crate::ShowLoop {
+            loop_id: "waiting_room".into(),
+            name: "Waiting room".into(),
+            start_ms: 0,
+            end_ms: 30_000,
+            preset_id: None,
+            leave: crate::LoopLeave::AtOnce,
+        }],
+        end: crate::ShowEnd::GoTo {
+            bookmark_id: "start".into(),
+        },
+        preset_id: Some(crate::TransitionPresetId::new("fade")),
+        image_ms: 8000,
+        next_monitor: crate::NextMonitor::Still,
+        planned_ms: Some(3_600_000),
+        ..crate::ShowInfo::new("evening")
+    }
 }
 
 /// A timeline that runs a sequence of cues and loops a range of it (ADR-0115).
@@ -3388,6 +3551,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             bindings: controller_bindings(),
             value_bindings: value_bindings(),
             channels: Box::new(channels()),
+            shows: Box::new(vec![show()]),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -3458,6 +3622,62 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 shadows: false,
                 ..crate::RenderFeatures::ALL
             }),
+            show: Some(Box::new(crate::RunningShow {
+                show_id: crate::ShowId::new("evening"),
+                at_ms: 30_000,
+                state: crate::ShowState::Paused,
+                bookmark_id: Some("start".into()),
+                waited_ms: Some(4200),
+                off_script: None,
+                loop_id: None,
+                pass: None,
+                armed_ms: Some(60_000),
+                rehearse: false,
+            })),
+        },
+        QueryResult::StudioGet {
+            waiting: Vec::new(),
+            program_scene: Some(SceneId::new("scn_1")),
+            preview_scene: None,
+            timelines: Vec::new(),
+            keyframes: Vec::new(),
+            warm_scenes: None,
+            warm_gpu_mib: None,
+            rendering: None,
+            show: Some(Box::new(crate::RunningShow {
+                show_id: crate::ShowId::new("evening"),
+                at_ms: 12_000,
+                state: crate::ShowState::Playing,
+                bookmark_id: None,
+                waited_ms: None,
+                off_script: None,
+                loop_id: Some("waiting_room".into()),
+                pass: Some(2),
+                armed_ms: None,
+                rehearse: true,
+            })),
+        },
+        QueryResult::StudioGet {
+            waiting: Vec::new(),
+            program_scene: Some(SceneId::new("scn_2")),
+            preview_scene: None,
+            timelines: Vec::new(),
+            keyframes: Vec::new(),
+            warm_scenes: None,
+            warm_gpu_mib: None,
+            rendering: None,
+            show: Some(Box::new(crate::RunningShow {
+                show_id: crate::ShowId::new("evening"),
+                at_ms: 40_000,
+                state: crate::ShowState::OffScript,
+                bookmark_id: None,
+                waited_ms: None,
+                off_script: Some(SceneId::new("scn_2")),
+                loop_id: None,
+                pass: None,
+                armed_ms: None,
+                rehearse: false,
+            })),
         },
         QueryResult::StudioGet {
             waiting: Vec::new(),
@@ -3468,6 +3688,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             warm_scenes: None,
             warm_gpu_mib: None,
             rendering: None,
+            show: None,
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
@@ -4079,6 +4300,37 @@ pub(crate) fn events() -> Vec<Event> {
             playing,
             position_ms,
             pass,
+        });
+    }
+    for (change, running, at_ms, bookmark, show_loop) in [
+        (crate::ShowChange::Started, true, 0, None, None),
+        (crate::ShowChange::Paused, true, 30_000, Some("start"), None),
+        (
+            crate::ShowChange::Continued,
+            true,
+            30_000,
+            Some("start"),
+            None,
+        ),
+        (crate::ShowChange::Jumped, true, 60_000, Some("demo"), None),
+        (
+            crate::ShowChange::Looped,
+            true,
+            0,
+            None,
+            Some("waiting_room"),
+        ),
+        (crate::ShowChange::OffScript, true, 40_000, None, None),
+        (crate::ShowChange::Ended, false, 120_000, None, None),
+        (crate::ShowChange::Stopped, false, 75_000, None, None),
+    ] {
+        events.push(Event::ShowChanged {
+            show_id: crate::ShowId::new("evening"),
+            change,
+            running,
+            at_ms,
+            bookmark_id: bookmark.map(Into::into),
+            loop_id: show_loop.map(Into::into),
         });
     }
     events.push(Event::TimelineCueFired {

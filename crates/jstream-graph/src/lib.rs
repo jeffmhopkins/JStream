@@ -26,6 +26,7 @@ mod organise;
 mod persist;
 mod plan;
 mod read;
+mod show;
 mod target;
 mod timeline;
 mod touched;

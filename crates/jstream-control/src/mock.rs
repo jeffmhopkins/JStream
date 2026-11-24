@@ -629,6 +629,8 @@ struct Collection {
     value_bindings: BTreeMap<String, jstream_protocol::ValueBinding>,
     /// The channels (ADR-0183), by ID.
     channels: BTreeMap<String, jstream_protocol::ChannelInfo>,
+    /// The shows (ADR-0210), by ID.
+    shows: BTreeMap<jstream_protocol::ShowId, jstream_protocol::ShowInfo>,
     /// The scene list's folders, in folder order (ADR-0024 §3).
     folders: Vec<jstream_protocol::FolderInfo>,
     /// The labels, in label order (ADR-0024 §4).
@@ -668,6 +670,7 @@ impl Default for Collection {
             bindings: BTreeMap::new(),
             value_bindings: BTreeMap::new(),
             channels: BTreeMap::new(),
+            shows: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
         }
@@ -896,6 +899,7 @@ impl State {
                 Edit::EncoderDelete { profile_id } => {
                     Some((EntityKind::Encoder, profile_id.to_string()))
                 }
+                Edit::ShowDelete { show_id } => Some((EntityKind::Show, show_id.to_string())),
                 _ => None,
             };
             let mut inverse = next.apply(edit, at, &running)?;
@@ -1552,6 +1556,7 @@ impl State {
                     .collect(),
                 value_bindings: self.collection.value_bindings.values().cloned().collect(),
                 channels: Box::new(self.collection.channels.values().cloned().collect()),
+                shows: Box::new(self.collection.shows.values().cloned().collect()),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: self.collection.folders.clone(),
                 labels: self.collection.labels.clone(),
@@ -1581,6 +1586,8 @@ impl State {
                 ),
                 warm_gpu_mib: Some(self.warm_gpu_mib),
                 rendering: Some(self.rendering),
+                // The mock runs no show (ADR-0210).
+                show: None,
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
@@ -2871,6 +2878,26 @@ impl Collection {
                 };
                 vec![Edit::ChannelSet { channel }]
             }
+            Edit::ShowSet { show } => {
+                if let Some((field, reason)) = show.problem() {
+                    return Err(invalid(at, &format!("show.{field}"), &reason));
+                }
+                let id = show.show_id.clone();
+                if !self.shows.contains_key(&id) && self.shows.len() >= jstream_protocol::MAX_SHOWS
+                {
+                    return Err(invalid(at, "show", "a collection holds at most 64 shows"));
+                }
+                match self.shows.insert(id.clone(), show) {
+                    Some(old) => vec![Edit::ShowSet { show: old }],
+                    None => vec![Edit::ShowDelete { show_id: id }],
+                }
+            }
+            Edit::ShowDelete { show_id } => {
+                let Some(show) = self.shows.remove(&show_id) else {
+                    return Err(not_found(EntityKind::Show, show_id.as_str()));
+                };
+                vec![Edit::ShowSet { show }]
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
@@ -2899,6 +2926,7 @@ impl Collection {
                 // The mock has only the `cut` preset every collection starts with.
                 EntityKind::Transition => id == INITIAL_PRESET,
                 EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
+                EntityKind::Show => self.shows.contains_key(&jstream_protocol::ShowId::new(id)),
                 _ => false,
             };
             if !exists {
@@ -4523,6 +4551,7 @@ mod tests {
                 bindings,
                 value_bindings,
                 channels,
+                shows,
                 transitions,
                 folders,
                 labels,
@@ -4544,6 +4573,7 @@ mod tests {
                 bindings,
                 value_bindings,
                 channels,
+                shows,
                 transitions,
                 folders,
                 labels,
@@ -4770,6 +4800,7 @@ mod tests {
                 bindings: vec![],
                 value_bindings: vec![],
                 channels: Box::default(),
+                shows: Box::default(),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),

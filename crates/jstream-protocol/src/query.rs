@@ -648,6 +648,11 @@ pub enum QueryResult {
         // Boxed, as `master` is, to keep a call's result small.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         channels: Box<Vec<ChannelInfo>>,
+        /// Every show (ADR-0210), ordered by ID. Omitted when there are none, and
+        /// missing (from a server older than 0.177) parses as empty.
+        // Boxed, as `channels` is, to keep a call's result small.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        shows: Box<Vec<crate::ShowInfo>>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -738,6 +743,10 @@ pub enum QueryResult {
         /// decision 1, since 0.147). Omitted by an older server, which draws every effect.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rendering: Option<crate::RenderFeatures>,
+        /// The show running (ADR-0210, since 0.177), where its play head is and what it
+        /// is doing. Omitted when no show runs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        show: Option<Box<crate::RunningShow>>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]

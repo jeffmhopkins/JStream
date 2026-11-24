@@ -215,6 +215,7 @@ fn deleted_object(edit: &Edit) -> Option<(EntityKind, &str)> {
         Edit::OutputDelete { output_id } => Some((EntityKind::Output, output_id.as_str())),
         Edit::EncoderDelete { profile_id } => Some((EntityKind::Encoder, profile_id.as_str())),
         Edit::TransitionDelete { preset_id } => Some((EntityKind::Transition, preset_id.as_str())),
+        Edit::ShowDelete { show_id } => Some((EntityKind::Show, show_id.as_str())),
         _ => None,
     }
 }
@@ -462,6 +463,9 @@ fn apply_edit(
         return applied;
     }
     if let Some(applied) = crate::value::apply(state, kinds, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::show::apply(state, edit, at) {
         return applied;
     }
     if let Some(applied) = crate::channel::apply(state, edit, at) {

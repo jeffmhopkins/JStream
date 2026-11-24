@@ -1539,6 +1539,7 @@ mod tests {
             warm_scenes: None,
             warm_gpu_mib: None,
             rendering: None,
+            show: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }

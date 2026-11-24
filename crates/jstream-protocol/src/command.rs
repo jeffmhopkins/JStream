@@ -22,7 +22,7 @@ use crate::geometry::{ItemGeometry, SceneCamera};
 use crate::hotkey::Chord;
 use crate::id::{
     BusId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey, ItemId,
-    LabelId, OutputId, PluginId, Rev, SceneId, SourceId, TimelineId, TransitionPresetId,
+    LabelId, OutputId, PluginId, Rev, SceneId, ShowId, SourceId, TimelineId, TransitionPresetId,
     VideoMixId,
 };
 use crate::keyframe::OverrideField;
@@ -34,6 +34,7 @@ use crate::plugin::PluginGrant;
 use crate::preview::{PreviewCodec, PreviewDraft};
 use crate::query::SceneOptions;
 use crate::settings::Settings;
+use crate::show::ShowInfo;
 use crate::timeline::TimelineInfo;
 use crate::transition::{Easing, ItemTransition, KeyframeTiming};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
@@ -1105,6 +1106,27 @@ pub enum Edit {
         /// The channel's ID.
         channel_id: String,
     },
+    /// Sets a show (ADR-0210, since 0.177): a new one, or the whole of one with the same
+    /// `show_id` in its place. A show running when it is set again runs on with the new
+    /// one from where its play head is. Rejected with `invalid_argument` at
+    /// `show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th
+    /// show ([`MAX_SHOWS`](crate::MAX_SHOWS)). A clip naming a scene, source, sequence,
+    /// keyframe or preset that doesn't exist is taken, as a timeline's cue is, and does
+    /// nothing when the show reaches it. Inverse: `show.delete`, or `show.set` with the
+    /// show it replaced.
+    #[serde(rename = "show.set")]
+    ShowSet {
+        /// The show.
+        show: ShowInfo,
+    },
+    /// Deletes a show. A show running when it is deleted stops, and emits
+    /// `show.changed` (`stopped`). Rejected with `not_found` (entity `show`) for an ID no
+    /// show has. Inverse: `show.set` with the show.
+    #[serde(rename = "show.delete")]
+    ShowDelete {
+        /// The show's ID.
+        show_id: ShowId,
+    },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
     /// an action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't
@@ -1445,6 +1467,8 @@ impl Edit {
             Edit::BindingClearValue { .. } => "binding.clear_value",
             Edit::ChannelSet { .. } => "channel.set",
             Edit::ChannelDelete { .. } => "channel.delete",
+            Edit::ShowSet { .. } => "show.set",
+            Edit::ShowDelete { .. } => "show.delete",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",
@@ -2135,6 +2159,93 @@ pub enum Action {
     /// `output.start` still fails, as while held.
     #[serde(rename = "clock.release")]
     ClockRelease,
+    /// Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,
+    /// as a jump there would land. One show runs at a time: playing another stops the one
+    /// running, which emits `show.changed` (`stopped`). Running is studio state like the
+    /// program scene: it changes no `rev`, is never undone or saved, `studio.get` reports
+    /// it in `show`, and it emits `show.changed` (`started`). Fails with `not_found`
+    /// (entity `show`) for a show the collection doesn't hold, and with
+    /// `invalid_argument` at `bookmark_id` for one the show doesn't hold.
+    #[serde(rename = "show.play")]
+    ShowPlay {
+        /// The show.
+        show_id: ShowId,
+        /// The bookmark to start at. Omitted for the show's start.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bookmark_id: Option<String>,
+        /// Whether to rehearse it on preview, leaving program, the channels and the
+        /// mixer alone. Omitted for `false`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        rehearse: bool,
+    },
+    /// Stops the running show where it is (ADR-0210, since 0.177): program keeps what is
+    /// on it, and the sequences the show started stop, while ones started by hand or a
+    /// trigger play on. Emits `show.changed` (`stopped`). With no show running it
+    /// succeeds and emits nothing.
+    #[serde(rename = "show.stop")]
+    ShowStop,
+    /// Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a
+    /// pausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;
+    /// off script, it goes on to the next clip; in a loop, it leaves as the loop's
+    /// `leave` says; playing, it jumps to the next pausing bookmark, applying state as any
+    /// jump does. Ignored while a transition plays, so a double press can't skip a
+    /// bookmark. Emits `show.changed`. With no show running it succeeds and does
+    /// nothing.
+    #[serde(rename = "show.continue")]
+    ShowContinue,
+    /// Jumps the running show back to the pausing bookmark before its play head
+    /// (ADR-0210, since 0.177), or to its start if there is none, and waits there. Emits
+    /// `show.changed` (`jumped`). With no show running it succeeds and does nothing.
+    #[serde(rename = "show.back")]
+    ShowBack,
+    /// Jumps the running show to the next pausing bookmark without playing what is
+    /// between (ADR-0210, since 0.177), and waits there. Emits `show.changed`
+    /// (`jumped`). With no show running it succeeds and does nothing.
+    #[serde(rename = "show.skip")]
+    ShowSkip,
+    /// Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.177):
+    /// the state there is what playing there would have left (decision 6), and the
+    /// transition is the bookmark's own. It acts only while that show runs, so a key
+    /// bound to a bookmark does nothing during another show; with that show not running
+    /// it succeeds and does nothing. Emits `show.changed` (`jumped`). Fails with
+    /// `not_found` (entity `show`) for a show the collection doesn't hold.
+    #[serde(rename = "show.go_to")]
+    ShowGoTo {
+        /// The show.
+        show_id: ShowId,
+        /// The bookmark. One the show doesn't hold does nothing.
+        bookmark_id: String,
+    },
+    /// Jumps the running show to its bookmark number `number`, 1 to 8, counted in show
+    /// order (ADR-0210 decision 5, since 0.177), so a row of pads needs no rebinding when
+    /// bookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it
+    /// succeeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to
+    /// 8.
+    #[serde(rename = "show.go_to_number")]
+    ShowGoToNumber {
+        /// The bookmark's place in the show, 1 to 8.
+        number: u8,
+    },
+    /// Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.177),
+    /// as a jump to a bookmark there would: for scrubbing, and for an agent. A spot
+    /// inside a video seeks it. Emits `show.changed` (`jumped`). With no show running it
+    /// succeeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.
+    #[serde(rename = "show.seek")]
+    ShowSeek {
+        /// Where to, in milliseconds of show time.
+        at_ms: u32,
+    },
+    /// Arms a spot in the running show for the next `show.continue` (ADR-0210 decision
+    /// 14, since 0.177), which a click on the ruler does while a show runs, so a click
+    /// never jumps program on air. `studio.get` reports it in `show.armed_ms`; arming
+    /// again moves it, and omitting `at_ms` disarms it. With no show running it succeeds
+    /// and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.
+    #[serde(rename = "show.arm")]
+    ShowArm {
+        /// Where, in milliseconds of show time. Omitted to disarm.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at_ms: Option<u32>,
+    },
     /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
     /// loads again, and a `media` file plays from its start. Other kinds have nothing to
     /// restart, so for them it succeeds and does nothing, as it does for a source no mix
@@ -2467,6 +2578,15 @@ impl Action {
             Action::ClockHold => "clock.hold",
             Action::ClockStep { .. } => "clock.step",
             Action::ClockRelease => "clock.release",
+            Action::ShowPlay { .. } => "show.play",
+            Action::ShowStop => "show.stop",
+            Action::ShowContinue => "show.continue",
+            Action::ShowBack => "show.back",
+            Action::ShowSkip => "show.skip",
+            Action::ShowGoTo { .. } => "show.go_to",
+            Action::ShowGoToNumber { .. } => "show.go_to_number",
+            Action::ShowSeek { .. } => "show.seek",
+            Action::ShowArm { .. } => "show.arm",
             Action::SourceRestart { .. } => "source.restart",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
@@ -2602,7 +2722,17 @@ impl Action {
             | Action::CollectionSaveAs { .. }
             | Action::ClockHold
             | Action::ClockStep { .. }
-            | Action::ClockRelease => vec![],
+            | Action::ClockRelease
+            | Action::ShowStop
+            | Action::ShowContinue
+            | Action::ShowBack
+            | Action::ShowSkip
+            | Action::ShowGoToNumber { .. }
+            | Action::ShowSeek { .. }
+            | Action::ShowArm { .. } => vec![],
+            Action::ShowPlay { show_id, .. } | Action::ShowGoTo { show_id, .. } => {
+                vec![(EntityKind::Show, show_id.as_str())]
+            }
         }
     }
 
@@ -2743,6 +2873,17 @@ impl Action {
             Action::TimelinePlay { .. } => self.play_problem(),
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on a value out of range.
+            Action::ShowPlay { .. }
+            | Action::ShowStop
+            | Action::ShowContinue
+            | Action::ShowBack
+            | Action::ShowSkip
+            | Action::ShowGoTo { .. }
+            | Action::ShowGoToNumber { .. }
+            | Action::ShowSeek { .. }
+            | Action::ShowArm { .. } => self.show_problem(),
+            // Bindable, but checked as the call would be, so a saved binding never fails
+            // every press on a value out of range.
             Action::ChannelSetValue { .. }
             | Action::ChannelSwitch { .. }
             | Action::ChannelNudge { .. } => self.channel_problem(),
@@ -2775,6 +2916,15 @@ impl Action {
             Action::ClockHold
             | Action::ClockStep { .. }
             | Action::ClockRelease
+            | Action::ShowPlay { .. }
+            | Action::ShowStop
+            | Action::ShowContinue
+            | Action::ShowBack
+            | Action::ShowSkip
+            | Action::ShowGoTo { .. }
+            | Action::ShowGoToNumber { .. }
+            | Action::ShowSeek { .. }
+            | Action::ShowArm { .. }
             | Action::SceneDriveCamera { .. }
             | Action::SceneAimCamera { .. }
             | Action::PtzDrive { .. }
@@ -2915,6 +3065,34 @@ impl Action {
                 channel_id,
                 to: ChannelSwitch::On | ChannelSwitch::Off,
             } => Some(format!("channel switch {channel_id}")),
+            _ => None,
+        }
+    }
+
+    /// Why a `show.*` action is out of range, as the field and the reason, or `None`
+    /// (ADR-0210): a show ID and bookmark ID of the right form, a `number` within 1 to 8,
+    /// and an `at_ms` within 24 hours. `None` for any other action.
+    pub fn show_problem(&self) -> Option<(&'static str, &'static str)> {
+        let id = |id: &str, field| crate::check_channel_id(id).err().map(|r| (field, r));
+        let time = |ms: u32| {
+            (ms > crate::MAX_SHOW_MS).then_some(("at_ms", "must be at most 86400000 (24 hours)"))
+        };
+        match self {
+            Action::ShowPlay {
+                show_id,
+                bookmark_id,
+                ..
+            } => id(show_id.as_str(), "show_id")
+                .or_else(|| bookmark_id.as_deref().and_then(|b| id(b, "bookmark_id"))),
+            Action::ShowGoTo {
+                show_id,
+                bookmark_id,
+            } => id(show_id.as_str(), "show_id").or_else(|| id(bookmark_id, "bookmark_id")),
+            Action::ShowGoToNumber { number } => (!(1..=crate::SHOW_NUMBERED_BOOKMARKS)
+                .contains(number))
+            .then_some(("number", "must be within 1..=8")),
+            Action::ShowSeek { at_ms } => time(*at_ms),
+            Action::ShowArm { at_ms } => at_ms.and_then(time),
             _ => None,
         }
     }
