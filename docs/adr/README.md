@@ -216,7 +216,4 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0209](0209-value-bindings-aim-ptz-cameras.md) | PTZ cameras in the desktop app: the camera list, the PTZ panel, and value bindings that aim a head | accepted | agent |  |
 | [ADR-0210](0210-shows-a-run-order-with-bookmarks.md) | Shows: a saved run order of scenes, with bookmarks, loops and Continue | accepted | agent |  |
 | [ADR-0211](0211-a-filters-pixel-settings-count-in-its-inputs-extent.md) | A built-in filter's pixel settings count in its input's extent | accepted | agent |  |
-| [ADR-0212](0212-a-warm-scenes-stills-stay-uploaded.md) | A warm scene's still images stay uploaded on the program stage | accepted | agent |  |
-| [ADR-0213](0213-number-drags-follow-live.md) | Filter settings, opacity and gains are live values, so every number drag follows live | accepted | agent |  |
-| [ADR-0214](0214-a-timer-restarts-when-shown.md) | A timer starts its count again when the program shows it again | accepted | agent |  |
 <!-- @generated end adr-index -->
