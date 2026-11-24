@@ -566,8 +566,8 @@ fn percent_decode(text: &str) -> Option<String> {
 /// This is all a page can learn of a dropped file's place on disk. A browser hands the
 /// page `File` objects with a name but no path, so a drop from a source that writes no
 /// URI list (Windows Explorer, macOS Finder into most browsers) yields nothing here. The
-/// desktop app's window handles drops natively and hands the page no paths yet, so
-/// there too this is empty until the app passes them on.
+/// desktop app's window handles drops natively and passes their paths through
+/// `host::on_file_drop` instead, so there this is empty.
 pub fn dropped_paths(event: &JsValue) -> Vec<String> {
     use leptos::wasm_bindgen::JsCast;
     use leptos::web_sys::js_sys::{Function, Reflect};
