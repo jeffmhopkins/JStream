@@ -576,6 +576,24 @@ pub fn optimistic_program(action: &Action) -> Option<SceneId> {
     }
 }
 
+/// What a timeline action does to the play state at once, before the engine's
+/// `timeline.changed` confirms it: `Some(Some(position))` for a `timeline.play` with no
+/// delay (from 0) or a `timeline.seek` (from where it seeks), `Some(None)` for a
+/// `timeline.stop`, and `None` for anything else, a play that waits included.
+pub fn optimistic_timeline(
+    action: &Action,
+) -> Option<(jstream_control::protocol::TimelineId, Option<u32>)> {
+    match action {
+        Action::TimelinePlay {
+            timeline_id,
+            delay_ms: None | Some(0),
+        } => Some((timeline_id.clone(), Some(0))),
+        Action::TimelineSeek { timeline_id, at_ms } => Some((timeline_id.clone(), Some(*at_ms))),
+        Action::TimelineStop { timeline_id } => Some((timeline_id.clone(), None)),
+        _ => None,
+    }
+}
+
 /// The scene the canvas moves to when program goes from `program.0` to `program.1` and
 /// preview from `preview.0` to `preview.1`, while it shows `shown`. In studio mode the
 /// canvas is the preview side, so a new preview scene (a swap after a transition,
@@ -819,14 +837,18 @@ pub struct Studio {
     pub channel: RwSignal<Option<String>>,
     /// The sequence the Sequence panel edits (ADR-0184): a timeline, by ID.
     pub sequence: RwSignal<Option<jstream_control::protocol::TimelineId>>,
-    /// Each playing timeline, as the engine last reported it: where it was, and when
-    /// (`performance.now()`, in ms), so a play head can run on between reports.
+    /// Each playing timeline, as the engine last reported it or a Play or Stop just set
+    /// it ([`Studio::act`]): where it was, and when (`performance.now()`, in ms), so a
+    /// play head can run on between reports.
     pub playing: RwSignal<HashMap<jstream_control::protocol::TimelineId, Playing>>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
     /// overtook is dropped.
     studio_seq: StoredValue<u64>,
+    /// Bumped by each `timeline.changed` and each play or stop [`Studio::act`] shows at
+    /// once, so a `studio.get` answer they overtook doesn't put back what played before.
+    timeline_seq: StoredValue<u64>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
     /// The number the next toast takes. It only grows, so a timer left from an earlier
@@ -911,6 +933,7 @@ impl Studio {
             playing: RwSignal::new(HashMap::new()),
             refresh: StoredValue::new((false, false)),
             studio_seq: StoredValue::new(0),
+            timeline_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
             next_toast: StoredValue::new(0),
         }
@@ -950,10 +973,13 @@ impl Studio {
         });
     }
 
-    /// Reads the program and preview scenes with `studio.get`, unless a
-    /// `studio.changed` arrives while it is in flight: that event is newer.
+    /// Reads the program and preview scenes and what plays with `studio.get`. A
+    /// `studio.changed` that comes while it is in flight is newer than its scenes, and a
+    /// `timeline.changed` or a Play or Stop shown at once ([`Studio::act`]) is newer than
+    /// what it says plays.
     async fn read_studio(&self, session: &Session) {
         let asked = self.studio_seq.get_value();
+        let timelines_asked = self.timeline_seq.get_value();
         if let Ok(QueryResult::StudioGet {
             program_scene,
             preview_scene,
@@ -961,21 +987,23 @@ impl Studio {
             ..
         }) = query(session, Query::StudioGet).await
         {
-            let at = now_ms();
-            self.playing.set(
-                timelines
-                    .into_iter()
-                    .map(|t| {
-                        (
-                            t.timeline_id,
-                            Playing {
-                                position_ms: t.position_ms,
-                                at,
-                            },
-                        )
-                    })
-                    .collect(),
-            );
+            if self.timeline_seq.get_value() == timelines_asked {
+                let at = now_ms();
+                self.playing.set(
+                    timelines
+                        .into_iter()
+                        .map(|t| {
+                            (
+                                t.timeline_id,
+                                Playing {
+                                    position_ms: t.position_ms,
+                                    at,
+                                },
+                            )
+                        })
+                        .collect(),
+                );
+            }
             self.take_studio(asked, program_scene, preview_scene);
         }
     }
@@ -1134,6 +1162,7 @@ impl Studio {
                 position_ms,
                 ..
             } => {
+                self.timeline_seq.update_value(|seq| *seq += 1);
                 let at = now_ms();
                 self.playing.update(|map| {
                     if *playing {
@@ -1339,12 +1368,16 @@ impl Studio {
     /// A `scene.switch` shows its scene on program at once, before the engine's
     /// `studio.changed` confirms it, so the "program" badge moves on the click and the
     /// canvas keeps the program stream rather than wanting the new scene on its own for
-    /// the round trip. The call is queued before that change wakes the panels, so the
-    /// request leaves before they redraw. A refused switch reads the studio back.
+    /// the round trip. A `timeline.play`, `timeline.seek` or `timeline.stop` shows its
+    /// sequence playing or stopped at once too ([`optimistic_timeline`]), so a second
+    /// click on a Play button stops what the first started instead of starting it
+    /// again. The call is queued before that change wakes the panels, so the request
+    /// leaves before they redraw. A refused switch or play reads the studio back.
     pub fn act(&self, session: &Session, action: Action) {
         let studio = *self;
         let switched = optimistic_program(&action);
-        let reread = switched.is_some();
+        let played = optimistic_timeline(&action);
+        let reread = switched.is_some() || played.is_some();
         let session = session.clone();
         spawn_local(async move {
             if let Err(error) = session.control.call(Call::Action { action }).await {
@@ -1368,6 +1401,19 @@ impl Studio {
                 (before.as_ref(), Some(&scene_id)),
                 (preview.as_ref(), preview.as_ref()),
             );
+        }
+        if let Some((timeline_id, from)) = played {
+            // Newer than what any `studio.get` in flight says plays.
+            self.timeline_seq.update_value(|seq| *seq += 1);
+            let at = now_ms();
+            self.playing.update(|map| match from {
+                Some(position_ms) => {
+                    map.insert(timeline_id, Playing { position_ms, at });
+                }
+                None => {
+                    map.remove(&timeline_id);
+                }
+            });
         }
     }
 
@@ -1478,7 +1524,8 @@ fn unexpected(what: &str) -> ControlError {
 mod tests {
     use super::{
         Collection, Selection, Studio, apply, followed_scene, fresh_id, list_kinds,
-        optimistic_program, plan_summary, query, reset_edits, scene_click, sizes_of,
+        optimistic_program, optimistic_timeline, plan_summary, query, reset_edits, scene_click,
+        sizes_of,
     };
     use crate::session::Session;
     use jstream_control::protocol::{
@@ -2214,6 +2261,42 @@ mod tests {
             followed_scene(false, (Some(&a), None), still, Some(&a)),
             None
         );
+    }
+
+    /// A Play, a seek or a Stop shows at once; a play that waits, and anything else,
+    /// waits for the engine.
+    #[test]
+    fn a_timeline_action_shows_at_once_unless_it_waits() {
+        use jstream_control::protocol::TimelineId;
+        let id = TimelineId::new("seq_1");
+        let play = |delay_ms| Action::TimelinePlay {
+            timeline_id: id.clone(),
+            delay_ms,
+        };
+        assert_eq!(
+            optimistic_timeline(&play(None)),
+            Some((id.clone(), Some(0)))
+        );
+        assert_eq!(
+            optimistic_timeline(&play(Some(0))),
+            Some((id.clone(), Some(0)))
+        );
+        assert_eq!(optimistic_timeline(&play(Some(500))), None);
+        let seek = Action::TimelineSeek {
+            timeline_id: id.clone(),
+            at_ms: 1200,
+        };
+        assert_eq!(optimistic_timeline(&seek), Some((id.clone(), Some(1200))));
+        let stop = Action::TimelineStop {
+            timeline_id: id.clone(),
+        };
+        assert_eq!(optimistic_timeline(&stop), Some((id, None)));
+        let switch = Action::SceneSwitch {
+            scene_id: SceneId::new("main"),
+            preset_id: None,
+            via: Vec::new(),
+        };
+        assert_eq!(optimistic_timeline(&switch), None);
     }
 
     /// A `studio.get` answer that a `studio.changed` overtook is stale, and dropped;

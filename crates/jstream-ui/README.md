@@ -249,7 +249,10 @@ Contents ([Design](#design) explains the choices):
   reader grouped by source with the edits that write one back, bypass it, name a Mod and
   list and remove what starts and stops a sequence, tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
-  point order, the lane's drawn path and each trigger's sentence tested natively), its
+  point order, the lane's drawn path, each trigger's sentence, the loop button's steps and
+  range and a menu line's trigger toggle tested natively; `lane_offers.rs`: the settings
+  and switches Add lane offers and the switch lanes' bars, how one is added, dragged and
+  written back as points, tested natively), its
   Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
   which cues it edits and how it finds one, tested natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
@@ -584,7 +587,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   confirmation when anything refers to it. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection, in groups
   (open it; its state; the clipboard; its arrangement; other views; removal): Properties
-  (the Properties dialog), for one item a Labels submenu (each label checked while the
+  (the Properties dialog), for one browser or media item Reload page or Play from start
+  (`source.restart`, `item_menu::restart_label`, which the Properties dialog's button
+  shares), for one item a Labels submenu (each label checked while the
   source carries it, with its colour as the swatch, then Edit labels…), the Audio check
   (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, an Order
   submenu of the layer order (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
@@ -984,22 +989,46 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Sequences** (`panels/sequence.rs`, [ADR-0184](../../docs/adr/0184-sequences-lanes-and-triggers.md)).
   The Sequence panel (`PanelId::Sequence`, in the bottom dock from the View menu) edits a
   timeline with lanes of the selected scene (a keyframe's parent): the one in
-  `Studio::sequence`, else the scene's first. Its bar picks one or makes `seq_N`, plays or
-  stops it (`timeline.play`, `timeline.stop`), loops it, sets its length and adds a lane
-  by `ChannelSearch`; its trigger bar shows `starts` and `stops` as sentences
-  (`trigger_text`) and "+ Trigger" opens an editor for each kind. Each lane is an SVG path
+  `Studio::sequence`, else the scene's first. Its bar, which stays at the top while the
+  lanes scroll, picks one or makes `seq_N`, renames or deletes it from its ⋯ menu (the
+  picker turning into the name's field), plays or stops it (`timeline.play`,
+  `timeline.stop`, which `Studio::act` shows at once, `store::optimistic_timeline`, so a
+  second click stops what the first started), loops it (`next_loop`: off, the whole
+  sequence, then a range, `TimelineLoop::Range`, whose ends `fit_range` keeps within the
+  length and shaded on the ruler), sets its length and adds a lane by `AddLaneSearch`: the
+  channels, then the scene's settings and switches (`lane_offers::offers`, from the
+  sources' and filters' kind descriptors it reads as it opens), a setting picked making a
+  channel it follows (`learn::follows`) unless it follows one already, in the same batch
+  as the lane; its trigger bar shows `starts` and `stops` as sentences
+  (`trigger_text`) and each group's "+ Trigger" opens an editor beside it for each kind,
+  which never offers a channel the sequence's own lanes drive (the engine refuses one).
+  Every edit is built on the sequence as the panel's edits still on their way leave it
+  (`Pending`): the panel draws that draft at once and drops it once every edit is
+  answered and the collection has caught up, or at once when one is refused. Built on
+  the collection's copy instead, a second click before the engine answered sent that
+  copy back and undid the first. Each lane is an SVG path
   in a `0 0 1000 100` box stretched over the lane (`lane_path`, dashed from the channel's
   value when the first point is after 0) with its points as HTML dots placed with `style:`
   properties. A double-click adds a point, a drag moves one, kept between its neighbours,
-  and a right-click sets its curve or deletes it; each gesture sends one `timeline.set`,
-  and one that changes nothing sends none. A point takes the focus: Enter, Space, the Menu
-  key or Shift+F10 open its menu beside it, and Delete removes it.
+  and a click that doesn't move (a few pixels' slop) or a right-click opens its menu: its
+  curve, its time and value typed, or delete. A switch lane (`lane_offers::is_switch`:
+  every point `hold` at 0 or 1) is its bars instead, drawn as HTML bars with no dots: off
+  from 0 to the first bar whatever the channel was (`switch_bars` from off), and written
+  back as points from the bars (`bar_points`), so an edit never turns it into a curve. A
+  double-click in a gap adds a one-second bar cut short before the next (`insert_bar`), a
+  drag on a bar moves it and a drag on one of its ends moves that end, each kept 0.1 s
+  from its neighbours so two never join (`drag_bar`), and a click or a right-click opens
+  its menu (on at, off at, Delete bar; no curves). The dragged dot or bar only restyles,
+  so it keeps the pointer. Each gesture sends one `timeline.set`, and one that changes
+  nothing sends none. The menus open beside the click, kept inside the window
+  (`events::place`). A point or a bar takes the focus: Enter, Space, the Menu key or
+  Shift+F10 open its menu beside it, and Delete removes it.
   The play head runs from `Studio::playing`, kept from `studio.get`'s `timelines` and each
   `timeline.changed`, and a click on the ruler sends `timeline.seek`. Above the lanes, the
   Events lane (`panels/events.rs`) draws the timeline's `cues` as chips on the same
   ruler: a double-click opens an editor there (what happens, which item, keyframe, scene,
-  channel, sequence or source, from `objects`), a click on a chip edits it, a drag moves
-  it with the pointer captured, and the editor deletes it; each is one `timeline.set`,
+  channel, sequence or source, from `objects`), a click or a right-click on a chip edits
+  it, a drag moves it with the pointer captured and the grabbed spot kept under it, and the editor deletes it; each is one `timeline.set`,
   with the cues kept in time order. The editor edits a cue only when it can build the
   same action again (`editable`), and keeps an object that is gone as "(missing)"; each
   edit finds its cue by time and action (`position`), and one another client changed
@@ -1009,7 +1038,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its keyframes (`Row::Sequence`, the teal sequence icon): a click opens one in the
   Sequence panel (`sequence::open_sequence`), its hover button plays or stops it, it shows
   its elapsed time while it plays and the keys bound to play it, and its menu plays or
-  stops, renames (F2), sets or removes a key and deletes it (Del).
+  stops, renames (F2), sets or removes a key and deletes it (Del). A scene's and a
+  keyframe's menus have Play a sequence › (`sequence::trigger_submenu`, with
+  `scenes::scene_watches` and `keyframe_watches`), which adds or removes a `scene` or
+  `keyframe` trigger in any sequence's `starts` (`toggle_start`, matching one with a wait
+  by `same_watch`) or makes a new sequence it starts.
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
   its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
   (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source
@@ -1605,8 +1638,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   each change it reports resets the fields to it. The kind's parameters come from
   `kind.list` and `kind.describe` (category `transition`), or the built-in `cut`,
   `fade`, `move` and `stinger` when the engine can't list them; enum, boolean, number and text
-  parameters are editable, others read-only (so a stinger's scene is set over MCP or the
-  CLI for now). A value the editor refuses is not sent.
+  parameters are editable, and a scene parameter (a stinger's scene) is a list of the
+  scenes, keyframes left out, with None; others are read-only. A value the editor refuses
+  is not sent.
   Each scene's `transition_in` and `transition_out` can also be set in a folded table
   under the editor. The engine runs the transitions, `move` pairing and gliding items,
   and the program preview shows them, so the page draws none itself.
@@ -1910,7 +1944,11 @@ beside it ([Design › Studio mode](#design)).
   own live gesture (`Wheeling`) and commits as an orbit's drop does once no wheel event
   came for `WHEEL_SETTLE`, or at once when a drag starts. Camera mode and the item tool are left when the canvas shows a 2D scene. The bindings are kept in
   `localStorage` (`CameraControls::stored`). Save view batches `scene.create_variant`
-  and `scene.set_camera` for a new keyframe scene with the shown camera.
+  and `scene.set_camera` for a new keyframe scene with the shown camera. After it, the
+  live aim (`live_aim.rs`, `LiveAim`): pan, tilt and zoom buttons send
+  `scene.drive_camera` for their axis alone while held and 0 on release, Home sends
+  `scene.aim_camera` to the stored camera, and a readout reads `scene.camera_aim` every
+  300 ms while camera mode is on; none of it is an edit.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos

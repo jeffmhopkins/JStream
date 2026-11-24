@@ -22,9 +22,13 @@
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
 //! session. It does no persistence or real output work, and knows no transition preset
 //! but the initial `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are
-//! not mocked. Neither are timelines (ADR-0115): the `timeline.*` edits and actions,
-//! `source.restart` and `source.seek`, so `studio.get` never lists a timeline playing, nor keyframe tracks
-//! (ADR-0116): `scene.set_keyframe`, so `studio.get` lists no placed keyframe.
+//! not mocked. Timelines (ADR-0115) are stored and checked (`timeline.set`,
+//! `timeline.delete`), and `timeline.play`, `timeline.seek` and `timeline.stop` send
+//! their `timeline.changed` and list the timeline in `studio.get`, but the mock keeps no
+//! clock: a timeline it plays stays where it started until stopped or deleted, never
+//! ending, looping or firing a cue, and a play's delay or a trigger is ignored.
+//! `source.restart` and `source.seek` are not mocked, nor keyframe tracks (ADR-0116):
+//! `scene.set_keyframe`, so `studio.get` lists no placed keyframe.
 //!
 //! The mock has no render thread, so a gesture's values are released the moment it ends,
 //! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
@@ -405,6 +409,10 @@ struct State {
     holders: BTreeMap<Param, (ClientId, GestureId)>,
     /// The codecs [`MockEngine::with_codec_downloads`] offers, ordered by ID.
     codec_downloads: Vec<jstream_protocol::CodecDownloadInfo>,
+    /// The timelines `timeline.play` started, with the scene that holds each: runtime
+    /// state, like the studio. The mock keeps no clock, so each stays where it started
+    /// (or was sought to) until `timeline.stop` or its deletion: it never ends or loops.
+    playing: BTreeMap<jstream_protocol::TimelineId, (SceneId, u32)>,
 }
 
 /// A parameter a live value overrides: an item's placement or its crop, as the item has
@@ -766,6 +774,8 @@ struct Scene {
     variant_of: Option<SceneId>,
     /// A keyframe scene's overrides of its parent's items; empty for any other scene.
     overrides: keyframe::Overrides,
+    /// Its timelines (ADR-0115), as `timeline.set` gave them.
+    timelines: Vec<jstream_protocol::TimelineInfo>,
 }
 
 /// An item: the scene that holds it, the source it places, and every property an edit
@@ -1028,6 +1038,23 @@ impl State {
         }
         if moved {
             self.emit_studio(client_id, request_id, None);
+        }
+        // A playing timeline the edits deleted stops, with `removed`.
+        let gone: Vec<_> = self
+            .playing
+            .keys()
+            .filter(|id| self.collection.timeline_at(id).is_none())
+            .cloned()
+            .collect();
+        for timeline_id in gone {
+            if let Some((scene_id, position_ms)) = self.playing.remove(&timeline_id) {
+                self.emit(timeline_event(
+                    timeline_id,
+                    scene_id,
+                    jstream_protocol::TimelineChange::Removed,
+                    position_ms,
+                ));
+            }
         }
     }
 
@@ -1478,6 +1505,15 @@ impl State {
                     call: action.name().into(),
                 });
             }
+            Action::TimelinePlay { timeline_id, .. } => {
+                return self.play_timeline(timeline_id, Some(0));
+            }
+            Action::TimelineSeek { timeline_id, at_ms } => {
+                return self.play_timeline(timeline_id, Some(at_ms));
+            }
+            Action::TimelineStop { timeline_id } => {
+                return self.play_timeline(timeline_id, None);
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -1505,6 +1541,43 @@ impl State {
                 state,
             });
         }
+        Ok(CallResult::action())
+    }
+
+    /// `timeline.play` (from 0), `timeline.seek` (from `Some(at_ms)` within its length)
+    /// or `timeline.stop` (`None`) of `timeline_id`, with its `timeline.changed`. A play
+    /// waits no delay, and a stop of one that isn't playing changes nothing.
+    fn play_timeline(
+        &mut self,
+        timeline_id: jstream_protocol::TimelineId,
+        from: Option<u32>,
+    ) -> Result<CallResult, ProtocolError> {
+        let Some((s, n)) = self.collection.timeline_at(&timeline_id) else {
+            return Err(not_found(EntityKind::Timeline, timeline_id.as_str()));
+        };
+        let scene_id = self.collection.scenes[s].id.clone();
+        let duration_ms = self.collection.scenes[s].timelines[n].duration_ms;
+        let (change, position_ms) = match from {
+            Some(0) => (jstream_protocol::TimelineChange::Started, 0),
+            Some(at_ms) => {
+                if at_ms >= duration_ms.max(1) {
+                    return Err(ProtocolError::invalid_argument(
+                        "at_ms",
+                        format!("must be less than the timeline's {duration_ms} ms"),
+                    ));
+                }
+                (jstream_protocol::TimelineChange::Sought, at_ms)
+            }
+            None => match self.playing.remove(&timeline_id) {
+                Some((_, at)) => (jstream_protocol::TimelineChange::Stopped, at),
+                None => return Ok(CallResult::action()),
+            },
+        };
+        if from.is_some() {
+            self.playing
+                .insert(timeline_id.clone(), (scene_id.clone(), position_ms));
+        }
+        self.emit(timeline_event(timeline_id, scene_id, change, position_ms));
         Ok(CallResult::action())
     }
 
@@ -1618,7 +1691,7 @@ impl State {
                         camera_motion: scene.camera_motion.clone(),
                         ptz_shots: scene.ptz_shots.clone(),
                         camera_follow: scene.camera_follow.clone(),
-                        timelines: Vec::new(),
+                        timelines: scene.timelines.clone(),
                         items: self.collection.item_infos(scene),
                         transition_in: None,
                         transition_out: None,
@@ -1673,7 +1746,18 @@ impl State {
                 waiting: Vec::new(),
                 program_scene: self.program.clone(),
                 preview_scene: self.preview.clone(),
-                timelines: Vec::new(),
+                timelines: self
+                    .playing
+                    .iter()
+                    .map(|(timeline_id, (scene_id, position_ms))| {
+                        jstream_protocol::PlayingTimeline {
+                            timeline_id: timeline_id.clone(),
+                            scene_id: scene_id.clone(),
+                            position_ms: *position_ms,
+                            pass: 0,
+                        }
+                    })
+                    .collect(),
                 keyframes: Vec::new(),
                 warm_scenes: Some(
                     self.warm_scenes
@@ -2084,6 +2168,7 @@ impl Collection {
                     filters: Default::default(),
                     variant_of: None,
                     overrides: keyframe::Overrides::new(),
+                    timelines: Vec::new(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
             }
@@ -2235,6 +2320,10 @@ impl Collection {
                         follow: scene.camera_follow.clone(),
                     });
                 }
+                inverse.extend(scene.timelines.iter().map(|timeline| Edit::TimelineSet {
+                    scene_id: scene.id.clone(),
+                    timeline: timeline.clone(),
+                }));
                 inverse
             }
             Edit::SceneReorder { scene_id, index } => {
@@ -3018,6 +3107,19 @@ impl Collection {
                 };
                 vec![Edit::ShowSet { show }]
             }
+            Edit::TimelineSet { scene_id, timeline } => {
+                self.set_timeline(at, &scene_id, timeline)?
+            }
+            Edit::TimelineDelete { timeline_id } => {
+                let Some((s, n)) = self.timeline_at(&timeline_id) else {
+                    return Err(not_found(EntityKind::Timeline, timeline_id.as_str()));
+                };
+                let timeline = self.scenes[s].timelines.remove(n);
+                vec![Edit::TimelineSet {
+                    scene_id: self.scenes[s].id.clone(),
+                    timeline,
+                }]
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
@@ -3529,6 +3631,61 @@ impl Collection {
             .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))
     }
 
+    /// Where timeline `timeline_id` is: its scene's index and its index in that scene.
+    fn timeline_at(&self, timeline_id: &jstream_protocol::TimelineId) -> Option<(usize, usize)> {
+        self.scenes.iter().enumerate().find_map(|(s, scene)| {
+            scene
+                .timelines
+                .iter()
+                .position(|t| t.timeline_id == *timeline_id)
+                .map(|n| (s, n))
+        })
+    }
+
+    /// `timeline.set` of `timeline` in `scene_id`, checked as the graph checks it: the
+    /// scene exists, [`jstream_protocol::TimelineInfo::problem`], no other scene holds
+    /// the ID, and at most [`jstream_protocol::MAX_TIMELINES`] in the scene. Returns its
+    /// inverse.
+    fn set_timeline(
+        &mut self,
+        at: usize,
+        scene_id: &SceneId,
+        timeline: jstream_protocol::TimelineInfo,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let index = self.existing_scene(scene_id)?;
+        if let Some((field, reason)) = timeline.problem() {
+            return Err(invalid(at, &format!("timeline.{field}"), reason));
+        }
+        let id = timeline.timeline_id.clone();
+        let inverse = match self.timeline_at(&id) {
+            Some((s, _)) if s != index => {
+                return Err(already_exists(EntityKind::Timeline, id.as_str()));
+            }
+            Some((s, n)) => {
+                let old = std::mem::replace(&mut self.scenes[s].timelines[n], timeline);
+                vec![Edit::TimelineSet {
+                    scene_id: scene_id.clone(),
+                    timeline: old,
+                }]
+            }
+            None => {
+                if self.scenes[index].timelines.len() >= jstream_protocol::MAX_TIMELINES {
+                    return Err(invalid(
+                        at,
+                        "timeline",
+                        format!(
+                            "a scene holds at most {} timelines",
+                            jstream_protocol::MAX_TIMELINES
+                        ),
+                    ));
+                }
+                self.scenes[index].timelines.push(timeline);
+                vec![Edit::TimelineDelete { timeline_id: id }]
+            }
+        };
+        Ok(inverse)
+    }
+
     fn existing_item(&mut self, item_id: &ItemId) -> Result<&mut Item, ProtocolError> {
         self.items
             .get_mut(item_id)
@@ -3981,6 +4138,24 @@ fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
 }
 
 /// A protocol variant added after this mock was written.
+/// A `timeline.changed` for `change`, playing unless it stopped it.
+fn timeline_event(
+    timeline_id: jstream_protocol::TimelineId,
+    scene_id: SceneId,
+    change: jstream_protocol::TimelineChange,
+    position_ms: u32,
+) -> Event {
+    use jstream_protocol::TimelineChange;
+    Event::TimelineChanged {
+        timeline_id,
+        scene_id,
+        playing: matches!(change, TimelineChange::Started | TimelineChange::Sought),
+        change,
+        position_ms,
+        pass: 0,
+    }
+}
+
 fn unimplemented_by_mock(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the mock engine does not implement {what}"),
@@ -4157,6 +4332,148 @@ mod tests {
             }
         ));
         assert!(drain(&mut events).is_empty());
+    }
+
+    /// Timelines (ADR-0115) are stored, checked, undone and played as far as the mock
+    /// goes: `timeline.changed` on play, seek and stop, `studio.get` listing what plays,
+    /// and a deleted playing one stops with `removed`.
+    #[test]
+    fn timelines_are_stored_and_played() {
+        use jstream_protocol::{TimelineChange, TimelineId, TimelineInfo, TimelineLoop};
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let timeline = |id: &str, ms: u32| TimelineInfo {
+            timeline_id: TimelineId::new(id),
+            name: id.to_uppercase(),
+            duration_ms: ms,
+            looping: TimelineLoop::Once,
+            cues: Vec::new(),
+            labels: Vec::new(),
+            lanes: Vec::new(),
+            starts: Vec::new(),
+            stops: Vec::new(),
+        };
+        let set = |scene: &str, t: TimelineInfo| {
+            Batch::single(Edit::TimelineSet {
+                scene_id: SceneId::new(scene),
+                timeline: t,
+            })
+        };
+        batch(&*control, Batch::single(create("main"))).expect("main");
+        batch(&*control, Batch::single(create("intro"))).expect("intro");
+        batch(&*control, set("main", timeline("seq_1", 6000))).expect("set");
+        batch(&*control, set("main", timeline("seq_1", 3000))).expect("replace");
+        let held = |control: &dyn Control| match state(control) {
+            QueryResult::StateGet { scenes, .. } => scenes
+                .iter()
+                .flat_map(|s| {
+                    s.timelines
+                        .iter()
+                        .map(|t| (s.scene_id.to_string(), t.duration_ms))
+                })
+                .collect::<Vec<_>>(),
+            other => panic!("not a state: {other:?}"),
+        };
+        assert_eq!(held(&*control), [("main".to_owned(), 3000)]);
+        let taken = batch(&*control, set("intro", timeline("seq_1", 1000)))
+            .expect_err("another scene holds it");
+        assert_eq!(code(&taken), Some("already_exists"));
+        let bad = batch(&*control, set("main", timeline("bad id", 1000))).expect_err("bad ID");
+        assert_eq!(code(&bad), Some("invalid_argument"));
+        undo(&*control).expect("undo the replace");
+        assert_eq!(held(&*control), [("main".to_owned(), 6000)]);
+
+        let mut events = control.events();
+        let seq = || TimelineId::new("seq_1");
+        action(
+            &*control,
+            Action::TimelinePlay {
+                timeline_id: seq(),
+                delay_ms: None,
+            },
+        )
+        .expect("play");
+        action(
+            &*control,
+            Action::TimelineSeek {
+                timeline_id: seq(),
+                at_ms: 1500,
+            },
+        )
+        .expect("seek");
+        let past = action(
+            &*control,
+            Action::TimelineSeek {
+                timeline_id: seq(),
+                at_ms: 6000,
+            },
+        )
+        .expect_err("past its end");
+        assert_eq!(code(&past), Some("invalid_argument"));
+        match query(&*control, Query::StudioGet).expect("studio") {
+            QueryResult::StudioGet { timelines, .. } => {
+                assert_eq!(timelines.len(), 1);
+                assert_eq!(
+                    (timelines[0].position_ms, timelines[0].scene_id.as_str()),
+                    (1500, "main")
+                );
+            }
+            other => panic!("not a studio: {other:?}"),
+        }
+        action(&*control, Action::TimelineStop { timeline_id: seq() }).expect("stop");
+        action(&*control, Action::TimelineStop { timeline_id: seq() })
+            .expect("a stop again does nothing");
+        action(
+            &*control,
+            Action::TimelinePlay {
+                timeline_id: seq(),
+                delay_ms: None,
+            },
+        )
+        .expect("play again");
+        batch(
+            &*control,
+            Batch::single(Edit::TimelineDelete { timeline_id: seq() }),
+        )
+        .expect("delete");
+        let changes: Vec<_> = drain(&mut events)
+            .into_iter()
+            .filter_map(|e| match e {
+                Event::TimelineChanged {
+                    change,
+                    playing,
+                    position_ms,
+                    ..
+                } => Some((change, playing, position_ms)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            changes,
+            [
+                (TimelineChange::Started, true, 0),
+                (TimelineChange::Sought, true, 1500),
+                (TimelineChange::Stopped, false, 1500),
+                (TimelineChange::Started, true, 0),
+                (TimelineChange::Removed, false, 0),
+            ]
+        );
+        assert_eq!(held(&*control), []);
+        let gone =
+            action(&*control, Action::TimelineStop { timeline_id: seq() }).expect_err("deleted");
+        assert_eq!(code(&gone), Some("not_found"));
+
+        // Undoing a scene's delete brings its timelines back.
+        batch(&*control, set("intro", timeline("seq_2", 1000))).expect("set");
+        batch(
+            &*control,
+            Batch::single(Edit::SceneDelete {
+                scene_id: SceneId::new("intro"),
+            }),
+        )
+        .expect("delete the scene");
+        undo(&*control).expect("undo the delete");
+        assert_eq!(held(&*control), [("intro".to_owned(), 1000)]);
     }
 
     /// Shared values (ADR-0102 decision 7) as the engine runs them: change-only

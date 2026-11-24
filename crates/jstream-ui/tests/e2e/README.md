@@ -586,6 +586,19 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   curve's drawing and points, and an x1 past 1 is sent as 1 in the easing's
   `transition.update`. The mock engine refuses preset edits,
   so the panel after an edit is tested natively.
+- **Sequences** (`sequence.spec.js`, the panel shown from View and its dock pulled up):
+  with every engine message held back 300 ms, two quick double-clicks on a lane show
+  two new points at once and the last `timeline.set` carries both, two clicks on M leave
+  the lane as it was, and two clicks on Play send one `timeline.play` and one
+  `timeline.stop`. "+ Trigger" offers no channel the sequence's own lanes drive, and
+  adds a trigger on another. A lane made a switch (its point held at 0 from the point's
+  menu, which a click opens) has no dots: a double-click in a gap adds a one-second bar
+  and one in a bar adds nothing, a drag on its body moves it as one `timeline.set`, a
+  drag on either end moves that end, a bar stops at the end and 0.1 s short of another,
+  the points sent are off at 0 and on at the bar, a click or a right-click opens its menu
+  (only Delete bar, typed times kept between its neighbours), and Delete removes a
+  focused one, leaving a switch lane. An on/off event's chip opens its editor on a click
+  and on a right-click, and a drag moves it by as much as the pointer moved.
 - **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
   `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click
