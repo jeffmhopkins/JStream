@@ -15,8 +15,9 @@ use jstream_anim::show::{
 };
 use jstream_graph::Graph;
 use jstream_protocol::{
-    Action, ClientId, EntityKind, Event, LoopLeave, ProtocolError, RequestId, RunningShow, SceneId,
-    ShowChange, ShowEnd, ShowId, ShowInfo, ShowState, TimelineId, TransitionPresetId,
+    Action, ClientId, Edit, EntityKind, Event, ItemId, LoopLeave, ProtocolError, RequestId,
+    RunningShow, SceneId, Settings, ShowChange, ShowEnd, ShowId, ShowInfo, ShowState, SourceId,
+    SourceKind, TimelineId, TransitionPresetId,
 };
 
 use super::State;
@@ -249,6 +250,9 @@ impl State {
                 });
                 Ok(())
             }
+            Action::OverlayShow { scene_id } => self.overlay_action(scene_id, Some(true), wake),
+            Action::OverlayHide { scene_id } => self.overlay_action(scene_id, Some(false), wake),
+            Action::OverlayToggle { scene_id } => self.overlay_action(scene_id, None, wake),
             Action::ShowArm { at_ms } => {
                 if let Some(run) = self.show.as_mut() {
                     run.runner.arm(*at_ms);
@@ -295,8 +299,9 @@ impl State {
             .ok_or_else(|| ProtocolError::NotFound {
                 entity: EntityKind::Show,
                 id: show_id.to_string(),
-            })?;
-        let plan = plan(info, &self.graph);
+            })?
+            .clone();
+        let plan = plan(&info, &self.graph);
         let bookmark =
             match bookmark_id {
                 None => None,
@@ -313,6 +318,16 @@ impl State {
             self.show_stop(ShowChange::Stopped, wake);
         }
         let before = self.studio.program().cloned();
+        // Every overlay's item, made ahead and in track order (bottom track first), so a
+        // clip never waits on a batch and the tracks stack as the show lays them out.
+        let scenes: Vec<SceneId> = info
+            .overlays
+            .iter()
+            .flat_map(|track| track.clips.iter().map(|clip| clip.scene_id.clone()))
+            .collect();
+        for scene in scenes {
+            self.overlay_item(&scene, wake);
+        }
         let now = self.show_now();
         let mut runner = Runner::new();
         let steps = match bookmark {
@@ -536,7 +551,16 @@ impl State {
                         self.set_keyframe(client_id, request_id, program, keyframe, preset, wake);
                 }
             }
-            Effect::OverlayOn { .. } | Effect::OverlayOff { .. } => {}
+            Effect::OverlayOn { scene, fade_ms, .. } => {
+                if let Some(item_id) = self.overlay_item(&scene, wake) {
+                    self.set_overlay_shown(&item_id, true, fade_ms, wake);
+                }
+            }
+            Effect::OverlayOff { scene, fade_ms, .. } => {
+                if let Some(item_id) = self.find_overlay_item(&scene) {
+                    self.set_overlay_shown(&item_id, false, fade_ms, wake);
+                }
+            }
             Effect::SequencePlay {
                 timeline,
                 offset_ms,
@@ -578,6 +602,190 @@ impl State {
             }
             Effect::Ended => self.emit_show(ShowChange::Ended, None, None, wake),
         }
+    }
+
+    /// The item in the show scene that draws `scene` as an overlay, if there is one: a
+    /// nested-scene item whose `scene` source shows it.
+    fn find_overlay_item(&self, scene: &SceneId) -> Option<ItemId> {
+        let state = self.graph.state();
+        let show = state.scene(state.show_scene()?)?;
+        show.items()
+            .iter()
+            .find(|item| {
+                state.source(item.source_id()).is_some_and(|source| {
+                    matches!(source.kind(), SourceKind::Scene { scene_id } if scene_id == scene)
+                })
+            })
+            .map(|item| item.id().clone())
+    }
+
+    /// The item in the show scene that draws `scene` as an overlay (ADR-0210 decision
+    /// 12), made if there is none: the engine makes the show scene the first time it
+    /// needs it, then a `scene` source for `scene` and a hidden item placing it, as one
+    /// batch of its own (`engine` in the history, never an undo step). `None` for a
+    /// scene the collection doesn't hold, or one that can't be nested in the show scene.
+    fn overlay_item(&mut self, scene: &SceneId, wake: &mut Vec<Waker>) -> Option<ItemId> {
+        if let Some(item) = self.find_overlay_item(scene) {
+            return Some(item);
+        }
+        let state = self.graph.state();
+        state.scene(scene)?;
+        let free = |prefix: &str, taken: &dyn Fn(&str) -> bool| {
+            (1u32..)
+                .map(|n| format!("{prefix}-{n}"))
+                .find(|id| !taken(id))
+                .unwrap_or_default()
+        };
+        let mut edits = Vec::new();
+        let show_scene = match state.show_scene() {
+            Some(id) => id.clone(),
+            None => {
+                let id = SceneId::new(free("show-scene", &|id| {
+                    state.scene(&SceneId::new(id)).is_some()
+                }));
+                edits.push(Edit::SceneCreate {
+                    scene_id: id.clone(),
+                    name: "Show overlays".into(),
+                    role: None,
+                });
+                id
+            }
+        };
+        let source_id = state
+            .sources()
+            .find(|source| {
+                matches!(source.kind(), SourceKind::Scene { scene_id } if scene_id == scene)
+            })
+            .map(|source| source.id().clone());
+        let source_id = match source_id {
+            Some(id) => id,
+            None => {
+                let id = SourceId::new(free("show-overlay", &|id| {
+                    state.source(&SourceId::new(id)).is_some()
+                }));
+                edits.push(Edit::SourceCreate {
+                    source_id: id.clone(),
+                    name: format!("Overlay: {}", state.scene(scene).map_or("", |s| s.name())),
+                    kind: SourceKind::Scene {
+                        scene_id: scene.clone(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                });
+                id
+            }
+        };
+        let item_id = ItemId::new(free("show-overlay", &|id| {
+            state.item(&ItemId::new(id)).is_some()
+        }));
+        edits.push(Edit::ItemAdd {
+            scene_id: show_scene.clone(),
+            item_id: item_id.clone(),
+            source_id,
+            transform: None,
+            geometry: None,
+            opacity: None,
+            blend: None,
+        });
+        edits.push(Edit::ItemSetVisible {
+            item_id: item_id.clone(),
+            scene_id: None,
+            visible: false,
+        });
+        let running = self.outputs.running();
+        let applied = match self.graph.apply_with_running(&edits, None, &running) {
+            Ok(applied) => applied,
+            Err(error) => {
+                tracing::debug!(code = error.code(), "an overlay could not be set up");
+                return None;
+            }
+        };
+        let made_scene = self.graph.state().show_scene().is_none();
+        if made_scene && !self.graph.set_show_scene(Some(show_scene)) {
+            return None;
+        }
+        self.history.record_engine(applied.rev, applied.touched);
+        let engine = ClientId::new(crate::history::ENGINE_CLIENT);
+        self.changed(
+            &engine,
+            &RequestId::new("show"),
+            &edits,
+            applied.rev,
+            None,
+            wake,
+        );
+        self.save_pending = true;
+        Some(item_id)
+    }
+
+    /// The scenes up as overlays now, bottom first, as `studio.get` reports them.
+    pub(super) fn overlay_report(&self) -> Vec<SceneId> {
+        let state = self.graph.state();
+        let Some(show_id) = state.show_scene() else {
+            return Vec::new();
+        };
+        let Some(show) = state.scene(show_id) else {
+            return Vec::new();
+        };
+        show.items()
+            .iter()
+            .filter(|item| state.visible_in(item.id(), Some(show_id)) == Some(true))
+            .filter_map(|item| match state.source(item.source_id())?.kind() {
+                SourceKind::Scene { scene_id } => Some(scene_id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `overlay.show`, `overlay.hide` and `overlay.toggle` (`visible` `None`): puts
+    /// `scene_id` over program, or takes it down, through its item's own show or hide
+    /// transition, with or without a show running. Fails with `not_found` for a scene
+    /// the collection doesn't hold, and `invalid_argument` for the show scene itself or
+    /// one that can't be nested.
+    fn overlay_action(
+        &mut self,
+        scene_id: &SceneId,
+        visible: Option<bool>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        if self.graph.state().scene(scene_id).is_none() {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.to_string(),
+            });
+        }
+        let item_id = match visible {
+            // Hiding an overlay that was never made changes nothing.
+            Some(false) => match self.find_overlay_item(scene_id) {
+                Some(item) => item,
+                None => return Ok(()),
+            },
+            _ => self.overlay_item(scene_id, wake).ok_or_else(|| {
+                ProtocolError::invalid_argument(
+                    "scene_id",
+                    "can't be drawn as an overlay: the show scene, or a scene that would contain it",
+                )
+            })?,
+        };
+        let visible = visible.unwrap_or_else(|| {
+            let state = self.graph.state();
+            state.visible_in(&item_id, state.show_scene()) != Some(true)
+        });
+        self.set_show_scene_item_shown(&item_id, visible, None, wake)
+    }
+
+    /// Shows or hides an overlay's item of the show scene, over program. A clip's fade of
+    /// 0 uses the overlay's own show or hide transition; any other length is a plain fade
+    /// of that many milliseconds.
+    fn set_overlay_shown(
+        &mut self,
+        item_id: &ItemId,
+        visible: bool,
+        fade_ms: u32,
+        wake: &mut Vec<Waker>,
+    ) {
+        let fade = (fade_ms > 0).then_some(fade_ms);
+        let _ = self.set_show_scene_item_shown(item_id, visible, fade, wake);
     }
 
     /// Emits `show.changed` for the running show.
@@ -676,5 +884,17 @@ impl State {
         };
         self.run_show_steps(&new, steps, wake);
         self.show_settle(wake);
+    }
+}
+
+#[cfg(test)]
+impl super::Engine {
+    /// The show scene, if the engine has made one.
+    pub(crate) fn show_scene_id(&self) -> Option<SceneId> {
+        crate::lock(&self.shared.state)
+            .graph
+            .state()
+            .show_scene()
+            .cloned()
     }
 }

@@ -257,15 +257,18 @@ fn clients_never_see_the_show_scene_and_nothing_may_show_it() {
     // A scene something already shows can't become the show scene.
     assert!(!engine.set_show_scene(Some(SceneId::new("logo"))));
     assert!(!engine.set_show_scene(Some(SceneId::new("missing"))));
-    // Deleting the show scene takes the marker with it.
-    batch(
-        &control,
-        edits(vec![edit(
-            json!({"type": "scene.delete", "scene_id": "show"}),
-        )]),
-    )
-    .expect("deleted");
-    assert!(!engine.render_hub().load().shot().draws_show());
+    // No client can delete the show scene: to clients it doesn't exist (alpha.13 ST5).
+    assert_eq!(
+        code(batch(
+            &control,
+            edits(vec![edit(
+                json!({"type": "scene.delete", "scene_id": "show"}),
+            )]),
+        )),
+        "not_found",
+        "never deleted by a client"
+    );
+    assert!(engine.render_hub().load().shot().draws_show());
 }
 
 /// With program on the scene that becomes the show scene, program moves to the first
@@ -281,6 +284,171 @@ fn program_leaves_the_scene_that_becomes_the_show_scene() {
         engine.render_hub().load().shot().program(),
         Some(&SceneId::new("a"))
     );
+}
+
+/// `item.show` or `item.hide` on an item of the show scene.
+fn shown(control: &dyn Control, item: &str, visible: bool) {
+    let item_id = jstream_protocol::ItemId::new(item);
+    let action = if visible {
+        Action::ItemShow {
+            item_id,
+            scene_id: None,
+        }
+    } else {
+        Action::ItemHide {
+            item_id,
+            scene_id: None,
+        }
+    };
+    block_on(control.call(Call::Action { action })).expect("shown or hidden");
+}
+
+/// Whether `value` is well between the two ends: a channel partway through a fade.
+fn between(value: u8) -> bool {
+    (16..240).contains(&value)
+}
+
+/// An overlay shown or hidden plays its own effect (ADR-0101) over program, as a show
+/// scene item: on its own, so a program transition running at the same time keeps
+/// running under it, and the two overlap.
+#[test]
+fn an_overlay_fades_by_its_own_effect_over_a_program_transition() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let hub = engine.render_hub();
+    batch(
+        &control,
+        edits(vec![edit(
+            json!({"type": "transition.set_default", "preset_id": "fade"}),
+        )]),
+    )
+    .expect("the 400 ms fade is the default");
+
+    // Hidden, it fades out over the default preset's 400 ms, and program stays as it is.
+    shown(&control, "overlay", false);
+    assert!(hub.load().shot().draws_show(), "still on its way out");
+    assert_eq!(
+        hub.load().shot().transition_tracks(),
+        None,
+        "program runs nothing"
+    );
+    if let Some(pixels) = program_at(&engine, ms(0)) {
+        assert_eq!(at(&pixels, 4, 4), BLUE, "not yet faded");
+    }
+    if let Some(pixels) = program_at(&engine, ms(200)) {
+        let [r, g, b, a] = at(&pixels, 4, 4);
+        assert!(
+            between(r) && between(b) && g == 0 && a == 255,
+            "halfway out, over red: {r} {g} {b}"
+        );
+        assert_eq!(at(&pixels, 48, 27), RED, "program under it");
+    }
+    clock.advance(400_000);
+    engine.replan();
+    assert!(!hub.load().shot().draws_show(), "gone once its fade ended");
+
+    // Shown while program fades from red to green: both run at once.
+    switch(&control, "b", Some("fade")).expect("switch");
+    shown(&control, "overlay", true);
+    let shot = hub.load();
+    assert_eq!(
+        shot.shot().transition_tracks(),
+        Some(2),
+        "program's fade runs"
+    );
+    assert!(shot.shot().draws_show(), "and the overlay's over it");
+    drop(shot);
+    if let Some(pixels) = program_at(&engine, ms(400)) {
+        assert_eq!(at(&pixels, 4, 4), RED, "the overlay starts from nothing");
+    }
+    if let Some(pixels) = program_at(&engine, ms(600)) {
+        let [r, g, b, _] = at(&pixels, 4, 4);
+        assert!(
+            r > 0 && g > 0 && between(b),
+            "the overlay halfway in, over red fading into green: {r} {g} {b}"
+        );
+        let [r, g, b, a] = at(&pixels, 48, 27);
+        assert!(
+            between(r) && between(g) && b == 0 && a == 255,
+            "program halfway: {r} {g} {b}"
+        );
+    }
+    clock.advance(400_000);
+    engine.replan();
+    let shot = hub.load();
+    assert_eq!(shot.shot().transition_tracks(), None, "both ended");
+    assert!(shot.shot().draws_show());
+    drop(shot);
+    if let Some(pixels) = program_at(&engine, ms(800)) {
+        assert_eq!(at(&pixels, 4, 4), BLUE);
+        assert_eq!(at(&pixels, 48, 27), GREEN);
+    }
+}
+
+/// The show runner fades an overlay over a length of its own in place of the item's
+/// effect, 0 cutting; reversed partway, the fade turns back from where it is.
+#[test]
+fn the_show_runner_fades_an_overlay_over_its_own_length() {
+    let (engine, clock) = studio();
+    let hub = engine.render_hub();
+    let overlay = jstream_protocol::ItemId::new("overlay");
+    engine
+        .set_show_scene_item_shown(&overlay, false, Some(0))
+        .expect("hidden");
+    assert!(!hub.load().shot().draws_show(), "0 cuts");
+    engine
+        .set_show_scene_item_shown(&overlay, true, Some(1000))
+        .expect("shown");
+    assert!(hub.load().shot().draws_show());
+    let mut half = None;
+    if let Some(pixels) = program_at(&engine, ms(0)) {
+        assert_eq!(at(&pixels, 4, 4), RED, "not in yet");
+    }
+    if let Some(pixels) = program_at(&engine, ms(500)) {
+        let [r, g, b, _] = at(&pixels, 4, 4);
+        assert!(between(r) && g == 0 && between(b), "halfway: {r} {g} {b}");
+        half = Some([r, g, b]);
+    }
+    if let Some(pixels) = program_at(&engine, ms(1000)) {
+        assert_eq!(at(&pixels, 4, 4), BLUE, "all the way in");
+    }
+
+    // Hidden halfway in, it goes back out from halfway, with what is left of the way.
+    clock.advance(500_000);
+    engine.replan();
+    engine
+        .set_show_scene_item_shown(&overlay, false, Some(1000))
+        .expect("hidden");
+    if let Some(pixels) = program_at(&engine, ms(500)) {
+        let [r, g, b, _] = at(&pixels, 4, 4);
+        let close = |x: u8, y: u8| x.abs_diff(y) <= 2;
+        let [hr, hg, hb] = half.expect("drawn above");
+        assert!(
+            close(r, hr) && close(g, hg) && close(b, hb),
+            "no jump: {r} {g} {b}"
+        );
+    }
+    if let Some(pixels) = program_at(&engine, ms(1000)) {
+        assert_eq!(at(&pixels, 4, 4), RED, "out");
+    }
+    clock.advance(500_000);
+    engine.replan();
+    assert!(!hub.load().shot().draws_show());
+
+    // Only the show scene's own items.
+    let refused = |item: &str| {
+        engine
+            .set_show_scene_item_shown(&jstream_protocol::ItemId::new(item), true, None)
+            .expect_err("refused")
+    };
+    assert!(matches!(
+        refused("a1"),
+        jstream_protocol::ProtocolError::InvalidArgument { .. }
+    ));
+    assert!(matches!(
+        refused("missing"),
+        jstream_protocol::ProtocolError::NotFound { .. }
+    ));
 }
 
 /// The show scene's items are drawn items like any pass's: their `shown` clock starts
