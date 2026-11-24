@@ -1038,7 +1038,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:a0c0b9f41af51c6b", by = "agent:st0-show-format", note = "Re-read the protocol summary against command.rs, query.rs and event.rs: show.set/show.delete, the show.* run actions as studio state, studio.get show, show.changed, and overlay.* are described; the mock and engine changes need no more here." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/show/tests.rs"]
-stamp = { hash = "b3:e664a8064ddd0805", by = "agent:st0-show-format", note = "Re-read the protocol summary against command.rs, query.rs and event.rs: show.set/show.delete, the show.* run actions as studio state, studio.get show, show.changed, and overlay.* are described; the mock and engine changes need no more here." }
+stamp = { hash = "b3:c814755a90adb722", by = "agent:st0-show-format", note = "Re-read the shows paragraph after the ShowEnd::Unknown test landed in show/tests.rs (then reformatted by cargo fmt): the summary of show.set/delete, the run actions, studio.get show, show.changed and overlay.* still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/timeline.rs"]
 stamp = { hash = "b3:0680276e182b2c8c", by = "agent:channels", note = "Added 0.170's lanes, starts and stops, the play delay and studio.get waiting to the timelines bullet." }
@@ -5067,7 +5067,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:a0c0b9f41af51c6b", by = "agent:st0-show-format", note = "Re-read after adding ShowEnd::Unknown and its test in show.rs: purpose and the contents list still hold." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/show/tests.rs"]
-stamp = { hash = "b3:e664a8064ddd0805", by = "agent:st0-show-format", note = "Re-read after adding ShowEnd::Unknown and its test in show.rs: purpose and the contents list still hold." }
+stamp = { hash = "b3:c814755a90adb722", by = "agent:st0-show-format", note = "Re-read after cargo fmt reformatted the new ShowEnd fallback test in show/tests.rs (formatting only): purpose and contents still hold." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/timeline.rs"]
 stamp = { hash = "b3:0680276e182b2c8c", by = "agent:channels", note = "Re-read: the crate's purpose holds." }
