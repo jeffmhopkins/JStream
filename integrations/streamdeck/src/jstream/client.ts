@@ -51,6 +51,8 @@ export class JStreamClient extends EventEmitter<ClientEvents> {
 
 	constructor(clientName: string) {
 		super();
+		// One listener per key action and the hub, more than Node's default 10.
+		this.setMaxListeners(50);
 		this.#clientName = clientName;
 	}
 

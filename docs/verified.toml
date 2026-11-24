@@ -8562,7 +8562,7 @@ stamp = { hash = "b3:badafd07ab70c4ce", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:22c5b9ecf7cda0b5", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/client.ts"]
-stamp = { hash = "b3:d1890e314b0958ef", by = "agent:claude", note = "client.ts stops retrying on FingerprintMismatch like a 401 (N3); discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:953ac216333edc04", by = "agent:claude", note = "client.ts and studio.ts raise their listener limit to 50 (one per key action plus the hub); the design text holds" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/discovery.ts"]
 stamp = { hash = "b3:d65185eb4dff3671", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8571,7 +8571,7 @@ stamp = { hash = "b3:d65185eb4dff3671", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:68b84d51d14515c9", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/studio.ts"]
-stamp = { hash = "b3:83d2f4ba8bf1d569", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
+stamp = { hash = "b3:0dd58e7625cb540c", by = "agent:claude", note = "client.ts and studio.ts raise their listener limit to 50 (one per key action plus the hub); the design text holds" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/jstream/tls.ts"]
 stamp = { hash = "b3:7099247b3b19db3f", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
