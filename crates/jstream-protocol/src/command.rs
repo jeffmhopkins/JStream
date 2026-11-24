@@ -1106,7 +1106,7 @@ pub enum Edit {
         /// The channel's ID.
         channel_id: String,
     },
-    /// Sets a show (ADR-0210, since 0.178): a new one, or the whole of one with the same
+    /// Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same
     /// `show_id` in its place. A show running when it is set again runs on with the new
     /// one from where its play head is. Rejected with `invalid_argument` at
     /// `show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th
@@ -2159,7 +2159,7 @@ pub enum Action {
     /// `output.start` still fails, as while held.
     #[serde(rename = "clock.release")]
     ClockRelease,
-    /// Runs a show (ADR-0210, since 0.178) from its start, or from one of its bookmarks,
+    /// Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,
     /// as a jump there would land. Of the show that runs, paused by `show.pause`, with no
     /// `bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one
     /// running, which emits `show.changed` (`stopped`). Running is studio state like the
@@ -2179,13 +2179,13 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         rehearse: bool,
     },
-    /// Stops the running show where it is (ADR-0210, since 0.178): program keeps what is
+    /// Stops the running show where it is (ADR-0210, since 0.179): program keeps what is
     /// on it, and the sequences the show started stop, while ones started by hand or a
     /// trigger play on. Emits `show.changed` (`stopped`). With no show running it
     /// succeeds and emits nothing.
     #[serde(rename = "show.stop")]
     ShowStop,
-    /// Pauses the running show where it is (ADR-0210 decision 5, since 0.178): its play
+    /// Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play
     /// head holds, and program keeps what is on it, as at a pausing bookmark.
     /// `show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on
     /// from there. `studio.get` reports it `paused` with no `bookmark_id`. Emits
@@ -2193,7 +2193,7 @@ pub enum Action {
     /// script, it succeeds and does nothing.
     #[serde(rename = "show.pause")]
     ShowPause,
-    /// Continues the running show (ADR-0210 decision 5, since 0.178). Waiting at a
+    /// Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a
     /// pausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;
     /// off script, it goes on to the next clip; in a loop, it leaves as the loop's
     /// `leave` says; playing, it jumps to the next pausing bookmark, applying state as any
@@ -2203,16 +2203,16 @@ pub enum Action {
     #[serde(rename = "show.continue")]
     ShowContinue,
     /// Jumps the running show back to the pausing bookmark before its play head
-    /// (ADR-0210, since 0.178), or to its start if there is none, and waits there. Emits
+    /// (ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits
     /// `show.changed` (`jumped`). With no show running it succeeds and does nothing.
     #[serde(rename = "show.back")]
     ShowBack,
     /// Jumps the running show to the next pausing bookmark without playing what is
-    /// between (ADR-0210, since 0.178), and waits there. Emits `show.changed`
+    /// between (ADR-0210, since 0.179), and waits there. Emits `show.changed`
     /// (`jumped`). With no show running it succeeds and does nothing.
     #[serde(rename = "show.skip")]
     ShowSkip,
-    /// Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.178):
+    /// Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):
     /// the state there is what playing there would have left (decision 6), and the
     /// transition is the bookmark's own. It acts only while that show runs, so a key
     /// bound to a bookmark does nothing during another show; with that show not running
@@ -2226,7 +2226,7 @@ pub enum Action {
         bookmark_id: String,
     },
     /// Jumps the running show to its bookmark number `number`, 1 to 8, counted in show
-    /// order (ADR-0210 decision 5, since 0.178), so a row of pads needs no rebinding when
+    /// order (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when
     /// bookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it
     /// succeeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to
     /// 8.
@@ -2235,7 +2235,7 @@ pub enum Action {
         /// The bookmark's place in the show, 1 to 8.
         number: u8,
     },
-    /// Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.178),
+    /// Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),
     /// as a jump to a bookmark there would: for scrubbing, and for an agent. A spot
     /// inside a video seeks it. Emits `show.changed` (`jumped`). With no show running it
     /// succeeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.
@@ -2245,7 +2245,7 @@ pub enum Action {
         at_ms: u32,
     },
     /// Arms a spot in the running show for the next `show.continue` (ADR-0210 decision
-    /// 14, since 0.177), which a click on the ruler does while a show runs, so a click
+    /// 14, since 0.179), which a click on the ruler does while a show runs, so a click
     /// never jumps program on air. `studio.get` reports it in `show.armed_ms`; arming
     /// again moves it, and omitting `at_ms` disarms it. With no show running it succeeds
     /// and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.
@@ -2255,7 +2255,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at_ms: Option<u32>,
     },
-    /// Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.178), with
+    /// Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with
     /// or without a show running: on the internal show scene's top layer, through its
     /// fade, and steady while program transitions under it. Runtime state like the
     /// program scene: no `rev`, never undone or saved; `studio.get` lists it in
@@ -2266,7 +2266,7 @@ pub enum Action {
         /// The scene to put over program.
         scene_id: SceneId,
     },
-    /// Takes a scene down from over program, through its fade (ADR-0210, since 0.178).
+    /// Takes a scene down from over program, through its fade (ADR-0210, since 0.179).
     /// Hiding one that isn't up does nothing. Fails as `overlay.show` does.
     #[serde(rename = "overlay.hide")]
     OverlayHide {
@@ -2274,7 +2274,7 @@ pub enum Action {
         scene_id: SceneId,
     },
     /// `overlay.show` if the scene isn't up as an overlay, else `overlay.hide`
-    /// (ADR-0210, since 0.178). A retried toggle flips twice, so a caller that may retry
+    /// (ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry
     /// sends `overlay.show` or `overlay.hide`.
     #[serde(rename = "overlay.toggle")]
     OverlayToggle {

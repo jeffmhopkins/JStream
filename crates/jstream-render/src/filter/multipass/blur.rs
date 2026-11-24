@@ -142,6 +142,57 @@ mod tests {
         );
     }
 
+    /// The radius counts in the input's extent, not its texels (#1680): an image with
+    /// half the texels of the size it is placed at (a model's layer drawn smaller,
+    /// ADR-0197) blurs over the same share of the picture as one with them all, so
+    /// each of its texels is the mean of the two full-size pixels it stands for.
+    #[test]
+    fn a_blur_spreads_over_the_same_share_of_an_image_with_fewer_texels() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        let row = |width: u32, height: u32| -> Vec<[u8; 4]> {
+            (0..height)
+                .flat_map(|_| (0..width).map(move |x| if x < width / 2 { K } else { W }))
+                .collect()
+        };
+        let full = image(&opened, 96, &row(96, 8));
+        let mut half = image(&opened, 48, &row(48, 4));
+        half.set_extent(jstream_media::FrameSize::new(96, 8).expect("non-zero"));
+        let mut blur = filter("blur", json!({ "radius": 12.0 }));
+        let whole = run(&mut opened, &mut blur, &full, 0.0);
+        let mut blur = filter("blur", json!({ "radius": 12.0 }));
+        let halved = run(&mut opened, &mut blur, &half, 0.0);
+        let linear = |v: u8| crate::color::srgb_channel_to_linear(f32::from(v) / 255.0);
+        let at = |snapshot: &crate::Snapshot, x: u32, y: u32| {
+            linear(snapshot.pixel(x, y).expect("inside")[0])
+        };
+        let expected: Vec<f32> = (0..48)
+            .map(|x| (at(&whole, 2 * x, 4) + at(&whole, 2 * x + 1, 4)) / 2.0)
+            .collect();
+        let got: Vec<f32> = (0..48).map(|x| at(&halved, x, 2)).collect();
+        for (x, (e, g)) in expected.iter().zip(&got).enumerate() {
+            assert!(
+                (e - g).abs() < 0.06,
+                "texel {x}: {g} where the full image has {e}\n{expected:?}\n{got:?}"
+            );
+        }
+        // The same image drawn with twice the texels of its extent blurs over twice
+        // as many of them.
+        let mut double = image(&opened, 192, &row(192, 16));
+        double.set_extent(jstream_media::FrameSize::new(96, 8).expect("non-zero"));
+        let mut blur = filter("blur", json!({ "radius": 12.0 }));
+        let doubled = run(&mut opened, &mut blur, &double, 0.0);
+        for x in 0..96 {
+            let mean = (at(&doubled, 2 * x, 8) + at(&doubled, 2 * x + 1, 8)) / 2.0;
+            let e = at(&whole, x, 4);
+            assert!(
+                (e - mean).abs() < 0.06,
+                "pixel {x}: {mean} where it has {e}"
+            );
+        }
+    }
+
     #[test]
     fn a_large_radius_runs_downsampled_and_stays_smooth() {
         let Some(mut opened) = open() else {

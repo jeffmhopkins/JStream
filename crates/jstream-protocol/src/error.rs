@@ -281,7 +281,7 @@ pub enum EntityKind {
     /// A channel (0.169, ADR-0183). Only an error answering a `channel.*` command names
     /// it, so a client that sends none never reads it.
     Channel,
-    /// A show (0.177, ADR-0210). Only an error answering a `show.*` command names it, so
+    /// A show (0.179, ADR-0210). Only an error answering a `show.*` command names it, so
     /// a client that sends none never reads it.
     Show,
 }
