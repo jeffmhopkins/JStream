@@ -111,6 +111,16 @@
 //!   (ADR-0140); media files decode through `MfMediaDecoders`. `Require` is
 //!   `Unsupported`, and so is a machine with no H.264 decoder MFT (an N edition without
 //!   the Media Feature Pack).
+//! - **Direct vendor encoders** (ADR-0217, `codec/direct/`): on the GPU path the
+//!   adapter's vendor encoder can be tried before the MFTs, NVENC on NVIDIA and AMF on AMD,
+//!   through the runtime DLL the display driver installs. It reads the encode targets
+//!   the same way (a GPU copy into a texture of its own, eight at most, `Busy` when it
+//!   holds all of them), is configured and frames its packets as the MFT path does, and
+//!   names itself "… (direct)" in `CodecInfo::name`. When it can't open, the MFT opens
+//!   instead and `tracing` logs why; when both refuse, the error names both.
+//!   `JSTREAM_DIRECT_ENCODERS` (read when the backend goes on a context) chooses: `auto`,
+//!   the default, tries only vendors whose hardware run has passed (`Vendor::proven`:
+//!   AMF so far); `on` tries the GPU's vendor anyway; `off` never does.
 //! - **Not yet:** HEVC and AV1 decoders, which report `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
@@ -118,6 +128,9 @@
 mod aac;
 #[cfg(any(windows, test))]
 mod decoder;
+// The vendor encoders' shared bookkeeping and FFI layouts are tested on every platform.
+#[cfg(any(windows, test))]
+pub(crate) mod direct;
 #[cfg(any(windows, test))]
 mod fallback;
 #[cfg(windows)]
@@ -147,6 +160,7 @@ mod backend {
 
     use super::aac::MfAacEncoder;
     use super::decoder::MfH264Decoder;
+    use super::direct::{self, Policy};
     use super::fallback::FirstFrameFallback;
     use super::mf::{self, MfRuntime};
     use super::video::{Format, MfVideoEncoder};
@@ -165,12 +179,25 @@ mod backend {
     pub struct MfCodecs {
         /// The context its video encoders read encode targets on; `None` for CPU frames.
         gpu: Option<EncodeGpu>,
+        /// Which direct vendor encoders the GPU path tries first (`codec::direct`);
+        /// `None` reads `JSTREAM_DIRECT_ENCODERS` when the backend goes on a context.
+        direct: Option<Policy>,
     }
 
     impl MfCodecs {
         /// The backend. Opening nothing yet, it can't fail.
         pub fn new() -> Self {
             Self::default()
+        }
+
+        /// The backend with the direct encoders `policy` names, whatever the variable
+        /// says: for tests that compare a direct encoder with the MFT.
+        #[cfg(all(test, feature = "hw-tests"))]
+        pub(crate) fn with_direct(policy: Policy) -> Self {
+            Self {
+                gpu: None,
+                direct: Some(policy),
+            }
         }
     }
 
@@ -218,9 +245,45 @@ mod backend {
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            // The GPU path has hardware encoders only, so nothing to fall back to.
+            // The GPU path has hardware encoders only, so no software to fall back to: the
+            // vendor's direct encoder first, then the Media Foundation MFTs.
             if let Some(gpu) = &self.gpu {
-                return Ok(Box::new(MfVideoEncoder::open_on(config, gpu)?));
+                let policy = self.direct.unwrap_or(Policy::Off);
+                let refused = match direct::open_direct(config, gpu, policy) {
+                    Ok(Some(encoder)) => {
+                        // The engine's status doesn't name the encoder, so the log does.
+                        tracing::info!(
+                            encoder = %encoder.info().name,
+                            "opened the GPU's direct video encoder"
+                        );
+                        return Ok(encoder);
+                    }
+                    Ok(None) => None,
+                    Err(err) => Some(err),
+                };
+                return match MfVideoEncoder::open_on(config, gpu) {
+                    Ok(encoder) => {
+                        if let Some(err) = refused {
+                            tracing::info!(
+                                direct = gpu.vendor().encoder().unwrap_or_default(),
+                                encoder = %encoder.info().name,
+                                error = %err,
+                                "the GPU's direct encoder didn't open; using the Media \
+                                 Foundation encoder"
+                            );
+                        }
+                        Ok(Box::new(encoder))
+                    }
+                    Err(mf) => Err(match refused {
+                        Some(err) => PlatformError::Unsupported {
+                            what: format!(
+                                "{mf}; the GPU's direct encoder ({}) refused too: {err}",
+                                gpu.vendor().encoder().unwrap_or_default()
+                            ),
+                        },
+                        None => mf,
+                    }),
+                };
             }
             let encoder = MfVideoEncoder::open(config)?;
             if !FirstFrameFallback::applies(config, encoder.info()) {
@@ -275,6 +338,7 @@ mod backend {
         ) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
             Ok(Some(Arc::new(Self {
                 gpu: Some(EncodeGpu::of(context)?),
+                direct: Some(self.direct.unwrap_or_else(direct::policy)),
             })))
         }
     }
@@ -291,6 +355,7 @@ mod device_tests {
     use jstream_platform::{AudioEncoderConfig, Codecs};
 
     use super::MfCodecs;
+    use super::direct::Policy;
 
     #[test]
     #[ignore = "needs Media Foundation's AAC encoder"]
@@ -657,19 +722,47 @@ mod device_tests {
     #[test]
     #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware H.264 encoder"]
     fn encodes_h264_from_encode_targets() {
-        encode_from_targets(Codec::H264);
+        encode_from_targets(Codec::H264, Policy::Off);
     }
 
     #[test]
     #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware HEVC encoder"]
     fn encodes_hevc_from_encode_targets() {
-        encode_from_targets(Codec::Hevc);
+        encode_from_targets(Codec::Hevc, Policy::Off);
     }
 
     #[test]
     #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware AV1 encoder"]
     fn encodes_av1_from_encode_targets() {
-        encode_from_targets(Codec::Av1);
+        encode_from_targets(Codec::Av1, Policy::Off);
+    }
+
+    /// The GPU path end to end as above, through the GPU vendor's own encoder (NVENC or
+    /// AMF, `codec::direct`) instead of its MFT.
+    #[test]
+    #[ignore = "needs an NVIDIA or AMD GPU with NV12 textures and a hardware H.264 encoder"]
+    fn encodes_h264_from_encode_targets_directly() {
+        encode_from_targets(Codec::H264, Policy::On);
+    }
+
+    #[test]
+    #[ignore = "needs an NVIDIA or AMD GPU with NV12 textures and a hardware HEVC encoder"]
+    fn encodes_hevc_from_encode_targets_directly() {
+        encode_from_targets(Codec::Hevc, Policy::On);
+    }
+
+    #[test]
+    #[ignore = "needs an NVIDIA RTX 40 or AMD RX 7000 (or newer) GPU, for AV1 encoding"]
+    fn encodes_av1_from_encode_targets_directly() {
+        encode_from_targets(Codec::Av1, Policy::On);
+    }
+
+    /// A keyframe asked for mid-stream comes out as the next packet, through the
+    /// vendor's own encoder.
+    #[test]
+    #[ignore = "needs an NVIDIA or AMD GPU with NV12 textures and a hardware H.264 encoder"]
+    fn forces_a_keyframe_directly() {
+        forced_keyframe(Policy::On);
     }
 
     /// The live case the engine runs (#1617's follow-up): 1080p at 30 fps for ten
@@ -683,7 +776,15 @@ mod device_tests {
     #[test]
     #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware H.264 encoder"]
     fn keeps_up_with_1080p30_from_encode_targets() {
-        live_1080p30(true);
+        live_1080p30(true, Policy::Off);
+    }
+
+    /// As [`keeps_up_with_1080p30_from_encode_targets`], through the GPU vendor's own
+    /// encoder: run both with `--nocapture` to compare their reports (ADR-0217).
+    #[test]
+    #[ignore = "needs an NVIDIA or AMD GPU with NV12 textures and a hardware H.264 encoder"]
+    fn keeps_up_with_1080p30_directly() {
+        live_1080p30(true, Policy::On);
     }
 
     /// As [`keeps_up_with_1080p30_from_encode_targets`], with CPU NV12 frames into the
@@ -691,10 +792,25 @@ mod device_tests {
     #[test]
     #[ignore = "needs a GPU with a hardware H.264 encoder"]
     fn keeps_up_with_1080p30_from_cpu_frames_in_hardware() {
-        live_1080p30(false);
+        live_1080p30(false, Policy::Off);
     }
 
-    fn live_1080p30(gpu_path: bool) {
+    /// Whether `enc` is the direct encoder `policy` asks for, or an MFT for `Off`.
+    fn assert_path(enc: &dyn jstream_platform::VideoEncoder, policy: Policy) {
+        let direct = enc.info().name.ends_with("(direct)");
+        assert_eq!(
+            direct,
+            policy == Policy::On,
+            "{policy:?} opened {}",
+            enc.info().name
+        );
+    }
+
+    #[allow(
+        clippy::print_stderr,
+        reason = "the report is the measurement ADR-0217 asks for; --nocapture shows it"
+    )]
+    fn live_1080p30(gpu_path: bool, policy: Policy) {
         use std::collections::VecDeque;
         use std::sync::Arc;
         use std::time::{Duration, Instant};
@@ -726,7 +842,7 @@ mod device_tests {
         let context = gpu.open_device().expect("open the media adapter's device");
         let opening = Instant::now();
         let mut enc = if gpu_path {
-            MfCodecs::new()
+            MfCodecs::with_direct(policy)
                 .on_context(&context)
                 .expect("our context")
                 .expect("MF has a GPU path")
@@ -737,6 +853,7 @@ mod device_tests {
         .unwrap_or_else(|e| panic!("a hardware H.264 encoder: {e}"));
         let opened = opening.elapsed();
         assert!(enc.info().hardware);
+        assert_path(enc.as_ref(), policy);
         let making = Instant::now();
         let ring: Vec<_> = if gpu_path {
             (0..QUEUE + 2)
@@ -844,6 +961,7 @@ mod device_tests {
             out.len(),
         );
         enc.finish(&mut out).expect("finish");
+        eprintln!("{report}");
         assert!(
             accepted >= FRAMES * 95 / 100,
             "the hardware encoder fell behind at 1080p30: {report}"
@@ -855,7 +973,7 @@ mod device_tests {
         drop(context);
     }
 
-    fn encode_from_targets(codec: Codec) {
+    fn encode_from_targets(codec: Codec, policy: Policy) {
         use std::sync::Arc;
 
         use jstream_platform::media::{FrameSize, MediaTime, PixelFormat, Timebase};
@@ -868,7 +986,7 @@ mod device_tests {
 
         let gpu = WindowsGpu::new();
         let context = gpu.open_device().expect("open the media adapter's device");
-        let codecs = MfCodecs::new()
+        let codecs = MfCodecs::with_direct(policy)
             .on_context(&context)
             .expect("our context")
             .expect("MF has a GPU path");
@@ -887,6 +1005,7 @@ mod device_tests {
                 panic!("a D3D11-aware hardware {codec:?} encoder on the context's adapter: {e}")
             });
         assert!(enc.info().hardware);
+        assert_path(enc.as_ref(), policy);
         let ring: Vec<_> = (0..3)
             .map(|_| gpu.encode_target(&context, size).expect("encode target"))
             .collect();
@@ -948,6 +1067,82 @@ mod device_tests {
         }
         assert_framing(codec, &out);
         // Release the encoder's textures before the context's device.
+        drop(enc);
+        drop(codecs);
+        drop(ring);
+        drop(context);
+    }
+
+    /// Encodes 30 frames of 720p from encode targets with a keyframe interval of 300,
+    /// asks for a keyframe before frame 10, and checks that frame 10's packet is one,
+    /// with its parameter sets in-band.
+    fn forced_keyframe(policy: Policy) {
+        use std::sync::Arc;
+
+        use jstream_platform::media::{FrameSize, MediaTime, PixelFormat, Timebase};
+        use jstream_platform::{
+            GpuInterop, HardwarePreference, RateControl, VideoEncoderConfig, VideoSurface,
+        };
+
+        use crate::WindowsGpu;
+
+        let gpu = WindowsGpu::new();
+        let context = gpu.open_device().expect("open the media adapter's device");
+        let codecs = MfCodecs::with_direct(policy)
+            .on_context(&context)
+            .expect("our context")
+            .expect("MF has a GPU path");
+        let size = FrameSize::new(1280, 720).expect("size");
+        let mut enc = codecs
+            .video_encoder(&VideoEncoderConfig {
+                codec: Codec::H264,
+                size,
+                input_format: PixelFormat::Nv12,
+                frame_period: Timebase::new(1, 30).expect("30 fps"),
+                rate_control: RateControl::Cbr { kbps: 3000 },
+                keyframe_interval: 300,
+                hardware: HardwarePreference::Require,
+            })
+            .unwrap_or_else(|e| panic!("a hardware H.264 encoder: {e}"));
+        assert_path(enc.as_ref(), policy);
+        let ring: Vec<_> = (0..3)
+            .map(|_| gpu.encode_target(&context, size).expect("encode target"))
+            .collect();
+        let tb = Timebase::MPEG_90K;
+        let mut out = Vec::new();
+        for i in 0..30i64 {
+            let target = &ring[i as usize % ring.len()];
+            assert_eq!(Arc::strong_count(target.sync()), 1, "frame {i}: still held");
+            draw_target(&context, target, (i % 30) as f64 / 30.0);
+            for _ in 0..1000 {
+                enc.poll(&mut out).expect("poll");
+                if enc.can_accept() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            if i == 10 {
+                enc.request_keyframe().expect("request a keyframe");
+            }
+            let frame = target.clone().with_pts(MediaTime::new(i * 3000, tb));
+            enc.encode(VideoSurface::Gpu(frame)).expect("encode");
+            enc.poll(&mut out).expect("poll");
+        }
+        enc.finish(&mut out).expect("finish");
+        let keyframes: Vec<i64> = out
+            .iter()
+            .filter(|p| p.is_keyframe())
+            .map(|p| p.pts().ticks() / 3000)
+            .collect();
+        assert_eq!(keyframes, [0, 10], "keyframes at frames {keyframes:?}");
+        let forced = out
+            .iter()
+            .find(|p| p.pts() == MediaTime::new(10 * 3000, tb))
+            .expect("frame 10's packet");
+        assert!(
+            nal_types(forced.data(), |b| b & 0x1F).contains(&7),
+            "the forced keyframe carries an SPS"
+        );
         drop(enc);
         drop(codecs);
         drop(ring);

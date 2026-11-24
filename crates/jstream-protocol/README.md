@@ -86,7 +86,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
-  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.report`,
+  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.show`,
+  `preview.request_keyframe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
@@ -398,7 +399,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.186 because a value binding and a reader motion row (`midi`,
+`PROTOCOL_VERSION` is 0.188 because `preview.show` moves an open preview stream to
+another scene, or the program, on its channel, keeping its encoder where nothing else
+shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.186 because a value binding and a reader motion row (`midi`,
 `data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
 `replace`; a value binding's target sums its `add` bindings onto the last moved
 `replace` binding's value or its stored value, a binding gains `enabled`, and a
@@ -3704,6 +3707,19 @@ the JSON text messages of the same connection (0.20,
   windows and webcams it shows for the preview itself. A scene the collection doesn't
   have fails with `not_found`; a scene deleted while its stream is open ends the stream
   with an end frame.
+- **Moving a stream.** `preview.show {channel, scene_id?}` (0.188) changes what an open
+  stream of the program or a scene shows, on the same channel and at the same size, rate
+  and codec: what a canvas or monitor does when the scene it shows changes, so its
+  decoder and its last picture carry on and no stream opens or closes. An H.264 stream
+  whose encoder session nothing else shares keeps it, and a hardware session it holds;
+  one whose new picture another stream already encodes joins that session. The first
+  picture of the new scene is a keyframe, and pictures of the old one may arrive before
+  it. A channel not open, or a stream of a source, fails with `invalid_argument` naming
+  `channel`; a scene the collection doesn't have with `not_found`.
+  `preview.request_keyframe {channel}` (0.188) asks a stream for a keyframe as its next picture:
+  a client whose decoder fell behind and dropped pictures resumes from it at once
+  rather than at the stream's next regular keyframe, up to 2 s later. It succeeds for a
+  channel that isn't open, and the activity log doesn't record it.
 - **Draft sources.** A `source` stream (`PreviewDraft {kind, settings?}`, 0.49) shows a
   source the collection doesn't hold, alone, as an item covering the canvas would show
   it and with no filters: what a `display`, `window` or `webcam` source with those

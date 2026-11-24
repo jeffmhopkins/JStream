@@ -23,8 +23,12 @@
 //! completes frames up to the oldest queued one's `pts` (`VTCompressionSessionCompleteFrames`),
 //! so the oldest is emitted before it returns, at the same cost (#627).
 //!
-//! GPU frames (IOSurface encode targets) follow once the Metal interop spike lands
-//! (ADR-0063 §8).
+//! **GPU frames.** An encoder opened on a GPU context takes the context's encode targets
+//! instead (`VideoSurface::Gpu`, NV12 IOSurface pixel buffers, `crate::gpu`): it waits on
+//! the CPU for the GPU to finish render's write (at most [`GPU_WAIT_MS`]), submits the
+//! target's own pixel buffer with no copy, and keeps the frame, boxed as the frame's
+//! `sourceFrameRefcon`, until the output callback for it runs, so render can't write the
+//! target again while VideoToolbox reads it (ADR-0063 §8).
 
 use std::collections::VecDeque;
 use std::ffi::{c_int, c_void};
@@ -36,10 +40,10 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use jstream_platform::media::{Codec, Packet, Rounding, Timebase, VideoFrame};
 use jstream_platform::{
-    CodecInfo, CodecRole, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    CodecInfo, CodecRole, GpuFrame, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 use objc2_core_foundation::{
-    CFArray, CFBoolean, CFDictionary, CFNumber, CFRetained, CFString, CFType,
+    CFArray, CFBoolean, CFDictionary, CFNumber, CFRetained, CFString, CFType, Type,
 };
 use objc2_core_media::{
     CMFormatDescription, CMSampleBuffer, CMTime, CMTimeFlags,
@@ -74,10 +78,15 @@ use objc2_video_toolbox::{
 use crate::annexb::{annexb_access_unit, cm_time_parts, copy_rows, media_time_from_cm};
 use crate::codec::{CM_H264, CM_HEVC, VtBitRate, VtEncoderSettings, vt_encoder_settings};
 use crate::fourcc::os_status;
+use crate::gpu::EncodeInput;
 
 /// Frames submitted and not yet returned by the output callback, at most. Enough to keep
 /// a hardware encoder busy without frame reordering; more only adds latency.
 pub(crate) const MAX_IN_FLIGHT: usize = 4;
+
+/// How long an encoder on the GPU path waits for the GPU to finish writing a target
+/// before it reports the frame as failed.
+pub(crate) const GPU_WAIT_MS: u64 = 2000;
 
 /// The session's `MaxFrameDelayCount`: frames the encoder may hold before it must emit
 /// one. Below [`MAX_IN_FLIGHT`], so a full queue always drains.
@@ -121,6 +130,13 @@ enum Output {
     Dropped,
     /// Encoding the frame failed.
     Failed(PlatformError),
+}
+
+/// A frame as `VtEncoder::encode` takes it: copied into a pool buffer, or an encode
+/// target's own pixel buffer.
+enum Input {
+    Cpu(VideoFrame),
+    Gpu(GpuFrame),
 }
 
 /// What the output callback reaches through its `refcon`. Owned by [`VtEncoder`], boxed so
@@ -443,11 +459,18 @@ fn output(
 /// order. No panic leaves it (R-UNSAFE-005).
 unsafe extern "C-unwind" fn output_callback(
     refcon: *mut c_void,
-    _source_frame_refcon: *mut c_void,
+    source_frame_refcon: *mut c_void,
     status: i32,
     flags: VTEncodeInfoFlags,
     sample: *mut CMSampleBuffer,
 ) {
+    if !source_frame_refcon.is_null() {
+        // SAFETY: a non-null frame refcon is the `Box<GpuFrame>` `VtEncoder::encode`
+        // leaked for this frame, and VideoToolbox calls back once per submitted frame, so
+        // it is taken back exactly once. Dropping it lets render write the target again.
+        let frame = unsafe { Box::from_raw(source_frame_refcon.cast::<GpuFrame>()) };
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(frame)));
+    }
     let _ = catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: `refcon` is the boxed `CallbackContext` the session was created with,
         // which outlives the session (`VtEncoder` drops the session first).
@@ -618,7 +641,8 @@ fn configure(
     Ok(delay_limited)
 }
 
-/// One VideoToolbox H.264 or HEVC compression session, fed CPU frames.
+/// One VideoToolbox H.264 or HEVC compression session, fed CPU frames or, on the GPU
+/// path, encode targets.
 pub(crate) struct VtEncoder {
     /// Declared before `context`, so it is completed and invalidated before the context
     /// its callback uses is freed.
@@ -640,6 +664,8 @@ pub(crate) struct VtEncoder {
     /// back in submission order (no reordering), so the oldest in flight is the
     /// `in_flight`-th from the back.
     queued: VecDeque<CMTime>,
+    /// Whether it takes encode targets (`VideoSurface::Gpu`) instead of CPU frames.
+    gpu: bool,
 }
 
 impl VtEncoder {
@@ -649,7 +675,7 @@ impl VtEncoder {
     /// [`PlatformError::Unsupported`] for a configuration VideoToolbox can't take, or when
     /// `HardwarePreference::Require` finds no hardware encoder, and [`PlatformError::Os`]
     /// when VideoToolbox refuses.
-    pub(crate) fn open(config: &VideoEncoderConfig) -> Result<Self, PlatformError> {
+    pub(crate) fn open(config: &VideoEncoderConfig, gpu: bool) -> Result<Self, PlatformError> {
         let settings = vt_encoder_settings(config)?;
         let too_big = || PlatformError::Unsupported {
             what: format!(
@@ -740,6 +766,7 @@ impl VtEncoder {
             finished: false,
             delay_limited,
             queued: VecDeque::with_capacity(MAX_IN_FLIGHT),
+            gpu,
         })
     }
 
@@ -866,12 +893,25 @@ impl VideoEncoder for VtEncoder {
                 what: "VideoToolbox encoder",
             });
         }
-        let VideoSurface::Cpu(frame) = frame else {
-            return Err(PlatformError::Unsupported {
-                what: format!("a GPU frame on the VideoToolbox {name} CPU path"),
-            });
+        let (info, input) = match frame {
+            VideoSurface::Cpu(frame) if !self.gpu => (*frame.info(), Input::Cpu(frame)),
+            VideoSurface::Gpu(frame) if self.gpu => (*frame.info(), Input::Gpu(frame)),
+            VideoSurface::Cpu(_) => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("a CPU frame on the VideoToolbox {name} GPU path"),
+                });
+            }
+            VideoSurface::Gpu(_) => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("a GPU frame on the VideoToolbox {name} CPU path"),
+                });
+            }
+            _ => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("a kind of frame VideoToolbox {name} doesn't know"),
+                });
+            }
         };
-        let info = *frame.info();
         if info.size != self.config.size || info.format != self.config.input_format {
             return Err(PlatformError::Unsupported {
                 what: format!(
@@ -896,8 +936,32 @@ impl VideoEncoder for VtEncoder {
             flags: CMTimeFlags::Valid,
             epoch: 0,
         };
-        let buffer = self.pixel_buffer()?;
-        copy_frame(&frame, &buffer)?;
+        let (buffer, refcon) = match input {
+            Input::Cpu(frame) => {
+                let buffer = self.pixel_buffer()?;
+                copy_frame(&frame, &buffer)?;
+                (buffer, ptr::null_mut())
+            }
+            Input::Gpu(frame) => {
+                let target = EncodeInput::of(&frame).ok_or_else(|| PlatformError::Unsupported {
+                    what: format!(
+                        "a GPU frame the Metal interop didn't allocate, on VideoToolbox {name}"
+                    ),
+                })?;
+                if !target.wait_written(GPU_WAIT_MS) {
+                    return Err(PlatformError::Os {
+                        call: "MTLSharedEvent waitUntilSignaledValue:timeoutMS:",
+                        code: None,
+                        message: format!(
+                            "the GPU didn't finish an encode target within {GPU_WAIT_MS} ms"
+                        ),
+                    });
+                }
+                let buffer = target.pixel_buffer().retain();
+                let refcon = Box::into_raw(Box::new(frame)).cast::<c_void>();
+                (buffer, refcon)
+            }
+        };
         let options = self.force_keyframe.then(|| {
             // SAFETY: a VideoToolbox constant, set before any code runs and never written.
             let key = unsafe { kVTEncodeFrameOptionKey_ForceKeyFrame };
@@ -906,21 +970,25 @@ impl VideoEncoder for VtEncoder {
         });
         self.context.in_flight.fetch_add(1, Ordering::AcqRel);
         // SAFETY: the session and pixel buffer are live, the options dictionary maps the
-        // documented key to a CFBoolean, and the frame refcon and info-flags pointers may
-        // be null.
+        // documented key to a CFBoolean, the frame refcon is null or the boxed frame the
+        // output callback takes back, and the info-flags pointer may be null.
         let status = unsafe {
             self.session.0.encode_frame(
                 &buffer,
                 pts,
                 self.duration,
                 options.as_deref().map(|d| -> &CFDictionary { d.as_ref() }),
-                ptr::null_mut(),
+                refcon,
                 ptr::null_mut(),
             )
         };
         if status != NO_ERR {
             // VideoToolbox doesn't call back for a frame it refused.
             self.context.release();
+            if !refcon.is_null() {
+                // SAFETY: the box leaked above, which no callback will take back.
+                drop(unsafe { Box::from_raw(refcon.cast::<GpuFrame>()) });
+            }
             return Err(os_status(
                 "VTCompressionSessionEncodeFrame",
                 status,
@@ -1134,6 +1202,98 @@ mod tests {
             let want = MediaTime::new(i64::try_from(n).expect("small") * 333_333, timebase());
             assert_eq!(p.pts(), want, "packet {n} keeps its frame's time");
             assert_eq!(p.dts(), p.pts(), "no reordering");
+        }
+    }
+
+    /// Writes every pixel of `target`'s Y plane as `y` and its CbCr plane as mid-grey,
+    /// with two render passes on `context`'s device, and stages it, as render does.
+    fn write_target(
+        context: &jstream_platform::GpuContext,
+        target: &jstream_platform::GpuFrame,
+        y: f64,
+    ) {
+        let (luma, chroma) = target.planes().expect("a planar target");
+        let device = context.device();
+        let mut encoder = device.create_command_encoder(&Default::default());
+        for (texture, value) in [(luma, y), (chroma, 0.5)] {
+            let view = texture.create_view(&Default::default());
+            drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("test target write"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: value,
+                            g: 0.5,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            }));
+        }
+        target.stage(context.queue()).expect("staged");
+        context.queue().submit([encoder.finish()]);
+    }
+
+    /// On a Metal context (the CI Mac's paravirtual GPU included) the encoders take the
+    /// interop's IOSurface encode targets with no copy, and hand each back once encoded.
+    #[test]
+    fn encode_targets_encode_through_videotoolbox() {
+        use jstream_platform::GpuInterop;
+        let gpu = crate::MetalGpu::new();
+        let context = match gpu.open_device() {
+            Ok(context) => context,
+            // No GPU on this Mac: nothing to check.
+            Err(PlatformError::Unsupported { .. }) => return,
+            Err(e) => panic!("open_device: {e}"),
+        };
+        let mut config = config(Codec::H264, PixelFormat::Nv12);
+        config.hardware = HardwarePreference::Avoid;
+        let codecs = VideoToolboxCodecs::new()
+            .on_context(&context)
+            .expect("our context")
+            .expect("a GPU path");
+        let mut encoder = codecs.video_encoder(&config).expect("an H.264 session");
+        assert!(matches!(
+            encoder.encode(frame(&config, 0)),
+            Err(PlatformError::Unsupported { .. })
+        ));
+        let ring: Vec<_> = (0..3)
+            .map(|_| gpu.encode_target(&context, config.size).expect("a target"))
+            .collect();
+        let frames = 10u32;
+        let mut out = Vec::new();
+        for n in 0..frames {
+            let target = &ring[n as usize % ring.len()];
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while std::sync::Arc::strong_count(target.sync()) > 1 || !encoder.can_accept() {
+                encoder.poll(&mut out).expect("poll");
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "target {n} never came back"
+                );
+                std::thread::yield_now();
+            }
+            write_target(&context, target, f64::from(n * 20 + 16) / 255.0);
+            let pts = MediaTime::new(i64::from(n) * 333_333, timebase());
+            encoder
+                .encode(VideoSurface::Gpu(target.clone().with_pts(pts)))
+                .expect("encode");
+            encoder.poll(&mut out).expect("poll");
+        }
+        encoder.finish(&mut out).expect("finish");
+        check_stream(&out, Codec::H264, frames);
+        for target in &ring {
+            assert_eq!(
+                std::sync::Arc::strong_count(target.sync()),
+                1,
+                "every target is handed back"
+            );
         }
     }
 

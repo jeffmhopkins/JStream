@@ -670,7 +670,8 @@ pub fn span_show(show: &mut ShowInfo, clip: &str) -> bool {
 
 /// Puts source `source`'s audio on audio track `track` at `at_ms`, or on a new audio
 /// track when `track` is `None` or isn't one (a source dragged onto the tracks): one
-/// edit. `whole` spans it over the whole show. Returns the clip's ID, or `None` when it
+/// edit, with the default fades a dropped clip gets. `whole` spans it over the whole
+/// show. Returns the clip's ID, or `None` when it
 /// doesn't fit there or the show holds the most tracks.
 pub fn place_source_audio(
     show: &mut ShowInfo,
@@ -690,7 +691,8 @@ pub fn place_source_audio(
     } else {
         (at_ms, length_ms)
     };
-    add_audio_clip(show, &track, source, at_ms, length_ms, (0, 0))
+    let fades = (super::drop::DEFAULT_FADE_MS, super::drop::DEFAULT_FADE_MS);
+    add_audio_clip(show, &track, source, at_ms, length_ms, fades)
 }
 
 /// Sets audio or overlay clip `clip`'s fades (a fade handle dragged), fitted inside it.
@@ -969,6 +971,15 @@ mod tests {
         assert_eq!(
             (s.audio[0].clips[0].start_ms, s.audio[0].clips[0].length_ms),
             (10_000, 30_000)
+        );
+        let fade = super::super::drop::DEFAULT_FADE_MS;
+        assert_eq!(
+            (
+                s.audio[0].clips[0].fade_in_ms,
+                s.audio[0].clips[0].fade_out_ms
+            ),
+            (fade, fade),
+            "it gets a dropped clip's default fades"
         );
         assert!(span_show(&mut s, &id));
         assert_eq!(

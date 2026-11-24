@@ -162,7 +162,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 # script. Only the headers the macOS crate calls.
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDate", "CFDictionary", "CFMachPort", "CFNumber", "CFRunLoop", "CFString"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "CMTimeRange", "objc2-core-audio-types", "objc2-core-video"] }
-objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferIOSurface", "CVPixelBufferPool", "CVReturn", "objc2-io-surface"] }
 objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTDecompressionProperties", "VTDecompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
 # AudioToolbox and Core Audio's base types through the objc2 framework crates (ADR-0063 §7,
 # §12), for the AAC-LC `AudioConverter`: the converter and its properties, the codec's
@@ -205,6 +205,13 @@ objc2-security = { version = "0.3", default-features = false, features = ["std",
 # capture asks for, and the pointer's location over a captured display (`CGEventCreate`,
 # `CGEventGetLocation` and `CGDisplayBounds`). The 0.3 line, which ScreenCaptureKit's crate already brings in.
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGDirectDisplay", "CGEvent", "CGEventTypes", "CGWindow"] }
+# Metal and IOSurface through the objc2 framework crates (ADR-0063 §8, §12), for GPU
+# frames: an IOSurface plane wrapped as a Metal texture, adopted into wgpu through
+# wgpu-hal, and the `MTLSharedEvent` that says when the GPU is done with it. The 0.3 line
+# wgpu's Metal backend already brings in, so they add no crate. Only the headers the
+# macOS crate calls.
+objc2-metal = { version = "0.3", default-features = false, features = ["std", "MTLAllocation", "MTLDevice", "MTLEvent", "MTLPixelFormat", "MTLResource", "MTLTexture", "objc2-io-surface"] }
+objc2-io-surface = { version = "0.3", default-features = false, features = ["std", "IOSurfaceRef", "IOSurfaceTypes", "libc", "objc2-core-foundation"] }
 # The Objective-C runtime, blocks and dispatch queues that ScreenCaptureKit's API is made
 # of: a class for the stream's output and delegate (`objc2::define_class!`), completion
 # handler blocks (`block2`) and the serial queue frames arrive on (`dispatch2`). All three

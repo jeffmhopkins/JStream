@@ -5,7 +5,10 @@
 //! engine gives the sharpest picture and any other engine only what the box shows. A new
 //! base rate, or a box that changed by a quarter or more once the newest resize has
 //! settled, closes the stream and opens the next on a new tapped channel
-//! ([`preview::Stream::at_fps`], [`preview::Stream::at_stage`]).
+//! ([`preview::Stream::at_fps`], [`preview::Stream::at_stage`]). A new scene moves the
+//! open stream there on its channel (`preview.show`), keeping the last picture until the
+//! new one's first; a decoder that falls behind asks for a keyframe
+//! (`preview.request_keyframe`).
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
@@ -234,6 +237,7 @@ pub fn Monitor(
     // A new scene: a stream of it, once the canvas is up.
     {
         let reopen = Rc::clone(&reopen);
+        let control = control.clone();
         Effect::new(
             move |before: Option<Option<jstream_control::protocol::SceneId>>| {
                 let now = scene.get();
@@ -241,6 +245,30 @@ pub fn Monitor(
                     && before != now
                     && screen.borrow().is_some()
                 {
+                    // A moving monitor's open stream moves to the scene on its channel
+                    // (`preview.show`): the last picture stays until the new one's
+                    // first, with no placeholder and no new stream. Should the engine
+                    // refuse, or a still monitor have no stream open, one opens.
+                    if !still
+                        && let (Some(current), Some(control)) =
+                            (open.try_get_value().flatten(), control.clone())
+                    {
+                        let next = current.showing(now.clone());
+                        open.try_set_value(Some(next.clone()));
+                        let reopen = Rc::clone(&reopen);
+                        spawn_local(async move {
+                            match act(&control, next.show()).await {
+                                Some(Ok(())) | None => {}
+                                Some(Err(_)) => {
+                                    if open.try_get_value().flatten().as_ref() == Some(&next) {
+                                        shown.try_set(Shown::Starting);
+                                        reopen(next);
+                                    }
+                                }
+                            }
+                        });
+                        return now;
+                    }
                     shown.set(Shown::Starting);
                     reopen(Stream {
                         scene: now.clone(),
@@ -346,7 +374,15 @@ fn frames(
         let Some(drawn) = drawn.as_mut() else {
             return;
         };
-        if let Err(reason) = drawn.show(&header, &frame.payload)
+        let result = drawn.show(&header, &frame.payload);
+        if drawn.wants_keyframe() {
+            // Behind: the next keyframe now, rather than the stream's next regular one.
+            let control = control.clone();
+            spawn_local(async move {
+                let _asked = act(&control, Action::PreviewRequestKeyframe { channel }).await;
+            });
+        }
+        if let Err(reason) = result
             && !drawn.h264_failed()
         {
             shown.try_set(Shown::Ended(reason));
