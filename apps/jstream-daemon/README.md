@@ -511,8 +511,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
     `VideoToolboxCodecs` and `AvMediaDecoders`;
-  - `MetalGpu`, the engine's device on Metal, which ScreenCaptureKit delivers GPU
-    frames to; the encoders still take the program read back to the CPU;
+  - `MetalGpu`, the engine's device on Metal, which ScreenCaptureKit and the webcams
+    deliver GPU frames to; the encoders still take the program read back to the CPU;
   - no virtual camera, no CLAP scan and no YouTube sign-in;
   - `MacosKeychain` as its stream key store, behind `jstream_crash::Redacting` with
     the daemon's `Secrets` through `live_redacting` as on Windows, and the same

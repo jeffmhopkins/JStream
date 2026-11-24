@@ -6,7 +6,9 @@
 //! is an `AVCaptureSession` whose `AVCaptureVideoDataOutput` asks for NV12, which
 //! AVFoundation converts or decodes (MJPEG) to, so every format is delivered raw and no
 //! `CaptureDecoder` is needed. Frames are copied out into the same single-slot mailbox
-//! display capture uses.
+//! display capture uses. On a GPU context (`VideoDevices::on_context`) the output asks
+//! for BGRA instead, which AVFoundation converts the camera's YCbCr to, and each frame is
+//! delivered as a GPU frame over its own IOSurface, with no copy (`crate::gpu`).
 //!
 //! Before a camera opens, the backend checks the Camera permission, as it checks the
 //! Microphone permission before an audio input (`crate::audio`'s `permission`).

@@ -139,7 +139,8 @@ pub fn learned(control: &MidiControlInfo, target: &ValueTarget, range: (f64, f64
     }
 }
 
-/// What a binding reads, as the button shows it: `CC 7`, `Bend`, `Pressure` or `Data`.
+/// What a binding reads, as the button shows it: `CC 7`, `Bend`, `Pressure`, `Mod 3`,
+/// `Audio` or `Data`.
 pub fn short_name(binding: &ValueBinding) -> String {
     match &binding.input {
         MotionKind::Midi {
@@ -152,6 +153,7 @@ pub fn short_name(binding: &ValueBinding) -> String {
             ..
         } => "Bend".into(),
         MotionKind::Midi { .. } => "Pressure".into(),
+        MotionKind::Audio { .. } => "Audio".into(),
         other => match crate::live_sources::mod_of(other) {
             Some((_, slot)) => format!("Mod {}", slot + 1),
             None => "Data".into(),
@@ -183,6 +185,7 @@ pub fn long_name(binding: &ValueBinding) -> String {
             "Field `{field}` of `{key}` from {} drives this. Click to unbind it.",
             input.as_deref().unwrap_or("any sender")
         ),
+        MotionKind::Audio { .. } => "An audio level drives this. Click to unbind it.".into(),
         _ => "A binding drives this. Click to unbind it.".into(),
     }
 }
@@ -330,18 +333,23 @@ fn keeps_own_menu(tag: &str, ty: &str) -> bool {
 /// Hands a right-click to the control button of the setting it landed on, and says
 /// whether it did. The setting is the nearest element around the click that holds
 /// exactly one control button as its own child, looked for no further out than the
-/// panel or dialog. A right-click in a field of free text is left to the browser.
+/// panel or dialog. A right-click in a field of free text is left to the browser, and
+/// so is one that something nearer the click has handled.
 pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
     use leptos::wasm_bindgen::JsCast;
+    // Something nearer the click has answered it already.
+    if event.default_prevented() {
+        return false;
+    }
     let Some(el) = event
         .target()
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
     else {
         return false;
     };
-    // A field of free text keeps the browser's menu, unless it is itself a mapping
-    // target (a number field).
-    let marked = matches!(el.closest("[data-map]"), Ok(Some(_)));
+    // A field of free text keeps the browser's menu. A number field is not one, though
+    // its input is typed as text: a right-click on the number maps the setting.
+    let marked = matches!(el.closest("[data-map], .number-field"), Ok(Some(_)));
     if !marked
         && keeps_own_menu(
             &el.tag_name(),
@@ -354,11 +362,9 @@ pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
         return false;
     };
     event.prevent_default();
-    at.0.set(Some((
-        id,
-        f64::from(event.client_x()),
-        f64::from(event.client_y()),
-    )));
+    // In the page's CSS pixels, where the menu is placed, at any UI scale.
+    let (x, y) = crate::ui_scale::pointer(event);
+    at.0.set(Some((id, x, y)));
     true
 }
 
@@ -434,13 +440,29 @@ pub fn Learn(
         }
     };
     let menu_keys = crate::menu::keys(close);
-    let bound = move || {
+    // Every mapping onto the setting, and the one the button shows: the override, or
+    // else the first offset.
+    let all = move || {
         studio.collection.with(|c| {
-            c.as_ref().and_then(|c| {
-                target.with_value(|t| c.value_bindings.iter().find(|b| &b.target == t).cloned())
+            c.as_ref().map_or_else(Vec::new, |c| {
+                target.with_value(|t| {
+                    c.value_bindings
+                        .iter()
+                        .filter(|b| &b.target == t)
+                        .cloned()
+                        .collect()
+                })
             })
         })
     };
+    let bound = move || {
+        let all: Vec<ValueBinding> = all();
+        all.iter()
+            .find(|b| b.mode.is_replace())
+            .or(all.first())
+            .cloned()
+    };
+    let map_target = move || crate::panels::map_target::MapTarget::Value(target.get_value());
     let channel = move || {
         bound().and_then(|b| match b.input {
             MotionKind::Channel { channel_id, .. } => Some(channel_id),
@@ -451,14 +473,15 @@ pub fn Learn(
     // amount, shown while the drag is under way and written once when it ends.
     let mode = use_context::<crate::panels::mapping_mode::MappingMode>();
     let preview = RwSignal::new(None::<(f32, f32)>);
-    // The ends the armed source maps this setting onto already.
-    let armed_ends = move || {
+    // The armed source's mapping onto this setting, if it has one, and its ends.
+    let armed_mapping = move || {
         let armed = mode?.armed.get()?;
-        let binding = bound()?;
-        crate::panels::map_control::same_source(&binding.input, &armed.reader)
-            .then(|| crate::panels::map_control::ends(&binding.input))
-            .flatten()
+        all()
+            .into_iter()
+            .find(|b| crate::panels::map_control::same_source(&b.input, &armed.reader))
     };
+    let armed_ends =
+        move || armed_mapping().and_then(|b| crate::panels::map_control::ends(&b.input));
     if let Some(mode) = mode {
         let own_id = own_id.clone();
         Effect::new(move |_| {
@@ -470,13 +493,25 @@ pub fn Learn(
             let Some(armed) = mode.armed.get_untracked() else {
                 return;
             };
-            let existing = untrack(armed_ends);
-            let ends = crate::panels::mapping_mode::ends_after(
-                existing,
-                current.and_then(|c| c.get_untracked()),
-                range,
-                drag.amount,
-            );
+            let previous = untrack(armed_mapping);
+            let existing = previous
+                .as_ref()
+                .and_then(|b| crate::panels::map_control::ends(&b.input));
+            // An override the source has already keeps its start and stays in range. A
+            // drag otherwise makes or moves an offset: the source adds to the setting.
+            let ends = match &previous {
+                Some(b) if b.mode.is_replace() => crate::panels::mapping_mode::ends_after(
+                    existing,
+                    current.and_then(|c| c.get_untracked()),
+                    range,
+                    drag.amount,
+                ),
+                _ => crate::panels::map_target::reach_after(
+                    existing,
+                    (range.1 - range.0).abs(),
+                    drag.amount,
+                ),
+            };
             if !drag.done {
                 preview.set(Some(ends));
                 return;
@@ -488,17 +523,27 @@ pub fn Learn(
                 return;
             }
             if let Some(s) = session.0.get_value() {
-                let previous = untrack(bound);
-                let kept = previous.as_ref().filter(|_| existing.is_some());
                 let input = crate::panels::map_control::with_ends(
-                    crate::panels::map_control::picked(armed.reader, kept.map(|b| &b.input), range),
+                    crate::panels::map_control::picked(
+                        armed.reader,
+                        previous.as_ref().map(|b| &b.input),
+                        range,
+                    ),
                     ends.0,
                     ends.1,
                 );
-                let amount = kept.and_then(|b| b.amount.clone());
-                let binding = target
-                    .with_value(|t| crate::panels::map_control::binding_for(t, input, amount));
-                studio.apply(&s, vec![Edit::BindingSetValue { binding }]);
+                let blend = previous
+                    .as_ref()
+                    .map_or(jstream_control::protocol::MappingMode::Add, |b| b.mode);
+                let amount = previous.and_then(|b| b.amount);
+                let edits = studio.collection.with_untracked(|c| {
+                    c.as_ref().map_or_else(Vec::new, |c| {
+                        map_target().set(c, input, amount, blend, None)
+                    })
+                });
+                if !edits.is_empty() {
+                    studio.apply(&s, edits);
+                }
             }
         });
     }
@@ -517,9 +562,20 @@ pub fn Learn(
         if let Some(s) = session.0.get_value() {
             let amount = untrack(bound).and_then(|b| b.amount);
             let input = crate::panels::map_control::picked(reader, None, range);
-            let binding =
-                target.with_value(|t| crate::panels::map_control::binding_for(t, input, amount));
-            studio.apply(&s, vec![Edit::BindingSetValue { binding }]);
+            let edits = studio.collection.with_untracked(|c| {
+                c.as_ref().map_or_else(Vec::new, |c| {
+                    map_target().set(
+                        c,
+                        input,
+                        amount,
+                        jstream_control::protocol::MappingMode::Replace,
+                        None,
+                    )
+                })
+            });
+            if !edits.is_empty() {
+                studio.apply(&s, edits);
+            }
         }
     };
     // The edits that make this setting follow a new channel named `name`, and its ID;
@@ -608,15 +664,37 @@ pub fn Learn(
         }
         crate::panels::sequence::open_sequence(studio, timeline_id);
     };
+    // Removes every mapping onto the setting.
     let remove = move || {
         menu.set(None);
-        if let (Some(binding), Some(s)) = (bound(), session.0.get_value()) {
-            studio.apply(
-                &s,
-                vec![Edit::BindingClearValue {
-                    binding_id: binding.binding_id,
-                }],
-            );
+        let edits: Vec<Edit> = all()
+            .into_iter()
+            .map(|b| Edit::BindingClearValue {
+                binding_id: b.binding_id,
+            })
+            .collect();
+        if let (false, Some(s)) = (edits.is_empty(), session.0.get_value()) {
+            studio.apply(&s, edits);
+        }
+    };
+    // Bypasses every mapping onto the setting, or brings them all back when all are
+    // bypassed.
+    let bypassed = move || {
+        let all = all();
+        !all.is_empty() && all.iter().all(|b| !b.enabled)
+    };
+    let bypass = move || {
+        menu.set(None);
+        let enabled = bypassed();
+        let edits: Vec<Edit> = all()
+            .into_iter()
+            .filter(|b| b.enabled != enabled)
+            .map(|b| Edit::BindingSetValue {
+                binding: ValueBinding { enabled, ..b },
+            })
+            .collect();
+        if let (false, Some(s)) = (edits.is_empty(), session.0.get_value()) {
+            studio.apply(&s, edits);
         }
     };
     let click = move |e: leptos::ev::MouseEvent| {
@@ -683,6 +761,7 @@ pub fn Learn(
         };
         let name = label.get_value();
         let linked = channel();
+        let more = all().len().saturating_sub(1);
         let mapped = bound().map(|b| {
             studio
                 .collection
@@ -732,7 +811,10 @@ pub fn Learn(
                 </button>
                 {mapped.map(|mapped| view! {
                     <div class="menu-sep"></div>
-                    <div class="ctx-head">{format!("Mapped to {mapped}")}</div>
+                    <div class="ctx-head">{match more {
+                        0 => format!("Mapped to {mapped}"),
+                        n => format!("Mapped to {mapped} and {n} more"),
+                    }}</div>
                     {smoothing}
                     <button type="button" class="menuitem" role="menuitem" on:click=move |_| map_control()>
                         <span class="ctx-check"></span>
@@ -744,9 +826,14 @@ pub fn Learn(
                             <span class="ctx-label">"Open channel"</span>
                         </button>
                     })}
+                    <button type="button" class="menuitem" role="menuitemcheckbox" aria-checked=bypassed().to_string() on:click=move |_| bypass()>
+                        <span class="ctx-check">{bypassed().then_some("✓")}</span>
+                        <span class="ctx-label">"Bypass"</span>
+                        <span class="hint">"keep it, ignore it"</span>
+                    </button>
                     <button type="button" class="menuitem danger" role="menuitem" on:click=move |_| remove()>
                         <span class="ctx-check"></span>
-                        <span class="ctx-label">"Remove mapping"</span>
+                        <span class="ctx-label">{if more > 0 { "Remove mappings" } else { "Remove mapping" }}</span>
                     </button>
                 })}
                 <div class="menu-sep"></div>
@@ -825,6 +912,7 @@ pub fn Learn(
             node_ref=opener
             class:learning=learning
             class:bound=move || bound().is_some()
+            class:bypassed=bypassed
             class:amount=move || amount_text().is_some()
             class:chip=move || channel().is_some()
             data-learn=own_id
