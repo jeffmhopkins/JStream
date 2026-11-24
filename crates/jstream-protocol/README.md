@@ -367,7 +367,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   down and forward, and `principal` point, which turn a pixel and its distance back into
   a point of the scene, ADR-0151 decision 1), whose `blur_at` is the camera's
   depth-of-field blur at a distance along its view
-  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and whose `in_view` and
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), with `lens_blur` the far
+  blur of a fixed-aperture camera
+  ([ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)), and whose `in_view` and
   `direction_in_view` take scene points and directions into a model's viewing frame.
   `geometry/group.rs` holds `GroupPose`, a 3D group's pose in its scene
   ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)): `place` puts a
@@ -407,7 +409,9 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.192 because `scene.drawn_camera` answers the camera a 3D scene
 was drawn through last, as its camera motion, follow camera, live aim and the 3D group
-it rides with moved it, which is where an editor outlines its items; 0.190 because a folder may belong to one scene and hold that
+it rides with moved it, which is where an editor outlines its items; 0.191 because a scene
+camera gains `fixed_aperture`, which makes its depth of field follow its zoom and focus
+distance like a real lens; 0.190 because a folder may belong to one scene and hold that
 scene's keyframe scenes and timelines (`FolderInfo.scene_id`, `folder.create`'s
 `scene_id`, `TimelineInfo.folder`, and `scene.set_folder` on a keyframe scene;
 [ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md));
@@ -1811,7 +1815,13 @@ written while false) focuses a camera with a depth of field on the nearest item 
 viewing axis meets each frame, gliding there and holding while nothing is met, with
 `focus_px` the distance it starts from
 ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)
-decision 5). A camera
+decision 5). Since 0.191 `fixed_aperture` (default `false`, not written while false)
+makes the depth of field a real lens's with a fixed f-number: `blur_px` is then the blur
+far away for the framing camera (45°, focused at its framing distance), and the blur a
+view draws with is `blur_px · f² / (f₄₅ · focus_px)`, capped at 64, with `f` its focal
+length and `f₄₅` the framing camera's, so zooming in or focusing closer softens the
+background and a dolly zoom changes it
+([ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)). A camera
 omitted removes it. The edit refuses a field of view out of range
 (`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
 position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance

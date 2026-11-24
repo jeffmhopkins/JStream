@@ -241,6 +241,11 @@ focuses each frame on the nearest item at the centre of the frame, gliding there
 or more, added to 1 when the camera's switch is on) lets a CC button switch it. \
 Models blur too, each part by its own distance, so a near part of a model goes soft \
 while the focus sits on something past it. \
+With `fixed_aperture: true` the blur behaves like a real lens: `blur_px` is the blur of \
+the framing camera (45°, focused at its framing distance), and zooming in (a smaller \
+`fov_deg`) or focusing closer softens the background, by the square of the zoom and the \
+inverse of the focus distance; a dolly zoom (moving the camera back while narrowing \
+`fov_deg` to keep the subject's size) then softens the background as it goes. \
 A camera can move on its own: `scene.set_camera_motion` gives it up to 32 modifiers, the \
 kinds and clocks of `item.set_motion` (all but `audio`), on `position_x`/`_y`/`_z`, \
 `target_x`/`_y`/`_z`, `pan`, `tilt` (degrees, turning the view about the camera), `fov`, \

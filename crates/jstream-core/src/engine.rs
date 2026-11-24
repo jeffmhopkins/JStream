@@ -1006,6 +1006,9 @@ impl Engine {
             // No client is connected yet, so nobody is woken.
             state.sync_sizes(&mut Vec::new());
             state.feed_pages();
+            // Its channels, bindings and triggers are followed from the start, not from
+            // the first action or edit: until then a channel reads 0 to what follows it.
+            state.wake_values();
             *lock(&self.shared.key_scope) = Some(crate::projects::key_scope(opened.path()));
             *file = Some(opened);
         }

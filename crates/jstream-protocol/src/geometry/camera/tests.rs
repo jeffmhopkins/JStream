@@ -44,6 +44,7 @@ fn camera(position: Vec3, target: Vec3, fov: f32, roll: f32) -> SceneCamera {
         focus_px: None,
         blur_px: Finite32::ZERO,
         autofocus: false,
+        fixed_aperture: false,
     }
 }
 
@@ -493,6 +494,52 @@ fn the_blur_follows_the_thin_lens() {
     assert_eq!(seen.blur_at(-5.0), super::MAX_BLUR_PX);
     c.blur_px = finite(0.0);
     assert_eq!(view(c).focus(), None, "no blur");
+}
+
+/// ADR-0223: a fixed-aperture camera blurs by `blur_px` when it frames the canvas, by the
+/// square of its focal length as it zooms, and less as its focus moves away, so a dolly
+/// zoom that keeps its subject the same size softens the background; off, the zoom and
+/// the focus leave the blur alone. The field isn't written while off.
+#[test]
+fn a_fixed_aperture_blurs_like_a_real_lens() {
+    let framing = SceneCamera::framing(CANVAS);
+    let distance = framing.target_distance();
+    let mut lens = framing;
+    lens.focus_px = Some(finite(distance));
+    lens.blur_px = finite(8.0);
+    assert!(
+        serde_json::to_value(lens)
+            .expect("writes")
+            .get("fixed_aperture")
+            .is_none()
+    );
+    lens.fixed_aperture = true;
+    assert_eq!(
+        serde_json::to_value(lens).expect("writes")["fixed_aperture"],
+        true
+    );
+    let blur = |c: SceneCamera| view(c).focus().expect("a depth of field").blur;
+    assert!(
+        (blur(lens) - 8.0).abs() < 1e-3,
+        "the framing camera blurs by blur_px"
+    );
+    // Focused twice as far: half the blur far away.
+    let mut far = lens;
+    far.focus_px = Some(finite(distance * 2.0));
+    assert!((blur(far) - 4.0).abs() < 1e-3);
+    // A dolly zoom: twice the focal length from twice as far, the subject the same size.
+    let tan = (22.5_f32).to_radians().tan();
+    let mut zoomed = lens;
+    zoomed.fov_deg = finite(2.0 * (tan / 2.0).atan().to_degrees());
+    zoomed.position.z = finite(distance * 2.0);
+    zoomed.focus_px = Some(finite(distance * 2.0));
+    assert!((blur(zoomed) - 16.0).abs() < 1e-2, "got {}", blur(zoomed));
+    // Capped, and the same camera without a fixed aperture blurs by blur_px throughout.
+    zoomed.fov_deg = finite(2.0);
+    assert_eq!(blur(zoomed), super::MAX_BLUR_PX);
+    zoomed.fixed_aperture = false;
+    assert_eq!(blur(zoomed), 8.0);
+    assert!((super::lens_blur(8.0, 1080.0, 45.0, distance) - 8.0).abs() < 1e-3);
 }
 
 /// ADR-0143 decision 3: a scene point taken into the viewing frame lands where a model
