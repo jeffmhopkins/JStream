@@ -236,6 +236,11 @@ pub struct State {
     /// [`Graph::apply`](crate::Graph::apply) keeps it, nothing saves it, and it is not a
     /// revision. Empty until a switch sets it.
     pub(crate) placed_keyframes: BTreeMap<SceneId, SceneId>,
+    /// The internal show scene, if the engine made one: the scene drawn over program
+    /// for every output, with program as its bottom layer and its items above it. It
+    /// is an ordinary scene of `scenes`, but nothing may place it, show it on program
+    /// or point a video mix at it, so no scene can contain it.
+    pub(crate) show_scene: Option<SceneId>,
 }
 
 impl Default for State {
@@ -264,6 +269,7 @@ impl Default for State {
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),
+            show_scene: None,
         }
     }
 }
@@ -301,6 +307,11 @@ impl State {
     /// (ADR-0080 §1): a video chain over each mix an output draws, and an audio chain.
     pub fn master(&self) -> &Chains {
         &self.master
+    }
+
+    /// The internal show scene, drawn over program for every output, if there is one.
+    pub fn show_scene(&self) -> Option<&SceneId> {
+        self.show_scene.as_ref()
     }
 
     /// Every scene, in display order.
