@@ -237,6 +237,9 @@ pub struct Runner<T: Ord> {
     leaving: bool,
     /// A spot armed for the next Continue, in show time.
     armed_ms: Option<u32>,
+    /// Whether it is paused by hand ([`Runner::pause`]): show time and its sequences
+    /// hold where they were, and playing on puts them back from there.
+    held: bool,
     applied: Applied<T>,
 }
 
@@ -252,6 +255,7 @@ impl<T: Ord + Clone> Runner<T> {
             looping: None,
             leaving: false,
             armed_ms: None,
+            held: false,
             applied: Applied::default(),
         }
     }
@@ -310,7 +314,7 @@ impl<T: Ord + Clone> Runner<T> {
         if let Some(due) = self.limit_due(plan)
             && now_ns >= due
         {
-            self.resume(due, &mut out);
+            self.resume(plan, due, &mut out);
         }
         self.run(plan, now_ns, &mut out);
         out
@@ -329,7 +333,7 @@ impl<T: Ord + Clone> Runner<T> {
         let mut out = Vec::new();
         match self.next(plan, now_ns) {
             Next::Nothing => {}
-            Next::Resume => self.resume(now_ns, &mut out),
+            Next::Resume => self.resume(plan, now_ns, &mut out),
             Next::LeaveLoop(i) => {
                 let Some(region) = plan.loops.get(i) else {
                     return out;
@@ -471,6 +475,64 @@ impl<T: Ord + Clone> Runner<T> {
         self.status = Status::Playing;
         if self.done_ms.is_none_or(|done| done < t) {
             self.resume_ms = Some(t);
+        }
+        out
+    }
+
+    /// Pause by hand: show time holds where the play head is, between points or at one,
+    /// and the sequences it started stop ([`Effect::SequenceStop`]); program, overlays and
+    /// state values stay. Continue (or a jump) plays on from there: the sequences play
+    /// again from where they were and a timed program clip seeks back to the held point
+    /// (a [`Landing::PlayOn`] put-up), so what pausing held is what it plays on from.
+    /// Nothing unless it is playing.
+    pub fn pause<K: ShowKeys<Timeline = T>>(
+        &mut self,
+        _plan: &Plan<K>,
+        now_ns: i64,
+    ) -> Vec<Step<K>> {
+        let mut out = Vec::new();
+        if self.status != Status::Playing {
+            return out;
+        }
+        let at_ns = self.position_ns(now_ns);
+        self.anchor_show_ns = at_ns;
+        self.anchor_clock_ns = now_ns;
+        self.status = Status::Paused {
+            bookmark: None,
+            since_ns: now_ns,
+        };
+        self.held = true;
+        for (timeline, clip) in std::mem::take(&mut self.applied.sequences) {
+            out.push(Step {
+                at_ns: now_ns,
+                effect: Effect::SequenceStop { clip, timeline },
+            });
+        }
+        out.push(Step {
+            at_ns: now_ns,
+            effect: Effect::Paused {
+                bookmark: None,
+                at_ms: self.position_ms(now_ns),
+            },
+        });
+        out
+    }
+
+    /// Whether it is paused by hand ([`Runner::pause`]).
+    pub fn held(&self) -> bool {
+        self.held
+    }
+
+    /// Plays on from a pause by hand, as Continue would but never to an armed spot.
+    /// Nothing unless it is paused by hand.
+    pub fn unpause<K: ShowKeys<Timeline = T>>(
+        &mut self,
+        plan: &Plan<K>,
+        now_ns: i64,
+    ) -> Vec<Step<K>> {
+        let mut out = Vec::new();
+        if self.held && matches!(self.status, Status::Paused { .. }) {
+            self.resume(plan, now_ns, &mut out);
         }
         out
     }
@@ -619,7 +681,12 @@ impl<T: Ord + Clone> Runner<T> {
     }
 
     /// Plays on from a pause, as of `at_ns`: the point it waits at does not pause again.
-    fn resume<K: ShowKeys<Timeline = T>>(&mut self, at_ns: i64, out: &mut Vec<Step<K>>) {
+    fn resume<K: ShowKeys<Timeline = T>>(
+        &mut self,
+        plan: &Plan<K>,
+        at_ns: i64,
+        out: &mut Vec<Step<K>>,
+    ) {
         let at_ms = self.position_ms(at_ns);
         self.status = Status::Playing;
         self.anchor_clock_ns = at_ns;
@@ -628,6 +695,11 @@ impl<T: Ord + Clone> Runner<T> {
             at_ns,
             effect: Effect::Resumed { at_ms },
         });
+        if std::mem::take(&mut self.held) {
+            // What the pause held plays on from where it was.
+            let target = spanning(plan, at_ms, Edge::At);
+            self.put_up(plan, &target, Mode::Jump { seek: true }, None, at_ns, out);
+        }
     }
 
     /// Processes the points that fell due by `now_ns`, while playing. It always ends:
@@ -858,6 +930,7 @@ impl<T: Ord + Clone> Runner<T> {
         self.looping = plan.loop_at(t).map(|i| (i, 0));
         self.leaving = false;
         self.armed_ms = None;
+        self.held = false;
         match landing {
             Landing::Pausing => {
                 let bookmark = pausing_at(plan, t);

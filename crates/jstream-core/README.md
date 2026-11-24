@@ -1784,7 +1784,9 @@ it before the timelines (`show_tick`), as do `clock.step` and `clock.release`, s
 sequence clip's cues fire on time. A show call ends by ticking the show and the
 timelines and waking the ticker (`show_settle`), so after a jump it plans from the
 landing, not the point it was waiting for. `show.play` at a bookmark lands as a jump
-there would, with its arrive transition. Each
+there would, with its arrive transition; `show.play` with no bookmark of the show the
+runner holds by hand (`Runner::pause`, which no call reaches until `show.pause`
+lands) plays it on from where it holds instead of from the start. Each
 `Effect` runs as of its own time (`cue_at`) as the call a key or pad would make:
 `scene.switch` with the clip's preset, `scene.set_keyframe` on the program scene,
 `timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a

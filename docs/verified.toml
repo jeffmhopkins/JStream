@@ -1278,7 +1278,7 @@ stamp = { hash = "b3:5ebbea4fc060099b", by = "agent:a2656", note = "#723 review 
 stamp = { hash = "b3:6e349eea2a49e041", by = "agent:claude", note = "Re-read the whole section against #799 (#744, intensity stereo), file by file. Tools (under ADR-0062's limits): intensity stereo moves from 'allowed and not built yet' into the list of tools this crate uses (with M/S), and the bullet is reflowed; PNS, SBR and PS stay never emitted. intensity.rs (new): start() gives the start frequency (6 kHz at 32 kbps per channel and below, rising to 10 kHz at 64, never above) and the slack (4, i.e. 6 dB, falling to none); code() needs both energies above threshold, correlation of at least 0.9 and a rebuild error within each threshold times the slack, codes the sum scaled to E_L, position round(2 log2(E_L/E_R)) clamped to ±30, book 15 in phase and 14 out of phase, citing Herre, Brandenburg and Lederer (1994): the Stereo bullet and Techniques say this; its unit tests (a panned band coding exactly, energies carrying over, the refusals, clamped positions, start and slack by rate) are in the Tests text. encoder.rs: decide_intensity() runs after TNS and before M/S, skips any frame where either channel has a TNS filter, sets the left threshold to min(thr_L, thr_R*E_L/E_R) and empties the right band while recording its book and position; decide_ms() keeps intensity bands off M/S, so ms_used is 0 there and invert_intensity never applies; write_ics codes positions as their own difference chain from 0 and writes no spectrum for those bands: the Stereo bullet covers the decision, the TNS exclusion and the left band carrying the scaled sum. quant.rs: Channel gains is_book and is_position; count() prices an intensity band 0 under its own book and NEVER under the others, counts the position bits and keeps those bands out of global_gain: Tests' bits-against-count sentence covers it. huffman.rs: BOOKS goes to 16 so sections can name 14 and 15, books 12 and 13 always NEVER (PNS never emitted, as Tools says). lib.rs: Config::intensity, on by default, as the Stereo bullet says. tests.rs: the intensity decode test checks both books and positions -30..30 (steps up to 60) decoding to the left band scaled by 0.5^(pos/4) with their sign, with ms_mask_present 0, with 1 beside M/S bands (ms_used 0 on intensity bands), and with ms_used set on intensity bands (sign inverted), as the Tests text says; plus intensity bits against counted bits for long and short windows, hostile rounds with intensity off in a fifth, and the panned rate case. tests/quality.rs: the panned-band level, sign and SNR test. tests/no_alloc.rs: the panned stream. Not built yet drops intensity stereo." }
 
 ["CRATE-jstream-anim#purpose"."body"]
-stamp = { hash = "b3:c524b2ae15a761da", by = "agent:show-runner", note = "Added the show module bullet (Plan, spanning on both edges, state_events_before, Runner's point order, diff-based landing through Applied, Steps with exact times) and the show tests to the Tests paragraph, checked against show/mod.rs, runner.rs and tests.rs; the other bullets are untouched." }
+stamp = { hash = "b3:60d452a907025d15", by = "agent:claude", note = "Re-read the whole section against show/: added start_at_bookmark, pause/held/unpause, the loop wrap stopping and replaying a sequence clip that ended at the loop's end, and their tests (the random-operation property now includes pause and unpause); the rest matches the code as before." }
 
 ["CRATE-jstream-anim#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-anim"]
 stamp = { hash = "b3:58d22503a7a64223", by = "agent:native-motion", note = "Added the motion contents (Modifier, Property, Kind, Clock, check_list, evaluate, Offsets::blend) and the Timeline contents (Looping, check, due, position, seek), the ADR-0099 dependency and the new tests; checked each name and behaviour against modifier.rs and timeline.rs" }
@@ -1311,7 +1311,7 @@ stamp = { hash = "b3:f35e389a33a56324", by = "agent:claude-daw", note = "re-read
 stamp = { hash = "b3:7948ad2d6ff50e3a", by = "agent:channels", note = "Added evaluate_scaled and the channel kind as a Kind::Midi follower, plus its test; other modules unchanged." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/show/mod.rs"]
-stamp = { hash = "b3:c16cd8480a37ac78", by = "agent:show-runner", note = "Added the show module bullet (Plan, spanning on both edges, state_events_before, Runner's point order, diff-based landing through Applied, Steps with exact times) and the show tests to the Tests paragraph, checked against show/mod.rs, runner.rs and tests.rs; the other bullets are untouched." }
+stamp = { hash = "b3:83d618284adcdd35", by = "agent:claude", note = "Re-read the whole section against show/: added start_at_bookmark, pause/held/unpause, the loop wrap stopping and replaying a sequence clip that ended at the loop's end, and their tests (the random-operation property now includes pause and unpause); the rest matches the code as before." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/show/plan.rs"]
 stamp = { hash = "b3:0f4324581c343c63", by = "agent:show-runner", note = "Added the show module bullet (Plan, spanning on both edges, state_events_before, Runner's point order, diff-based landing through Applied, Steps with exact times) and the show tests to the Tests paragraph, checked against show/mod.rs, runner.rs and tests.rs; the other bullets are untouched." }
@@ -1320,10 +1320,10 @@ stamp = { hash = "b3:0f4324581c343c63", by = "agent:show-runner", note = "Added 
 stamp = { hash = "b3:d5929be81c3e430b", by = "agent:show-runner", note = "Added the show module bullet (Plan, spanning on both edges, state_events_before, Runner's point order, diff-based landing through Applied, Steps with exact times) and the show tests to the Tests paragraph, checked against show/mod.rs, runner.rs and tests.rs; the other bullets are untouched." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/show/runner.rs"]
-stamp = { hash = "b3:83389f15260c0a4a", by = "agent:show-runner", note = "Added the show module bullet (Plan, spanning on both edges, state_events_before, Runner's point order, diff-based landing through Applied, Steps with exact times) and the show tests to the Tests paragraph, checked against show/mod.rs, runner.rs and tests.rs; the other bullets are untouched." }
+stamp = { hash = "b3:b255ed7e5a1c0fdb", by = "agent:claude", note = "Re-read the whole section against show/: added start_at_bookmark, pause/held/unpause, the loop wrap stopping and replaying a sequence clip that ended at the loop's end, and their tests (the random-operation property now includes pause and unpause); the rest matches the code as before." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/show/tests.rs"]
-stamp = { hash = "b3:3acfe471c3cd036e", by = "agent:show-runner", note = "Added the show module bullet (Plan, spanning on both edges, state_events_before, Runner's point order, diff-based landing through Applied, Steps with exact times) and the show tests to the Tests paragraph, checked against show/mod.rs, runner.rs and tests.rs; the other bullets are untouched." }
+stamp = { hash = "b3:c3e76e46a96de1f5", by = "agent:claude", note = "Re-read the whole section against show/: added start_at_bookmark, pause/held/unpause, the loop wrap stopping and replaying a sequence clip that ended at the loop's end, and their tests (the random-operation property now includes pause and unpause); the rest matches the code as before." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/switch.rs"]
 stamp = { hash = "b3:a124ac2cdf2f7c77" }
@@ -1881,7 +1881,7 @@ stamp = { hash = "b3:dc61649a25421166", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to audit.rs, activity_log.rs, private_file.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
 
 ["CRATE-jstream-core#calls"."body"]
-stamp = { hash = "b3:d3eb1377439b061c", by = "agent:show-runner", note = "Re-read: clock.hold/step/release now also tick the running show (clock_moved), added; show.* actions run under the collection lock like timeline.play and need nothing else here." }
+stamp = { hash = "b3:efd53a1cdfda6d1f", by = "agent:claude", note = "Re-read the whole section against engine.rs: the clock calls now run the show's tick before the timelines' (B1), and start_ticker waking a waiting ticker doesn't change what these calls answer or what they lock; the rest holds." }
 
 ["CRATE-jstream-core#calls"."dep:crates/jstream-protocol/README.md#batches"]
 stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "Batches now name removed_bindings beside removed_hotkeys for controller bindings (ADR-0122, protocol 0.96)" }
@@ -1893,7 +1893,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, history.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on 0013-command-model.md, RULES.md#R-API-004, README.md#batches, matching what it relies on" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:63a589bee39d72d7", by = "agent:show-runner", note = "Re-read: clock.hold/step/release now also tick the running show (clock_moved), added; show.* actions run under the collection lock like timeline.play and need nothing else here." }
+stamp = { hash = "b3:dfa1d425d7f78792", by = "agent:claude", note = "Re-read the whole section against engine.rs: the clock calls now run the show's tick before the timelines' (B1), and start_ticker waking a waiting ticker doesn't change what these calls answer or what they lock; the rest holds." }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:3396a70c4ea3f458", by = "agent:lane-d", note = "collection.* dispatch through collection_call before the generic path; the call flow, saving after batches and audit described here still hold. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
@@ -1917,7 +1917,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:128b8747967ace26", by = "agent:release-alpha8", note = "added stop_jtunnel beside start_jtunnel and jtunnel_stats; checked engine.rs" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:63a589bee39d72d7", by = "agent:show-runner", note = "engine.rs gains the running show (studio state, like timelines, which this list also leaves out) and the show.* action dispatch; no new public Engine API, so the list of builders and calls still holds." }
+stamp = { hash = "b3:dfa1d425d7f78792", by = "agent:claude", note = "Re-read: engine.rs's changes (ticker condvar in Shared, ticker_rev, show-before-timelines order) add no public Engine API and change none of the parts listed; the section holds." }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:d1aca46da610447c", by = "agent:claude", note = "B1: a bindi
 stamp = { hash = "b3:6cd45e61e61a2c66", by = "agent:claude", note = "Re-read: the Data-driven motion bullet now describes painting bindings and Bindings::tint, and Driven source settings names set_color and set_emissive and effects, matching reactive.rs, sourced.rs and driven.rs." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:63a589bee39d72d7", by = "agent:show-runner", note = "Re-read against engine.rs's show runner wiring: added a Shows bullet beside Timelines (engine/shows.rs, studio state run by the live ticker); Studio, Timelines and Keyframe tracks bullets unchanged and still hold." }
+stamp = { hash = "b3:dfa1d425d7f78792", by = "agent:claude", note = "Re-read the section: its Timelines and Shows bullets still hold with the show ticked before the timelines and the ticker woken by start_ticker; nothing else in it is touched by engine.rs's changes." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/follow.rs"]
 stamp = { hash = "b3:67a9c13712b51b9d", by = "agent:channels", note = "Added channels.rs to covers and a Channels bullet (driver, cells, values thread, scene reset, note control, amount); value bindings bullet notes amount." }
@@ -2238,7 +2238,7 @@ stamp = { hash = "b3:cd17cec087f59b8f", by = "agent:claude", note = "Screen-spac
 stamp = { hash = "b3:7cf62c40f0622957", by = "agent:claude", note = "Re-read: tests/sequences.rs only changed how two tests wait (for a tick and for the value, not fixed sleeps); the list of test files is unchanged." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/shows.rs"]
-stamp = { hash = "b3:449999febdb15908", by = "agent:show-runner", note = "Added src/tests/shows.rs to the list of engine test files; checked the list against tests.rs's mod lines." }
+stamp = { hash = "b3:9d309ccb42487a8c", by = "agent:claude", note = "Re-read the whole section: it lists src/tests/shows.rs and src/tests/timelines.rs among the test files without detailing them (core#shows and #timelines do); the new show and ticker tests leave it true." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/source_sizes.rs"]
 stamp = { hash = "b3:c269cab1b6da11ab", by = "agent:claude", note = "tests gain depth: None on size events and a_model_reports_its_depth_beside_its_size in source_sizes.rs; the tests list's description of source_sizes.rs still holds." }
@@ -2247,7 +2247,7 @@ stamp = { hash = "b3:c269cab1b6da11ab", by = "agent:claude", note = "tests gain 
 stamp = { hash = "b3:be31b9e7287c91e4", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Only the media file test's deadline (30 s real time) and failure message changed (#1604); the section's description of the sources tests still holds" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/timelines.rs"]
-stamp = { hash = "b3:f1cec73d2d439e33", by = "agent:channels", note = "Re-read: tests/sequences.rs is described in the Timelines section it is covered by; the list here is by area." }
+stamp = { hash = "b3:be36654f4e5decbc", by = "agent:claude", note = "Re-read the whole section: it lists src/tests/shows.rs and src/tests/timelines.rs among the test files without detailing them (core#shows and #timelines do); the new show and ticker tests leave it true." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/transitions.rs"]
 stamp = { hash = "b3:cd79013c586d6d4b", by = "agent:claude", note = "Lists the new groups3d test (an effect setting changed later reaches a 3D card) and the keyframes tests of the shown clock in a chained scene and for an item with effects." }
@@ -2286,7 +2286,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:aaad4fc91ed634cc", by = "agent:plugin-uninstall", note = "re-read and edited: the plugin bullet now names plugin.uninstall with no engine lock held, not_found without wasm-plugins, and the differential script sending it | merge: #1575 added Engine::handles (counts handles and sessions keeping the engine alive) and pipeline-thread stop logging; nothing about plugins, and plugin.uninstall still holds no engine handle (its threads hold it weakly) | kept from the merged side: Added that Engine::handles counts the handles and sessions to the Engine and sessions part; the rest of the design is unchanged by this diff." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Re-read: engine handle, sessions and envelope unchanged by channels. | merge: #1645 (screen-space reflections, 1f65ffa) merged: engine.rs gains SSR's rendering switches beside the train's channels, sequences and jtunnel_names; the section holds | kept from the merged side: Re-read the crate's design against engine.rs's new screen_space_steps refusal and the snapshot's surface buffer: no locking, threading or ownership statement changes." }
+stamp = { hash = "b3:da8f9fb0183db56f", by = "agent:claude", note = "Re-read Engine and sessions: engine.rs's ticker condvar and show order change nothing about handles, sessions or the envelope; the dependency changes (control#design, ARCH#protocol) are ST0's show additions, which leave the session rules here as they are." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#calls"]
 stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
@@ -2295,13 +2295,13 @@ stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:29bbf97755ed19b5", by = "agent:release-alpha9", note = "Re-read: sessions and envelope unchanged by sequences. | merge: #1645 (screen-space reflections, 1f65ffa) merged: engine.rs gains SSR's rendering switches beside the train's channels, sequences and jtunnel_names; the section holds | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: re-read after the dependency's text changed; the crate design holds." }
+stamp = { hash = "b3:06742827f58a3516", by = "agent:claude", note = "Re-read Engine and sessions: engine.rs's ticker condvar and show order change nothing about handles, sessions or the envelope; the dependency changes (control#design, ARCH#protocol) are ST0's show additions, which leave the session rules here as they are." }
 
 ["CRATE-jstream-core#design"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:63a589bee39d72d7", by = "agent:show-runner", note = "Re-read the engine and session design: show.* actions are ordinary actions in call(), complete inside call, need hello, and add no lock or session behaviour; holds as written." }
+stamp = { hash = "b3:dfa1d425d7f78792", by = "agent:claude", note = "Re-read Engine and sessions: engine.rs's ticker condvar and show order change nothing about handles, sessions or the envelope; the dependency changes (control#design, ARCH#protocol) are ST0's show additions, which leave the session rules here as they are." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
 stamp = { hash = "b3:ffa05e79cb25d202", by = "agent:show-runner", note = "Re-read the engine and session design: show.* actions are ordinary actions in call(), complete inside call, need hello, and add no lock or session behaviour; holds as written." }
@@ -2364,10 +2364,10 @@ stamp = { hash = "b3:f13bc220412c8d90", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:b7ef33611a15221a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to gesture.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#live-values, matching what it relies on" }
 
 ["CRATE-jstream-core#locking"."body"]
-stamp = { hash = "b3:8b2013671d98e8aa", by = "agent:show-runner", note = "Re-read: the show runner takes no new lock; its tick runs on the jstream-live thread under the collection lock beside the timeline tick, so added that to the jstream-live sentence. Lock order unchanged." }
+stamp = { hash = "b3:783471e7f35df692", by = "agent:claude", note = "Re-read the whole section: the jstream-live thread now waits on Shared::ticker, a condvar of the collection lock, which releases the lock while it waits and is notified under it by start_ticker; it takes no other lock, so the order is unchanged. The rest holds against engine.rs and session.rs." }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:63a589bee39d72d7", by = "agent:show-runner", note = "Re-read: the show runner takes no new lock; its tick runs on the jstream-live thread under the collection lock beside the timeline tick, so added that to the jstream-live sentence. Lock order unchanged." }
+stamp = { hash = "b3:dfa1d425d7f78792", by = "agent:claude", note = "Re-read the whole section: the jstream-live thread now waits on Shared::ticker, a condvar of the collection lock, which releases the lock while it waits and is notified under it by start_ticker; it takes no other lock, so the order is unchanged. The rest holds against engine.rs and session.rs." }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2376,7 +2376,7 @@ stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:c55c642463d2624c", by = "agent:show-runner", note = "Re-read: a running show's effects run like timeline cues, without a command span, so added that they log nothing and show.changed reports them; the rest holds." }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:63a589bee39d72d7", by = "agent:show-runner", note = "Re-read: a running show's effects run like timeline cues, without a command span, so added that they log nothing and show.changed reports them; the rest holds." }
+stamp = { hash = "b3:dfa1d425d7f78792", by = "agent:claude", note = "Re-read the section: engine.rs's changes (ticker condvar, show-before-timelines order, show_settle) add no log and change no log level; a running show's effects still log nothing." }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2430,7 +2430,7 @@ stamp = { hash = "b3:62d8d7d707f625e6", by = "agent:release-alpha11", note = "Ed
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
 
 ["CRATE-jstream-core#privacy"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:63a589bee39d72d7", by = "agent:show-runner", note = "Re-read: the show runner adds no privacy call, microphone or program-stage behaviour; privacy.set/get and the microphone rules are unchanged." }
+stamp = { hash = "b3:dfa1d425d7f78792", by = "agent:claude", note = "Re-read: nothing in engine.rs's ticker or show changes touches privacy.set/get or what opens a microphone." }
 
 ["CRATE-jstream-core#program-scene"."body"]
 stamp = { hash = "b3:6ce554deb0186f21", by = "agent:issues-thread", note = "Re-read against the fix: added that a switch, set_keyframe or item.show after a transition ended but not yet let go starts from the program scene (still_on_screen), and that a held whole-scene picture keeps its scene's camera; ADR-0029 §7 and ADR-0180 decision 2 still hold" }
@@ -2502,16 +2502,16 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#shows"."body"]
-stamp = { hash = "b3:89a5f5346dfb5531", by = "agent:show-runner", note = "New section written against engine/shows.rs and tests/shows.rs: plan built per call from ShowInfo, effects at cue_at, ticks from the live ticker and clock steps, off script on a hand switch, Continue ignored mid-transition, stop/delete/open stop it, overlays and media seeks not run yet; test list matches the six tests." }
+stamp = { hash = "b3:1b45e14e1a8a021e", by = "agent:claude", note = "Re-read against engine/shows.rs and tests/shows.rs: show ticks before the timelines, show_settle after every show call, show.play at a bookmark through start_at_bookmark, show.play of a show held by hand unpausing it (not reachable until show.pause), and the two new tests; the rest still matches." }
 
 ["CRATE-jstream-core#shows"."dep:crates/jstream-anim/README.md#purpose"]
-stamp = { hash = "b3:c524b2ae15a761da", by = "agent:show-runner", note = "Re-read after the anim purpose gained its test paragraph: this section's description of the engine side still matches engine/shows.rs." }
+stamp = { hash = "b3:60d452a907025d15", by = "agent:claude", note = "Re-read against engine/shows.rs and tests/shows.rs: show ticks before the timelines, show_settle after every show call, show.play at a bookmark through start_at_bookmark, show.play of a show held by hand unpausing it (not reachable until show.pause), and the two new tests; the rest still matches." }
 
 ["CRATE-jstream-core#shows"."file:crates/jstream-core/src/engine/shows.rs"]
-stamp = { hash = "b3:25f36f145372ff67", by = "agent:show-runner", note = "New section written against engine/shows.rs and tests/shows.rs: plan built per call from ShowInfo, effects at cue_at, ticks from the live ticker and clock steps, off script on a hand switch, Continue ignored mid-transition, stop/delete/open stop it, overlays and media seeks not run yet; test list matches the six tests." }
+stamp = { hash = "b3:a9fe71a99d53968d", by = "agent:claude", note = "Re-read against engine/shows.rs and tests/shows.rs: show ticks before the timelines, show_settle after every show call, show.play at a bookmark through start_at_bookmark, show.play of a show held by hand unpausing it (not reachable until show.pause), and the two new tests; the rest still matches." }
 
 ["CRATE-jstream-core#shows"."file:crates/jstream-core/src/tests/shows.rs"]
-stamp = { hash = "b3:449999febdb15908", by = "agent:show-runner", note = "New section written against engine/shows.rs and tests/shows.rs: plan built per call from ShowInfo, effects at cue_at, ticks from the live ticker and clock steps, off script on a hand switch, Continue ignored mid-transition, stop/delete/open stop it, overlays and media seeks not run yet; test list matches the six tests." }
+stamp = { hash = "b3:9d309ccb42487a8c", by = "agent:claude", note = "Re-read against engine/shows.rs and tests/shows.rs: show ticks before the timelines, show_settle after every show call, show.play at a bookmark through start_at_bookmark, show.play of a show held by hand unpausing it (not reachable until show.pause), and the two new tests; the rest still matches." }
 
 ["CRATE-jstream-core#snapshots"."body"]
 stamp = { hash = "b3:28a3f305192c2a95", by = "agent:issues-thread", note = "Shadows paragraph edited: ready_casting_models uploads every model the pass shows (a model with effects too) and no longer makes its layer, models are posed by layer_pose without their layer, caster_bounds counts casting models; names both first-frame tests. The 3D group nesting paragraph still holds (a group's nesting counts toward MAX_NESTING)" }
@@ -2562,7 +2562,7 @@ stamp = { hash = "b3:54c776185e5d3074", by = "agent:claude-warp-aim", note = "pr
 stamp = { hash = "b3:648e0a8f0ce9eca9", by = "agent:claude-warp-aim", note = "New ADR-0187 module (from_angles, to_angles, multiply, inverse, held_ahead), now covered; the section names it as the rotation maths the sky state uses" }
 
 ["CRATE-jstream-core#timelines"."body"]
-stamp = { hash = "b3:7141b98ebf9b26c2", by = "agent:claude", note = "Only the ADR number changed, 0188 to 0190." }
+stamp = { hash = "b3:dad9fcbcb2f02683", by = "agent:claude", note = "Re-read the whole section: Ticks now says the show ticks first and how start_ticker wakes a waiting ticker (Shared::ticker condvar, ticker_rev, TICKER_HOLD), as engine.rs does; tests/timelines.rs gained the test of a timeline played while the ticker waits for a later cue; the rest holds." }
 
 ["CRATE-jstream-core#timelines"."dep:crates/jstream-protocol/README.md#timelines"]
 stamp = { hash = "b3:5b59d20d2360b00d", by = "agent:channels", note = "Added Lanes and Triggers and waits bullets (sequences.rs, lanes_start/lanes_at, frame-rate ticks, dead band, refire limit) and the new test file to covers." }
@@ -2577,7 +2577,7 @@ stamp = { hash = "b3:43ca29f960db297d", by = "agent:claude", note = "Lanes bulle
 stamp = { hash = "b3:7cf62c40f0622957", by = "agent:claude", note = "Re-read against the sequences test fix: the trigger test now waits for a tick to see 0.2 before the rise, and the seek test waits for the value to come back above 0.7. Added that a channel trigger's first check notes the side its channel is on, and the glide test's wording now matches its never-rising, several-values check." }
 
 ["CRATE-jstream-core#timelines"."file:crates/jstream-core/src/tests/timelines.rs"]
-stamp = { hash = "b3:f1cec73d2d439e33", by = "agent:channels", note = "Added Lanes and Triggers and waits bullets (sequences.rs, lanes_start/lanes_at, frame-rate ticks, dead band, refire limit) and the new test file to covers." }
+stamp = { hash = "b3:be36654f4e5decbc", by = "agent:claude", note = "Re-read the whole section: Ticks now says the show ticks first and how start_ticker wakes a waiting ticker (Shared::ticker condvar, ticker_rev, TICKER_HOLD), as engine.rs does; tests/timelines.rs gained the test of a timeline played while the ticker waits for a later cue; the rest holds." }
 
 ["CRATE-jstream-core#timelines"."file:crates/jstream-core/src/timelines.rs"]
 stamp = { hash = "b3:2833b18aab066189", by = "agent:channels", note = "Added Lanes and Triggers and waits bullets (sequences.rs, lanes_start/lanes_at, frame-rate ticks, dead band, refire limit) and the new test file to covers." }

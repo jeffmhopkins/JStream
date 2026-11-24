@@ -1640,6 +1640,8 @@ enum Op {
     BackToScript,
     Stop,
     Start(u32, bool),
+    Pause,
+    Unpause,
 }
 
 fn arb_op() -> impl Strategy<Value = Op> {
@@ -1655,6 +1657,8 @@ fn arb_op() -> impl Strategy<Value = Op> {
         1 => Just(Op::OffScript),
         1 => Just(Op::BackToScript),
         1 => Just(Op::Stop),
+        1 => Just(Op::Pause),
+        1 => Just(Op::Unpause),
         1 => (0u32..200, any::<bool>()).prop_map(|(t, p)| Op::Start(t, p)),
     ]
 }
@@ -1703,6 +1707,12 @@ fn run_ops(plan: Plan<K>, ops: Vec<Op>) -> Result<(), TestCaseError> {
                 if matches!(g.r.status(), Status::OffScript { .. }) {
                     g.back_to_script();
                 }
+            }
+            Op::Pause => {
+                g.cmd(|r, p, n| r.pause(p, n));
+            }
+            Op::Unpause => {
+                g.cmd(|r, p, n| r.unpause(p, n));
             }
             Op::Stop => {
                 g.stop();
@@ -1843,4 +1853,69 @@ fn a_loop_wrap_plays_again_a_sequence_clip_that_ends_at_the_loops_end() {
             "pass {pass}"
         );
     }
+}
+
+#[test]
+fn pause_holds_show_time_and_its_sequences_and_continue_plays_on_from_there() {
+    let mut p = plan(vec![clip("A", 100)]);
+    p.program[0].timed = true;
+    p.sequences.push(seq(1, 10, 50));
+    p.events.push(ev(40, Act::Shot(1)));
+    let mut rig = Rig::new(p);
+    rig.start(0, Landing::PlayOn);
+    rig.at(10);
+    rig.at(25);
+    let paused = rig.cmd(|r, p, n| r.pause(p, n));
+    assert_eq!(
+        paused,
+        vec![
+            Effect::SequenceStop {
+                clip: 0,
+                timeline: 1
+            },
+            Effect::Paused {
+                bookmark: None,
+                at_ms: 25
+            },
+        ]
+    );
+    assert!(rig.r.held());
+    // Time passes; show time doesn't, and the event at 40 waits.
+    assert_eq!(rig.at(5_000), vec![]);
+    assert_eq!(rig.r.position_ms(rig.now), 25);
+    // Pausing again, or Unpause while not held, does nothing.
+    assert_eq!(rig.cmd(|r, p, n| r.pause(p, n)), vec![]);
+    let resumed = rig.cont();
+    assert_eq!(
+        resumed,
+        vec![
+            Effect::Resumed { at_ms: 25 },
+            Effect::Seek {
+                clip: 0,
+                scene: "A",
+                offset_ms: 25
+            },
+            Effect::SequencePlay {
+                clip: 0,
+                timeline: 1,
+                offset_ms: 15
+            },
+        ]
+    );
+    assert!(!rig.r.held());
+    assert_eq!(rig.at(5_014), vec![]);
+    assert_eq!(
+        rig.at(5_015),
+        vec![Effect::Action {
+            event: 0,
+            action: Act::Shot(1)
+        }]
+    );
+    // Unpause resumes a hand pause, and only that.
+    rig.cmd(|r, p, n| r.pause(p, n));
+    assert_eq!(
+        rig.cmd(|r, p, n| r.unpause(p, n)).first(),
+        Some(&Effect::Resumed { at_ms: 40 })
+    );
+    assert_eq!(rig.cmd(|r, p, n| r.unpause(p, n)), vec![]);
 }

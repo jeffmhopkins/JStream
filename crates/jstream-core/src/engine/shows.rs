@@ -272,6 +272,16 @@ impl State {
         bookmark_id: Option<&str>,
         wake: &mut Vec<Waker>,
     ) -> Result<(), ProtocolError> {
+        // Play on the show paused by hand plays it on from where it holds.
+        if bookmark_id.is_none()
+            && self
+                .show
+                .as_ref()
+                .is_some_and(|run| &run.show_id == show_id && run.runner.held())
+        {
+            self.show_step(wake, |runner, plan, now| runner.unpause(plan, now));
+            return Ok(());
+        }
         let info = self
             .graph
             .show(show_id)

@@ -1,7 +1,7 @@
 //! Shows (alpha.13 show timeline): a running order of scenes in show time, with pausing
 //! bookmarks that wait for Continue, loops, overlays, keyframe markers, sequence clips
 //! and one-off events. This module is the pure schedule: what a show puts up at any point
-//! of show time ([`resolve`]) and the state machine that walks it ([`Runner`]). The
+//! of show time ([`spanning`]) and the state machine that walks it ([`Runner`]). The
 //! engine instantiates it with its protocol types through [`ShowKeys`] and runs the
 //! [`Effect`]s it returns, as it runs a timeline's cues.
 //!
@@ -48,6 +48,14 @@
 //! that key differs, so anything set by hand on a key the show never set, or set again by
 //! hand after the show set it, is left alone. A program cut caused by a landing uses the
 //! bookmark's arrive transition, else the show's default.
+//!
+//! # Pause by hand
+//!
+//! [`Runner::pause`] holds show time where the play head is, at a point or between two,
+//! and stops the sequences the show started. Continue, or [`Runner::unpause`], plays on
+//! from there: the state at the held point is put up as a play-on landing would put it
+//! up, so the sequences play again from where they were and a timed program clip seeks
+//! back to the held point.
 //!
 //! **Jump equals play:** after landing at `t`, what the show owns (program clip and its
 //! media position, keyframe, overlays, sequences and their positions, state-event values)

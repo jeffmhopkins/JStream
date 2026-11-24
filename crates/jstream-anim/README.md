@@ -120,7 +120,10 @@ Contents:
   could pause, a pausing bookmark pauses before anything at its time, then the spanning
   state, then the events), and `continue_`, `back`, `skip`, `go_to`, `jump`, `arm`,
   `off_script`, `back_to_script` and `stop` move it; `start_at_bookmark` starts as a
-  jump to a bookmark would land, with its arrive transition. Every move puts up state by
+  jump to a bookmark would land, with its arrive transition. `pause` holds show time
+  where the play head is by hand (`held`) and stops the sequences it started;
+  Continue, or `unpause`, plays on from there, playing them again from where they
+  were and seeking a timed program clip back to the held point. Every move puts up state by
   diffing the target `Spanning` against what it last put up (`Applied`), so a jump
   lands the state playing there would leave and re-applies only state events whose
   value it changed itself; one-shots are never replayed. It returns `Step`s: each
@@ -151,7 +154,7 @@ plan's checks and `spanning` on both edges; cuts with each clip's transition, pa
 before a pausing bookmark's point and Continue firing what sits there, non-pausing
 bookmarks, `go_to`, Back, Skip, early Continue, an armed spot, loops (passes, clips
 spanning a wrap staying up, a sequence clip ending at the loop's end stopped and played again on each wrap, a bookmark at a loop's start pausing once and one at its
-end never pausing a pass, both ways of leaving), every end of show, the pause limit,
+end never pausing a pass, both ways of leaving), every end of show, the pause limit, a pause by hand holding show time and its sequences and playing on from there,
 off script, `stop`, one-shots never replayed and hand-set values left alone, exact
 step times on a late tick, `next` and `next_due`; and property tests that a jump to a
 random bookmark or point leaves the same program, keyframe, overlays, sequences and
