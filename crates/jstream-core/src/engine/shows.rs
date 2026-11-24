@@ -49,6 +49,10 @@ pub(super) struct Run {
     /// The plan as of the last call, so an edit of the running show can be carried over
     /// (`Runner::replan`).
     pub(super) plan: Plan<Keys>,
+    /// Whether it rehearses on preview (ADR-0210 decision 13): its clips and keyframes
+    /// go to preview, and program, the overlays, the sequences, the cues, the channels
+    /// and the mixer are left alone.
+    pub(super) rehearse: bool,
 }
 
 /// The plan of `info`, as the runner reads it: the overlay tracks' clips flattened by
@@ -62,8 +66,7 @@ pub(super) fn plan(info: &ShowInfo, graph: &Graph) -> Plan<Keys> {
             scene: clip.scene_id.clone(),
             length_ms: clip.length_ms,
             transition: clip.preset_id.clone(),
-            // Media seeking on a jump comes with `source.seek`.
-            timed: false,
+            timed: !media_sources(graph.state(), &clip.scene_id).is_empty(),
         })
         .collect();
     let mut overlays: Vec<OverlayClip<Keys>> = info
@@ -77,7 +80,7 @@ pub(super) fn plan(info: &ShowInfo, graph: &Graph) -> Plan<Keys> {
                 length_ms: clip.length_ms,
                 fade_in_ms: clip.fade_in_ms,
                 fade_out_ms: clip.fade_out_ms,
-                timed: false,
+                timed: !media_sources(graph.state(), &clip.scene_id).is_empty(),
             })
         })
         .collect();
@@ -157,6 +160,27 @@ pub(super) fn plan(info: &ShowInfo, graph: &Graph) -> Plan<Keys> {
     }
 }
 
+/// The `media` sources `scene` draws (its family's tree), which a jump into a clip of
+/// it seeks (`source.seek`, ADR-0210 decision 9): what makes a clip timed.
+fn media_sources(state: &jstream_graph::State, scene: &SceneId) -> Vec<SourceId> {
+    sources_of_kind(state, scene, "media")
+}
+
+/// The sources of built-in `kind` that `scene`'s family draws, each once.
+fn sources_of_kind(state: &jstream_graph::State, scene: &SceneId, kind: &str) -> Vec<SourceId> {
+    let sources: std::collections::BTreeSet<SourceId> = state
+        .tree_items(state.family_of(scene))
+        .into_iter()
+        .filter_map(|item| state.item(item).map(|(_, item)| item.source_id().clone()))
+        .filter(|source| {
+            state
+                .source(source)
+                .is_some_and(|s| matches!(s.kind(), SourceKind::Builtin { kind: k } if k == kind))
+        })
+        .collect();
+    sources.into_iter().collect()
+}
+
 impl State {
     /// The running show's plan, or `None` with no show running or its show gone.
     fn show_plan(&self) -> Option<Plan<Keys>> {
@@ -185,8 +209,14 @@ impl State {
             Action::ShowPlay {
                 show_id,
                 bookmark_id,
-                ..
-            } => self.show_play(client_id, request_id, show_id, bookmark_id.as_deref(), wake),
+                rehearse,
+            } => self.show_play(
+                (client_id, request_id),
+                show_id,
+                bookmark_id.as_deref(),
+                *rehearse,
+                wake,
+            ),
             Action::ShowStop => {
                 self.show_stop(ShowChange::Stopped, wake);
                 Ok(())
@@ -277,18 +307,17 @@ impl State {
     /// start or at `bookmark_id`.
     fn show_play(
         &mut self,
-        client_id: &ClientId,
-        request_id: &RequestId,
+        (client_id, request_id): (&ClientId, &RequestId),
         show_id: &ShowId,
         bookmark_id: Option<&str>,
+        rehearse: bool,
         wake: &mut Vec<Waker>,
     ) -> Result<(), ProtocolError> {
         // Play on the show paused by hand plays it on from where it holds.
         if bookmark_id.is_none()
-            && self
-                .show
-                .as_ref()
-                .is_some_and(|run| &run.show_id == show_id && run.runner.held())
+            && self.show.as_ref().is_some_and(|run| {
+                &run.show_id == show_id && run.rehearse == rehearse && run.runner.held()
+            })
         {
             self.show_step(wake, |runner, plan, now| runner.unpause(plan, now));
             return Ok(());
@@ -325,7 +354,7 @@ impl State {
             .iter()
             .flat_map(|track| track.clips.iter().map(|clip| clip.scene_id.clone()))
             .collect();
-        for scene in scenes {
+        for scene in scenes.into_iter().filter(|_| !rehearse) {
             self.overlay_item(&scene, wake);
         }
         let now = self.show_now();
@@ -339,12 +368,13 @@ impl State {
             runner,
             by: (client_id.clone(), request_id.clone()),
             plan: plan.clone(),
+            rehearse,
         });
         self.emit_show(ShowChange::Started, None, None, wake);
         self.run_show_steps(&plan, steps, wake);
         // A show that starts on the scene already on program starts its timers again, as
-        // the cut to it would have.
-        if let Some(program) = before.filter(|p| self.studio.program() == Some(p)) {
+        // the cut to it would have. A rehearsal leaves program alone.
+        if let Some(program) = before.filter(|p| !rehearse && self.studio.program() == Some(p)) {
             self.restart_timers(&program);
         }
         self.show_settle(wake);
@@ -369,6 +399,7 @@ impl State {
         if let Some(run) = self.show.take() {
             self.emit_stopped(&run, change, wake);
         }
+        let _ = self.set_upcoming(None);
     }
 
     fn emit_stopped(&mut self, run: &Run, change: ShowChange, wake: &mut Vec<Waker>) {
@@ -408,20 +439,7 @@ impl State {
     /// Restarts every `timer` source `scene` draws (its countdowns among them), at the
     /// action's time (`LiveSources::restart`).
     fn restart_timers(&mut self, scene: &SceneId) {
-        let state = self.graph.state();
-        let timers: std::collections::BTreeSet<_> = state
-            .tree_items(state.family_of(scene))
-            .into_iter()
-            .filter_map(|item| state.item(item).map(|(_, item)| item.source_id().clone()))
-            .filter(|source| {
-                state.source(source).is_some_and(|s| {
-                    matches!(
-                        s.kind(),
-                        jstream_protocol::SourceKind::Builtin { kind } if kind == "timer"
-                    )
-                })
-            })
-            .collect();
+        let timers = sources_of_kind(self.graph.state(), scene, "timer");
         let at = self.action_now();
         for source in timers {
             self.live.restart(&source, at);
@@ -446,11 +464,34 @@ impl State {
         let now = crate::timelines::ns(self.live.now());
         let steps = self.show.as_mut()?.runner.tick(&plan, now);
         self.run_show_steps(&plan, steps, wake);
+        self.show_upcoming(&plan);
         let run = self.show.as_ref()?;
         if matches!(run.runner.status(), Status::Ended | Status::Stopped) {
             return None;
         }
         run.runner.next_due(&plan).map(crate::timelines::media_time)
+    }
+
+    /// Names the scene of the program clip after the one under the play head as the
+    /// upcoming scene, kept warm with its media held at the first frame, so the cut to
+    /// it starts nothing (ADR-0210 decision 9, `State::set_upcoming`). None while no show
+    /// runs, after the last clip, or in a rehearsal.
+    fn show_upcoming(&mut self, plan: &Plan<Keys>) {
+        let now = self.show_now();
+        let next = self.show.as_ref().and_then(|run| {
+            if run.rehearse || matches!(run.runner.status(), Status::Ended | Status::Stopped) {
+                return None;
+            }
+            let at = run.runner.position_ms(now);
+            let current = (0..plan.program.len())
+                .find(|&i| at < plan.program_start(i + 1))
+                .unwrap_or(plan.program.len());
+            plan.program.get(current + 1).map(|clip| clip.scene.clone())
+        });
+        let next = next.filter(|scene| self.graph.state().scene(scene).is_some());
+        if self.studio.upcoming() != next.as_ref() {
+            let _ = self.set_upcoming(next.as_ref());
+        }
     }
 
     /// Whether the running show needs the live ticker.
@@ -469,7 +510,8 @@ impl State {
         let Some(run) = self.show.as_mut() else {
             return;
         };
-        if !matches!(run.runner.status(), Status::Playing | Status::Paused { .. }) {
+        // A rehearsal runs on preview, so what goes on program doesn't concern it.
+        if run.rehearse || !matches!(run.runner.status(), Status::Playing | Status::Paused { .. }) {
             return;
         }
         run.runner.off_script(now);
@@ -498,23 +540,36 @@ impl State {
         wake: &mut Vec<Waker>,
     ) {
         let (client_id, request_id) = (&by.0, &by.1);
+        if self.show.as_ref().is_some_and(|run| run.rehearse) {
+            self.rehearse_effect(plan, effect, by, wake);
+            return;
+        }
         // A clip naming something the collection no longer holds does nothing.
         match effect {
             Effect::Program {
-                scene, transition, ..
+                scene,
+                transition,
+                offset_ms,
+                ..
             } => {
                 self.show_switching = true;
                 let _ = self.switch(
                     client_id,
                     request_id,
-                    scene,
+                    scene.clone(),
                     transition.as_ref(),
                     Vec::new(),
                     wake,
                 );
                 self.show_switching = false;
+                // A jump into a timed clip seeks its media to that spot (decision 9).
+                if offset_ms > 0 {
+                    self.seek_media(&scene, offset_ms);
+                }
             }
-            Effect::Seek { .. } => {}
+            Effect::Seek {
+                scene, offset_ms, ..
+            } => self.seek_media(&scene, offset_ms),
             Effect::Keyframe {
                 keyframe, preset, ..
             } => {
@@ -551,9 +606,17 @@ impl State {
                         self.set_keyframe(client_id, request_id, program, keyframe, preset, wake);
                 }
             }
-            Effect::OverlayOn { scene, fade_ms, .. } => {
+            Effect::OverlayOn {
+                scene,
+                fade_ms,
+                offset_ms,
+                ..
+            } => {
                 if let Some(item_id) = self.overlay_item(&scene, wake) {
                     self.set_overlay_shown(&item_id, true, fade_ms, wake);
+                }
+                if offset_ms > 0 {
+                    self.seek_media(&scene, offset_ms);
                 }
             }
             Effect::OverlayOff { scene, fade_ms, .. } => {
@@ -581,6 +644,18 @@ impl State {
                     let _ = self.action(client_id, request_id, action, wake);
                 }
             }
+            Effect::Paused { .. }
+            | Effect::Resumed { .. }
+            | Effect::Jumped { .. }
+            | Effect::Looped { .. }
+            | Effect::Ended => self.run_show_report(plan, effect, wake),
+        }
+    }
+
+    /// Emits what a pause, resume, jump, loop or end of the running show reports
+    /// (`show.changed`).
+    fn run_show_report(&mut self, plan: &Plan<Keys>, effect: Effect<Keys>, wake: &mut Vec<Waker>) {
+        match effect {
             Effect::Paused { bookmark, .. } => {
                 let id = bookmark
                     .and_then(|b| plan.bookmarks.get(b))
@@ -601,6 +676,82 @@ impl State {
                 self.emit_show(ShowChange::Looped, None, id, wake);
             }
             Effect::Ended => self.emit_show(ShowChange::Ended, None, None, wake),
+            _ => {}
+        }
+    }
+
+    /// Runs one effect of a rehearsal (ADR-0210 decision 13): a program clip, or a
+    /// keyframe of the scene on preview, goes to preview; the show's own reports go out
+    /// as when it runs; everything else (overlays, sequences, cues and media seeks,
+    /// which would reach program, the channels or the mixer) is left out.
+    fn rehearse_effect(
+        &mut self,
+        plan: &Plan<Keys>,
+        effect: Effect<Keys>,
+        by: &(ClientId, RequestId),
+        wake: &mut Vec<Waker>,
+    ) {
+        let (client_id, request_id) = (&by.0, &by.1);
+        match effect {
+            Effect::Program { scene, .. } => {
+                self.rehearse_preview(client_id, request_id, &scene, wake)
+            }
+            Effect::Keyframe { keyframe, .. } => {
+                let state = self.graph.state();
+                let Some(preview) = self
+                    .studio
+                    .preview()
+                    .filter(|scene| state.scene(scene).is_some())
+                    .cloned()
+                else {
+                    return;
+                };
+                let family = state.family_of(&preview).clone();
+                let target = keyframe.unwrap_or_else(|| family.clone());
+                if state
+                    .scene(&target)
+                    .is_some_and(|_| *state.family_of(&target) == family)
+                {
+                    self.rehearse_preview(client_id, request_id, &target, wake);
+                }
+            }
+            Effect::Paused { .. }
+            | Effect::Resumed { .. }
+            | Effect::Jumped { .. }
+            | Effect::Looped { .. }
+            | Effect::Ended => self.run_show_report(plan, effect, wake),
+            Effect::Seek { .. }
+            | Effect::OverlayOn { .. }
+            | Effect::OverlayOff { .. }
+            | Effect::SequencePlay { .. }
+            | Effect::SequenceStop { .. }
+            | Effect::Action { .. } => {}
+        }
+    }
+
+    /// Puts `scene` on preview for a rehearsal, as `studio.set_preview` would.
+    fn rehearse_preview(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        scene: &SceneId,
+        wake: &mut Vec<Waker>,
+    ) {
+        if matches!(self.studio.set_preview(self.graph.state(), scene), Ok(true)) {
+            self.publish_warm();
+            self.emit_studio(client_id, request_id, None, wake);
+            self.feed_pages();
+        }
+    }
+
+    /// Seeks every `media` source `scene` draws to `offset_ms` into it, as of the
+    /// effect's time (`source.seek`, ADR-0210 decision 9).
+    fn seek_media(&mut self, scene: &SceneId, offset_ms: u32) {
+        let to =
+            jstream_media::MediaTime::new(i64::from(offset_ms), jstream_media::Timebase::MILLIS);
+        let at = self.action_now();
+        for source in media_sources(self.graph.state(), scene) {
+            self.live.seek(&source, at, to);
         }
     }
 
@@ -856,7 +1007,7 @@ impl State {
             loop_id,
             pass,
             armed_ms: run.runner.armed_ms(),
-            rehearse: false,
+            rehearse: run.rehearse,
         }))
     }
 

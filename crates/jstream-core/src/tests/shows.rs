@@ -666,3 +666,92 @@ fn an_edit_of_the_running_show_takes_effect_at_the_play_head() {
         "plays on in the new plan"
     );
 }
+
+fn preview(control: &dyn Control) -> Option<String> {
+    match query(control, Query::StudioGet) {
+        Ok(QueryResult::StudioGet { preview_scene, .. }) => {
+            preview_scene.map(|id| id.as_str().to_owned())
+        }
+        other => panic!("not studio.get: {other:?}"),
+    }
+}
+
+/// The program clip after the one under the play head is the upcoming scene, kept warm
+/// with its media held, so the cut to it starts nothing (ADR-0210 decision 9).
+#[test]
+fn the_next_program_clip_is_the_upcoming_scene() {
+    let (engine, control) = engine_with_show();
+    assert_eq!(engine.upcoming(), None);
+    act(&control, play()).expect("play");
+    assert_eq!(engine.upcoming().as_deref(), Some("b"));
+    step(&control, 1100);
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("b"),
+        "waits at p with b up"
+    );
+    assert_eq!(engine.upcoming().as_deref(), Some("c"));
+    act(&control, Action::ShowContinue).expect("continue");
+    step(&control, 1100);
+    assert_eq!(program(&control).as_deref(), Some("c"));
+    assert_eq!(engine.upcoming(), None, "nothing after the last clip");
+    act(&control, Action::ShowSeek { at_ms: 0 }).expect("seek");
+    assert_eq!(engine.upcoming().as_deref(), Some("b"));
+    act(&control, Action::ShowStop).expect("stop");
+    assert_eq!(engine.upcoming(), None, "no show, nothing upcoming");
+}
+
+/// A rehearsal runs the show on preview: its clips go to preview, program stays where
+/// it is, a hand switch doesn't take it off script, and its cues don't run (ADR-0210
+/// decision 13).
+#[test]
+fn a_rehearsal_runs_the_show_on_preview_and_leaves_program_alone() {
+    let (engine, control) = engine_with_show();
+    act(
+        &control,
+        Action::SceneSwitch {
+            scene_id: SceneId::new("c"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    )
+    .expect("c on program");
+    act(
+        &control,
+        Action::ShowPlay {
+            show_id: ShowId::new("s"),
+            bookmark_id: None,
+            rehearse: true,
+        },
+    )
+    .expect("rehearse");
+    assert_eq!(preview(&control).as_deref(), Some("a"));
+    assert_eq!(program(&control).as_deref(), Some("c"));
+    assert!(running(&control).rehearse);
+    assert_eq!(engine.upcoming(), None, "a rehearsal warms nothing");
+    act(
+        &control,
+        Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    )
+    .expect("a hand switch");
+    assert_eq!(
+        running(&control).state,
+        ShowState::Playing,
+        "still on script"
+    );
+    step(&control, 1100);
+    assert_eq!(preview(&control).as_deref(), Some("b"));
+    assert_eq!(running(&control).state, ShowState::Paused);
+    act(&control, Action::ShowContinue).expect("continue");
+    step(&control, 600);
+    assert!(!value_set(&control), "its cues don't run");
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("a"),
+        "program as the hand left it"
+    );
+}
