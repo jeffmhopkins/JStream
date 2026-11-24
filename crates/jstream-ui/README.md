@@ -217,7 +217,15 @@ Contents ([Design](#design) explains the choices):
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
   `looks` table in `looks.rs`), the control button beside a live setting, a fader or a send
   (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
-  binding are tested natively), the Channels panel (`channels.rs`: `Channels`, the channel
+  binding are tested natively), the Map control dialog and the Learn popover its menu
+  opens (`map_control.rs`, with a mapping's ends, the sources it compares and a key's
+  edits tested natively), mapping mode (`mapping_mode.rs`: `MappingMode` and
+  `MappingBar`, with a drag's amount, the ends it writes and its label tested natively),
+  the targets they write through (`map_target.rs`, with a target's mappings, edits and
+  offset labels tested natively, and `item_map.rs`, the Inspector fields' mapper),
+  what is arriving for them (`live_sources.rs`, outside `panels/`: `live_sources` and
+  `Listening`, with a sender's Mods, what moved and a message's fields tested natively),
+  the Channels panel (`channels.rs`: `Channels`, the channel
   search `ChannelSearch` the control button and the Sequence panel share, and the live
   values `live_values` reads, with channel IDs, the search and its order tested natively),
   the Mappings panel (`mappings.rs`: `Mappings`, its Mappings, Sources and Triggers tabs over
@@ -860,6 +868,22 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   on `done` writes one `binding.set_value` reading the armed source from where the
   setting is to the dragged amount, kept in range; a setting the source maps already
   keeps its start, smoothing, curve and amount channel.
+- **Mapping targets** (`panels/map_target.rs`, `panels/item_map.rs`). `MapTarget` is what
+  the Map control dialog and mapping mode write through: `Value`, a setting one value
+  binding takes over (`learn_<hash>`), or `Item`, a placement property of an item as a
+  scene shows it, which reader motion modifiers add to. `mappings` lists what drives it,
+  `set` writes a mapping (a setting's binding is replaced; a property's modifier from the
+  same source is changed, else one is added as `map_<n>` after the item's others, in one
+  `item.set_motion`) and `clear` removes one. `ItemUnit` gives a property's offset its
+  unit, label and drag span (1000 px, 360°, or 100 % for the properties the engine
+  multiplies by one plus the value), and `offset_after` the ends a drag leaves. A
+  `NumberField` takes a `MapMark` (`map`): its root carries `data-map`, which
+  `setting_at` reads before it looks for a row's control button, and its box shows the
+  mark's amount as a tag (`data-map-amount`). `ItemMapper`, made once by the Inspector's
+  Transform tab, hands each field its mark, takes the right-click (`ControlMenuAt`) and
+  the mapping-mode drag that name one of its fields (`property_of`), and draws the
+  field's menu. The dialog's request carries a `MapTarget`, the ends a new source gets
+  (`range`) and how far either end may go (`limits`).
 - **Channels** (`panels/channels.rs`, [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)).
   The Channels panel (`PanelId::Channels`, beside the Inspector by default from the View
   menu) shows a search over the collection's `channels` (from `state.get`, kept in

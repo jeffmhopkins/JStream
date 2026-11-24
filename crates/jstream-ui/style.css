@@ -2812,3 +2812,16 @@ body.mapping-mode :has(> button.learn):hover { outline: 1px solid var(--accent);
 body.mapping-mode :has(> button.learn) * { cursor: ns-resize; }
 body.mapping-mode button.learn { border-color: var(--accent); }
 button.learn.amount { color: var(--accent); border-color: var(--accent); padding: 0 6px; font-variant-numeric: tabular-nums; font-size: 12px; width: auto; }
+/* A field a control can be mapped onto (VC-05): its mappings' offset as a tag on its top
+   edge, and a drag target in mapping mode. */
+.number-field[data-map] .stepper { position: relative; }
+.stepper[data-map-amount]::after {
+  content: attr(data-map-amount);
+  position: absolute; right: 2px; top: -8px; z-index: 1;
+  padding: 0 4px; border-radius: 6px; line-height: 13px;
+  background: var(--selected); color: var(--accent);
+  font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+.stepper[data-map-amount] { border-color: var(--accent); }
+body.mapping-mode .number-field[data-map], body.mapping-mode .number-field[data-map] * { cursor: ns-resize; }
+body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid var(--accent); outline-offset: 1px; }

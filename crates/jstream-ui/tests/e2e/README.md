@@ -494,7 +494,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   after it opened, as one edit; and mapping mode from the dialog's "Map by dragging":
   the bar naming the armed Mod, a click on a setting mapping nothing, a 20 px drag up
   showing "+10 %" and sending one edit when let go, a second drag moving the far end
-  as one more edit, and Escape leaving the mode.
+  as one more edit, and Escape leaving the mode; and an item's properties from the
+  Inspector: the crop edges marked as targets, a right-click on Rotation opening its menu and the dialog on it, a 50 px
+  drag tagging the field "+90°" and sending one edit while the field keeps its stored
+  value, the same armed Mod mapping X as one more edit, and the menu's Remove taking the
+  rotation mapping off.
 - **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
   is mapped, then listing a channel made in the Channels panel as a group with
   "+ Target…"; a search that matches nothing saying so; a click on the channel opening its

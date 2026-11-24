@@ -335,10 +335,15 @@ pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
     else {
         return false;
     };
-    if keeps_own_menu(
-        &el.tag_name(),
-        &el.get_attribute("type").unwrap_or_default(),
-    ) {
+    // A field of free text keeps the browser's menu, unless it is itself a mapping
+    // target (a number field).
+    let marked = matches!(el.closest("[data-map]"), Ok(Some(_)));
+    if !marked
+        && keeps_own_menu(
+            &el.tag_name(),
+            &el.get_attribute("type").unwrap_or_default(),
+        )
+    {
         return false;
     }
     let Some(id) = crate::panels::mapping_mode::setting_at(el) else {
@@ -407,8 +412,9 @@ pub fn Learn(
             dialog
                 .0
                 .set(Some(crate::panels::map_control::MapControlRequest {
-                    target: target.get_value(),
+                    target: crate::panels::map_target::MapTarget::Value(target.get_value()),
                     range,
+                    limits: range,
                     label: label.get_value(),
                     current: current.and_then(|c| c.get_untracked()),
                 }));

@@ -214,9 +214,16 @@ The property grid, as OBS's Properties lay a source's settings out:
 - A setting a controller can drive (live, a number with both ends or a switch) has a
   learn button (`button.learn`, the MIDI icon) after its reset, in a third column that
   takes only its width: `--muted` and borderless at rest, `--accent` with a border when
-  bound (with its control's short name, `CC 7`) or while it is learning. A click opens
-  its one menu (learn, make or follow a channel, remove). A setting that follows a
-  channel shows the channel's name as a `--selected` chip in `--link` instead.
+  bound (with its control's short name, `CC 7` or `Mod 20`) or while it is learning. A
+  click on it, or a right-click anywhere on the setting's row, opens its one menu (Map
+  control…, Learn, and for a mapped setting what drives it, Edit and Remove). A setting
+  that follows a channel shows the channel's name as a `--selected` chip in `--link`
+  instead. In mapping mode the button shows the armed source's amount on that setting
+  (`+15 %`) in `--accent`, and a bar under the header in `--selected` with an `--accent`
+  edge names the armed source. An Inspector number that takes mappings has no button:
+  its mappings' offset is a 10 px `--accent` tag on a `--selected` pill over the
+  field's top right corner, its border turns `--accent`, and a right-click on the number
+  opens its menu.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for

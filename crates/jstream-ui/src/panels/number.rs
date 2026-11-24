@@ -149,10 +149,19 @@ pub fn NumberField(
     /// The largest value sent.
     #[prop(default = 100_000.0)]
     max: f64,
+    /// Marks the field as something a control can be mapped onto (UI-FEATURES VC-04):
+    /// a right-click or a mapping-mode drag on it names it by the mark's ID, and the
+    /// mark's amount shows as a tag on the field.
+    #[prop(optional, into)]
+    map: Option<crate::panels::map_target::MapMark>,
     /// Takes each new value, and says whether it sent an edit; when it didn't, the field
     /// shows the committed value again.
     send: impl Fn(f64) -> bool + Copy + Send + Sync + 'static,
 ) -> AnyView {
+    let (map_id, map_amount) = match map {
+        Some(mark) => (Some(mark.id), Some(mark.amount)),
+        None => (None, None),
+    };
     // The value a drag shows before its release sends it.
     let dragged = RwSignal::new(None::<f64>);
     // Bumped to show the committed value again after cancelled or refused text.
@@ -383,9 +392,10 @@ pub fn NumberField(
         view! { <span class="field-label" aria-hidden=caption_hidden>{shown}</span> }
     });
     view! {
-        <label class="number-field" class:inline=inline class:bare=!steppers on:click=on_click>
+        <label class="number-field" class:inline=inline class:bare=!steppers on:click=on_click
+            data-map=map_id>
             {above}
-            <span class="stepper">
+            <span class="stepper" data-map-amount=move || map_amount.and_then(|a| a.get())>
                 {steppers.then(decrease)}
                 {prefix}
                 {field()}

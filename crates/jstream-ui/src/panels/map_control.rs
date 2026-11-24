@@ -20,7 +20,8 @@ use crate::live_sources::{
     self, MOD_COUNT, MODS_KEY, Moved, live_sources, mod_drives, mod_of, mod_reader, reader_name,
 };
 use crate::panels::channels::{ChannelSearch, live_values, new_channel};
-use crate::panels::learn::{KeyCapture, follows, fraction, learn_id, set_smoothing, smoothing_of};
+use crate::panels::learn::{KeyCapture, fraction, learn_id, set_smoothing, smoothing_of};
+use crate::panels::map_target::MapTarget;
 use crate::panels::number::NumberField;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
@@ -41,9 +42,12 @@ const FIELD_LIMIT: usize = 200;
 #[derive(Clone, Debug, PartialEq)]
 pub struct MapControlRequest {
     /// The setting.
-    pub target: ValueTarget,
-    /// The setting's lowest and highest, in its unit: what a source maps onto at first.
+    pub target: MapTarget,
+    /// What a source maps onto at first, in the setting's unit: a setting's lowest and
+    /// highest, or the offset a property gets.
     pub range: (f64, f64),
+    /// The lowest and highest either end of a mapping may be.
+    pub limits: (f64, f64),
     /// The setting's name.
     pub label: String,
     /// The setting's value now.
@@ -259,6 +263,19 @@ pub fn key_channel(collection: &Collection, chord: &Chord) -> Option<String> {
     }
 }
 
+/// A reader of the channel `channel_id` over `range`, unsmoothed: the channel does its
+/// own shaping.
+pub fn channel_reader(channel_id: &str, range: (f64, f64)) -> MotionKind {
+    let end = |v: f64| Finite32::new(v as f32).unwrap_or(Finite32::ZERO);
+    MotionKind::Channel {
+        channel_id: channel_id.to_owned(),
+        smoothing_ms: 0,
+        curve: MotionCurve::Linear,
+        from: end(range.0),
+        to: end(range.1),
+    }
+}
+
 /// Whether `chord` is bound to anything but a channel's switch: mapping it here adds to
 /// that, since a chord runs several actions (ADR-0208).
 pub fn key_taken(collection: &Collection, chord: &Chord) -> bool {
@@ -271,7 +288,7 @@ pub struct KeyMapping<'a> {
     /// The key.
     pub chord: &'a Chord,
     /// The setting.
-    pub target: &'a ValueTarget,
+    pub target: &'a MapTarget,
     /// The setting's name, which a new channel takes.
     pub label: &'a str,
     /// The scene a new channel belongs to.
@@ -292,9 +309,12 @@ pub struct KeyMapping<'a> {
 /// it ran before.
 pub fn key_edits(collection: &Collection, map: &KeyMapping<'_>) -> Vec<Edit> {
     if let Some(channel_id) = key_channel(collection, map.chord) {
-        return vec![Edit::BindingSetValue {
-            binding: follows(&channel_id, map.target, map.ends),
-        }];
+        return map.target.set(
+            collection,
+            channel_reader(&channel_id, map.ends),
+            None,
+            None,
+        );
     }
     let mut channel = new_channel(map.label, map.scene.clone(), 1.0, &collection.channels);
     channel.rise_ms = map.fade_ms.min(60_000);
@@ -304,11 +324,14 @@ pub fn key_edits(collection: &Collection, map: &KeyMapping<'_>) -> Vec<Edit> {
         channel_id: channel.channel_id.clone(),
         to: ChannelSwitch::Toggle,
     };
-    let binding = follows(&channel.channel_id, map.target, map.ends);
-    let mut edits = vec![
-        Edit::ChannelSet { channel },
-        Edit::BindingSetValue { binding },
-    ];
+    let follow = map.target.set(
+        collection,
+        channel_reader(&channel.channel_id, map.ends),
+        None,
+        None,
+    );
+    let mut edits = vec![Edit::ChannelSet { channel }];
+    edits.extend(follow);
     edits.extend(crate::hotkeys::bind_edits(collection, &toggle, map.chord));
     edits
 }
@@ -515,19 +538,20 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
     let dialog = expect_context::<MapControlDialog>();
     let request = StoredValue::new(request);
     let range = request.with_value(|r| r.range);
+    let limits = request.with_value(|r| r.limits);
+    let adds = request.with_value(|r| r.target.adds());
     let close = move || dialog.0.set(None);
 
-    let bound = move || {
+    // Every mapping onto the setting: one for a setting a binding takes over, any
+    // number for a property mappings add to.
+    let mapped = move || {
         studio.collection.with(|c| {
-            let c = c.as_ref()?;
-            request.with_value(|r| {
-                c.value_bindings
-                    .iter()
-                    .find(|b| b.target == r.target)
-                    .cloned()
-            })
+            c.as_ref()
+                .map(|c| request.with_value(|r| r.target.mappings(c)))
+                .unwrap_or_default()
         })
     };
+    let bound = move || mapped().into_iter().next();
     let existing = untrack(bound);
     // The mapping as it would be written: the source with its range, smoothing and curve.
     let draft = RwSignal::new(existing.as_ref().map(|b| b.input.clone()));
@@ -876,14 +900,7 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
 
     // Channel.
     let pick_channel = move |channel_id: String| {
-        pick(
-            follows(
-                &channel_id,
-                &request.with_value(|r| r.target.clone()),
-                range,
-            )
-            .input,
-        );
+        pick(channel_reader(&channel_id, range));
     };
     let make_channel = move |name: String| {
         let scene = studio.selection.with_untracked(|s| s.scene.clone());
@@ -990,9 +1007,15 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                 {
                     edits.push(Edit::ChannelSet { channel });
                 }
-                let amount = untrack(bound).and_then(|b| b.amount);
-                let binding = request.with_value(|r| binding_for(&r.target, input, amount));
-                edits.push(Edit::BindingSetValue { binding });
+                let set = studio.collection.with_untracked(|c| {
+                    let c = c.as_ref()?;
+                    Some(request.with_value(|r| {
+                        // A mapping from the same source keeps the channel scaling it.
+                        let amount = r.target.mapping_from(c, &input).and_then(|m| m.amount);
+                        r.target.set(c, input, amount, None)
+                    }))
+                });
+                edits.extend(set.unwrap_or_default());
                 edits
             })
         };
@@ -1001,16 +1024,18 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
             close();
         }
     };
-    let remove = move |_| {
-        if let (Some(binding), Some(s)) = (untrack(bound), session.0.get_value()) {
-            studio.apply(
-                &s,
-                vec![Edit::BindingClearValue {
-                    binding_id: binding.binding_id,
-                }],
-            );
+    let remove = move |key: String| {
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| request.with_value(|r| r.target.clear(c, &key)))
+                .unwrap_or_default()
+        });
+        if let (false, Some(s)) = (edits.is_empty(), session.0.get_value()) {
+            studio.apply(&s, edits);
         }
-        draft.set(None);
+        if !adds {
+            draft.set(None);
+        }
     };
     let value_line = request.with_value(|r| match r.current {
         Some(v) => format!(
@@ -1021,30 +1046,44 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
     });
     // The setting's mapping as a row: its source, the range it maps onto, and Remove.
     let mapped_rows = move || {
-        let binding = bound()?;
-        let name = studio
-            .collection
-            .with(|c| reader_name(c.as_ref(), &binding.input));
-        let onto = ends(&binding.input).map_or_else(String::new, |(low, high)| {
-            let n = |v: f32| crate::panels::number::format_number(f64::from(v), 2, false);
-            format!("{} → {}", n(low), n(high))
-        });
+        let all = mapped();
+        if all.is_empty() {
+            return None;
+        }
+        let rows = all
+            .into_iter()
+            .map(|mapping| {
+                let name = studio
+                    .collection
+                    .with(|c| reader_name(c.as_ref(), &mapping.input));
+                let onto = ends(&mapping.input).map_or_else(String::new, |(low, high)| {
+                    let n = |v: f32| crate::panels::number::format_number(f64::from(v), 2, false);
+                    format!("{} → {}", n(low), n(high))
+                });
+                let key = mapping.key;
+                view! {
+                    <li class="chan-row">
+                        <span class="chan-row-name">{name}</span>
+                        <span class="hint mono">{onto}</span>
+                        <span class="hint">{if adds { "Offset" } else { "Override" }}</span>
+                        <button type="button" class="chan-x" title="Remove this mapping" aria-label="Remove this mapping"
+                            on:click=move |_| remove(key.clone())>
+                            "×"
+                        </button>
+                    </li>
+                }
+            })
+            .collect_view();
         Some(view! {
             <div class="section-head"><span class="eyebrow">"Mapped to"</span></div>
-            <ul class="chan-rows">
-                <li class="chan-row">
-                    <span class="chan-row-name">{name}</span>
-                    <span class="hint mono">{onto}</span>
-                    <span class="hint">"Override"</span>
-                    <button type="button" class="chan-x" title="Remove this mapping" aria-label="Remove this mapping" on:click=remove>
-                        "×"
-                    </button>
-                </li>
-            </ul>
+            <ul class="chan-rows">{rows}</ul>
         })
     };
     // What Use does, in words, when the draft isn't the mapping the setting has.
     let replaces = move || {
+        if adds {
+            return None;
+        }
         let binding = bound()?;
         let same = match tab.get() {
             Tab::Key => chord.with(Option::is_none),
@@ -1171,11 +1210,11 @@ fn MapControl(request: MapControlRequest) -> impl IntoView {
                     </p>
                     {move || if tab.get() == Tab::Key {
                         view! {
-                            <ReaderFields kind=key_reader limits=range names=("Off", "On")
+                            <ReaderFields kind=key_reader limits=limits names=("Off", "On")
                                 send=move |k| { if let Some((off, on)) = ends(&k) { key_ends.set((f64::from(off), f64::from(on))); } } />
                         }.into_any()
                     } else {
-                        view! { <ReaderFields kind=draft limits=range send=move |k| draft.set(Some(k)) /> }.into_any()
+                        view! { <ReaderFields kind=draft limits=limits send=move |k| draft.set(Some(k)) /> }.into_any()
                     }}
                 </div>
             </div>
@@ -1299,7 +1338,7 @@ mod tests {
             &c,
             &KeyMapping {
                 chord: &chord,
-                target: &target,
+                target: &MapTarget::Value(target.clone()),
                 label: "Master fader",
                 scene: None,
                 ends: (-60.0, 0.0),
@@ -1355,7 +1394,7 @@ mod tests {
             &c,
             &KeyMapping {
                 chord: &chord,
-                target: &second,
+                target: &MapTarget::Value(second.clone()),
                 label: "Mic volume",
                 scene: None,
                 ends: (-60.0, 6.0),
@@ -1387,7 +1426,7 @@ mod tests {
             &c,
             &KeyMapping {
                 chord: &chord,
-                target: &target,
+                target: &MapTarget::Value(target.clone()),
                 label: "Fader",
                 scene: None,
                 ends: (0.0, 1.0),
