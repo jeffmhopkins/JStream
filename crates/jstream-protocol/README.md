@@ -61,7 +61,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
   `send.remove`, `hotkey.set`, `hotkey.set_labels`,
-  `hotkey.clear`, `binding.set`, `binding.clear`, `binding.set_value`, `binding.clear_value`, `channel.set`, `channel.delete`, `transition.create`, `transition.update`, `transition.delete`,
+  `hotkey.clear`, `binding.set`, `binding.clear`, `binding.set_value`, `binding.clear_value`, `channel.set`, `channel.delete`, `show.set`, `show.delete`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
@@ -86,7 +86,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
-  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`,
+  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
@@ -137,6 +137,13 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch`, and
   `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
   [Controller bindings](#bindings).
+- **Shows** (`show.rs`, since 0.177,
+  [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)): `ShowInfo`, a
+  saved run order of scenes on tracks in show time: the program track's `ProgramClip`s end
+  to end, `OverlayTrack`s, `KeyframeMarker`s, `SequenceTrack`s of `ShowCue`s and
+  `AudioTrack`s, with `ShowBookmark`s, `ShowLoop`s, a `ShowEnd` and a `NextMonitor`
+  (`ShowInfo::problem`, shared by every implementation); `RunningShow` and `ShowState`,
+  what `studio.get` reports, and `ShowChange`, what `show.changed` reports.
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -283,7 +290,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `plugin.uninstalled` (0.163),
-  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
+  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, `show.changed` (with `ShowChange`, since 0.177), and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
   `KindsCause`, 0.107), `agent.approval_requested` and `agent.approval_resolved`
@@ -384,7 +391,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.176 because `profile.get`'s drawers report
+`PROTOCOL_VERSION` is 0.177 because a collection holds shows: `show.set` and
+`show.delete`, `state.get`'s `shows`, the `show.*` actions that run one, `studio.get`'s
+`show` and the `show.changed` event
+([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)); 0.176 because `profile.get`'s drawers report
 `preview_skipped`, the pictures only preview streams take that the program skipped,
 which `stats.tick`'s `render_ticks` no longer counts (#1690); 0.172 because a scene whose `reflections` is on also reflects
 what is on screen: `RenderFeatures`' `screen_space_reflections` and `screen_space_steps`
@@ -759,7 +769,7 @@ covers = ["crates/jstream-protocol/src/schema.rs", "crates/jstream-protocol/src/
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
   canvas, legacy items, one geometry item (flipped left to right), two RTMP outputs, a virtual camera, a recording output, two
-  encoder profiles, two video mixes, two hotkeys and two controller bindings, one of each rebound), the exact answer to every collection read of it (`output.list`
+  encoder profiles, two video mixes, two hotkeys and two controller bindings, one of each rebound, and a show set twice), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path, encoder profile, video mix, hotkey and binding checks, a hotkey
 binding's labels, `label.members` of a missing label, and `item.set_source` and
@@ -773,7 +783,8 @@ binding's labels, `label.members` of a missing label, and `item.set_source` and
   a disabled nested scene. The rejected batches also cover an audio filter on the
   virtual camera, a reference in a master filter's settings (refused before its
   index), the bus limit, the master bus, fader ranges, and sources with no audio (a
-  display capture, `screen`, never placed) or no fader of their own.
+  display capture, `screen`, never placed) or no fader of their own, and a show's
+  bookmarks out of order, a show cue that switches program, and deleting a show none has.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -1867,7 +1878,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   value binding (`value_bindings`, ordered by ID; omitted when there are none, so
   missing, also from a pre-0.168 server, parses as empty), every channel (`channels`,
   ordered by ID; omitted when there are none, so missing, also from a pre-0.169 server,
-  parses as empty), the
+  parses as empty), every show (`shows`, ordered by ID; omitted when there are none, so
+  missing, also from a pre-0.177 server, parses as empty), the
   master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
@@ -1925,7 +1937,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
   sets, since 0.165 the probe switch and face-size cap, and since 0.172 the screen-space
-  reflection switch and steps.
+  reflection switch and steps. Since 0.177 `show` is the running show (`RunningShow`:
+  its play head `at_ms`, its `state` `playing`, `paused` or `off_script`, the bookmark it
+  waits at and `waited_ms`, the scene that took it `off_script`, its `loop_id` and
+  `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs
+  ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)).
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
@@ -2558,6 +2574,10 @@ After `welcome`, the server pushes every event to every client.
 - `timeline.changed {timeline_id, scene_id, change, playing, position_ms, pass}` and
   `timeline.cue_fired {timeline_id, cue, pass, at_ms, error?}` (0.87) are described
   under [Timelines](#timelines). Neither is sent once a frame: a cue fires once a pass.
+- `show.changed {show_id, change, running, at_ms, bookmark_id?, loop_id?}` (0.177,
+  [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)) says the running
+  show `started`, `paused` at a bookmark, `continued`, `jumped`, `looped`, went
+  `off_script`, `ended` or `stopped`. Runtime state, so no `rev`, and never once a frame.
 - `scene.keyframe_changed {scene_id, keyframe_id?, client_id, request_id?}` (0.88) is
   described under [Keyframe tracks](#keyframe-tracks).
 - `kinds.changed {cause}` (0.107, #1328) says the kinds `kind.list` and `kind.describe`
@@ -3224,6 +3244,42 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+
+<a id="shows"></a>
+## Shows
+<!-- @section
+covers = ["crates/jstream-protocol/src/show.rs"]
+depends_on = ["docs/adr/0210-shows-a-run-order-with-bookmarks.md"]
+-->
+
+A show (since 0.177, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md))
+is a saved run order of scenes in show time, in milliseconds. `show.set` stores a whole
+`ShowInfo` (new, or in place of the one with its `show_id`) and `show.delete` removes it;
+`state.get` lists `shows`. A collection holds at most 64.
+
+- The **program track** (`program`) is scene clips end to end with no gaps: a clip stores
+  its length, and its start is the lengths before it (`ShowInfo::program_starts`). Its
+  start puts its scene on program through its `preset_id`, or the usual order when it has
+  none.
+- **Overlay tracks** (`overlays`, at most 8) hold scene clips anywhere, none overlapping on
+  one track, drawn over program for their span; **sequence tracks** (`sequences`, at most
+  8) hold `ShowCue`s, each one action a timeline's cue may run except `scene.switch`;
+  the **keyframe track** (`keyframes`) holds markers that load a keyframe of the scene on
+  program; **audio tracks** (`audio`, at most 8) hold clips that bring a source's fader
+  up to `gain_db` for their span, with fades that fit in it.
+- **Bookmarks** are in time order, no two at one time; a pausing one (the default) waits
+  for `show.continue`, or `continue_after_ms`. **Loops** are in time order, at least
+  100 ms, none overlapping another, and `leave` says how Continue leaves them. `end` is
+  `stop` (the default), `loop` or `go_to` a bookmark the show holds.
+- Every element's ID is unique within its show. What a clip names is not looked up: one
+  naming a scene, source, sequence, keyframe or preset the collection lacks is kept and
+  does nothing. `ShowInfo::problem` is the shape check every implementation shares.
+
+Running a show is studio state: the `show.*` actions (`show.play`, `show.stop`,
+`show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`,
+`show.seek`, `show.arm`), all bindable and checked by `Action::show_problem`, drive it,
+`studio.get`'s `show` reports it and `show.changed` says what it did. `show.delete` takes
+the bindings that name the show with it.
 
 <a id="media-clock"></a>
 ## Holding the media clock

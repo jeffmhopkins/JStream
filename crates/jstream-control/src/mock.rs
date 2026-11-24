@@ -1554,7 +1554,9 @@ impl State {
                     .iter()
                     .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                     .collect(),
-                value_bindings: self.collection.value_bindings.values().cloned().collect(),
+                value_bindings: Box::new(
+                    self.collection.value_bindings.values().cloned().collect(),
+                ),
                 channels: Box::new(self.collection.channels.values().cloned().collect()),
                 shows: Box::new(self.collection.shows.values().cloned().collect()),
                 transitions: Box::new(TransitionsInfo::default()),
@@ -4768,6 +4770,9 @@ mod tests {
                 Edit::VideoMixDelete {
                     mix_id: VideoMixId::new("prog"),
                 },
+                Edit::ShowDelete {
+                    show_id: jstream_protocol::ShowId::new("evening"),
+                },
             ],
             expected_rev: None,
             idempotency_key: None,
@@ -4798,7 +4803,7 @@ mod tests {
                 master: Default::default(),
                 hotkeys: vec![],
                 bindings: vec![],
-                value_bindings: vec![],
+                value_bindings: Box::default(),
                 channels: Box::default(),
                 shows: Box::default(),
                 transitions: Box::new(TransitionsInfo::default()),

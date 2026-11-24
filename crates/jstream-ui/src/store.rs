@@ -127,7 +127,7 @@ impl Collection {
                     hotkeys,
                     folders,
                     transitions: *transitions,
-                    value_bindings,
+                    value_bindings: *value_bindings,
                     channels: *channels,
                 })
             }

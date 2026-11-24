@@ -642,7 +642,8 @@ pub enum QueryResult {
         /// Every value binding (ADR-0178), ordered by ID. Omitted when there are none,
         /// and missing (from a server older than 0.168) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        value_bindings: Vec<ValueBinding>,
+        // Boxed, as `channels` is, to keep a call's result small.
+        value_bindings: Box<Vec<ValueBinding>>,
         /// Every channel (ADR-0183), ordered by ID. Omitted when there are none, and
         /// missing (from a server older than 0.169) parses as empty.
         // Boxed, as `master` is, to keep a call's result small.

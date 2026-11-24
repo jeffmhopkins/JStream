@@ -286,6 +286,19 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("channel.switch", Class(L)),
     ("channel.nudge", Class(L)),
     ("source.restart", Class(L)),
+    // A show switches program and runs cues, as a timeline does (ADR-0210), so writing
+    // or running one is "never" until a PR decides which class may.
+    ("show.set", N),
+    ("show.delete", N),
+    ("show.play", N),
+    ("show.stop", N),
+    ("show.continue", N),
+    ("show.back", N),
+    ("show.skip", N),
+    ("show.go_to", N),
+    ("show.go_to_number", N),
+    ("show.seek", N),
+    ("show.arm", N),
     // Holding the media clock stops every animation for every client (ADR-0172); a
     // plugin never does.
     ("clock.hold", N),

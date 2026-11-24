@@ -3549,7 +3549,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             hotkeys: hotkey_bindings(),
             bindings: controller_bindings(),
-            value_bindings: value_bindings(),
+            value_bindings: Box::new(value_bindings()),
             channels: Box::new(channels()),
             shows: Box::new(vec![show()]),
         },
