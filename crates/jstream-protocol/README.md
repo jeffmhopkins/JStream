@@ -89,11 +89,11 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`, and since 0.179
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`, and since 0.177
   `source.mute` and `bus.mute` with `MuteTo` in `audio.rs`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104), `Action::on_release` (what a held key or note runs
-  when let go, 0.179, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)),
+  when let go, 0.177, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)),
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
   and say what state it sets ([Timelines](#timelines)); `Batch`, whose
@@ -130,7 +130,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   `Trigger`, a MIDI note, control change or program change, on one channel or any, from
   one input or any (`Trigger::problem`, shared by every implementation), and `Binding`,
   a trigger and its action as reads report it; since 0.168 a `ValueBinding`, a control
-  or live-data field driving a `ValueTarget` (ADR-0178; since 0.179 also a switch: a
+  or live-data field driving a `ValueTarget` (ADR-0178; since 0.177 also a switch: a
   source's or bus's mute or a placement's visibility, ADR-0207), and `MidiControlInfo`, an
   input's latest control change. See [Controller bindings](#bindings).
 - **Channels** (`channel.rs`, since 0.169,
@@ -138,7 +138,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   value 0 to 1 that up to `MAX_CHANNEL_INPUTS` (8) `midi`, `data` or `channel` inputs
   drive, combined by `ChannelCombine`, averaged, faded, curved and switched on or off
   (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch` (with
-  `hold_on` and `hold_off` since 0.179, ADR-0207), and
+  `hold_on` and `hold_off` since 0.177, ADR-0207), and
   `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
   [Controller bindings](#bindings).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
@@ -158,7 +158,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   bus's monitor, with its shared check (`BusMonitor::problem`, 0.42); the fader range and
   its shared check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
-  a `meters.tick` carries; and `MuteTo` (0.179,
+  a `meters.tick` carries; and `MuteTo` (0.177,
   [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), what `source.mute`
   and `bus.mute` do, with `MuteTo::muted` and `MuteTo::released`.
 - **Organisation** (`organise.rs`,
@@ -390,7 +390,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.179 because a source's or bus's mute can be set by an action,
+`PROTOCOL_VERSION` is 0.177 because a source's or bus's mute can be set by an action,
 `source.mute` and `bus.mute`, whose `to` (`MuteTo`) mutes, unmutes, toggles, or holds it
 for push to talk or push to mute; `channel.switch` gains `hold_on` and `hold_off`; a key
 or note bound to one of those runs `Action::on_release` when it is let go; and a value
@@ -1055,7 +1055,7 @@ the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
-**Mute actions** (0.179, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)):
+**Mute actions** (0.177, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)):
 `source.mute { source_id, to }` and `bus.mute { bus_id, to }` set a mute as
 `source.set_audio` and `bus.set_fader` do, as actions a key or a MIDI trigger can run.
 `to` (`MuteTo`) is `muted`, `unmuted`, `toggle`, `push_to_talk` or `push_to_mute`; the
@@ -1535,7 +1535,7 @@ decision 1): a `Trigger` bound to an `Action`. A key chord stays a hotkey, so
 `state.get`'s `hotkeys` lists chords only, as a client that registers them with the OS
 expects; every other trigger is a binding, in `bindings`. Where a client listens for a
 chord and sends its action, a controller's messages come from an input the engine reads,
-so the engine runs the action itself. Since 0.179 it does
+so the engine runs the action itself. Since 0.177 it does
 ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md) decision 4): about 30
 times a second (60 while a value moves) it reads what each MIDI and JTunnel input sent since its last look, in
 the order sent, so a press and a release between two looks both run; nothing sent before
@@ -1552,7 +1552,7 @@ once the person turns on its "Use this sender's MIDI", off by default
   the same exactly when they are equal, so channel 1 and any channel are two bindings,
   and a message matching both fires both. Anything else is `invalid_argument` on
   `trigger.<field>`, with `Trigger::problem`'s reason.
-- **Releases** (0.179): a note's note-off (or note-on at velocity 0), and a control
+- **Releases** (0.177): a note's note-off (or note-on at velocity 0), and a control
   change falling back from 64 or above to 63 or below, run the bound action's
   `Action::on_release`, if it has one: `source.mute` and `bus.mute` with `push_to_talk`
   or `push_to_mute`, and `channel.switch` with `hold_on` or `hold_off`. A program change
@@ -1581,7 +1581,7 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
   modifier's own check refuses, as `binding.<field>`.
 - **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
   `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
-  {source_id}`, `bus_gain {bus_id}` and `send_gain {source_id, bus_id}`, and since 0.179
+  {source_id}`, `bus_gain {bus_id}` and `send_gain {source_id, bus_id}`, and since 0.177
   three switches, on at one half or more: `source_mute {source_id}`, `bus_mute {bus_id}`
   and `item_visible {item_id, scene_id?}` (which cuts, with no appear or disappear
   effect).
@@ -3052,9 +3052,9 @@ after 1.0:
   break counts as a minor bump, are part of open question 8. 0.99 adds the `Easing` and
   `ItemEasing` values `ease_in`, `hold` and `cubic_bezier` (ADR-0129) on the same
   terms: a client older than 0.99 can't parse `state.get` or an item listing once a
-  preset, an item or a keyframe's timing uses one. 0.179 adds the `ValueTarget` types
+  preset, an item or a keyframe's timing uses one. 0.177 adds the `ValueTarget` types
   `source_mute`, `bus_mute` and `item_visible` (ADR-0207) on the same terms: a client
-  older than 0.179 can't parse `state.get` once a value binding drives one. Its
+  older than 0.177 can't parse `state.get` once a value binding drives one. Its
   `MuteTo` values and `ChannelSwitch`'s `hold_on` and `hold_off` travel only inside
   actions, which hotkeys, bindings and cues hold as plain JSON, so they break no older
   client's reads.

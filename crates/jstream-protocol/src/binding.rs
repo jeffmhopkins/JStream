@@ -215,7 +215,7 @@ pub const MAX_VALUE_BINDINGS: usize = 256;
 
 /// The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in
 /// the collection that isn't an item's or a camera's, which their own motion modifiers
-/// drive, or since 0.179 a switch: a mute, or whether a placement shows its item
+/// drive, or since 0.177 a switch: a mute, or whether a placement shows its item
 /// (ADR-0207). Serialized with an internal `type` tag.
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
@@ -260,19 +260,19 @@ pub enum ValueTarget {
         bus_id: BusId,
     },
     /// An audio source's mute, a switch: muted at one half or more (ADR-0207, since
-    /// 0.179). A `scene` source has none.
+    /// 0.177). A `scene` source has none.
     SourceMute {
         /// The source.
         source_id: SourceId,
     },
     /// A bus's mute, the master's included, a switch: muted at one half or more
-    /// (ADR-0207, since 0.179).
+    /// (ADR-0207, since 0.177).
     BusMute {
         /// The bus.
         bus_id: BusId,
     },
     /// Whether a placement shows its item, a switch: shown at one half or more
-    /// (ADR-0207, since 0.179), as `item.set_visible` would set it, so it cuts, with no
+    /// (ADR-0207, since 0.177), as `item.set_visible` would set it, so it cuts, with no
     /// appear or disappear effect.
     ItemVisible {
         /// The item.

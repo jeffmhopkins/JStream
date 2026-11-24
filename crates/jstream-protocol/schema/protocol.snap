@@ -683,7 +683,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Mutes or unmutes a source's audio (ADR-0207, since 0.179), as `source.set_audio`'s\n`muted` would: `to` says how, and [`MuteTo`] says what a held key or note does\nwith `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:\n`rev` moves on by one, `state.changed` follows and the collection saves it, but it\nis an action, so it is never a step of the sender's undo history, and another\nclient's undo that would overwrite it fails with `undo_conflict`. Setting the mute\nit already has succeeds and changes nothing. The mixer ramps the change over one\nblock, so it never clicks, and nothing is reopened. Fails with `not_found` for a\nsource not in the collection, and `invalid_argument` on `source_id` for one\nwithout audio or a `scene` source, which has no mute of its own. An action takes\nno `expected_rev` or idempotency key, so a caller that may retry sends `muted` or\n`unmuted`, not `toggle`.",
+          "description": "Mutes or unmutes a source's audio (ADR-0207, since 0.177), as `source.set_audio`'s\n`muted` would: `to` says how, and [`MuteTo`] says what a held key or note does\nwith `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:\n`rev` moves on by one, `state.changed` follows and the collection saves it, but it\nis an action, so it is never a step of the sender's undo history, and another\nclient's undo that would overwrite it fails with `undo_conflict`. Setting the mute\nit already has succeeds and changes nothing. The mixer ramps the change over one\nblock, so it never clicks, and nothing is reopened. Fails with `not_found` for a\nsource not in the collection, and `invalid_argument` on `source_id` for one\nwithout audio or a `scene` source, which has no mute of its own. An action takes\nno `expected_rev` or idempotency key, so a caller that may retry sends `muted` or\n`unmuted`, not `toggle`.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -706,7 +706,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Mutes or unmutes a bus, the master included (ADR-0207, since 0.179), as\n`bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with\n`not_found` for a bus not in the collection.",
+          "description": "Mutes or unmutes a bus, the master included (ADR-0207, since 0.177), as\n`bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with\n`not_found` for a bus not in the collection.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -3966,12 +3966,12 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "hold_on",
-          "description": "Switches it on while a key or note is held, and off on release (ADR-0207, since\n0.179; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with\nnothing held, it switches it on.",
+          "description": "Switches it on while a key or note is held, and off on release (ADR-0207, since\n0.177; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with\nnothing held, it switches it on.",
           "type": "string"
         },
         {
           "const": "hold_off",
-          "description": "Switches it off while a key or note is held, and on on release (ADR-0207, since\n0.179). Sent as a call, it switches it off.",
+          "description": "Switches it off while a key or note is held, and on on release (ADR-0207, since\n0.177). Sent as a call, it switches it off.",
           "type": "string"
         }
       ]
@@ -11223,7 +11223,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "MuteTo": {
-      "description": "What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.179). Serialized as\na snake_case string.\n\n`push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the\naction, and releasing it runs [`MuteTo::released`]'s\n([`Action::on_release`](crate::Action::on_release)). Sent as a call, with nothing\nheld, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.",
+      "description": "What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.177). Serialized as\na snake_case string.\n\n`push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the\naction, and releasing it runs [`MuteTo::released`]'s\n([`Action::on_release`](crate::Action::on_release)). Sent as a call, with nothing\nheld, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.",
       "oneOf": [
         {
           "const": "muted",
@@ -18225,7 +18225,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "ValueTarget": {
-      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive, or since 0.179 a switch: a mute, or whether a placement shows its item\n(ADR-0207). Serialized with an internal `type` tag.",
+      "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive, or since 0.177 a switch: a mute, or whether a placement shows its item\n(ADR-0207). Serialized with an internal `type` tag.",
       "oneOf": [
         {
           "description": "A `live` number or `bool` setting of a source, which every place that draws it\nshows.",
@@ -18338,7 +18338,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "An audio source's mute, a switch: muted at one half or more (ADR-0207, since\n0.179). A `scene` source has none.",
+          "description": "An audio source's mute, a switch: muted at one half or more (ADR-0207, since\n0.177). A `scene` source has none.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -18356,7 +18356,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A bus's mute, the master's included, a switch: muted at one half or more\n(ADR-0207, since 0.179).",
+          "description": "A bus's mute, the master's included, a switch: muted at one half or more\n(ADR-0207, since 0.177).",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -18374,7 +18374,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Whether a placement shows its item, a switch: shown at one half or more\n(ADR-0207, since 0.179), as `item.set_visible` would set it, so it cuts, with no\nappear or disappear effect.",
+          "description": "Whether a placement shows its item, a switch: shown at one half or more\n(ADR-0207, since 0.177), as `item.set_visible` would set it, so it cuts, with no\nappear or disappear effect.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -19157,5 +19157,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.179"
+  "title": "JStream protocol 0.177"
 }

@@ -3,7 +3,7 @@
 //! ([`ValueRange`]), and the setter edit that gives it a value ([`value_edit`]).
 //!
 //! A value binding names a source setting, a filter setting on any chain, a fader, a
-//! send, or since 0.179 a switch: a source's or bus's mute, or whether a placement shows
+//! send, or since 0.177 a switch: a source's or bus's mute, or whether a placement shows
 //! its item (ADR-0207), which take a `bool`. `binding.set_value` checks the target exists and takes a number: a setting its
 //! kind marks `live` of type `int`, `float` or `bool`, an audio source's fader (not a
 //! `scene` source's), a bus's, or a send that exists. Unlike an action binding, a value

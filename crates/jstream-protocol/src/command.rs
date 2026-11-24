@@ -1844,7 +1844,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
-    /// Mutes or unmutes a source's audio (ADR-0207, since 0.179), as `source.set_audio`'s
+    /// Mutes or unmutes a source's audio (ADR-0207, since 0.177), as `source.set_audio`'s
     /// `muted` would: `to` says how, and [`MuteTo`] says what a held key or note does
     /// with `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:
     /// `rev` moves on by one, `state.changed` follows and the collection saves it, but it
@@ -1863,7 +1863,7 @@ pub enum Action {
         /// What to do to its mute.
         to: crate::MuteTo,
     },
-    /// Mutes or unmutes a bus, the master included (ADR-0207, since 0.179), as
+    /// Mutes or unmutes a bus, the master included (ADR-0207, since 0.177), as
     /// `bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with
     /// `not_found` for a bus not in the collection.
     #[serde(rename = "bus.mute")]
@@ -2957,7 +2957,7 @@ impl Action {
         }
     }
 
-    /// What a held key or note runs when it is released (ADR-0207, since 0.179), or
+    /// What a held key or note runs when it is released (ADR-0207, since 0.177), or
     /// `None` for an action that does nothing on release, which is every action but
     /// these: `source.mute` and `bus.mute` with `push_to_talk` mute again and with
     /// `push_to_mute` unmute again, and `channel.switch` with `hold_on` switches off and with
