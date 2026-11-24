@@ -325,6 +325,21 @@ a.menuitem:focus-visible { outline: none; }
   overflow: auto;
 }
 .studio-controls button.take { width: 100%; padding: 10px 8px; font-weight: 600; }
+/* A portrait canvas stacks the two-up (workspace.rs `stacks`): preview over the controls,
+   laid out as one wrapping row, over program, so each picture gets the stage's width. */
+.stage-row.two-up.stacked { flex-direction: column; }
+.stage-row.two-up.stacked .studio-controls {
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.stage-row.two-up.stacked .studio-controls button.take { width: auto; min-width: 110px; }
+.stage-row.two-up.stacked .studio-controls .studio-field { min-width: 180px; }
 .studio-controls .studio-field { display: grid; gap: 4px; }
 .studio-controls .slot-name { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
 .studio-controls select {
