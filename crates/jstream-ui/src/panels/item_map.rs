@@ -297,19 +297,12 @@ impl ItemMapper {
     }
 }
 
-/// The window's inner size, in CSS pixels.
+/// The window's inner size in the page's CSS pixels, at its UI scale.
 fn window_size() -> (f64, f64) {
-    let n = |v: Result<leptos::wasm_bindgen::JsValue, leptos::wasm_bindgen::JsValue>| {
-        v.ok().and_then(|v| v.as_f64())
-    };
-    web_sys::window()
-        .map(|w| {
-            (
-                n(w.inner_width()).unwrap_or(1600.0),
-                n(w.inner_height()).unwrap_or(1000.0),
-            )
-        })
-        .unwrap_or((1600.0, 1000.0))
+    match crate::ui_scale::window_size() {
+        (0.0, _) | (_, 0.0) => (1600.0, 1000.0),
+        size => size,
+    }
 }
 
 #[cfg(test)]

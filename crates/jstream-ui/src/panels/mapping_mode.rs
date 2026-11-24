@@ -312,7 +312,7 @@ pub fn MappingBar() -> impl IntoView {
             e.stop_propagation();
             // The drag keeps the pointer, so its release is heard outside the window.
             _ = pressed.set_pointer_capture(e.pointer_id());
-            last.set_value(Some((f64::from(e.client_y()), 0.0)));
+            last.set_value(Some((crate::ui_scale::pointer(&e).1, 0.0)));
             mode.drag.set(Some(Drag {
                 setting,
                 amount: 0.0,
@@ -328,7 +328,8 @@ pub fn MappingBar() -> impl IntoView {
                 finish(gone);
                 return;
             }
-            let now = f64::from(e.client_y());
+            // In the page's CSS pixels, so a drag goes as far at every UI scale.
+            let now = crate::ui_scale::pointer(&e).1;
             let dy = now - y;
             last.set_value(Some((now, gone + dy.abs())));
             mode.drag.update(|d| {

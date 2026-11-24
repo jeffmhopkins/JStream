@@ -362,11 +362,9 @@ pub fn row_context(at: ControlMenuAt, event: &leptos::ev::MouseEvent) -> bool {
         return false;
     };
     event.prevent_default();
-    at.0.set(Some((
-        id,
-        f64::from(event.client_x()),
-        f64::from(event.client_y()),
-    )));
+    // In the page's CSS pixels, where the menu is placed, at any UI scale.
+    let (x, y) = crate::ui_scale::pointer(event);
+    at.0.set(Some((id, x, y)));
     true
 }
 

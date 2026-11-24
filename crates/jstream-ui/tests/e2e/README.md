@@ -521,7 +521,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
   fader's number or anywhere on its row opening its menu, Map control… opening the dialog, a Mod picked there
   changing nothing until Use, which is one edit and names the Mod on the control button;
-  Cancel changing nothing; the menu's Learn taking the one MIDI control that moves
+  Cancel changing nothing; at a UI scale of 150% the row's menu opening at the pointer;
+  the menu's Learn taking the one MIDI control that moves
   after it opened, as one edit; and mapping mode from the dialog's "Map by dragging":
   the bar naming the armed Mod, a click on a setting mapping nothing, a 20 px drag up
   showing "+10 %" and sending one edit when let go, a second drag moving the far end

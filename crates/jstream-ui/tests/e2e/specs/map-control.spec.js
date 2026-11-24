@@ -53,6 +53,23 @@ test('a right-click on a setting maps it to a Mod from the Map control dialog', 
   await expect(button).toContainText('Mod 20');
 });
 
+test('at a UI scale of 150% a setting\'s right-click menu opens at the pointer', async ({ page, daemon }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await connect(page, daemon);
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('Control+Equal');
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('1.5');
+  const { x, y } = await fader(page);
+  await page.mouse.click(x, y, { button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Control' });
+  await expect(menu).toBeVisible();
+  // 12 px under the pointer, or 330 px above it when it wouldn't fit below, in the
+  // page's own pixels: 18 and 495 on the screen.
+  const placed = await menu.boundingBox();
+  const off = Math.min(Math.abs(placed.y - (y + 18)), Math.abs(placed.y - (y - 495)));
+  expect(off).toBeLessThan(3);
+  expect(placed.y).toBeGreaterThanOrEqual(0);
+});
+
 test('Cancel in the Map control dialog changes nothing', async ({ page, daemon }) => {
   const live = await liveSources(page);
   live({ senders: { Bitwig: { params: mods() } } });
