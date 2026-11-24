@@ -3,12 +3,13 @@
 //!
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
 //! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, network,
-//! networkOpen, browse, allowNetwork, jtunnel, setJtunnel, ptz, setPtz, ptzCameras,
+//! networkOpen, announce, browse, allowNetwork, setAnnounce, jtunnel, setJtunnel, ptz, setPtz, ptzCameras,
 //! setPtzCameras, saveScreenshot, openSaved, showSaved, setZoom }`: its in-process engine's WebSocket URL and control token,
 //! whether its virtual camera can be used, the default project's folder `collection`
 //! asset paths are relative to, whether "Allow devices on my network" was on at start and its listener
 //! opened, `browse`, which
-//! opens a native file dialog, and `allowNetwork`, which saves that setting; `jtunnel` and
+//! opens a native file dialog, and `allowNetwork`, which saves that setting; `announce`
+//! and `setAnnounce` are "Let devices find JStream on my network" (ADR-0233); `jtunnel` and
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
 //! `setJtunnel` and `setPtz` save them; `ptzCameras` is the machine's PTZ camera list
 //! (ADR-0209 decision 1), which `setPtzCameras` saves and the app applies at once.
@@ -154,6 +155,18 @@ pub fn desktop_network() -> Option<bool> {
         .ok()
         .filter(JsValue::is_function)?;
     Reflect::get(&global, &JsValue::from_str("network"))
+        .ok()?
+        .as_bool()
+}
+
+/// The desktop app's "Let devices find JStream on my network" setting as it was when
+/// the app started (ADR-0233), if the page runs in an app that has it.
+pub fn desktop_announce() -> Option<bool> {
+    let global = global()?;
+    Reflect::get(&global, &JsValue::from_str("setAnnounce"))
+        .ok()
+        .filter(JsValue::is_function)?;
+    Reflect::get(&global, &JsValue::from_str("announce"))
         .ok()?
         .as_bool()
 }
@@ -545,12 +558,26 @@ pub async fn set_ptz_cameras(setting: &PtzCameraSetting) -> Option<String> {
     }
 }
 
+/// Asks the desktop app to save "Let devices find JStream on my network" (ADR-0233),
+/// which applies when it next starts. Resolves to whether it was saved.
+pub async fn set_announce(announce: bool) -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        switch_js("setAnnounce", announce).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = announce;
+        false
+    }
+}
+
 /// Asks the desktop app to save "Allow devices on my network", which applies when it
 /// next starts. Resolves to whether it was saved.
 pub async fn allow_network(allow: bool) -> bool {
     #[cfg(target_arch = "wasm32")]
     {
-        allow_network_js(allow).await
+        switch_js("allowNetwork", allow).await
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -559,23 +586,24 @@ pub async fn allow_network(allow: bool) -> bool {
     }
 }
 
-/// Calls `allowNetwork` on the desktop global and awaits its promise.
+/// Calls the desktop global's `name` (`allowNetwork` or `setAnnounce`) with `on` and
+/// awaits its promise.
 #[cfg(target_arch = "wasm32")]
-async fn allow_network_js(allow: bool) -> bool {
+async fn switch_js(name: &str, on: bool) -> bool {
     use leptos::wasm_bindgen::JsCast;
     use leptos::web_sys::js_sys::{Function, Promise};
 
     let Some(global) = global() else {
         return false;
     };
-    let Some(function) = Reflect::get(&global, &JsValue::from_str("allowNetwork"))
+    let Some(function) = Reflect::get(&global, &JsValue::from_str(name))
         .ok()
         .and_then(|value| value.dyn_into::<Function>().ok())
     else {
         return false;
     };
     let Some(promise) = function
-        .call1(&global, &JsValue::from_bool(allow))
+        .call1(&global, &JsValue::from_bool(on))
         .ok()
         .and_then(|value| value.dyn_into::<Promise>().ok())
     else {

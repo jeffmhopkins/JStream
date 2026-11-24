@@ -104,6 +104,7 @@ fn start_network(configure: impl FnOnce(&mut ServerConfig)) -> (Harness, Arc<Ide
     let network = NetworkConfig {
         bind: SocketAddr::from(([127, 0, 0, 1], 0)),
         identity: Arc::clone(&identity),
+        announce: false,
     };
     let harness = start_with(&MockEngine::new(), move |config| {
         config.network = Some(network);

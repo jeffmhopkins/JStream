@@ -31,9 +31,10 @@ fn main() {
         all(target_os = "linux", feature = "webkitgtk")
     ))]
     {
-        // Declares `pick_path`, `set_network`, `set_jtunnel`, `set_ptz_controllers`,
-        // `set_ptz_cameras` and the screenshot and zoom commands so tauri-build writes
-        // `allow-pick-path`, `allow-set-network`, `allow-set-jtunnel`,
+        // Declares `pick_path`, `set_network`, `set_network_announce`, `set_jtunnel`,
+        // `set_ptz_controllers`, `set_ptz_cameras` and the screenshot and zoom commands so
+        // tauri-build writes `allow-pick-path`, `allow-set-network`,
+        // `allow-set-network-announce`, `allow-set-jtunnel`,
         // `allow-set-ptz-controllers`, `allow-set-ptz-cameras`, `allow-save-screenshot`,
         // `allow-open-saved`, `allow-show-saved` and `allow-set-zoom` (the `browse`,
         // `network`, `jtunnel`, `ptz`, `screenshots` and `zoom` capabilities grant those
@@ -43,6 +44,7 @@ fn main() {
             tauri_build::AppManifest::new().commands(&[
                 "pick_path",
                 "set_network",
+                "set_network_announce",
                 "set_jtunnel",
                 "set_ptz_controllers",
                 "set_ptz_cameras",

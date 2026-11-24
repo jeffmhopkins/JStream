@@ -2,7 +2,7 @@
 //! engine's URL and control token, and what the app knows about its virtual camera.
 //!
 //! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
-//! network, networkOpen, wheelFocusOnly, browse, allowNetwork, jtunnel, setJtunnel, ptz,
+//! network, networkOpen, announce, wheelFocusOnly, browse, allowNetwork, setAnnounce, jtunnel, setJtunnel, ptz,
 //! setPtz, ptzCameras, setPtzCameras, saveScreenshot, openSaved, showSaved, setZoom }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
 //! so no other page ever sees the token. `collection` is the default project's folder
@@ -15,6 +15,8 @@
 //! `networkOpen` whether the network listener then opened, and `allowNetwork(allow)`
 //! asks the `set_network` command to save it (`network.rs`), resolving to whether it was
 //! saved (false when the command fails too); it applies at the next start.
+//! `announce` and `setAnnounce(on)` are "Let devices find JStream on my network" the
+//! same way, through the `set_network_announce` command (ADR-0233).
 //! `jtunnel` is "Receive from JTunnel senders" as the app read it at start (`{on,
 //! accepted: [{name, address, state}], live}`, `jtunnel.rs`), and `setJtunnel(setting)` asks the
 //! `set_jtunnel` command to save one, resolving to `null` when it was saved or the
@@ -121,6 +123,8 @@ pub struct Page<'a> {
     pub network: bool,
     /// Whether the network listener opened.
     pub network_open: bool,
+    /// The "Let devices find JStream on my network" setting (ADR-0233).
+    pub announce: bool,
     /// Whether wheel chords are heard only while JStream has the focus, because the app
     /// lacks a permission the OS asks for (macOS's Accessibility), as of the start.
     pub wheel_focus_only: bool,
@@ -144,6 +148,7 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
         collection,
         network,
         network_open,
+        announce,
         wheel_focus_only,
         jtunnel,
         ptz,
@@ -157,7 +162,7 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
         "if (window.location.origin === {origin}) {{\
          Object.defineProperty(window, {global}, {{\
          value: Object.freeze({{ url: {url}, token: {token}, vcam: {vcam}, collection: {collection},\
-         network: {network}, networkOpen: {network_open}, wheelFocusOnly: {wheel_focus_only},\
+         network: {network}, networkOpen: {network_open}, announce: {announce}, wheelFocusOnly: {wheel_focus_only},\
          browse: function (request) {{\
          var internals = window.__TAURI_INTERNALS__;\
          if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(null);\
@@ -167,6 +172,12 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
          var internals = window.__TAURI_INTERNALS__;\
          if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(false);\
          return internals.invoke(\"set_network\", {{ allow: allow === true }})\
+         .then(function (saved) {{ return saved === true; }}, function () {{ return false; }});\
+         }},\
+         setAnnounce: function (on) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(false);\
+         return internals.invoke(\"set_network_announce\", {{ announce: on === true }})\
          .then(function (saved) {{ return saved === true; }}, function () {{ return false; }});\
          }},\
          jtunnel: Object.freeze(JSON.parse({jtunnel})),\
@@ -225,6 +236,7 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
         collection = js_string(collection),
         network = if network { "true" } else { "false" },
         network_open = if network_open { "true" } else { "false" },
+        announce = if announce { "true" } else { "false" },
         wheel_focus_only = if wheel_focus_only { "true" } else { "false" },
         jtunnel = js_string(&jtunnel),
         ptz = js_string(&ptz),
@@ -321,6 +333,7 @@ mod tests {
                 collection: r"C:\Users\me\AppData\Roaming\JStream",
                 network: true,
                 network_open: false,
+                announce: true,
                 wheel_focus_only: true,
                 jtunnel: &crate::jtunnel::Setting {
                     on: true,
@@ -360,7 +373,12 @@ mod tests {
         assert!(script.contains("vcam: \"registered\""));
         assert!(script.contains(r#"collection: "C:\\Users\\me\\AppData\\Roaming\\JStream""#));
         assert!(script.contains("invoke(\"pick_path\", request)"));
-        assert!(script.contains("network: true, networkOpen: false, wheelFocusOnly: true,"));
+        assert!(
+            script.contains(
+                "network: true, networkOpen: false, announce: true, wheelFocusOnly: true,"
+            )
+        );
+        assert!(script.contains("invoke(\"set_network_announce\", { announce: on === true })"));
         assert!(script.contains("invoke(\"set_network\", { allow: allow === true })"));
         assert!(
             script.contains("function () { return false; }"),

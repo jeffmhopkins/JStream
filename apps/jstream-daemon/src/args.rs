@@ -70,6 +70,10 @@ Options:
                        changed. Every paired device has to check the new
                        fingerprint, and a native client that pinned the old
                        one has to pair again
+  --lan-quiet          with --lan: don't announce the network listener on
+                       mDNS (ADR-0233). By default it is announced as
+                       _jstream._tcp.local, so a device finds it without its
+                       address; pairing still needs the code and fingerprint
   --jtunnel-accept <name@address:port>
                        receive from this JTunnel sender (ADR-0123): a DAW
                        plugin's tunnel name and the LAN address and port it
@@ -173,6 +177,8 @@ pub struct Lan {
     pub bind: Option<IpAddr>,
     /// `--lan-renew`: make a new key and certificate first.
     pub renew: bool,
+    /// Announce the listener on mDNS (ADR-0233); `--lan-quiet` turns it off.
+    pub announce: bool,
 }
 
 /// A parsed command line.
@@ -198,6 +204,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut lan_port = None;
     let mut lan_bind = None;
     let mut lan_renew = false;
+    let mut lan_quiet = false;
     let mut register_vcam = false;
     let mut unregister_vcam = false;
     let mut jtunnel_no_state: Vec<String> = Vec::new();
@@ -227,6 +234,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             }
             "--lan" => lan = true,
             "--lan-renew" => lan_renew = true,
+            "--lan-quiet" => lan_quiet = true,
             "--lan-port" => {
                 let text = value()?;
                 let parsed = text
@@ -395,9 +403,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             port: lan_port.unwrap_or(LAN_PORT),
             bind: lan_bind,
             renew: lan_renew,
+            announce: !lan_quiet,
         });
-    } else if lan_port.is_some() || lan_bind.is_some() || lan_renew {
-        return Err("`--lan-port`, `--lan-bind` and `--lan-renew` need `--lan`".to_owned());
+    } else if lan_port.is_some() || lan_bind.is_some() || lan_renew || lan_quiet {
+        return Err(
+            "`--lan-port`, `--lan-bind`, `--lan-renew` and `--lan-quiet` need `--lan`".to_owned(),
+        );
     }
     jstream_core::PtzControllerSetup::new(
         options.ptz_controllers.clone(),
@@ -494,20 +505,22 @@ mod tests {
             Some(Lan {
                 port: LAN_PORT,
                 bind: None,
-                renew: false
+                renew: false,
+                announce: true
             })
         );
         assert_eq!(
-            serve("--lan-port 5000 --lan --lan-bind 192.168.1.20 --lan-renew").lan,
+            serve("--lan-port 5000 --lan --lan-bind 192.168.1.20 --lan-renew --lan-quiet").lan,
             Some(Lan {
                 port: 5000,
                 bind: Some([192, 168, 1, 20].into()),
-                renew: true
+                renew: true,
+                announce: false
             })
         );
         assert_eq!(
             error("--lan-port 5000"),
-            "`--lan-port`, `--lan-bind` and `--lan-renew` need `--lan`"
+            "`--lan-port`, `--lan-bind`, `--lan-renew` and `--lan-quiet` need `--lan`"
         );
         assert_eq!(
             error("--lan --lan-port 0"),

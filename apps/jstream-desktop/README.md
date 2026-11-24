@@ -41,7 +41,9 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
 - **Network access** (`network.rs`): "Allow devices on my network"
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), the setting in the
   data folder's `network.json`, the network listener's configuration, and `set_network`,
-  the command that saves it.
+  the command that saves it; and "Let devices find JStream on my network"
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)) in the same
+  file, saved by `set_network_announce`.
 - **JTunnel** (`jtunnel.rs`): "Receive from JTunnel senders"
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
   its accepted senders and the one live sender in the data folder's `jtunnel.json`,
@@ -69,6 +71,7 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   the virtual camera's status, the default project's folder (so a picked file under it
   can be stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
+  "Let devices find JStream on my network" with `setAnnounce`, which saves it,
   the JTunnel setting as it was at start with `setJtunnel`, which saves it, the PTZ
   controller setting with `setPtz`, the PTZ camera list with `setPtzCameras`,
   `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands,
@@ -106,7 +109,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   script's escaping, the command line, the virtual camera's status values, the
   capped log file (user-only, checked on Unix), the update check's request and the
   replies it gives a releases list, a rate limit and a malformed message, the network
-  setting (off until saved on, user-only, off when malformed), the JTunnel setting (off
+  setting (off until saved on, user-only, off when malformed; announcing on until saved
+  off, each switch keeping the other), the JTunnel setting (off
   until turned on, user-only, a refused sender never saved, off when malformed, a
   sender's MIDI running no bindings until its `midi` is on), the network listener and
   pairing it turns on, the UI folder inside a macOS app, the control token registered
@@ -291,7 +295,9 @@ folder, and its log `logs\cef.log`.
   until turned on) saves `network.json` in the data folder; it applies at the next
   start. On, the app also listens on every interface on port 4456 (the daemon's
   `--lan` port), TLS only, admitting paired devices only
-  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), and pairs devices:
+  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), announces itself on
+  mDNS unless "Let devices find JStream on my network", just under it, is off
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)), and pairs devices:
   Settings › Devices then opens a pairing code and shows the addresses to open and the
   certificate's fingerprint to compare. The certificate (`token.tls`, made the
   first time) and the paired devices (`token.devices`) are kept beside the `token` file, the daemon's
@@ -434,8 +440,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   nothing else. It is not a UI setting (`ui_settings.set`), because any engine client
   (an agent with `--mcp`, a paired device) can write those, and widening who can reach the
   engine is the person's choice. It is read once at start, so a change applies at the
-  next start. On, `Host::start` gets a `Network`: `ServerConfig::network` on
-  `0.0.0.0:4456` with the certificate from `jstream_server::identity` (made the first
+  next start. `{"announce": false}` in the same file turns off announcing the listener
+  on mDNS ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)):
+  on unless that, saved the same way by `setAnnounce` and the command
+  `set_network_announce`, which the same capability grants. Each save keeps the other
+  key. On, `Host::start` gets a `Network`: `ServerConfig::network` on
+  `0.0.0.0:4456`, announced unless turned off, with the certificate from `jstream_server::identity` (made the first
   time, kept when its names are out of date, with a warning in the log, never renewed
   silently), `device_file` beside the token file, and pairing on, so the loopback
   listener (which the window uses) opens codes and `pairing.start` names the network
@@ -575,13 +585,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (not Windows: on Linux the camera finds its device only when it starts). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the default
   project's folder (ADR-0163), `network`, whether "Allow devices on my network" was on at start,
-  `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel
+  `networkOpen`, whether its listener then opened, `announce`, whether "Let devices find
+  JStream on my network" was on, `wheelFocusOnly`, whether wheel
   chords were heard only while the window had the focus (macOS without Accessibility,
   Wayland, or no listener that hears the wheel),
   and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
-  saved, false when the command fails too (see *Network access*). `jtunnel` is the
+  saved, false when the command fails too (see *Network access*), and
+  `setAnnounce(on)` does the same through `set_network_announce`. `jtunnel` is the
   JTunnel setting as the app read it at start, and `setJtunnel(setting)` calls
   `set_jtunnel` and resolves to null when it was saved, or why not (see *JTunnel*).
   `saveScreenshot(png, name)` sends the PNG's bytes as the raw body of
@@ -644,7 +656,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   backslash, quote, space or percent escape can reach its command line. Every
   other new window is refused, and a
   projector can open none. The page gets the Tauri commands `pick_path` (`pick.rs`),
-  `set_network` (`network.rs`), `set_jtunnel`, `set_ptz_controllers`, `set_ptz_cameras`,
+  `set_network` and `set_network_announce` (`network.rs`), `set_jtunnel`, `set_ptz_controllers`, `set_ptz_cameras`,
   `save_screenshot`, `open_saved` and `show_saved` (`screenshots.rs`), and `set_zoom`
   (`zoom.rs`), and no other.
   `build.rs` declares them to `tauri-build`, which writes an `allow-` permission for

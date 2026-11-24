@@ -235,7 +235,8 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 
 /// Runs the app until its window closes: `ui` serves the pages, `script` (if the
 /// engine started) hands them the engine, `host` is stopped on exit, and
-/// `network_file` is where `set_network` saves "Allow devices on my network",
+/// `network_file` is where `set_network` saves "Allow devices on my network" (and
+/// `set_network_announce` "Let devices find JStream on my network"),
 /// `jtunnel_file` where `set_jtunnel` saves "Receive from JTunnel senders", and
 /// `ptz_file` where `set_ptz_controllers` saves "Accept a PTZ controller", whose open
 /// endpoints `ptz_controllers` holds until exit, and `ptz_cameras_file` where
@@ -274,6 +275,7 @@ pub fn run(
         .invoke_handler(tauri::generate_handler![
             crate::pick::pick_path,
             crate::network::set_network,
+            crate::network::set_network_announce,
             crate::jtunnel::set_jtunnel,
             crate::ptz::set_ptz_controllers,
             crate::ptz_cameras::set_ptz_cameras,

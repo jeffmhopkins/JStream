@@ -242,6 +242,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--jtunnel-no-state <name>` | Ignores the DAW state the sender `<name>`, accepted with `--jtunnel-accept`, sends ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 1): its state packets are counted and dropped. Repeatable, each name once; a name no `--jtunnel-accept` accepts is a usage error. Default: an accepted sender's state is used, its transport, tracks, clips and so on becoming live data, read with `data.list` and `data.get`. |
 | `--jtunnel-midi <name>` | Lets the MIDI the sender `<name>`, accepted with `--jtunnel-accept`, sends run the collection's MIDI action bindings ("Use this sender's MIDI", [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md) decision 3, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)). Repeatable, each name once; a name no `--jtunnel-accept` accepts is a usage error. Default: off, its MIDI is drawn by the MIDI sources and runs no action binding. |
 | `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
+| `--lan-quiet` | With `--lan`: don't announce the network listener on mDNS ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)). Default: announced as `_jstream._tcp.local`, so a device such as the Stream Deck plugin finds it without its address. |
 | `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
 | `--ptz-controller <spec>` | Lets a PTZ controller drive a scene camera over VISCA ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)), repeatable: `address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the VISCA address it answers as (1 to 7, default 1), then `=program`, `=preview` or `=scene:<scene id>` for what it drives, as in `192.168.1.10:52381=program`. The address is the one LAN interface it listens on, never every interface (ADR-0123 §5). Needs `--ptz-controller-allow`. Default: none, so no controller socket is open. |
 | `--ptz-controller-allow <ip>` | A controller address the `--ptz-controller` endpoints answer, on the LAN, repeatable. Every other address is dropped and counted. |
@@ -282,7 +283,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   token file; the key never leaves it. The certificate names the host name, its
   `.local` name and the machine's address. It is never renewed silently: when those
   changed, the daemon says which names the certificate lacks at startup, and logs it
-  at `warn`; `--lan-renew` makes a new one. To pair a device: start pairing with
+  at `warn`; `--lan-renew` makes a new one. Unless `--lan-quiet`, the listener is
+  announced on mDNS as `_jstream._tcp.local` with the host name and port, so a device
+  can find it; that admits no one
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)). To pair a device: start pairing with
   `jstream-cli pair`, open one of the `network:` addresses on the device, compare the
   certificate's fingerprint with the one the daemon printed, then enter the code (a
   browser pairs on `/pair`). Once paired, a new certificate warning on that device means
@@ -737,7 +741,9 @@ folder another process is using, so the daemon couldn't start pages while the ap
   (4456 unless `--lan-port`) so a paired device's address stays the same across
   restarts. `network_config` (`main.rs`) loads or makes the certificate beside the
   token file with the machine's names (`jstream_server::machine_names`), reports names
-  it lacks rather than renewing, and renews only on `--lan-renew`.
+  it lacks rather than renewing, and renews only on `--lan-renew`. It sets
+  `NetworkConfig::announce` unless `--lan-quiet`, so the listener is announced on mDNS
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
 - **The device file** (`token.rs`, `main.rs`). The daemon names
   `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
   live and move with the token they stand beside, and deleting the two together resets
@@ -850,7 +856,7 @@ folder another process is using, so the daemon couldn't start pages while the ap
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
-  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--ptz-controller`,
+  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--lan-quiet`, `--ptz-camera`, `--ptz-controller`,
   `--ptz-controller-allow`, `--jtunnel-accept`, `--jtunnel-no-state`, `--jtunnel-midi`, `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.

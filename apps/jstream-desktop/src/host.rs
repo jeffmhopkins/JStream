@@ -1524,8 +1524,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&scratch);
         std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
         let token_file = scratch.join("token");
-        let mut config =
-            crate::network::config(&token_file).unwrap_or_else(|e| panic!("a config: {e:#}"));
+        let mut config = crate::network::config(&token_file, false)
+            .unwrap_or_else(|e| panic!("a config: {e:#}"));
         assert_eq!(config.bind.port(), crate::network::NETWORK_PORT);
         // A port the OS picks, so the test doesn't need 4456 free.
         config.bind = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
