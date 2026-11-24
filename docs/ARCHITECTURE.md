@@ -1358,13 +1358,13 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 
 **On macOS** ([ADR-0063](adr/0063-macos-platform-support.md) decision 8,
 `jstream-platform-macos`'s `gpu/`), the engine's wgpu device is on Metal. Capture needs no
-copy: ScreenCaptureKit's frames are IOSurface-backed BGRA pixel buffers, which the
-platform wraps as Metal textures (`newTextureWithDescriptor:iosurface:plane:`) and adopts
+copy: ScreenCaptureKit's frames are IOSurface-backed BGRA pixel buffers, as are
+AVFoundation's webcam frames when the output asks for BGRA, which the platform wraps as Metal textures (`newTextureWithDescriptor:iosurface:plane:`) and adopts
 into wgpu through wgpu-hal, as in steps 1 and 2. They are complete when delivered, so a
 read waits for nothing; the release is what is ordered. Each staged use signals the
 context's `MTLSharedEvent` after the submit that reads the frame, and a frame's last
-clone keeps its pixel buffer until the event reaches that value, so ScreenCaptureKit
-never writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so
+clone keeps its pixel buffer until the event reaches that value, so neither producer
+writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so
 an encode target will be two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12
 IOSurface that VideoToolbox reads, as spike S6 does; until then encoding takes the
 CPU readback of step 6.
