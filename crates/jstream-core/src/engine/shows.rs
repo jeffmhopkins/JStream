@@ -402,10 +402,12 @@ impl State {
     /// Stops the running show, if any: the sequences it started stop and its overlays
     /// go, program keeps its scene. Emits `show.changed` with `change`.
     pub(super) fn show_stop(&mut self, change: ShowChange, wake: &mut Vec<Waker>) {
-        let Some(plan) = self.show_plan() else {
-            if let Some(run) = self.show.take() {
-                self.emit_stopped(&run, change, wake);
-            }
+        // A deleted show has no plan in the collection any more: stop it by the plan it
+        // ran, so its overlays and sequences still go.
+        let Some(plan) = self
+            .show_plan()
+            .or_else(|| self.show.as_ref().map(|run| run.plan.clone()))
+        else {
             return;
         };
         let now = self.show_now();
