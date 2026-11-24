@@ -247,4 +247,49 @@ test.describe('Sequence panel', () => {
     await page.keyboard.press('Delete');
     await expect(chip).toHaveCount(0);
   });
+
+  // The zoom bar along the foot, as the Show panel's: + zooms in from the keyboard, the
+  // ruler's ticks get finer, a double-click on a zoomed lane still lands where it was
+  // clicked, Ctrl+wheel zooms and a double-click on the bar shows the whole sequence.
+  test('the zoom bar zooms and scrolls the lanes', async ({ page, daemon }) => {
+    await connect(page, daemon);
+    const panel = await sequenceWithLane(page, 'Haze');
+    const bar = panel.getByRole('scrollbar', { name: 'The part of the sequence in view' });
+    await expect(panel.locator('.seq-zoom-label')).toHaveText('Whole sequence · 6 s');
+    const clip = panel.locator('.seq-ruler-row .seq-clip');
+    const ruler = panel.locator('.seq-ruler');
+    const width = async (l) => (await l.boundingBox()).width;
+    expect(Math.abs((await width(ruler)) - (await width(clip)) + 16)).toBeLessThan(1);
+    await expect(ruler.locator('.seq-tick', { hasText: /^0\.2 s$/ })).toHaveCount(0);
+
+    // Zoomed in about four times, at the start.
+    await bar.focus();
+    for (let n = 0; n < 6; n += 1) await page.keyboard.press('+');
+    await page.keyboard.press('Home');
+    expect(await width(ruler)).toBeGreaterThan(3 * (await width(clip)));
+    await expect(ruler.locator('.seq-tick', { hasText: /^0\.2 s$/ })).toHaveCount(1);
+    const thumb = await panel.locator('.show-thumb').boundingBox();
+    expect(thumb.width).toBeLessThan((await bar.boundingBox()).width / 3);
+
+    // A double-click at half a second, on the zoomed lane, adds a point there.
+    const lane = panel.locator('.seq-lane:not(.seq-events)').first();
+    const area = await lane.locator('.seq-area').boundingBox();
+    await page.mouse.dblclick(area.x + (area.width * 500) / 6000, area.y + area.height / 2);
+    await expect(lane.locator('.seq-dot')).toHaveCount(2);
+    await expect(lane.getByRole('button', { name: /^0\.5 s · / })).toHaveCount(1);
+
+    // A double-click on the bar shows it all again; Ctrl+wheel over the lanes zooms in.
+    await bar.dblclick();
+    expect(Math.abs((await width(ruler)) - (await width(clip)) + 16)).toBeLessThan(1);
+    const c = await clip.boundingBox();
+    await page.mouse.move(c.x + c.width / 2, area.y + area.height / 2);
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -400);
+    await page.keyboard.up('Control');
+    await expect.poll(() => width(ruler)).toBeGreaterThan(1.5 * c.width);
+
+    if (process.env.JSTREAM_E2E_SHOTS) {
+      await panel.screenshot({ path: `${process.env.JSTREAM_E2E_SHOTS}/sequence-zoom.png` });
+    }
+  });
 });

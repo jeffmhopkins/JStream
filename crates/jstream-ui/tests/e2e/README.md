@@ -642,7 +642,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the points sent are off at 0 and on at the bar, a click or a right-click opens its menu
   (only Delete bar, typed times kept between its neighbours), and Delete removes a
   focused one, leaving a switch lane. An on/off event's chip opens its editor on a click
-  and on a right-click, and a drag moves it by as much as the pointer moved.
+  and on a right-click, and a drag moves it by as much as the pointer moved. The zoom
+  bar reads "Whole sequence · 6 s"; + from the keyboard zooms the ruler to over three
+  times its column with 0.2 s ticks and a thumb under a third of the bar, a
+  double-click on the zoomed lane at half a second adds a point at 0.5 s, a
+  double-click on the bar fits the ruler to its column again, and Ctrl+wheel over the
+  lanes zooms in.
 - **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
   `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click

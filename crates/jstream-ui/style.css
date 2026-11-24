@@ -2726,7 +2726,14 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .seq-point-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; padding: 6px 10px; }
 .seq-tick { position: absolute; top: 4px; padding-left: 4px; border-left: 1px solid var(--line); color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .seq-body { position: relative; }
-.seq-head-layer { position: absolute; top: 0; bottom: 0; left: 220px; right: 0; pointer-events: none; }
+.seq-head-layer { position: absolute; top: 0; bottom: 0; left: 220px; right: 0; pointer-events: none; overflow: hidden; }
+/* A time column clips the sequence's frame, which seq_zoom widens and slides to the part
+   in view; the zoom bar along the foot is the Show panel's (.show-zoom). */
+.seq-clip { position: relative; min-width: 0; overflow: hidden; }
+.seq-head-frame { position: relative; height: 100%; }
+.seq-zoom-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: center; height: 34px; padding-right: 8px; border-top: 1px solid var(--line); }
+.seq-zoom-row .show-zoom { margin-left: 8px; }
+.seq-zoom-label { padding-left: 10px; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seq-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text-soft); }
 .seq-lane { border-bottom: 1px solid var(--line); }
 .seq-lane.lane-0 { --lane: var(--accent); }
