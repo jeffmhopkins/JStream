@@ -1120,7 +1120,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `duration_ms` in `source.sizes` and a `source.seek` that holds whether it comes just
   before or just after the switch that shows the file, also on a file held at its start
   on the upcoming scene, and is `not_found` for a missing source
-  (`a_seek_holds_through_the_switch_that_shows_the_file`). The upcoming scene stays warm
+  (`a_seek_holds_through_the_switch_that_shows_the_file`), and a show's jump into a
+  timed clip, and within it, seeking its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). The upcoming scene stays warm
   past a budget of 0 and the GPU limit until cleared or deleted
   (`src/tests/warm_scenes.rs`,
   `the_upcoming_scene_is_warm_past_the_budget_and_the_gpu_limit`). Effect packs over the
@@ -1648,7 +1649,8 @@ scene, each once,
 at most the warm budget in all. The Preview scene is warm even past the budget. Right
 after it comes the upcoming scene, the one a show runs to next (`Studio::upcoming`,
 named with `State::set_upcoming`, `not_found` for a scene the collection doesn't hold;
-`None` while no show runs, and until a show runner calls it only the tests do): unless
+`None` while no show runs; the running show names the scene of the program clip after
+the one under its play head, see [Shows](#shows)): unless
 it is on program or is the Preview scene, it is warm past the budget and the GPU limit
 too, so a media file on it is held at its first frame and the cut to it starts nothing.
 A budget of 0 keeps only those two. A deleted scene stops being upcoming, and is
@@ -1928,13 +1930,25 @@ preset, when the keyframe is of the scene on program (a placed keyframe,
 `scene.set_keyframe`, only changes how other scenes draw a scene, never program
 itself), else `scene.set_keyframe` on the program scene;
 `timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a
-`show.*` action in a cue is skipped, so a cue can't re-enter the runner). Media seeks
-are not run yet. `show.continue` is ignored while a scene
+`show.*` action in a cue is skipped, so a cue can't re-enter the runner). A clip whose
+scene draws a `media` file is timed: a jump into it, or within it, seeks every such file
+the scene's family draws to that spot (`source.seek`'s `LiveSources::seek`, as of the
+effect's time), and so does an overlay put up partway through its clip (ADR-0210
+decision 9). After each tick the scene of the program clip after the one under the play
+head is the upcoming scene (`State::set_upcoming`, see *Program scene*), so its file is
+held at its first frame and the cut to it starts nothing; it clears when the show
+stops. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
 it. A show that starts on the scene already on program restarts every `timer` source
 that scene draws (`source.restart`), as the cut to it would have.
-`studio.get`'s `show` reports it, and `show.changed` says what it did.
+`studio.get`'s `show` reports it, and `show.changed` says what it did. `show.play` with
+`rehearse` runs the show on preview instead (ADR-0210 decision 13, `rehearse` in the
+report): its program clips, and keyframe markers of the scene on preview, go to preview
+as `studio.set_preview` would, its pauses, jumps, loops and end report as usual, and
+nothing else runs, so program, the overlays, the sequences, the cues, the channels and
+the mixer are left alone; it names no upcoming scene, restarts no timer, and a hand
+switch of program doesn't take it off script.
 
 An overlay clip, and `overlay.show`, `overlay.hide` and `overlay.toggle` with or without
 a show running, put a scene over program through the internal show scene
@@ -1957,8 +1971,11 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 `show.pause` holding show time until `show.continue` or `show.play` plays on,
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
-span and taken down when an edit removes it, the overlay actions with no show, and the
-show scene refusing a delete and being heard. `src/tests/timelines.rs` checks that a
+span and taken down when an edit removes it, the overlay actions with no show, the
+show scene refusing a delete and being heard, the next program clip named upcoming, and
+a rehearsal on preview leaving program, its cues and off script alone.
+`src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
+seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
 timeline played while the ticker waits for a later cue fires on time.
 
 <a id="privacy"></a>

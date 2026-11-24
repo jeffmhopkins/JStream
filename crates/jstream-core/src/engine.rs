@@ -3974,7 +3974,16 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
-    /// [`State::set_upcoming`], for tests until the show runner calls it.
+    /// The scene a show runs to next ([`State::set_upcoming`]), for tests.
+    #[cfg(test)]
+    pub(crate) fn upcoming(&self) -> Option<String> {
+        lock(&self.shared.state)
+            .studio
+            .upcoming()
+            .map(|id| id.as_str().to_owned())
+    }
+
+    /// [`State::set_upcoming`], for tests that name it without a show.
     #[cfg(test)]
     pub(crate) fn set_upcoming(&self, scene_id: Option<&str>) -> Result<(), ProtocolError> {
         let scene_id = scene_id.map(SceneId::new);
@@ -7178,10 +7187,6 @@ impl State {
     /// media file on it is held at its first frame and the cut to it starts nothing.
     /// The warm scenes are published again when it changed. A scene the collection
     /// doesn't hold is `not_found`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the show runner (alpha.13 ST1) calls it")
-    )]
     pub(crate) fn set_upcoming(&mut self, scene_id: Option<&SceneId>) -> Result<(), ProtocolError> {
         if self.studio.set_upcoming(self.graph.state(), scene_id)? {
             self.publish_warm();
