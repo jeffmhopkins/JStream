@@ -179,7 +179,7 @@ test('an item\'s sections are in tabs, and its settings in the Properties dialog
   await tab('Behaviour').click();
   await expect(tab('Behaviour')).toHaveAttribute('aria-selected', 'true');
   await expect(inspector(page).getByLabel('Glide to other scenes')).toBeVisible();
-  await expect(inspector(page).locator('.hotkey-row')).toHaveCount(3);
+  await expect(inspector(page).locator('.hotkey-row')).toHaveCount(4);
   await expect(field(page, 'X')).toBeHidden();
 
   // The arrow keys move along the strip, and the focus follows.

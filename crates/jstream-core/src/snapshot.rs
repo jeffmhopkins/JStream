@@ -3085,9 +3085,7 @@ impl<'a> Planner<'a, '_> {
                 && !partnered(&planned.tracks, visual, track);
             let fade = match track {
                 Track::Appear { effect, timing, .. } if alone => Some((true, *effect, *timing)),
-                Track::Disappear { effect, timing, .. } if alone => {
-                    Some((false, *effect, *timing))
-                }
+                Track::Disappear { effect, timing, .. } if alone => Some((false, *effect, *timing)),
                 _ => None,
             };
             match fade {

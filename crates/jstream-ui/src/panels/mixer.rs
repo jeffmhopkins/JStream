@@ -24,7 +24,8 @@ use crate::menu::Entry;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::gesture::EditDrag;
 use crate::panels::inspector::Fold;
-use crate::panels::learn::{FADER_THROW, Learn, SWITCH};
+use crate::panels::learn::{FADER_THROW, Learn, SWITCH, learn_id};
+use crate::panels::map_target::MapMark;
 use crate::panels::mute_keys::{MuteKeys, MuteOf};
 use crate::panels::number::{NumberField, Scrubbing};
 use crate::store::plan_summary;
@@ -1393,8 +1394,10 @@ where
 /// A fader with its readout. It shows the dragged value while the pointer holds it, and
 /// calls `commit` with the gain when it is let go and on each key press. Clicking the
 /// readout sets 0 dB. (A double click on the fader would first move it to the pointer,
-/// a second edit.)
+/// a second edit.) `map` is the gain setting's ID ([`learn_id`]), which a right-click on
+/// the fader or its readout maps, as the row also holds the mute's Learn button.
 fn fader<Fut>(
+    map: String,
     label: impl Fn() -> String + Copy + Send + Sync + 'static,
     gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
     problem: RwSignal<Option<String>>,
@@ -1412,6 +1415,7 @@ where
         <input
             type="range"
             class="fader"
+            data-map=map.clone()
             min="0"
             max=FADER_STEPS.to_string()
             step="1"
@@ -1427,6 +1431,7 @@ where
         />
         <button
             class="gain"
+            data-map=map
             title="Set to 0 dB"
             aria-label=move || format!("Set {} to 0 dB", label())
             on:click=move |_| send(0.0)
@@ -1439,8 +1444,9 @@ where
 
 /// A channel's gain: the console-taper fader and the prototype's dB field (M4), the
 /// field showing the fader's value while it is dragged. Either sends one edit through
-/// `commit`.
+/// `commit`. `map` is the gain setting's ID, as for [`fader`].
 fn channel_gain<Fut>(
+    map: String,
     label: impl Fn() -> String + Copy + Send + Sync + 'static,
     gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
     problem: RwSignal<Option<String>>,
@@ -1460,6 +1466,7 @@ where
         <input
             type="range"
             class="fader"
+            data-map=map.clone()
             min="0"
             max=FADER_STEPS.to_string()
             step="1"
@@ -1483,6 +1490,7 @@ where
             fixed=true
             min=f64::from(MIN_GAIN_DB)
             max=f64::from(MAX_GAIN_DB)
+            map=MapMark { id: map, amount: Signal::derive(|| None) }
             send=move |db: f64| {
                 // The field keeps to the gain range at one decimal place.
                 send(db as f32);
@@ -1518,13 +1526,17 @@ impl<F: Fn(f32) -> Option<Edit> + Copy + 'static> Live<F> {
 }
 
 /// A mute toggle.
+/// `map` is the mute setting's ID ([`learn_id`]) where the row holds more than one
+/// Learn button, so a right-click on it maps the mute.
 fn mute_button(
+    map: Option<String>,
     muted: impl Fn() -> bool + Copy + Send + Sync + 'static,
     toggle: impl Fn() + 'static,
 ) -> AnyView {
     view! {
         <button
             class="mute"
+            data-map=map
             class:on=muted
             aria-pressed=move || if muted() { "true" } else { "false" }
             on:click=move |_| toggle()
@@ -1631,13 +1643,18 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
             >
                 {meter(reading, false)}
                 {channel_gain(
+                    learn_id(&ValueTarget::SourceGain { source_id: id.get_value() }),
                     name,
                     move || audio().map_or(0.0, |a| a.gain_db.get()),
                     panel.problem,
                     commit_gain,
                     live,
                 )}
-                {mute_button(muted, move || set_audio(None, None, Some(!muted())))}
+                {mute_button(
+                    Some(learn_id(&ValueTarget::SourceMute { source_id: id.get_value() })),
+                    muted,
+                    move || set_audio(None, None, Some(!muted())),
+                )}
                 <MuteKeys of=MuteOf::Source(id.get_value()) label=untrack(name) />
                 <Learn
                     target=ValueTarget::SourceMute { source_id: id.get_value() }
@@ -1745,7 +1762,7 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
                     }
                     live=move |scrubbing| live.follow(scrubbing)
                 />
-                {mute_button(muted, move || {
+                {mute_button(None, muted, move || {
                     panel.set_audio(id.get_value(), None, None, Some(!muted()));
                 })}
             </Show>
@@ -2015,13 +2032,18 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
             </Show>
             {meter(reading, false)}
             {fader(
+                learn_id(&ValueTarget::BusGain { bus_id: id.get_value() }),
                 name,
                 move || bus.with(|b| b.as_ref().map_or(0.0, |b| b.gain_db.get())),
                 panel.problem,
                 commit_gain,
                 live,
             )}
-            {mute_button(muted, toggle_mute)}
+            {mute_button(
+                Some(learn_id(&ValueTarget::BusMute { bus_id: id.get_value() })),
+                muted,
+                toggle_mute,
+            )}
             <MuteKeys of=MuteOf::Bus(id.get_value()) label=untrack(name) />
             <Learn
                 target=ValueTarget::BusMute { bus_id: id.get_value() }

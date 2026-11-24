@@ -10,14 +10,16 @@ const mods = (moved = {}) => {
 };
 
 /** Shows the mixer with the master's rows open, and returns the first fader's control
- * button and a point on its row beside it. */
+ * button and a point on the fader. The row also holds its mute's control button, first,
+ * so the fader names its own setting. */
 async function fader(page) {
   await showPanel(page, 'Audio mixer');
   await page.locator('.mixer-panel').getByRole('button', { name: /^Master Program output/ }).click();
-  const button = page.locator('.mix-row > button.learn').first();
+  const row = page.locator('.mix-row').first();
+  const button = row.locator(':scope > button.learn').nth(1);
   await expect(button).toBeVisible();
-  const box = await button.boundingBox();
-  return { button, x: box.x - 60, y: box.y + box.height / 2 };
+  const box = await row.locator('input.fader').boundingBox();
+  return { button, x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
 test('a right-click on a setting maps it to a Mod from the Map control dialog', async ({ page, daemon }) => {
@@ -259,7 +261,7 @@ test('an item property is mapped by offsets, one per source, from the Inspector'
   // The property's menu bypasses a mapping, and removes it.
   await rotation.click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Control' });
-  await expect(menu).toContainText('Mod 20 · Bitwig · +90°');
+  await expect(menu).toContainText('Mod 20 · +90°');
   await menu.getByRole('menuitemcheckbox', { name: 'Bypass' }).click();
   await expect.poll(() => rev(page)).toBe(before + 3);
   await rotation.click({ button: 'right' });

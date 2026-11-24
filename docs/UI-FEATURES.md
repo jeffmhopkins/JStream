@@ -400,8 +400,9 @@ leaving whatever else the key runs) and offers
 Toggle key…, Push to talk key… and Push to mute key…, each capturing a chord and binding it
 to `source.mute` or `bus.mute`; a push-to-talk key unmutes while held and mutes on its
 release, a push-to-mute key the opposite. The mute's learn button makes a MIDI button, a
-Mod or a channel switch the mute, on at half way or more. The vertical strips keep only
-the mute button.
+Mod or a channel switch the mute, on at half way or more. On such a row a right-click on
+the fader, its dB field or readout opens the fader's menu, and one on the mute button the
+mute's. The vertical strips keep only the mute button.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|

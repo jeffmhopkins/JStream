@@ -979,9 +979,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   field of each send that exists; the Inspector's item Hotkeys fold has a Control row
   with one for the item's visibility (`item_visible`). A
   click on it, or a right-click on the setting's row, opens the control menu. The Shell and
-  every `Modal` hand a right-click to the row's own button (`row_context`: the nearest
-  ancestor with exactly one `button.learn` child, found by its `data-learn`, through
-  `ControlMenuAt`); a free-text field keeps the browser's menu (`keeps_own_menu`), a
+  every `Modal` hand a right-click to the row's own button (`row_context`: the field
+  around it marked `data-map`, else the nearest ancestor with exactly one `button.learn`
+  child, found by its `data-learn`, through `ControlMenuAt`). A mixer row holds two
+  control buttons, so its fader, dB field, gain readout and mute button carry their own
+  setting's `data-map` (`learn_id`); a free-text field keeps the browser's menu (`keeps_own_menu`), a
   `NumberField` doesn't though its input is typed as text, and a right-click something
   nearer has already answered (`default_prevented`) is left alone.
   The menu: for a learned MIDI control or Mod, a Smoothing field first, which sends the

@@ -631,7 +631,11 @@ fn an_item_shown_on_a_3d_keyframe_is_drawn_through_its_camera() {
     );
     clock.advance(400_000);
     engine.replan();
-    assert_eq!(pixel(&control, 960, 540), Some(BLUE), "the wall, once it has gone");
+    assert_eq!(
+        pixel(&control, 960, 540),
+        Some(BLUE),
+        "the wall, once it has gone"
+    );
 }
 
 /// An effect's setting changed after its first frame reaches the card in a 3D scene:

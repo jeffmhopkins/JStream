@@ -375,7 +375,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   and `,` are read; crop (with the folded "cropped" hint), opacity, the Fit select and
   the favourite star are sent; with no item selected the scene's object count, uses and Transition
   in and out show, and a second selected item shows "+1"; an item's sections are in
-  the Transform, Motion and Behaviour tabs, each hiding the others', with no Properties
+  the Transform, Motion and Behaviour tabs (Behaviour's four hotkey rows, the item's
+  Control row among them), each hiding the others with no Properties
   section, the arrow keys moving along the strip with the focus, the tab kept across a
   reload, and the header's Properties & filters… opening the Properties dialog; X and
   Y, W and H, and W % and H % each on one row of its group, the crop's four sides two by
@@ -522,7 +523,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Channels panel from the View menu making a channel from its search's "+ New
   channel", one edit, opening its card, and a Fade up typed there as one more edit.
 - **Map control** (`map-control.spec.js`, with `liveSources`): a right-click on a mixer
-  fader's number or anywhere on its row opening its menu, Map control… opening the dialog, a Mod picked there
+  fader's number or on the fader itself opening the fader's menu (its row's second
+  control button, after the mute's), Map control… opening the dialog, a Mod picked there
   changing nothing until Use, which is one edit and names the Mod on the control button;
   Cancel changing nothing; at a UI scale of 150% the row's menu opening at the pointer;
   the menu's Learn taking the one MIDI control that moves
@@ -537,7 +539,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Inspector: the crop edges marked as targets, a right-click on Rotation opening its menu and the dialog on it, a 50 px
   drag tagging the field "+90°" and sending one edit while the field keeps its stored
   value, the same armed Mod mapping X as one more edit, and the menu naming the mapping by its
-  source and offset, its Bypass ticked after one edit, and its Remove taking the
+  Mod and offset (no sender name, as it follows the live sender), its Bypass ticked after one edit, and its Remove taking the
   rotation mapping off.
 - **Mappings** (`mappings.spec.js`): the Mappings panel from the View menu saying nothing
   is mapped, then listing a channel made in the Channels panel as a group with
