@@ -1422,10 +1422,10 @@ needs = ["build"]
 id = "F7"
 milestone = "M3"
 title = "Direct NVENC and AMF encoders, if measurements justify them"
-status = "planned"
+status = "review"
 prs = []
-note = "ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so"
-needs = ["build"]
+note = "ADR-0215: the maintainer chose to build them for alpha.13 and measure alongside: NVENC and AMF first on the Windows GPU path, the MFT as fallback, JSTREAM_DIRECT_ENCODERS=off to compare; needs hw-tests runs on AMD and NVIDIA"
+needs = ["hardware"]
 
 [[item]]
 id = "CL2"

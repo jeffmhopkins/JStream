@@ -81,11 +81,6 @@ impl Ring {
         &self.textures[slot]
     }
 
-    /// The context's GPU state.
-    pub(crate) fn gpu(&self) -> &EncodeGpu {
-        &self.gpu
-    }
-
     /// Queues a copy of `frame`, an encode target of the context, into `slot`'s texture,
     /// and releases the target to its producer after it (`EncodeGpu::copy`).
     ///

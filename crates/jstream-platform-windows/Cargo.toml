@@ -1,7 +1,7 @@
 [package]
 name = "jstream-platform-windows"
 version = "0.0.0"
-description = "Windows platform backends: the QPC media clock, WASAPI audio I/O, WGC capture, Media Foundation webcam capture and codecs, GPU interop, the Credential Manager store for stream keys and the virtual camera's engine side."
+description = "Windows platform backends: the QPC media clock, WASAPI audio I/O, WGC capture, Media Foundation webcam capture and codecs, direct NVENC and AMF encoders, GPU interop, the Credential Manager store for stream keys and the virtual camera's engine side."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021)"
+summary = "WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, direct NVENC and AMF (ADR-0215), D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is

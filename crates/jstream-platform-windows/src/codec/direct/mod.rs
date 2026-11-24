@@ -35,6 +35,7 @@ pub(crate) use open::{open_direct, policy};
 pub(crate) use ring::Ring;
 
 /// The variable that chooses which direct encoders the GPU path tries ([`Policy`]).
+#[cfg(windows)]
 pub(crate) const VARIABLE: &str = "JSTREAM_DIRECT_ENCODERS";
 
 /// A GPU maker, from its adapter's PCI vendor ID.
@@ -69,7 +70,7 @@ impl Vendor {
 }
 
 /// Which direct encoders the GPU path tries before Media Foundation, from
-/// [`VARIABLE`]'s value.
+/// `JSTREAM_DIRECT_ENCODERS`'s value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Policy {
     /// None: every GPU encoder is a Media Foundation MFT (`off`).
@@ -80,7 +81,7 @@ pub(crate) enum Policy {
 }
 
 impl Policy {
-    /// The policy a value of [`VARIABLE`] names, and whether the value named one; an
+    /// The policy a value of `JSTREAM_DIRECT_ENCODERS` names, and whether the value named one; an
     /// unknown value keeps the default, so the caller can warn about it.
     pub(crate) fn named(value: Option<&str>) -> (Self, bool) {
         let Some(value) = value.map(str::trim) else {
