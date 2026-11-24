@@ -900,17 +900,20 @@ pub fn EditView() -> impl IntoView {
             );
             entries.push(Entry::Sep);
         }
-        entries.push(
-            Entry::item("+ Overlay track", move || {
-                send(Command::AddOverlayTrack(show_id()));
-            })
-            .disabled_if(off),
-        );
-        entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
+        // New tracks come from an empty spot's menu, not a track's own (UI-DESIGN ›
+        // Menus); the bar has them too.
+        if !head {
+            entries.push(
+                Entry::item("+ Overlay track", move || {
+                    send(Command::AddOverlayTrack(show_id()));
+                })
+                .disabled_if(off),
+            );
+            entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
+        }
         // Removal is the last group (UI-DESIGN › Menus).
         if head && own {
             let delete_id = track.clone();
-            entries.push(Entry::Sep);
             entries.push(
                 Entry::item("Delete track", move || {
                     panel.set_show(&show_id(), |s| {
@@ -920,6 +923,9 @@ pub fn EditView() -> impl IntoView {
                 .danger()
                 .disabled_if(off),
             );
+        }
+        while matches!(entries.last(), Some(Entry::Sep)) {
+            entries.pop();
         }
         menus.open(e, entries);
     };

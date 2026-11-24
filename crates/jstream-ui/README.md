@@ -307,14 +307,17 @@ Contents ([Design](#design) explains the choices):
   `edit/geom.rs` for where things are drawn, `edit/gesture.rs` for what a drag does,
   `edit/zoom.rs` for the zoom bar and `edit/drops.rs` for scenes and files dropped on
   the tracks), `run.rs` the Run view, `edits.rs` each tool's change to a show,
-  `drop.rs` what a dropped media file becomes, `inspector.rs` the Inspector's Show page
+  `drop.rs` what a dropped media file becomes, `prompter.rs` the Run view's notes as a
+  teleprompter (its size, rate and where the text has rolled to, kept by the browser),
+  `inspector.rs` the Inspector's Show page
   and `inspect_edits.rs` its fields' changes; `NextPane` and `next_monitor_shown` are
-  the Next monitor beside the canvas. Every one of those but the components is a pure
+  the Next monitor beside the canvas. `ShowPanel::carry_source` lets the Sources panel and
+  a mixer strip carry a source's audio onto the tracks. Every one of those but the components is a pure
   function tested natively, `drop.rs` against `MockEngine` too. It sends `show.set`
   (every edit, as one undo step) and `show.delete`, in a batch with `source.create`,
   `scene.create` and the folder and item edits a media drop needs, and the actions
-  `show.play` (`rehearse` for Rehearse), `show.stop`, `show.continue`, `show.back`,
-  `show.go_to` and `show.arm`; it reads the shows from `state.get` and the running
+  `show.play`, `show.pause`, `show.stop`, `show.continue`, `show.back`,
+  `show.go_to`, `show.seek` and `show.arm`; it reads the shows from `state.get` and the running
   show from `studio.get`'s `show`, kept current by `show.changed`.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
   Settings…, Video settings… and Plugins… open, with its pages (`SettingsPage`: General,
@@ -927,10 +930,24 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   6 px, else 0.1 s, Shift free): the view draws that show in place of the engine's
   (`ShowPanel::preview`) and sends it once on release, and Escape drops it. The preview
   stays until the engine's answer brings the new show in, or 1.5 s pass. A refused drag
-  says why in its tip and sends nothing. A scene dragged from the Scenes panel reaches
-  the panel as a `Carry` the Scenes panel sets as the pointer moves (a pointer drag, as
-  the rows' own reorder is), and the Edit view finds the track under it with
-  `host::element_at`. Files arrive as a browser drop's `text/uri-list`
+  says why in its tip and sends nothing. A scene dragged from the Scenes panel, or a
+  source's audio dragged from a Sources row or a mixer strip's name, reaches the panel
+  as a `Carry` the other panel sets as the pointer moves (a pointer drag, as the rows'
+  own reorder is), and the Edit view finds the track under it with
+  `host::element_at`; a source's audio goes on the A track it is let go on, or a new
+  one (`edits::place_source_audio`). A track head drags to reorder its kind's rows
+  (`edits::move_track`, refused across kinds by `geom::reorder_refusal`), and its menu
+  renames and deletes overlay and audio tracks. A scene clip's own audio is never
+  stored ([ADR-0213](../../docs/adr/0213-a-scene-clips-audio-is-drawn-linked-under-it.md)):
+  `wire::heard_in` finds the sources a scene is heard through when shown, and
+  `view_of` draws a read-only `TrackKind::Linked` row per video track whose clips keep
+  their scene clips' IDs, so a press on one grabs the scene clip. The play head is the
+  runner's while the open show is the running one, else the panel's `cursor` (where Play
+  starts, [ADR-0212](../../docs/adr/0212-the-edit-views-ruler-moves-the-play-head.md)):
+  `ShowPanel::move_head` seeks a running show or moves the cursor, and Play then seeks
+  to it. The Run view's notes are the note of the bookmark the show is at (`run::notes`),
+  split into lines to say and `*directions*` (`run::paragraphs`), and the run of show
+  marks each bookmark done, NOW or NEXT. Files arrive as a browser drop's `text/uri-list`
   (`drop::dropped_paths`) or as the desktop app's `host::on_file_drop`; **one batch per
   drop** makes each file's "Show media" folder, media source, scene and item
   (`drop::plan_drop`, reusing a file's scene or source when it is there already) and
