@@ -57,7 +57,7 @@
 //! - Folder and label IDs are non-empty and unique within their kind. Every scene's
 //!   folder and every folder's parent exists, and no folder sits inside itself. Every
 //!   label a source carries exists (ADR-0024 §3 and §4).
-//! - A folder that belongs to a scene (ADR-0219) names an existing scene that is not a
+//! - A folder that belongs to a scene (ADR-0222) names an existing scene that is not a
 //!   variant, and its parent belongs to the same scene; a folder of the scene list has
 //!   a parent of the scene list. A variant's folder, if any, belongs to its parent, any
 //!   other scene's to none, and a timeline's to its scene's family: the scene, or its
@@ -1055,7 +1055,7 @@ impl Scene {
 }
 
 /// One folder of the scene list (ADR-0024 §3), or of one scene's keyframe scenes and
-/// timelines (ADR-0219): for organising only.
+/// timelines (ADR-0222): for organising only.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
     pub(crate) id: FolderId,
@@ -1081,7 +1081,7 @@ impl Folder {
         self.parent.as_ref()
     }
 
-    /// The scene whose keyframe scenes and timelines it organises (ADR-0219), or `None`
+    /// The scene whose keyframe scenes and timelines it organises (ADR-0222), or `None`
     /// for a folder of the scene list.
     pub fn scene(&self) -> Option<&SceneId> {
         self.scene.as_ref()

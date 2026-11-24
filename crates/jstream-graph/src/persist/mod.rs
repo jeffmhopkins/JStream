@@ -68,7 +68,7 @@ const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v18_to_v19, v19_to_v20, v20_to_v21, v21_to_v22, v22_to_v23,
 ];
 
-/// Version 23 adds a scene's own folders (ADR-0219): a folder's `scene`, a keyframe
+/// Version 23 adds a scene's own folders (ADR-0222): a folder's `scene`, a keyframe
 /// scene's `folder` and a timeline's `folder`. A version 22 file has none of them, so it
 /// upgrades unchanged; any of them there is refused, as version 22 refused it.
 fn v22_to_v23(value: &mut Value) -> Result<(), String> {
@@ -928,7 +928,7 @@ struct FileFolder {
     /// Omitted at the top level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     parent: Option<FolderId>,
-    /// The scene it belongs to (ADR-0219, schema_version 23); omitted for a folder of
+    /// The scene it belongs to (ADR-0222, schema_version 23); omitted for a folder of
     /// the scene list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     scene: Option<SceneId>,
@@ -1623,7 +1623,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
     }
     // Folders are created top level in folder order, then nested, so a parent may come
-    // after its child in the file. A scene's own folders (ADR-0219) come after the
+    // after its child in the file. A scene's own folders (ADR-0222) come after the
     // scenes, the same way, and a reorder then puts every folder back in file order.
     let (scene_folders, list_folders): (Vec<&FileFolder>, Vec<&FileFolder>) =
         file.folders.iter().partition(|f| f.scene.is_some());

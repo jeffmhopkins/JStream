@@ -748,7 +748,7 @@ pub fn plan_summary(edits: &[Edit]) -> Option<String> {
             Edit::SourceSetSettings { patch, .. } => references += patch.0.len(),
             Edit::SceneSetFolder { .. } => scenes += 1,
             Edit::FolderSetParent { .. } => folders += 1,
-            // A folder's plan moves the sequences filed in it out (ADR-0219).
+            // A folder's plan moves the sequences filed in it out (ADR-0222).
             Edit::TimelineSet { .. } => sequences += 1,
             _ => {}
         }

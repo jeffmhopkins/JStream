@@ -4079,7 +4079,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `folder` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with\n`scene_id`, a folder under one scene for its keyframe scenes and sequences\n(ADR-0219, since 0.190). Folders organise only: they change no rendering,\nswitching or nesting. Inverse: `folder.delete`.",
+                "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with\n`scene_id`, a folder under one scene for its keyframe scenes and sequences\n(ADR-0222, since 0.190). Folders organise only: they change no rendering,\nswitching or nesting. Inverse: `folder.delete`.",
                 "properties": {
                   "folder_id": {
                     "$ref": "#/$defs/FolderId",
@@ -4147,7 +4147,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself, or that belongs to another\nscene than the folder (ADR-0219), is `invalid_argument` (field `parent`), and a\nparent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
+                "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself, or that belongs to another\nscene than the folder (ADR-0222), is `invalid_argument` (field `parent`), and a\nparent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
                 "properties": {
                   "folder_id": {
                     "$ref": "#/$defs/FolderId",
@@ -9834,7 +9834,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. A keyframe scene goes only in a folder of its parent\n(ADR-0219, since 0.190), and any other scene only in a folder of the scene list,\nelse `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the\nprevious folder.",
+                "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. A keyframe scene goes only in a folder of its parent\n(ADR-0222, since 0.190), and any other scene only in a folder of the scene list,\nelse `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the\nprevious folder.",
                 "properties": {
                   "folder_id": {
                     "anyOf": [
@@ -12455,7 +12455,7 @@ source: crates/jstream-mcp/src/tests.rs
                     "type": "null"
                   }
                 ],
-                "description": "The folder it is filed in under its scene (ADR-0219, since 0.190): a folder of\nthe scene that holds it, or of that scene's parent for a keyframe scene's, else\n`invalid_argument`. Folders organise only. Omitted for none."
+                "description": "The folder it is filed in under its scene (ADR-0222, since 0.190): a folder of\nthe scene that holds it, or of that scene's parent for a keyframe scene's, else\n`invalid_argument`. Folders organise only. Omitted for none."
               },
               "labels": {
                 "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",

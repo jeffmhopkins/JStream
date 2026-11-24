@@ -16,7 +16,7 @@
 //!
 //! A scene's keyframe scenes (ADR-0024 §2) nest under it, each with the purple diamond,
 //! then its sequences, and the scene's caret folds them away. The scene's own folders
-//! (ADR-0219) come first under it and hold its keyframes and sequences, for organising
+//! (ADR-0222) come first under it and hold its keyframes and sequences, for organising
 //! only: the scene menu's "New folder under" makes one, and a keyframe, a sequence or
 //! one of those folders is dragged, or moved with its menu's "Move to folder", only
 //! among the rows under its own scene. A keyframe's menu switches to it, resets it
@@ -136,7 +136,7 @@ impl Node {
     }
 }
 
-/// The rows a row moves among (ADR-0219): `Some(None)` for the scene list, or
+/// The rows a row moves among (ADR-0222): `Some(None)` for the scene list, or
 /// `Some(Some(scene))` for what sits under `scene`: its folders, keyframes and
 /// sequences. `None` for a row naming nothing.
 fn space_of(collection: &Collection, node: &Node) -> Option<Option<SceneId>> {
@@ -155,7 +155,7 @@ fn space_of(collection: &Collection, node: &Node) -> Option<Option<SceneId>> {
     }
 }
 
-/// `folder`, if it is one of `owner`'s folders (ADR-0219), or of the scene list for
+/// `folder`, if it is one of `owner`'s folders (ADR-0222), or of the scene list for
 /// `None`: anything filed in a folder that isn't shows unfiled.
 fn filed_in(
     collection: &Collection,
@@ -178,7 +178,7 @@ fn sequence_folder(collection: &Collection, timeline_id: &TimelineId) -> Option<
     filed_in(collection, timeline.folder.as_ref(), Some(owner))
 }
 
-/// `owner`'s folders (ADR-0219) in tree order, each with its path of names, for a
+/// `owner`'s folders (ADR-0222) in tree order, each with its path of names, for a
 /// "Move to folder" menu.
 fn scene_folders(collection: &Collection, owner: &SceneId) -> Vec<(FolderId, String)> {
     fn walk(
@@ -220,7 +220,7 @@ fn parent_of(collection: &Collection, folder_id: &FolderId) -> Option<FolderId> 
 }
 
 /// The folder a scene sits in, if it names one that exists and is of its kind: one of
-/// its parent's for a keyframe scene (ADR-0219), else one of the scene list's.
+/// its parent's for a keyframe scene (ADR-0222), else one of the scene list's.
 fn folder_of(collection: &Collection, scene_id: &SceneId) -> Option<FolderId> {
     let scene = collection.scene(scene_id)?;
     filed_in(collection, scene.folder.as_ref(), scene.variant_of.as_ref())
@@ -341,7 +341,7 @@ impl Walk<'_> {
     }
 
     /// What sits in `parent` under `scene` (the scene itself for `None`), at `depth`
-    /// (ADR-0219): its folders there in folder order, each followed by its contents
+    /// (ADR-0222): its folders there in folder order, each followed by its contents
     /// unless collapsed, then its keyframe scenes filed there in display order, then its
     /// sequences filed there.
     fn family(
@@ -414,7 +414,7 @@ impl Walk<'_> {
 /// batch: a scene, keyframe, sequence or folder dropped into a folder goes in it;
 /// dropped beside a row it joins that row's folder, and beside a row of its own kind it
 /// also takes the position there (sequences keep their order by ID). A row moves only
-/// among the rows of its own space (ADR-0219): the scene list's, or those under one
+/// among the rows of its own space (ADR-0222): the scene list's, or those under one
 /// scene, so a keyframe or sequence stays under its scene. Nothing for a drop where it
 /// already is, a drop into another space, or a folder dropped on itself or anything
 /// within it.
@@ -666,7 +666,7 @@ pub fn Scenes() -> impl IntoView {
     };
     // Adds a folder named "New folder" in `parent`, with its name open for editing (the
     // menus' New folder): one of the scene list's, or with `scene` one under that scene
-    // for its keyframes and sequences (ADR-0219), which unfolds.
+    // for its keyframes and sequences (ADR-0222), which unfolds.
     let new_folder = move |parent: Option<FolderId>, scene: Option<SceneId>| {
         let Some(s) = session.get() else { return };
         let folder_id = FolderId::new(studio.fresh_id(&s, "folder"));
@@ -756,7 +756,7 @@ pub fn Scenes() -> impl IntoView {
             );
         }
     };
-    // A new keyframe scene of `parent`, in `folder` (one of the parent's, ADR-0219) if
+    // A new keyframe scene of `parent`, in `folder` (one of the parent's, ADR-0222) if
     // given, unfolded and selected so it can be arranged.
     let new_keyframe = move |parent: SceneId, folder: Option<FolderId>| {
         let Some(s) = session.get() else { return };
@@ -1463,7 +1463,7 @@ pub fn Scenes() -> impl IntoView {
                     let (scene_in, folder_in) = (id.clone(), id.clone());
                     let rename_key = key.clone();
                     let (delete_id, delete_name) = (id.clone(), name.clone());
-                    // A folder under a scene (ADR-0219) makes keyframes of that scene.
+                    // A folder under a scene (ADR-0222) makes keyframes of that scene.
                     let owner = studio.collection.with_untracked(|c| {
                         c.as_ref()
                             .and_then(|c| c.folder(&id))
@@ -1683,7 +1683,7 @@ pub fn Scenes() -> impl IntoView {
                 let has_keys = !chords.get_untracked().is_empty();
                 let key = key.clone();
                 let toggle_play = toggle_play.clone();
-                // Its scene's folders (ADR-0219): a keyframe scene's sequence files in
+                // Its scene's folders (ADR-0222): a keyframe scene's sequence files in
                 // its parent's.
                 let filed = studio.collection.with_untracked(|c| {
                     let c = c.as_ref()?;
@@ -2466,7 +2466,7 @@ mod tests {
         );
     }
 
-    /// Scene B with its own folders (ADR-0219): Looks, with Intro inside it, holding
+    /// Scene B with its own folders (ADR-0222): Looks, with Intro inside it, holding
     /// keyframe K1 and sequence Lights up; keyframe K2 and sequence Fade unfiled; and a
     /// scene-list folder Show holding A.
     fn scene_folder_collection() -> Collection {

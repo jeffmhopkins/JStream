@@ -462,7 +462,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             name: "Intros".into(),
             parent: Some(FolderId::new("fld_shows")),
         },
-        // A folder under one scene for its keyframes and sequences (ADR-0219).
+        // A folder under one scene for its keyframes and sequences (ADR-0222).
         Edit::FolderCreate {
             scene_id: Some(SceneId::new("scn_main")),
             folder_id: FolderId::new("fld_looks"),

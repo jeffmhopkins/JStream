@@ -537,7 +537,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024).
-  Under a scene come its own folders (ADR-0219), then its unfiled keyframe scenes, then
+  Under a scene come its own folders (ADR-0222), then its unfiled keyframe scenes, then
   its unfiled sequences; a keyframe, a sequence or such a folder drags, and moves with
   "Move to folder", only among the rows under its scene (`space_of`), as
   `scene.set_folder`, `timeline.set` with the sequence's `folder`, or `folder.set_parent`. It marks the program scene
@@ -560,7 +560,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   off, and the browser keeps it (`jstream.studio-mode`). A
   scene's keyframe scenes (ADR-0024 §2) nest under it, one level in, with the diamond,
   folded away by its caret, and stay there: they drag only among the rows under their
-  scene, into and out of its own folders (ADR-0219). A keyframe scene has no items of its
+  scene, into and out of its own folders (ADR-0222). A keyframe scene has no items of its
   own; it shows its parent's at its overrides, so selecting one lists and draws those,
   and its eye, the canvas, the Inspector's placement fields and the item menu's
   placement choices send placement edits addressed to it, which write its overrides

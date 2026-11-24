@@ -1,4 +1,4 @@
-//! A scene's own folders (ADR-0219): folders under a scene that hold its keyframe scenes
+//! A scene's own folders (ADR-0222): folders under a scene that hold its keyframe scenes
 //! and timelines, the owners `folder.create`, `folder.set_parent`, `scene.set_folder`
 //! and `timeline.set` check, what blocks a folder's delete and its plan, a deleted
 //! scene's folders and their undo, and the collection file.

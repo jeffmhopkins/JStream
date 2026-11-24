@@ -220,7 +220,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   make the graph's checks with the protocol's own `check_color`, `check_icon`,
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
   background or reflections): a missing parent, folder or label, a folder inside itself,
-  a folder, scene or timeline filed under the wrong owner (ADR-0219: a scene's own
+  a folder, scene or timeline filed under the wrong owner (ADR-0222: a scene's own
   folders hold its keyframes and timelines, and go with it on its delete), a
   label listed twice, and no deleting a folder that holds a scene, timeline or folder or a label a
   source, scene or hotkey binding carries (with the graph's `blockers`; scenes carry labels since

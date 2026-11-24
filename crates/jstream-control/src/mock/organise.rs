@@ -117,7 +117,7 @@ impl Collection {
     }
 
     /// Everything that stops deleting folder `id`: the scenes filed in it (display
-    /// order), the timelines filed in it (by scene, then ID; ADR-0219), then the folders
+    /// order), the timelines filed in it (by scene, then ID; ADR-0222), then the folders
     /// inside it (folder order).
     fn folder_blockers(&self, id: &FolderId) -> Vec<Blocker> {
         let scenes = self
@@ -146,7 +146,7 @@ impl Collection {
     }
 
     /// Checks that folder `folder_id` exists (`not_found`) and belongs to `owner`, as
-    /// the graph does (ADR-0219): a scene, or the scene list for `None`.
+    /// the graph does (ADR-0222): a scene, or the scene list for `None`.
     pub(super) fn check_folder_owner(
         &self,
         folder_id: &FolderId,
@@ -422,7 +422,7 @@ impl Collection {
     ) -> Result<Vec<Edit>, ProtocolError> {
         let si = self.existing_scene(scene_id)?;
         // A keyframe scene only in its parent's folders, any other scene only in the
-        // scene list's (ADR-0219).
+        // scene list's (ADR-0222).
         if let Some(folder_id) = folder_id {
             let owner = self.scenes[si].variant_of.clone();
             self.check_folder_owner(folder_id, owner.as_ref(), at, "folder_id")?;

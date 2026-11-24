@@ -402,7 +402,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `PROTOCOL_VERSION` is 0.190 because a folder may belong to one scene and hold that
 scene's keyframe scenes and timelines (`FolderInfo.scene_id`, `folder.create`'s
 `scene_id`, `TimelineInfo.folder`, and `scene.set_folder` on a keyframe scene;
-[ADR-0219](../../docs/adr/0219-a-scenes-own-folders.md));
+[ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md));
 0.188 because `preview.show` moves an open preview stream to
 another scene, or the program, on its channel, keeping its encoder where nothing else
 shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.186 because a value binding and a reader motion row (`midi`,
@@ -1028,7 +1028,7 @@ keeps the addressing of the edit it undoes.
 - Everything else follows the parent, so the edits that add or order a scene's own
   things refuse a variant with `invalid_argument` on `scene_id`: `item.add`, `item.move`
   into it, and, until 0.190, `scene.set_folder` (a variant is listed under its parent;
-  since 0.190 it may sit in one of its parent's own folders, ADR-0219).
+  since 0.190 it may sit in one of its parent's own folders, ADR-0222).
   `item.set_transform`, `scene.set_role`, renames, transitions and metadata
   work as on any scene.
 - **Dropped overrides** (ADR-0040 §1): an edit that takes an item out of a variant's
@@ -1694,7 +1694,7 @@ list of `{ folder_id, name, parent? }`, where a folder's children show in folder
 and a scene names at most one folder (`scene.set_folder`) while keeping its place in the
 flat display order. `folder.set_parent` refuses a parent that would put the folder
 inside itself. Since 0.190 a folder may instead belong to one scene (`scene_id`,
-[ADR-0219](../../docs/adr/0219-a-scenes-own-folders.md)): it shows under that scene and
+[ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md)): it shows under that scene and
 holds its keyframe scenes (`scene.set_folder`) and its timelines (`TimelineInfo.folder`,
 written with `timeline.set`; a keyframe scene's timelines file in its parent's
 folders). A folder's parent belongs to the same scene or, like it, to none; a keyframe
@@ -3349,7 +3349,7 @@ Since 0.87 a scene holds timelines
   are kept ordered by ID ([Folders, labels and scene options](#organisation)). Since
   0.190 a timeline may name a `folder`, omitted for none: one of its scene's own folders,
   or its parent's for a keyframe scene's timeline (`invalid_argument` on
-  `timeline.folder` otherwise, [ADR-0219](../../docs/adr/0219-a-scenes-own-folders.md)).
+  `timeline.folder` otherwise, [ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md)).
   It only organises the scene's rows.
 - **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
   `scene.set_keyframe` (since 0.88, [Keyframe tracks](#keyframe-tracks)), `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,

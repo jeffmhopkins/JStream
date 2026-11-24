@@ -113,7 +113,7 @@ const V21: &str = include_str!("fixtures/v21.json");
 const V22: &str = include_str!("fixtures/v22.json");
 
 /// A collection file at schema version 23, the current one: version 22 with scene
-/// `a`'s own folders (ADR-0219), `looks` and `intro` inside it, keyframe `k` filed in
+/// `a`'s own folders (ADR-0222), `looks` and `intro` inside it, keyframe `k` filed in
 /// `intro` and the sequence `power_up` in `looks`, and a scene-list folder `shows` after
 /// them in folder order. The same rule applies once version 24 exists.
 const V23: &str = include_str!("fixtures/v23.json");
@@ -1094,7 +1094,7 @@ fn the_v23_fixture_loads_exactly() {
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
 }
 
-/// Version 23 adds a scene's own folders (ADR-0219): a folder's `scene`, a keyframe
+/// Version 23 adds a scene's own folders (ADR-0222): a folder's `scene`, a keyframe
 /// scene's `folder` and a timeline's `folder` in a version 22 file are each refused,
 /// as version 22 refused them.
 #[test]

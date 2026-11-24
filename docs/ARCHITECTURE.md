@@ -188,7 +188,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent?, scene? }   ordered; a tree per owner (the
-│                    scene list, or one scene's keyframes and timelines, ADR-0219); organising only
+│                    scene list, or one scene's keyframes and timelines, ADR-0222); organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action, labels }]   chord → protocol action request; a chord repeats once per action, in bind order (ADR-0208)
 ├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request, repeated likewise (ADR-0122, ADR-0208)
@@ -313,7 +313,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   person). Folders change no rendering, switching or nesting; scenes keep their flat
   display order, and a variant sits under its parent, in none of the scene list's folders:
   only in one of its parent's own, which a scene may have to organise its keyframe
-  scenes and timelines ([ADR-0219](adr/0219-a-scenes-own-folders.md)). A folder sits in
+  scenes and timelines ([ADR-0222](adr/0222-a-scenes-own-folders.md)). A folder sits in
   at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
   the folders in one parent show in folder order. A folder that holds anything, or a
   label anything carries, can't be deleted; `delete.plan` moves what the folder
@@ -812,7 +812,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list (and, with a folder that
   belongs to a scene, that scene's keyframe scenes and, through `timeline.set`'s
-  `folder`, its timelines; protocol 0.190, [ADR-0219](adr/0219-a-scenes-own-folders.md)), and `label.create`,
+  `folder`, its timelines; protocol 0.190, [ADR-0222](adr/0222-a-scenes-own-folders.md)), and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31; a scene's labels, protocol
@@ -1846,7 +1846,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
   `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
   a marker naming a scene the file doesn't hold, or one something shows, is dropped on load.
-  Version 23 (ADR-0219) adds a folder's `scene`, a keyframe scene's `folder` and a
+  Version 23 (ADR-0222) adds a folder's `scene`, a keyframe scene's `folder` and a
   timeline's `folder`, refused the same way; a scene's own folders are made after the
   scenes, then every folder is put back in file order. A chord or trigger
   with several actions (ADR-0208) is stored as one entry per action with no version

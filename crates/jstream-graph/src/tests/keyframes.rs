@@ -274,7 +274,7 @@ fn a_keyframe_scene_refuses_what_it_cant_hold() {
         index: 0,
     };
     assert_eq!(refused(&mut graph, into).0, "edits.0.scene_id");
-    // It sits under its parent, so only in one of its parent's folders (ADR-0219), not
+    // It sits under its parent, so only in one of its parent's folders (ADR-0222), not
     // in one of the scene list's.
     let folder = Edit::SceneSetFolder {
         scene_id: SceneId::new("k"),

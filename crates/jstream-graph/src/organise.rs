@@ -136,7 +136,7 @@ pub(crate) fn source_meta(source: &Source) -> SourceMeta {
 }
 
 /// Everything that stops deleting folder `id`: the scenes filed in it (display order),
-/// the timelines filed in it (by scene, then ID; ADR-0219), then the folders inside it
+/// the timelines filed in it (by scene, then ID; ADR-0222), then the folders inside it
 /// (folder order).
 pub(crate) fn folder_blockers(state: &State, id: &FolderId) -> Vec<Blocker> {
     let scenes = state
@@ -180,7 +180,7 @@ fn filed_timelines<'a>(
     })
 }
 
-/// The scene whose folders can hold scene `si`'s timelines (ADR-0219): its parent for a
+/// The scene whose folders can hold scene `si`'s timelines (ADR-0222): its parent for a
 /// keyframe scene, else itself.
 fn family(state: &State, si: usize) -> SceneId {
     let scene = &state.scenes[si];
@@ -215,7 +215,7 @@ pub(crate) fn check_folder_owner(
     ))
 }
 
-/// Checks the folder a timeline held by scene `scene_id` names (ADR-0219): one of the
+/// Checks the folder a timeline held by scene `scene_id` names (ADR-0222): one of the
 /// scene's family's folders, or none.
 pub(crate) fn check_timeline_folder(
     state: &State,
@@ -235,7 +235,7 @@ pub(crate) fn check_timeline_folder(
     )
 }
 
-/// Takes the folders that belong to `scene_id` out of `state` (ADR-0219: they go with
+/// Takes the folders that belong to `scene_id` out of `state` (ADR-0222: they go with
 /// their scene) and returns the edits that put them back, in their places.
 pub(crate) fn remove_scene_folders(
     state: &mut State,
@@ -532,7 +532,7 @@ fn create_folder(
     if state.folder(id).is_some() {
         return Err(already_exists(EntityKind::Folder, id.as_str()));
     }
-    // A scene's folders hold its keyframe scenes and timelines (ADR-0219), so a keyframe
+    // A scene's folders hold its keyframe scenes and timelines (ADR-0222), so a keyframe
     // scene, which has neither of its own, has none.
     if let Some(scene_id) = scene {
         let si = state
@@ -654,7 +654,7 @@ fn set_folder(
         .scene_index(scene_id)
         .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
     // A keyframe scene sits under its parent, so only in one of its parent's folders
-    // (ADR-0219); any other scene only in a folder of the scene list.
+    // (ADR-0222); any other scene only in a folder of the scene list.
     if let Some(folder_id) = folder_id {
         let owner = state.scenes[si].variant_of.clone();
         check_folder_owner(state, folder_id, owner.as_ref(), at, "folder_id")?;

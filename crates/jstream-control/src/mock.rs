@@ -2304,7 +2304,7 @@ impl Collection {
                     });
                 }
                 let scene = self.scenes.remove(index);
-                // Its folders go with it (ADR-0219), and come back before its timelines.
+                // Its folders go with it (ADR-0222), and come back before its timelines.
                 let folders = self.remove_scene_folders(&scene.id)?;
                 let mut inverse = vec![match &scene.variant_of {
                     Some(parent) => Edit::SceneCreateVariant {
@@ -3729,7 +3729,7 @@ impl Collection {
         if let Some((field, reason)) = timeline.problem() {
             return Err(invalid(at, &format!("timeline.{field}"), reason));
         }
-        // Its folder is one of its scene's family's (ADR-0219).
+        // Its folder is one of its scene's family's (ADR-0222).
         if let Some(folder) = &timeline.folder {
             let family = self.scenes[index]
                 .variant_of
