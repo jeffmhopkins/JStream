@@ -3454,7 +3454,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "integer"
           },
           "VideoCodec": {
-            "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP; a recording takes H.264 only so far, and its start fails with another.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
+            "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP, and a recording writes each in MP4.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
             "oneOf": [
               {
                 "const": "h264",
