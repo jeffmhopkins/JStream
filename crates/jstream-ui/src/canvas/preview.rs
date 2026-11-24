@@ -46,7 +46,8 @@ pub fn live_fps(base_fps: u32) -> u32 {
 pub const MAX_BACKLOG: u32 = 12;
 
 /// The `preview.subscribe` for a stage `width` × `height` CSS pixels at
-/// `pixel_ratio` device pixels per CSS pixel: a picture as sharp as the stage, kept
+/// `pixel_ratio` device pixels per CSS pixel (below 1 when the UI scale is under 100 %,
+/// `ui_scale.rs`): a picture as sharp as the stage, kept
 /// between 320×180 and the largest the engine sends (1920×1080), so a tiny window still
 /// shows something and a large one shows the canvas at full resolution (#1203: at the
 /// old 1280×720 cap a window capture's text was unreadable), at `fps` pictures a
@@ -54,7 +55,7 @@ pub const MAX_BACKLOG: u32 = 12;
 /// as the fallback.
 pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool, fps: u32) -> Action {
     let side = |css: f32, low: u32, high: u32| {
-        let device = (css * pixel_ratio.max(1.0)).round();
+        let device = (css * pixel_ratio).round();
         if device.is_finite() && device > 0.0 {
             (device as u32).clamp(low, high)
         } else {
@@ -634,6 +635,16 @@ mod tests {
             panic!("a subscribe");
         };
         assert_eq!((max_width, max_height), (Some(1920), Some(1080)));
+        // At a 50 % UI scale the stage's CSS pixels are half a device pixel each.
+        let Action::PreviewSubscribe {
+            max_width,
+            max_height,
+            ..
+        } = subscribe(1600.0, 900.0, 0.5, true, 60)
+        else {
+            panic!("a subscribe");
+        };
+        assert_eq!((max_width, max_height), (Some(800), Some(450)));
         // Each request resolves on the engine's side.
         for action in [
             subscribe(1.0, 1.0, 1.0, true, 0),
