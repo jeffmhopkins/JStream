@@ -2574,11 +2574,8 @@ impl Nv12Passes {
             found => {
                 // In the target's own colour: the platform's is the engine's default,
                 // BT.709 limited range.
-                let pass = converter.bind(
-                    output,
-                    &Nv12Target::nv12_texture(frame.texture())?,
-                    frame.info().color,
-                )?;
+                let pass =
+                    converter.bind(output, &Nv12Target::gpu_frame(frame)?, frame.info().color)?;
                 let entry = (Arc::downgrade(sync), output.clone(), pass);
                 match found {
                     Some(at) => {
