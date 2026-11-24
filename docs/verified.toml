@@ -6774,7 +6774,7 @@ stamp = { hash = "b3:67cb3de4e6103ee0", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#canvas"."body"]
-stamp = { hash = "b3:4a42a84d452249c6", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. The canvas section now has both: a model past the near plane falls back to its clipped card box (#1601), and a 3D group is outlined and hit by its children through GroupPose (#1596, ADR-0164 decision 6); the merged camera.rs applies the fallback per piece | kept from the merged side: A model whose bounds reach past the near plane now falls back to its clipped card box for outline and hit (#1601 N1); the section now says so" }
+stamp = { hash = "b3:447b66620051ca68", by = "agent:issues-thread", note = "Rewrote the outline paragraph: a hidden item draws nothing and isn't hit, marqueed or snapped to unless selected (Layout::seen_boxes/seen_shapes), and only a selected hidden item is dashed (#1732)" }
 
 ["CRATE-jstream-ui#canvas"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -6795,10 +6795,10 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): new 3D scenes bullet: Layout.camera from camera_of, outlines through project_seen, the hit test nearest by depth_of with later items winning ties, a move on the item's depth plane through on_plane with no snapping or handles, the marquee on screen bounds, Alt-drag orbit (0.3°/px, elevation capped at 85°) and Alt+Shift-drag dolly (exp 0.005·dy, at least 10 px) shown live through live.set and committed as one scene.set_camera, and the camera pill; checked against camera.rs and its tests, mod.rs, live.rs and model.rs's an_orbit_commits_the_scene_s_camera." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with the UI scale: the canvas's picks now convert client coordinates to the stage's CSS pixels and its streams are sized by ui_scale::pixel_ratio (device ratio at least 1 times the CSS zoom), while preview::subscribe drops its own floor at 1 so a scale under 100% asks for fewer pixels; the section's sizing claims (as sharp as the stage, 320x180 to 1920x1080) still hold." }
+stamp = { hash = "b3:eade1e4d4a7d4f63", by = "agent:issues-thread", note = "Rewrote the outline paragraph: a hidden item draws nothing and isn't hit, marqueed or snapped to unless selected (Layout::seen_boxes/seen_shapes), and only a selected hidden item is dashed (#1732)" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "Added the 3D group bullet text: hull of children placed through GroupPose, hit inside a child at its depth, drag moves the group item, what Layout::sized shares (once per scene, visible, geometry, no cycle, MAX_NESTING) and that keyframe overrides of children aren't applied; checked against camera.rs and model.rs" }
+stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Rewrote the outline paragraph: a hidden item draws nothing and isn't hit, marqueed or snapped to unless selected (Layout::seen_boxes/seen_shapes), and only a selected hidden item is dashed (#1732)" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/monitor.rs"]
 stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with the UI scale: the canvas's picks now convert client coordinates to the stage's CSS pixels and its streams are sized by ui_scale::pixel_ratio (device ratio at least 1 times the CSS zoom), while preview::subscribe drops its own floor at 1 so a scale under 100% asks for fewer pixels; the section's sizing claims (as sharp as the stage, 320x180 to 1920x1080) still hold." }
@@ -6855,10 +6855,10 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): the Scene Properties paragraph gains the camera: the 3D camera check starting from SceneCamera::framing, position, target, FOV and roll fields, Nearest on top, scene.set_camera sent after validate, Own camera on a keyframe only while the parent has one, the has_3d_items note, Defaults keeping it, and Duplicate scene copying it (clipboard.rs). The Store bullet's camera_of (store.rs), the canvas files (camera.rs, live.rs, mod.rs, model.rs: see Canvas) and style.css's camera field classes hold. Checked against scene_properties.rs and its tests." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
+stamp = { hash = "b3:eade1e4d4a7d4f63", by = "agent:issues-thread", note = "Re-read the canvas and model parts of the design section; nothing there names hidden-item outlines or hit rules, which the canvas section covers; still holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "Re-read: the groups text covers New group, open and ungroup, which the 3D group outline leaves unchanged; nothing about canvas hit testing is claimed here" }
+stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Re-read the canvas and model parts of the design section; nothing there names hidden-item outlines or hit rules, which the canvas section covers; still holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/monitor.rs"]
 stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with ui_scale.rs: the new UI scale bullet (UiScale, STEPS, the browser's storage, webview zoom in the app, CSS zoom and --ui-scale in a browser, css/rect/pointer/window_size where things are placed by the pointer, pixel_ratio for streams) and host.rs's set_desktop_zoom match the code; style.css only adds the menu-scale rules and divides vh/vw by --ui-scale." }
@@ -7107,10 +7107,10 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): the Store bullet names Collection::camera_of (own camera, a keyframe's override or its parent's), checked against store.rs. canvas/camera.rs, live.rs, mod.rs and model.rs (3D canvas), clipboard.rs (Duplicate scene copies the camera) and scene_properties.rs (camera fields) are described under Canvas and Design; the module entries here still hold." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
+stamp = { hash = "b3:eade1e4d4a7d4f63", by = "agent:issues-thread", note = "canvas/mod.rs and model.rs only change which items the canvas draws and hits (hidden ones only while selected, #1732); the crate's purpose is unchanged" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "Re-read: the purpose names the canvas generally; the 3D group outline adds no new purpose or crate seam" }
+stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "canvas/mod.rs and model.rs only change which items the canvas draws and hits (hidden ones only while selected, #1732); the crate's purpose is unchanged" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/monitor.rs"]
 stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with the UI scale: the purpose still holds; ui_scale.rs is one more module of the UI, and the pointer conversions in menu, dialog, workspace, number, learn, events, sequence and canvas change no purpose." }
@@ -7362,7 +7362,7 @@ stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Specs ch
 stamp = { hash = "b3:7b62546c1f4ecd14", by = "agent:claude", note = "addOutput now picks the kind on the Kind segmented control; openOutputSettings is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
-stamp = { hash = "b3:87accd39f503289f", by = "agent:obs-ui-thread", note = "canvas.spec.js adds the lock case: the Sources row's lock button locks Backdrop, a drag selects it but leaves its corners and the readout says '640 × 360 · locked', ArrowRight sends nothing, and the item menu's checked Lock unlocks it; it uses connect, rev, outline, corners and readout as the harness describes, so the harness is unchanged." }
+stamp = { hash = "b3:56dab030c399e591", by = "agent:issues-thread", note = "Re-read the harness section; the new canvas test uses the existing connect/rev helpers and the mock daemon, no harness change" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/capture-targets.spec.js"]
 stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note = "New spec capture-targets.spec.js uses the existing describeKinds and openAddSource fixtures as described; the mock daemon's MockEngine now also lists a window in capture.targets, which the harness text doesn't enumerate. Still holds." }
@@ -7494,7 +7494,7 @@ stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:d6c50cb8b11974bf", by = "agent:bindings", note = "plugins.spec.js now steps Audio → Keys & MIDI → Plugins (SettingsPage::ALL order); the Plugins entry lists Keys & MIDI among the pages. Full e2e suite: 179 passed. | merge: Merged main's #1704 (UI scale 50-150% in View, Ctrl+=/-/0, ui_scale.rs, desktop zoom.rs); main verified its own text, and the merge left this branch's Keys & MIDI additions unchanged; this section's text holds. | kept from the merged side: Added the Projects entry for projects.spec.js: checked each claim (routed collection.info and collection.open, recent list without the open project, click/Space/Up/Down filling Location, one tab stop, double-click and Enter sending one collection.open, New and Save as with no list) against the spec and project.rs | merge: alpha.11: #1679 (f4e862b) limits the model depth test to camera items and keeps a model past the near plane outlined and selectable; #1678 (8bb503e) adds projects.spec.js; a4aa16c notes ADR-0198 amends ADR-0188; the Projects spec and the dialog Escape test listed beside #1662's spec changes, holds | kept from the merged side: Edited the Header stats entry: no dropped count while idle, counting from the first tick with a running output (#1690). | merge: Merging main (#1655, the alpha.11 train this branch was cut from) changed none of this section's inputs: the diff 979e73d..main is empty for them; only main's restamps came in, and the text conflicts were line-wrap only, resolved to this branch's #1690 wording. | kept from the merged side: Re-read with ui-scale.spec.js: the new UI scale entry describes its three tests (menu steps and ends, keys and a kept scale across reload, a click and a right-click menu at 150%) and says the desktop zoom isn't tested here. | merge: The merge brought #1694: the header readout's dropped count now counts only intervals that began with an output running and the Outputs header reads Idle while none runs; re-read, it touches neither the UI scale row nor the keys, and both parts hold together." }
+stamp = { hash = "b3:ec054614f7a4ab5c", by = "agent:issues-thread", note = "Canvas bullet now lists the hidden-item test: no box, a click selects nothing, a dashed outline once selected, solid when shown again (#1732)" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/agents.spec.js"]
 stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated the Agents and Video settings entries to the new names (Ask before connecting, Scale existing scenes to fit); the Outputs and Menus entries describe behaviour, which is unchanged, not the title or subtitle text." }
@@ -7503,7 +7503,7 @@ stamp = { hash = "b3:27dbee02345b7ad6", by = "agent:ui-design", note = "Updated 
 stamp = { hash = "b3:7b62546c1f4ecd14", by = "agent:claude", note = "The outputs entry now has Saved with Replace…, the Name field, Save with no Apply, the Bus select and New encoder…; browse.spec picks Record on the Kind control." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
-stamp = { hash = "b3:87accd39f503289f", by = "agent:obs-ui-thread", note = "The tests list names canvas.spec's lock case and menus.spec's Lock and Screenshot (source/scene) labels and the screenshot toast (the mock refuses png, so a toast shows)." }
+stamp = { hash = "b3:56dab030c399e591", by = "agent:issues-thread", note = "Canvas bullet now lists the hidden-item test: no box, a click selects nothing, a dashed outline once selected, solid when shown again (#1732)" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/capture-targets.spec.js"]
 stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note = "Added the Capture targets bullet for capture-targets.spec.js: describes the window kind, lists only the mock window after None, OK is one edit, reopened shows mock:window; matches the spec, which passes locally with the full suite (106)." }
@@ -8055,7 +8055,7 @@ stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "Pack
 stamp = { hash = "b3:741d1e68f59f3ed4", by = "agent:release-alpha8", note = "The fog card bundle's new Add source type appears in the walkthrough as a fog card after the backdrop under Generated, where UI-FEATURES DL-06 puts it; the walkthrough never named light, so leaving out #1609's reflection probe keeps it a beginner's list. | kept from the merged side: Step 3 now tells a newcomer about the 3D Depth and Turn tools and camera mode (K, drags, wheel zoom, Save view, Esc), matching UI-FEATURES#canvas" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#canvas"]
-stamp = { hash = "b3:6a0ae9449553483e", by = "agent:claude", note = "Re-read against UI-FEATURES' header (new HD-13 UI scale row) and canvas (CV-03 now says the picture is as sharp as the canvas at the UI scale): this section's steps don't depend on either change and still hold." }
+stamp = { hash = "b3:0d8baca5b9948658", by = "agent:issues-thread", note = "Re-read against CV-04's hidden-item change (#1732); the walkthrough mentions no hidden-item boxes, outlines or eye on the canvas, still holds" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
 stamp = { hash = "b3:5e96713eac99b119", by = "agent:issues-thread", note = "Re-read the walkthrough against the DL-01 change; it says nothing about dialog focus timing, still holds" }
@@ -8799,7 +8799,7 @@ stamp = { hash = "b3:21472b2516d7a36f", by = "agent:claude", note = "C18: the WA
 stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }
 
 ["UI-FEATURES#canvas"."body"]
-stamp = { hash = "b3:6a0ae9449553483e", by = "agent:claude", note = "Re-read with the canvas's picks in CSS pixels and streams sized by ui_scale::pixel_ratio: CV-03 now says the picture is as sharp as the canvas on screen at the UI scale; the rest holds." }
+stamp = { hash = "b3:0d8baca5b9948658", by = "agent:issues-thread", note = "CV-04 now says a hidden item draws nothing and takes no click, marquee or snap until selected, then shows a dashed outline (#1732); matches boxes/hit/marquee/snap in canvas/mod.rs" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/camera.rs"]
 stamp = { hash = "b3:85e9ab93ca6e5827", by = "agent:issues-thread", note = "Merged #1679 into #1596's canvas branch. Re-read: CV-15 describes the 3D group outline (#1596); the model near-plane fallback is in the jstream-ui README canvas section | kept from the merged side: Re-read: the 3D canvas bullet describes cards' outlines; the model outline fallback is in the jstream-ui README canvas section; still holds" }
@@ -8814,10 +8814,10 @@ stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude", note = "this branch
 stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094 UI): re-read the canvas rows against the 3D canvas (camera.rs, live.rs, mod.rs, model.rs, store.rs's camera_of): 2D behaviour is unchanged; the 3D canvas is described under Beyond the prototype, and KB-02 says what Alt does there." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with the canvas's picks in CSS pixels and streams sized by ui_scale::pixel_ratio: CV-03 now says the picture is as sharp as the canvas on screen at the UI scale; the rest holds." }
+stamp = { hash = "b3:eade1e4d4a7d4f63", by = "agent:issues-thread", note = "CV-04 now says a hidden item draws nothing and takes no click, marquee or snap until selected, then shows a dashed outline (#1732); matches boxes/hit/marquee/snap in canvas/mod.rs" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:9922fbe27b891a53", by = "agent:issues-thread", note = "CV-15 now says a 3D group is outlined by its children's hull, picked only on a child, and dragged by its item; matches camera::Shape and its tests" }
+stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "CV-04 now says a hidden item draws nothing and takes no click, marquee or snap until selected, then shows a dashed outline (#1732); matches boxes/hit/marquee/snap in canvas/mod.rs" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/monitor.rs"]
 stamp = { hash = "b3:fb59c416d874a5b2", by = "agent:claude", note = "Re-read with the canvas's picks in CSS pixels and streams sized by ui_scale::pixel_ratio: CV-03 now says the picture is as sharp as the canvas on screen at the UI scale; the rest holds." }
@@ -8925,7 +8925,7 @@ stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.
 stamp = { hash = "b3:e10f50b856fcc8ff", by = "agent:bindings", note = "Re-read KB-08: added how a row's Set key adds to a shared chord (unbinding only a conflicting action) and that the scene dialog still refuses one, per review N1." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:19304c70d31cbe8c", by = "agent:claude", note = "Re-read with canvas/mod.rs's picks in CSS pixels; the new Ctrl+=/-/0 keys are described in HD-13 and yield to a hotkey the project binds, so KB-07 still holds." }
+stamp = { hash = "b3:eade1e4d4a7d4f63", by = "agent:issues-thread", note = "Re-read; canvas/mod.rs's keyboard handling (nudges, Ctrl+A select all, Escape) is unchanged, Ctrl+A still selects hidden items too; still holds" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }
