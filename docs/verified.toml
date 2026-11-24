@@ -1752,7 +1752,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Edited the capture targets row: each device's camera controls are listed after its formats (name, value, range, step, default, auto or manual). Checked against run.rs and capture_targets_prints_each_target." }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:ee457af30c160f0b", by = "agent:release-alpha9", note = "Added the mock's channel checks and channel.values answer, and channels in the mock's in-memory state. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs and the protocol text merged; the design holds | kept from the merged side: Checked the mock bullet on studio.set_rendering: it now names the invalid_argument for a screen_space_steps outside SCREEN_SPACE_STEPS before the probe-size refusal, matching mock.rs and the engine; the rest of the mock's rules are unchanged." }
+stamp = { hash = "b3:26ec48be56601a3f", by = "agent:st6-peripheral", note = "the Mock list now says source.seek answers internal like source.restart, as the mock's fallback does" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:29bbf97755ed19b5", by = "agent:release-alpha9", note = "Re-read: the mock only gains empty lanes/starts/stops and waiting fields in literals; it plays no lanes and keeps no waits, which the section does not claim. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs and the protocol text merged; the design holds | kept from the merged side: Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: the mock starts from RenderFeatures::default(), now DEFAULT, and its refusals are unchanged; holds." }
@@ -1776,7 +1776,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "edited the capture.targets bullet to name the mock webcam and its two formats" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:975ef0991b12f675", by = "agent:release-alpha9", note = "Re-read: the mock only gains empty lanes/starts/stops and waiting fields in literals; it plays no lanes and keeps no waits, which the section does not claim. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs and the protocol text merged; the design holds | kept from the merged side: Re-read after the mock gained a test that a screen_space_steps of 20 is invalid_argument and 64 is taken, as the design's studio.set_rendering bullet says." }
+stamp = { hash = "b3:c88aefe6561419e1", by = "agent:st6-peripheral", note = "the Mock list now says source.seek answers internal like source.restart, as the mock's fallback does" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "Added the output-bus bullet to the mock's checks: output.set_audio_buses's errors and bus.delete's output blocker, matching mock.rs and mock/audio.rs; ARCH#protocol's new output.set_audio_buses paragraph agrees" }
@@ -1815,7 +1815,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "the mock's capture.targets gains MOCK_DEVICE with two formats; the purpose still holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:975ef0991b12f675", by = "agent:release-alpha9", note = "Re-read: the mock's purpose is unchanged by the new timeline fields. | merge: #1645 (screen-space reflections, 1f65ffa) merged: mock.rs gains SSR's rendering fields beside the train's channel and timeline mocks; holds | kept from the merged side: Re-read after formatting mock.rs's new steps test: the purpose holds." }
+stamp = { hash = "b3:c88aefe6561419e1", by = "agent:st6-peripheral", note = "mock.rs only adds source.seek to the unmocked timeline actions; the crate's contents list is unchanged" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "The mock now handles output.set_audio_buses (ghost output, not one bus, a virtual camera, ghost bus), lists audio_buses in output.list and blocks bus.delete for an output carrying the bus with the graph's reason; the purpose still holds" }
@@ -3276,7 +3276,7 @@ stamp = { hash = "b3:f372f4393411319f", by = "agent:claude", note = "New crate: 
 stamp = { hash = "b3:70b18ef3f311952a", by = "agent:claude", note = "wire gains PacketType::Names, MOD_SLOTS, MAX_MOD_NAME, is_mod_name and write_names, and the layout test; README lists them" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:98887c9068de8e3c", by = "agent:claude-warp-aim", note = "the scene-design bullet now names sky_pictures with ADR-0188, matching design.rs" }
+stamp = { hash = "b3:9acc23862b036000", by = "agent:st6-peripheral", note = "the destructiveHint list now names source.seek beside source.restart, matching REVERSIBLE_ACTIONS and the tools.snap source tool" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:23b6c2b103145aa3", by = "agent:channels", note = "Added sequences and their starts/stops to the guidance summary." }
@@ -3294,7 +3294,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:34b92306cdcaa650", by = "agent:claude-sun", note = "design.rs guide gains the ADR-0198 nested-scene arrival sentence (bottom ahead, others by turn_deg/tilt_deg, top lights); the section's description of the guide still holds" }
+stamp = { hash = "b3:1ba04057087e42e8", by = "agent:st6-peripheral", note = "the destructiveHint list now names source.seek beside source.restart, matching REVERSIBLE_ACTIONS and the tools.snap source tool" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3318,7 +3318,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:4d027ece570a71c8", by = "agent:channels", note = "Added channels to the guidance summary; checked REVERSIBLE_ACTIONS wording still holds with the channel actions added." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:222172469621ccdf", by = "agent:channels", note = "Added channels to the guidance summary; checked REVERSIBLE_ACTIONS wording still holds with the channel actions added." }
+stamp = { hash = "b3:0cfdc163321e6682", by = "agent:st6-peripheral", note = "the destructiveHint list now names source.seek beside source.restart, matching REVERSIBLE_ACTIONS and the tools.snap source tool" }
 
 ["CRATE-jstream-mcp#purpose"."body"]
 stamp = { hash = "b3:af5c949db44560d1", by = "agent:ptz-builder", note = "OPEN_WORLD now names ptz; checked the text against tools.rs and its test | merge: merged wave/alpha5, which brought #1334/#1338 agent approval (0.108), #1417 pulse motion-driven effect settings (0.109, schema 13, ADR-0138), #1424 quality.probe (0.110), #1410 H.264 decoder, #1419 Linux desktop window and #1415 JTunnel MIDI; re-read: the PTZ text in this section holds beside them, at protocol 0.111 and schema 14 | kept from the merged side: Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds | merge: wave/alpha5 brought #1419 (Linux desktop window, ADR-0141), #1334 and #1338 (asking before a new agent connects, ADR-0131) and #1427 (midi_beat position). The merge kept wave's text and this branch's ADR-0061 → ADR-0140 link rewrite (ADR-0140 supersedes ADR-0061); re-read, the section holds. | kept from the merged side: Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials)" }
@@ -3327,7 +3327,7 @@ stamp = { hash = "b3:af5c949db44560d1", by = "agent:ptz-builder", note = "OPEN_W
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:34b92306cdcaa650", by = "agent:claude-sun", note = "design.rs guide adds how to make a planet-and-sun arrival from a nested scene (ADR-0198); the purpose names nothing this changes" }
+stamp = { hash = "b3:1ba04057087e42e8", by = "agent:st6-peripheral", note = "tools.rs adds source.seek to REVERSIBLE_ACTIONS and design.rs a line on it; the contents list still names both files' roles" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3351,7 +3351,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:4d027ece570a71c8", by = "agent:channels", note = "Re-read: design.rs and tools.rs changes (channel guidance, reversible channel actions) fit the module list as written." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:222172469621ccdf", by = "agent:channels", note = "Re-read: design.rs and tools.rs changes (channel guidance, reversible channel actions) fit the module list as written." }
+stamp = { hash = "b3:0cfdc163321e6682", by = "agent:st6-peripheral", note = "tools.rs adds source.seek to REVERSIBLE_ACTIONS and design.rs a line on it; the contents list still names both files' roles" }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:9503adad5cd5aa4f", by = "agent:capture-cost", note = "Edited: the Video bullet says a plane still shared gives no buffer from Plane::into_data, so nothing is copied for it (video.rs: into_data now returns an Option and is None for a shared plane or a range of a longer buffer); the rest of the bullet and crate are unchanged." }
