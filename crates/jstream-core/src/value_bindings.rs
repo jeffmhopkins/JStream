@@ -143,18 +143,18 @@ impl ValueDriver {
                 .map_or(1.0, f64::from);
             let from = driven.midi.from;
             let value = from + (driven.midi.value(level) - from) * amount;
-            if driven.binding.enabled {
-                if let ValueTarget::PtzAxis { camera, axis } = &driven.binding.target {
-                    let (min, max) = axis.range();
-                    let v = if value.is_finite() { value } else { 0.0 };
-                    // Within the axis's `i32` range once clamped, so the cast is exact.
-                    let count = v.round().clamp(f64::from(min), f64::from(max)) as i32;
-                    aims.push(PtzAim {
-                        camera: camera.clone(),
-                        axis: *axis,
-                        count,
-                    });
-                }
+            if driven.binding.enabled
+                && let ValueTarget::PtzAxis { camera, axis } = &driven.binding.target
+            {
+                let (min, max) = axis.range();
+                let v = if value.is_finite() { value } else { 0.0 };
+                // Within the axis's `i32` range once clamped, so the cast is exact.
+                let count = v.round().clamp(f64::from(min), f64::from(max)) as i32;
+                aims.push(PtzAim {
+                    camera: camera.clone(),
+                    axis: *axis,
+                    count,
+                });
             }
             if driven.value != Some(value) {
                 self.clock += 1;
