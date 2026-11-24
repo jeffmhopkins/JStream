@@ -296,7 +296,7 @@ fn room(bars: &[(u32, u32)], n: usize, next: usize, duration_ms: u32) -> (u32, u
 }
 
 /// Where bar `n` of `bars` goes when `grip` is dragged to `at_ms` (for the body: its
-/// start goes there). It stays in its [room](room) and in `0..duration_ms`, and keeps
+/// start goes there). It stays in its room (`room`) and in `0..duration_ms`, and keeps
 /// [`MIN_BAR_MS`]; moved whole it keeps its length.
 pub fn drag_bar(
     bars: &[(u32, u32)],
@@ -320,7 +320,7 @@ pub fn drag_bar(
     }
 }
 
-/// `bars` with a new bar `len_ms` long from `at_ms`, kept in the gap's [room](room)
+/// `bars` with a new bar `len_ms` long from `at_ms`, kept in the gap's room (`room`)
 /// (so cut short before the next bar and the end), and its place among them; `None`
 /// when `at_ms` is in a bar or the gap has no room for [`MIN_BAR_MS`].
 pub fn insert_bar(
