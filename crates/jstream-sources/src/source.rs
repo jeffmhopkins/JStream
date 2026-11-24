@@ -72,9 +72,10 @@ pub trait Source: Send {
     /// Whether the source counts from its time zero and starts again by counting from a
     /// new one: a `timer` (ADR-0214). The engine restarts such a source itself, for a
     /// show, a `source.restart` and a `source.seek`, by moving its time zero, so a build
-    /// that keeps its time ([`SourceKind::keeps_time`]) keeps the restart too; it calls
-    /// none of [`show`](Self::show), [`restart`](Self::restart) or [`seek`](Self::seek)
-    /// for one. `false`, the default.
+    /// that keeps its time ([`SourceKind::keeps_time`]) keeps the restart too. It calls
+    /// neither [`restart`](Self::restart) nor [`seek`](Self::seek) for one, and calls
+    /// [`show`](Self::show) only after the zero has moved, at the new zero, so a kind
+    /// like this leaves `show` as the default. `false`, the default.
     fn counts_from_zero(&self) -> bool {
         false
     }
