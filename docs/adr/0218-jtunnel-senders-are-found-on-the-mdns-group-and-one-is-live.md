@@ -1,12 +1,12 @@
 <!-- @doc
 id = "ADR-0218"
-title = "JTunnel senders are found on the mDNS group, one accepted sender is live, and it is also the input JTunnel"
+title = "JTunnel senders are found on the mDNS group, and one accepted sender is live and needs no name"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0218: JTunnel senders are found on the mDNS group, one accepted sender is live, and it is also the input JTunnel
+# ADR-0218: JTunnel senders are found on the mDNS group, and one accepted sender is live and needs no name
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -24,8 +24,8 @@ tunnel name and its address and port, which change when the DAW picks another po
 The maintainer then asked for three things beside working discovery. Several senders may
 be accepted, but only one is received at a time. Accepting a discovered sender should be
 one click after the confirmation ADR-0123 requires. And because only one sender is live,
-what a collection binds to should not depend on the sender's tunnel name (a show built
-against a sender called `Bitwig` broke against one called anything else).
+what a collection binds to should name no sender at all (a show built against a sender
+called `Bitwig` broke against one called anything else).
 
 <a id="decision"></a>
 ## Decision
@@ -50,25 +50,25 @@ against a sender called `Bitwig` broke against one called anything else).
    restarted on another port) is offered the same way, and accepting moves it. Every
    first use is still confirmed by name and address (ADR-0123 §3). The daemon's
    `--jtunnel-accept` list is unchanged: it receives from each.
-3. **The live sender is also the input `JTunnel`.** The engine gives the first accepted
-   sender (in the app, the live one) a second name, `JTunnel`, unless an accepted sender
-   is itself called that. Its MIDI feeds both names' states, its state messages are put
-   in the live data under both, a `network_audio` source may name it either way (and
-   names `JTunnel` by default), and param names read under either name reach it
-   ([ADR-0181](0181-jstream-names-a-jtunnel-senders-params.md)). A binding, source or
-   grant that names `JTunnel` follows whichever sender is live; one that names a sender
-   keeps working. The app's Map dialog and Learn show the live sender once, as
-   `JTunnel`, so what they bind follows the live sender. No protocol type changes:
-   `JTunnel` is an input name like any other.
+3. **What reads the live sender names no sender.** A reader with no `input` (a MIDI or
+   data binding, a channel input, a page's data grant, a grid) already reads any sender,
+   and with one sender received that is the live one, whatever its tunnel name. So no
+   name is needed, and none is added: there is no alias. A `network_audio` source with
+   an empty `sender` records the first accepted sender (in the app, the live one), and
+   that is its default. The app's Learn and Map dialog bind a Mod, live data or MIDI
+   from an accepted sender with no `input`; a MIDI port keeps its name. A reader that
+   names a sender keeps working while that sender is live. Collections are changed to
+   the unnamed form; the engine keeps no compatibility path, since a named reader is
+   still valid. No protocol type changes.
 
 <a id="consequences"></a>
 ## Consequences
 - **Easier:** a sender on the LAN shows up and is accepted with one confirmation; a DAW
-  that moved port is followed with one; a collection works against whichever sender is
-  live.
+  that moved port is followed with one; a collection that names no sender works
+  against whichever sender is live.
 - **Harder:** the receiver holds a second socket on a well-known port while it runs. Its
   input is the same parser and bounds as before, and the threat model's LAN inputs
-  section says so. The live sender's state is held twice in the live data (each copy
-  within its per-sender bound).
+  section says so. An unnamed MIDI reader also hears a MIDI port sending the same
+  control; a person who has both names the port's readers.
 - **Must do:** the threat model, the core, desktop and UI READMEs, and a regression test
   that an announcement on the group is listed.

@@ -662,13 +662,7 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         || keys.held(0, 60) == 100 && keys.controller(3, 7) == 99
     ));
     assert_eq!(midi.any().held(0, 60), 100);
-    // The live sender is also the input `JTunnel` (ADR-0218); the every-input state
-    // still hears each message once.
-    let live = midi.drawn(LIVE_INPUT);
-    assert_eq!(live.held(0, 60), 100);
-    assert_eq!(live.controller(3, 7), 99);
     assert!(eventually(|| receiver.stats().midi == 4));
-    assert_eq!(midi.any().pushed(), keys.pushed());
     // Its clock runs the input's tempo (ADR-0142 §3).
     let tempo = keys.tempo().expect("a tempo from the sender's clock");
     assert!(tempo.playing);
@@ -807,10 +801,11 @@ fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
         data.get("Bitwig", "transport").as_deref(),
         Some(&serde_json::json!({"playing": true}))
     );
+    // A reader naming no sender reads it: with one sender received, the live one
+    // (ADR-0218).
     assert_eq!(
-        data.get(LIVE_INPUT, "transport"),
-        data.get("Bitwig", "transport"),
-        "the live sender's second name"
+        data.get_from(None, "transport"),
+        data.get("Bitwig", "transport")
     );
     sender.state(to, &piece(1, 3, 0, 1, "mixer", b"{not json"));
     assert!(eventually(|| receiver.stats().state_dropped == 1));
@@ -821,13 +816,9 @@ fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
     // The sender starts again: what it sent before is gone.
     sender.state(to, &piece(2, 1, 0, 1, "clock", b"{\"tempo\":120}"));
     assert!(eventually(|| receiver.stats().state == 3));
-    // The live sender's state is also under `JTunnel` (ADR-0218).
     assert_eq!(
         data.list(),
-        vec![
-            ("Bitwig".to_owned(), vec!["clock".to_owned()]),
-            (LIVE_INPUT.to_owned(), vec!["clock".to_owned()]),
-        ]
+        vec![("Bitwig".to_owned(), vec!["clock".to_owned()])]
     );
     assert_eq!(volume.read(), jstream_sources::DataReading::Absent);
     drop(receiver);
@@ -878,10 +869,10 @@ fn an_expired_key_comes_back_with_its_next_resend() {
     assert_eq!(receiver.stats().state, 2);
 }
 
-/// ADR-0218: the first accepted sender is also `JTunnel`, so a source may name it
-/// either way; no other sender is, and a sender called `JTunnel` keeps its own name.
+/// ADR-0218: a source with no sender named records the first accepted one, the
+/// desktop app's one live sender.
 #[test]
-fn the_first_sender_is_also_the_live_input() {
+fn an_unnamed_sender_is_the_first_accepted() {
     let accepted = |names: &[&str]| {
         let mut setup = JtunnelSetup::new(
             names
@@ -899,11 +890,8 @@ fn the_first_sender_is_also_the_live_input() {
         start(&setup)
     };
     let two = accepted(&["Bitwig", "Laptop"]);
-    assert_eq!(two.sender(LIVE_INPUT), Ok(0));
+    assert_eq!(two.sender(""), Ok(0));
     assert_eq!(two.sender("Laptop"), Ok(1));
-    let named = accepted(&["Bitwig", LIVE_INPUT]);
-    assert_eq!(named.sender(LIVE_INPUT), Ok(1), "its own name wins");
-    assert!(named.senders[0].alias.is_none());
-    let none = accepted(&[]);
-    assert!(none.sender(LIVE_INPUT).is_err());
+    assert!(two.sender("Other").is_err());
+    assert!(accepted(&[]).sender("").is_err());
 }

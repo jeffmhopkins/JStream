@@ -305,7 +305,7 @@ folder, and its log `logs\cef.log`.
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
   in the data folder; they apply at once. Several senders may be accepted, but one is
   live at a time ([ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)): Make live switches, and a sender accepted becomes live. The
-  live sender is also the input `JTunnel`, so a collection that names `JTunnel` follows
+  readers that name no input (what Learn and Map make for a JTunnel source) follow
   whichever sender is live. On, the app receives the live
   sender's audio and MIDI as the daemon's `--jtunnel-accept` does
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and the DAW state of

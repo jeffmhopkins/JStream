@@ -1814,17 +1814,10 @@ fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
     assert!(eventually(|| {
         super::query(&control, Query::DataList).ok()
             == Some(QueryResult::DataList {
-                inputs: vec![
-                    DataInputInfo {
-                        input: "Bitwig".into(),
-                        remote_keys: vec!["track/0".into()],
-                    },
-                    // The live sender's second name (ADR-0218).
-                    DataInputInfo {
-                        input: crate::LIVE_INPUT.into(),
-                        remote_keys: vec!["track/0".into()],
-                    },
-                ],
+                inputs: vec![DataInputInfo {
+                    input: "Bitwig".into(),
+                    remote_keys: vec!["track/0".into()],
+                }],
             })
     }));
     let get = |input: &str, key: &str| {
@@ -1843,7 +1836,6 @@ fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
             remote_value: Some(serde_json::json!({"name": "Drums", "volume": 0.8}))
         })
     );
-    assert_eq!(get(crate::LIVE_INPUT, "track/0"), get("Bitwig", "track/0"));
     assert_eq!(
         get("Bitwig", "clock"),
         Some(QueryResult::DataGet { remote_value: None })

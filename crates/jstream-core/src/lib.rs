@@ -101,7 +101,7 @@ pub use drops::{
     capture_drops, output_packet_drops, render_tick_drops, video_encode_drops,
 };
 pub use engine::Engine;
-pub use jtunnel::{AcceptedSender, JtunnelSetup, JtunnelStats, LIVE_INPUT, MAX_SENDERS};
+pub use jtunnel::{AcceptedSender, JtunnelSetup, JtunnelStats, MAX_SENDERS};
 pub use lan::is_lan;
 pub use plugins::kinds::{CLAP_KIND_PREFIX, ClapKind, ClapScan};
 pub use plugins::supervisor::{

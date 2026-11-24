@@ -743,9 +743,8 @@ somewhere it shouldn't.
   uncounted; it reads at most 16 datagrams per turn of the thread, so other programs'
   mDNS traffic can't hold up playout. Another local program on 5353 sees the same
   group traffic it always did; JStream adds nothing to it.
-- In the desktop app one accepted sender is live at a time: only it is subscribed to,
-  and the first accepted sender is also the input `JTunnel` (ADR-0218), which changes
-  no bound below: it is the same sender's data under a second name.
+- In the desktop app one accepted sender is live at a time (ADR-0218): only it is
+  subscribed to, so a reader naming no input reads only that sender's data.
 - A names packet ([ADR-0181](../adr/0181-jstream-names-a-jtunnel-senders-params.md))
   tells an accepted sender whose state is on what the collection calls its modulation
   params, so its DAW shows them. It carries only the names of what reads the sender's

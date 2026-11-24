@@ -5,7 +5,7 @@
 //! - **The switch** turns the JTunnel receiver on for this machine. Off until the person
 //!   turns it on.
 //! - **One live sender.** Any number of senders may be accepted, but JStream receives
-//!   from one at a time. The live one is marked **Live**; each other one stands by with
+//!   from one at a time, so what reads it names no sender ([`bound_input`]). The live one is marked **Live**; each other one stands by with
 //!   **Make live**, which switches to it. A sender added or accepted becomes the live
 //!   one, replacing the one before, which stays accepted.
 //! - **The accepted senders** are listed by tunnel name and the address and port they
@@ -38,9 +38,20 @@ use jstream_control::protocol::{Call, CallResult, JtunnelSenderInfo, Query, Quer
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
-/// The input name the live JTunnel sender also goes by, whatever its tunnel name: the
-/// engine's `LIVE_INPUT` (ADR-0218), which this crate can't depend on.
-pub const LIVE_INPUT: &str = "JTunnel";
+/// The input a reader learned from `input` names: none when `input` is a JTunnel sender
+/// this app accepts, since the app receives from one sender at a time and a reader
+/// naming no input reads the live one, whatever its tunnel name (ADR-0218); `input`
+/// itself for anything else (a MIDI port), or outside the desktop app.
+pub fn bound_input(input: &str) -> Option<String> {
+    let jtunnel = crate::host::desktop_jtunnel()
+        .is_some_and(|setting| setting.accepted.iter().any(|s| s.name == input));
+    bound_input_of(input, jtunnel)
+}
+
+/// [`bound_input`] once it is known whether `input` is an accepted JTunnel sender.
+pub fn bound_input_of(input: &str, jtunnel: bool) -> Option<String> {
+    (!jtunnel && !input.is_empty()).then(|| input.to_owned())
+}
 
 /// `jtunnel.senders`: whether the receiver runs, and the senders it heard.
 ///
@@ -484,5 +495,17 @@ mod tests {
         };
         assert_eq!(gone.live_name(), Some("Bitwig"));
         assert_eq!(JtunnelSetting::parse(&moved.to_json()), moved);
+    }
+
+    /// ADR-0218: a reader learned from an accepted JTunnel sender names no input, so it
+    /// follows whichever sender is live; a MIDI port keeps its name.
+    #[test]
+    fn a_reader_learned_from_a_jtunnel_sender_names_no_input() {
+        assert_eq!(super::bound_input_of("Bitwig", true), None);
+        assert_eq!(
+            super::bound_input_of("Pads", false),
+            Some("Pads".to_owned())
+        );
+        assert_eq!(super::bound_input_of("", false), None);
     }
 }

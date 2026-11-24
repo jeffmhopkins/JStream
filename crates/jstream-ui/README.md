@@ -416,10 +416,10 @@ Contents ([Design](#design) explains the choices):
   check, `with_heard` (accept a heard sender, or move an accepted one to the address it
   is heard at), `with_live` and `JtunnelSetting::live_name` (the one live sender,
   [ADR-0218](../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), and `accepts`, whether a heard sender is on the list, tested natively. The
-  store's `jtunnel_changed` counts `jtunnel.senders_changed`. `LIVE_INPUT` is
-  `JTunnel`, the name the live sender also goes by; `live_sources::prefer_live` shows
-  the live sender once, under it, so Learn and the Map dialog bind what follows the
-  live sender.
+  store's `jtunnel_changed` counts `jtunnel.senders_changed`. `bound_input` is the
+  input a learned reader names: none for an accepted JTunnel sender, so Learn, the Map
+  dialog (whose JTunnel and Other data readers name no sender) and a channel's Learn
+  MIDI bind what follows the live sender, and a MIDI port's own name.
 - **PTZ cameras** (`ptz_cameras.rs`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)
   decision 1): `PtzCameraSettingView`, the desktop app's "Control PTZ cameras" switch and
   camera list on the Devices page, with Edit filling the form for Save camera, saved

@@ -27,15 +27,11 @@
 //! `jtunnel.senders` reports the list. Each change to it is sent on the host's
 //! `changed` channel, which the engine turns into `jtunnel.senders_changed`.
 //!
-//! **The live sender's second name** ([ADR-0218](../../../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)).
-//! The first accepted sender, which in the desktop app is the one live sender, is also
-//! the input [`LIVE_INPUT`] (`JTunnel`): its MIDI feeds both names' states, its state
-//! messages are put in the live data under both, a `network_audio` source may name it
-//! either way, and param names read by either name reach it. A binding, source or
-//! grant that names `JTunnel` follows whichever sender is live, whatever its tunnel
-//! name, so switching senders needs no edit; one that names the sender keeps working.
-//! When an accepted sender is itself called `JTunnel`, that name is its own and no
-//! other sender gets it.
+//! **The live sender needs no name** ([ADR-0218](../../../../docs/adr/0218-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)).
+//! The desktop app receives from one sender at a time, so a reader that names no input
+//! (a binding, a channel input, a page grant) already reads it, whatever its tunnel
+//! name, and a `network_audio` source with an empty `sender` records the first accepted
+//! sender, the app's live one. A reader that names the sender keeps working.
 //!
 //! **Naming a sender's params** ([ADR-0181](../../../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md)).
 //! The engine hands the receiver what the collection calls each sender's 32 modulation
@@ -88,10 +84,6 @@ use jstream_platform::{
     AudioInputHandler, AudioPacket, AudioPacketFlags, AudioStream, MediaClock, PlatformError,
 };
 use jstream_sources::{DataRefused, LiveData, MidiFeed, MidiInputs};
-
-/// The input name the first accepted sender (the desktop app's live sender) also goes by,
-/// so bindings, sources and grants need not name the sender itself (ADR-0218).
-pub const LIVE_INPUT: &str = "JTunnel";
 
 /// How often a sender is subscribed to again: JTunnel's keepalive.
 const SUBSCRIBE_EVERY: Duration = Duration::from_millis(500);
@@ -321,9 +313,6 @@ struct JtunnelCounters {
 /// One accepted sender, as both sides see it.
 struct Sender {
     accepted: AcceptedSender,
-    /// Its second name, [`LIVE_INPUT`], for the first accepted sender unless another one
-    /// is called that.
-    alias: Option<&'static str>,
     /// What the collection calls its modulation params (ADR-0181).
     naming: Mutex<Naming>,
     /// Its stream's sample rate, from its latest audio packet; 0 before one.
@@ -453,14 +442,11 @@ impl Receiver {
             }
             _ => None,
         };
-        let taken = setup.accepted.iter().any(|s| s.name == LIVE_INPUT);
         let senders: Arc<[Sender]> = setup
             .accepted
             .iter()
-            .enumerate()
-            .map(|(n, accepted)| Sender {
+            .map(|accepted| Sender {
                 accepted: accepted.clone(),
-                alias: (n == 0 && !taken).then_some(LIVE_INPUT),
                 naming: Mutex::new(Naming::default()),
                 rate: AtomicU32::new(0),
                 recorder: AtomicU64::new(0),
@@ -486,7 +472,7 @@ impl Receiver {
                 stop: Arc::clone(&stop),
                 streams: senders
                     .iter()
-                    .map(|sender| Stream::new(midi.as_deref(), &sender.accepted.name, sender.alias))
+                    .map(|sender| Stream::new(midi.as_deref(), &sender.accepted.name))
                     .collect(),
             };
             thread::Builder::new()
@@ -511,7 +497,7 @@ impl Receiver {
     pub(crate) fn set_names(&self, names: &names::ParamNames) {
         for sender in self.senders.iter() {
             let wanted = if sender.accepted.uses_state() {
-                names::for_sender(names, &sender.accepted.name, sender.alias)
+                names::for_sender(names, &sender.accepted.name)
             } else {
                 Vec::new()
             };
@@ -618,15 +604,19 @@ impl Receiver {
             .collect()
     }
 
+    /// The sender called `name`, or for an empty name the first accepted one: the
+    /// desktop app's one live sender (ADR-0218).
     fn sender(&self, name: &str) -> Result<usize, String> {
         if name.is_empty() {
-            return Err("no JTunnel sender is named".into());
+            return if self.senders.is_empty() {
+                Err("no JTunnel sender is accepted on this machine".into())
+            } else {
+                Ok(0)
+            };
         }
-        // Its own name first: an alias never shadows a sender of that name.
         self.senders
             .iter()
             .position(|s| s.accepted.name == name)
-            .or_else(|| self.senders.iter().position(|s| s.alias == Some(name)))
             .ok_or_else(|| format!("the JTunnel sender `{name}` is not accepted on this machine"))
     }
 
@@ -762,11 +752,11 @@ struct Handler {
 }
 
 impl Stream {
-    fn new(midi: Option<&MidiInputs>, name: &str, alias: Option<&str>) -> Self {
+    fn new(midi: Option<&MidiInputs>, name: &str) -> Self {
         Self {
             playout: Playout::new(u64::from(jstream_sources::LATENCY_MS.2) * 1_000_000),
             handler: None,
-            midi: midi.map(|inputs| inputs.feed_as(name, alias)),
+            midi: midi.map(|inputs| inputs.feed(name)),
             state: StateAssembler::new(),
             evicted: 0,
         }
@@ -834,9 +824,6 @@ impl Run {
         // What it no longer receives reads as absent at once, not after 3 s.
         for sender in self.senders.iter() {
             self.data.restart(&sender.accepted.name);
-            if let Some(alias) = sender.alias {
-                self.data.restart(alias);
-            }
         }
         // A receiver stopped or replaced (the host started JTunnel again) leaves no
         // source recording silently: each reopens on the receiver now running. Opens
@@ -1116,7 +1103,6 @@ impl Run {
     /// Takes one state piece from the sender at `index` (ADR-0171 decision 1).
     fn state(&mut self, index: usize, piece: &wire::StatePiece<'_>) {
         let counters = &self.counters;
-        let alias = self.senders[index].alias;
         let sender = &self.senders[index].accepted;
         if !sender.state {
             counters.state_off.fetch_add(1, Ordering::Relaxed);
@@ -1127,13 +1113,8 @@ impl Run {
         let mut pushed = stream.state.push(piece);
         if pushed.restarted {
             self.data.restart(&sender.name);
-            if let Some(alias) = alias {
-                self.data.restart(alias);
-            }
         }
-        // Both names must still hold it, or it is taken again for both.
-        let held = |name: &str| self.data.touch(name, piece.key, now);
-        if pushed.step == StateStep::Repeat && !(held(&sender.name) & alias.is_none_or(held)) {
+        if pushed.step == StateStep::Repeat && !self.data.touch(&sender.name, piece.key, now) {
             // A resend of a message the live data no longer has (it expired after a gap,
             // or a stopped receiver forgot it): take it again, at once for one piece and
             // from the next resend round for more (#1597 review B1).
@@ -1141,11 +1122,6 @@ impl Run {
             pushed = stream.state.push(piece);
         }
         if let StateStep::Whole(json) = pushed.step {
-            if let Some(alias) = alias {
-                // The same message under the second name; the sender's own name's
-                // result is the one counted.
-                let _ = self.data.put(alias, piece.key, &json, now);
-            }
             match self.data.put(&sender.name, piece.key, &json, now) {
                 Ok(()) => {
                     counters.state.fetch_add(1, Ordering::Relaxed);

@@ -1010,7 +1010,7 @@ pub fn midi_input(control: &MidiControlInfo) -> MotionKind {
         control: MotionMidiControl::Cc,
         controller: Some(control.controller),
         channel: Some(control.channel),
-        input: Some(control.input.clone()),
+        input: crate::jtunnel::bound_input(&control.input),
         smoothing_ms: 50,
         curve: MotionCurve::Linear,
         from: Finite32::ZERO,

@@ -4176,9 +4176,9 @@ source: crates/jstream-core/src/kinds.rs
         "type": "string",
         "multiline": false,
         "max_len": 31,
-        "default": "JTunnel",
+        "default": "",
         "label": "Sender",
-        "description": "`JTunnel` follows the live sender, whatever its name; or the sender's own name, as its plugin shows it. JStream receives only from senders accepted on this machine.",
+        "description": "The sender's name, as its plugin shows it, or empty for the live sender (the first accepted). JStream receives only from senders accepted on this machine.",
         "live": false
       },
       {

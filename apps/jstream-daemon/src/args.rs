@@ -75,8 +75,8 @@ Options:
                        plugin's tunnel name and the LAN address and port it
                        sends from (repeatable). Off without it: no socket is
                        open. A `network_audio` source naming the sender then
-                       records its audio. The first one is also the input
-                       `JTunnel` (ADR-0218)
+                       records its audio; one with no sender named records
+                       the first given (ADR-0218)
   --jtunnel-no-state <name>
                        ignore the DAW state the accepted JTunnel sender <name>
                        sends (ADR-0171): its transport, tracks and clips, which

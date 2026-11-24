@@ -256,12 +256,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
   taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
-  says bye when it stops; it never announces itself or sends audio or MIDI. The first
-  accepted sender (the desktop app's one live sender) is also the input `LIVE_INPUT`,
-  `JTunnel` (ADR-0218), unless a sender is called that: its MIDI feeds both names'
-  states (`MidiInputs::feed_as`), its state goes in the live data under both, a
-  `network_audio` source may name it either way, and readers of either name name its
-  params, so what names `JTunnel` follows whichever sender is live. Beside each
+  says bye when it stops; it never announces itself or sends audio or MIDI. A
+  `network_audio` source with an empty `sender` records the first accepted sender, the
+  desktop app's one live sender (ADR-0218); a reader that names no input already reads
+  it. Beside each
   keepalive it may send a names packet
   ([ADR-0181](../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md),
   `jtunnel/names.rs`): what the collection calls the sender's 32 modulation params, each
@@ -302,7 +300,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   accepted sender). On,
   each sender's `StateAssembler` joins its pieces per key and the whole message goes to
   the engine's `LiveData` (`jstream-sources`, one per engine, `Engine::live_data`) under
-  the sender's name (and the first sender's under `LIVE_INPUT` too, below), counted as `state`, or as `state_dropped` when it isn't one JSON
+  the sender's name, counted as `state`, or as `state_dropped` when it isn't one JSON
   value or is over a bound, as is a message forgotten part-way; a resend of a finished
   message keeps its key current, and is taken again whole when its key expired or its
   message was refused for room (`StateAssembler::forget`), a new stream ID forgets the sender's keys, every
