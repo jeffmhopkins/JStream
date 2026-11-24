@@ -325,7 +325,7 @@ test('a filter picked in the dialog shows its settings there, and Cancel puts th
   await expect(page.getByRole('dialog', { name: 'Filters', exact: true })).toHaveCount(0);
 
   const before = await rev(page);
-  const amount = pane.getByRole('spinbutton');
+  const amount = pane.locator('.number-field input');
   await amount.fill('0.5');
   await amount.press('Tab');
   await expect(rows.first().locator('.filter-summary')).toHaveText('0.50');
@@ -369,4 +369,46 @@ test('Escape closes the topmost dialog wherever the focus is', async ({ page, da
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+});
+
+const SIZED = {
+  kind_id: 'color', category: 'source', name: 'Color', version: 1, video: true, audio: false,
+  params: [
+    { id: 'size', type: 'int', min: 1, max: 400, step: 1, unit: 'px', default: 100, label: 'Size', live: true },
+  ],
+};
+
+// #1734: a dialog's number is the shared click-drag field, and a drag follows into the
+// draft as it goes: a live setting shows on output through the dialog's gesture before
+// the release, and OK still sends one batch, one undo step.
+test('dragging a live setting in the dialog shows it before the release, and OK is one edit', async ({ page, daemon }) => {
+  const requests = [];
+  await describeKinds(page, [SIZED], { refuse: (request) => { requests.push(JSON.stringify(request)); return null; } });
+  const sent = (marker) => requests.filter((r) => r.includes(marker));
+  await connect(page, daemon);
+  const startRev = await rev(page);
+  const dialog = await openProperties(page);
+  const size = dialog.getByRole('textbox', { name: 'Size' });
+  await expect(size).toHaveValue('100');
+  const box = await size.boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + 10, y);
+  await page.mouse.down();
+  // One step a 3 px: 30 px is 10 more.
+  await page.mouse.move(box.x + 40, y, { steps: 6 });
+  await expect(size).toHaveValue('110');
+  await expect.poll(() => sent('"live.set"').length).toBeGreaterThan(0);
+  await page.mouse.move(box.x + 70, y, { steps: 6 });
+  await expect(size).toHaveValue('120');
+  await expect.poll(() => sent('"live.set"').some((r) => r.includes('"size":120'))).toBe(true);
+  expect(await rev(page)).toBe(startRev);
+  await page.mouse.up();
+  await expect(size).toHaveValue('120');
+  expect(sent('"ends_gesture"')).toHaveLength(0);
+
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(startRev + 1);
+  const [commit] = sent('"ends_gesture"');
+  expect(commit).toContain('"size":120');
 });

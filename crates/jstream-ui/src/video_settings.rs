@@ -17,6 +17,7 @@
 
 use crate::app::SessionContext;
 use crate::dialog::Info;
+use crate::panels::number::{NumberField, into_draft};
 use crate::store::Studio;
 use jstream_control::ControlError;
 use jstream_control::protocol::ProtocolError;
@@ -527,6 +528,13 @@ pub fn VideoPage(
         error,
         ..
     } = draft;
+    // A side's field into the draft: a drag follows into it as it goes (#1734); Save
+    // sends it.
+    let put_side = move |side: RwSignal<String>, v: f64| {
+        side.set(format!("{}", v.round() as u32));
+        error.set(None);
+        true
+    };
     let preset = move || {
         let (w, h) = (side(&width.get()), side(&height.get()));
         PRESETS
@@ -577,34 +585,18 @@ pub fn VideoPage(
                                 <option value="custom">"Custom"</option>
                             </select>
                             <span class="settings-size">
-                                <label class="size-side">
-                                    <span aria-hidden="true">"W"</span>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max=MAX_SIDE.to_string()
-                                        aria-label="Width"
-                                        prop:value=move || width.get()
-                                        on:input=move |event| {
-                                            width.set(event_target_value(&event));
-                                            error.set(None);
-                                        }
-                                    />
-                                </label>
-                                <label class="size-side">
-                                    <span aria-hidden="true">"H"</span>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max=MAX_SIDE.to_string()
-                                        aria-label="Height"
-                                        prop:value=move || height.get()
-                                        on:input=move |event| {
-                                            height.set(event_target_value(&event));
-                                            error.set(None);
-                                        }
-                                    />
-                                </label>
+                                <span class="size-side">
+                                    <NumberField label="Width" caption="W" inline=true
+                                        value=Signal::derive(move || side(&width.get()).ok().map(f64::from))
+                                        step=1.0 decimals=0 min=1.0 max=f64::from(MAX_SIDE)
+                                        send=move |v| put_side(width, v) live=into_draft(move |v| _ = put_side(width, v)) />
+                                </span>
+                                <span class="size-side">
+                                    <NumberField label="Height" caption="H" inline=true
+                                        value=Signal::derive(move || side(&height.get()).ok().map(f64::from))
+                                        step=1.0 decimals=0 min=1.0 max=f64::from(MAX_SIDE)
+                                        send=move |v| put_side(height, v) live=into_draft(move |v| _ = put_side(height, v)) />
+                                </span>
                             </span>
                             <p class="help">"Every scene is laid out on it; outputs scale from it."</p>
                         </div>
