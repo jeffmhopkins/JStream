@@ -189,7 +189,8 @@ pub(crate) fn reader(
                     unresolved = true;
                     Arc::new(MidiState::new())
                 }),
-                None => inputs.any(),
+                // Every input the person let in (ADR-0123 §3).
+                None => inputs.bound(),
             };
             Reader::Midi { state, control }
         }
@@ -962,9 +963,12 @@ mod tests {
 
     impl Rig {
         fn new() -> Self {
+            let midi = MidiInputs::new();
+            // Its MIDI may move things (ADR-0123 §3).
+            midi.set_bindable(["Pad".to_owned()]);
             Rig {
                 graph: Graph::new(),
-                midi: MidiInputs::new(),
+                midi,
                 data: LiveData::new(),
                 heard: crate::reactive::HeardScopes::default(),
                 driver: ChannelDriver::default(),
@@ -986,6 +990,77 @@ mod tests {
         fn value(&self, id: &str) -> Option<f32> {
             self.data.channels().cell(id).read()
         }
+    }
+
+    #[test]
+    fn a_sender_left_out_moves_no_channel_input_named_or_not() {
+        // ADR-0123 §3: a JTunnel sender whose "Use this sender's MIDI" is off moves no
+        // channel, whether its input names the sender or listens to every input; one
+        // let in ("Pad") still does.
+        let mut rig = Rig::new();
+        let named = match cc(8) {
+            MotionKind::Midi {
+                control,
+                controller,
+                channel,
+                smoothing_ms,
+                curve,
+                from,
+                to,
+                ..
+            } => MotionKind::Midi {
+                control,
+                controller,
+                channel,
+                input: Some("Stranger".into()),
+                smoothing_ms,
+                curve,
+                from,
+                to,
+            },
+            other => other,
+        };
+        set(
+            &mut rig.graph,
+            ChannelInfo {
+                default: f(0.5),
+                inputs: vec![cc(7)],
+                ..ChannelInfo::new("any")
+            },
+        );
+        set(
+            &mut rig.graph,
+            ChannelInfo {
+                default: f(0.5),
+                inputs: vec![named],
+                ..ChannelInfo::new("named")
+            },
+        );
+        rig.tick(0);
+        rig.midi.push("Stranger", 0, &message(&[0xB0, 7, 127]));
+        rig.midi.push("Stranger", 1, &message(&[0xB0, 8, 127]));
+        rig.tick(33);
+        assert_eq!(
+            rig.value("any"),
+            Some(0.5),
+            "every input, the stranger left out"
+        );
+        assert_eq!(rig.value("named"), Some(0.5), "its own input, left out");
+        rig.midi.push("Pad", 40, &message(&[0xB0, 7, 127]));
+        rig.tick(66);
+        assert_eq!(
+            rig.value("any"),
+            Some(1.0),
+            "an input let in still moves it"
+        );
+        // Let in, the stranger moves the channel that names it, from where its
+        // control is.
+        rig.midi.set_bindable(["Pad", "Stranger"].map(String::from));
+        rig.tick(80);
+        assert_eq!(rig.value("named"), Some(1.0));
+        rig.midi.push("Stranger", 90, &message(&[0xB0, 8, 0]));
+        rig.tick(100);
+        assert_eq!(rig.value("named"), Some(0.0));
     }
 
     #[test]
@@ -1268,6 +1343,48 @@ mod tests {
         rig.driver.scene_live(&SceneId::new("flight"));
         rig.tick(133);
         assert_eq!(rig.value("pad"), Some(0.2), "its own starts it again");
+    }
+
+    /// ADR-0123 §3: a sender switched off while it holds a note lets go of a channel
+    /// that listens to every input, as one that names it does.
+    #[test]
+    fn a_sender_switched_off_mid_hold_lets_go_of_an_every_input_channel() {
+        let mut rig = Rig::new();
+        rig.midi.set_bindable(["Pad", "Stranger"].map(String::from));
+        let note = |input: Option<&str>| MotionKind::Midi {
+            control: MotionMidiControl::Note,
+            controller: Some(36),
+            channel: None,
+            input: input.map(str::to_owned),
+            smoothing_ms: 0,
+            curve: MotionCurve::Linear,
+            from: Finite32::ZERO,
+            to: Finite32::ONE,
+        };
+        for (id, input) in [("any", None), ("named", Some("Stranger"))] {
+            set(
+                &mut rig.graph,
+                ChannelInfo {
+                    default: f(0.2),
+                    inputs: vec![note(input)],
+                    ..ChannelInfo::new(id)
+                },
+            );
+        }
+        rig.tick(0);
+        rig.midi.push("Stranger", 0, &message(&[0x99, 36, 100]));
+        rig.tick(33);
+        assert_eq!(rig.value("any"), Some(1.0), "held");
+        assert_eq!(rig.value("named"), Some(1.0), "held");
+        // Switched off mid-hold: neither stays held, with no note-off sent.
+        rig.midi.set_bindable(["Pad".to_owned()]);
+        rig.tick(66);
+        assert_eq!(rig.value("any"), Some(0.0), "every input lets go");
+        assert_eq!(rig.value("named"), Some(0.0), "its own input lets go");
+        // An input still let in holds it again.
+        rig.midi.push("Pad", 70, &message(&[0x99, 36, 100]));
+        rig.tick(100);
+        assert_eq!(rig.value("any"), Some(1.0));
     }
 
     fn lane_timeline(id: &str, value: f32) -> jstream_protocol::TimelineInfo {

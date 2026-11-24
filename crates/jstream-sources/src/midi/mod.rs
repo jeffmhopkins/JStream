@@ -25,7 +25,7 @@ use jstream_midi::Message;
 use jstream_platform::MediaClock;
 use jstream_protocol::{KindDescriptor, Settings};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicI16, AtomicU8, AtomicU64, Ordering, fence};
+use std::sync::atomic::{AtomicBool, AtomicI16, AtomicU8, AtomicU64, Ordering, fence};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// MIDI's channels.
@@ -185,6 +185,9 @@ pub struct MidiState {
     /// how many there have been in its top 48 bits, then its channel (0 to 15) and
     /// controller.
     last_cc: AtomicU64,
+    /// Whether this input's MIDI may move anything (ADR-0123 §3): what
+    /// [`MidiInputs::set_bindable`] last said of it.
+    bindable: AtomicBool,
 }
 
 impl std::fmt::Debug for MidiState {
@@ -232,7 +235,16 @@ impl MidiState {
             changes: AtomicU64::new(0),
             tempo: tempo::TempoCell::new(),
             last_cc: AtomicU64::new(0),
+            bindable: AtomicBool::new(false),
         }
+    }
+
+    /// Whether this input's MIDI may move bindings, channels and `midi` modifiers
+    /// (ADR-0123 §3): set by [`MidiInputs::set_bindable`] for a named input, always so
+    /// for [`MidiInputs::bound`], never for [`MidiInputs::any`] or a state made on its
+    /// own. Reads one atomic.
+    pub fn bindable(&self) -> bool {
+        self.bindable.load(Ordering::Relaxed)
     }
 
     /// Records `message`, which arrived at `at_ms` on the media clock. Messages that
@@ -294,6 +306,59 @@ impl MidiState {
             _ => {}
         }
         // After every store above, so a reader that sees the count sees what it counts.
+        self.changes.fetch_add(1, Ordering::Release);
+    }
+
+    /// Sets what is held and where each controller, bend and pressure is to what
+    /// `inputs` hold now: a key held in any of them, each value the largest (a bend the
+    /// furthest from centre), and nothing for none. The logs and the tempo are kept.
+    /// [`MidiInputs::set_bindable`] rebuilds the bound state this way when it drops an
+    /// input, so nothing the input held while it was let in stays held there.
+    fn rebuild_from(&self, inputs: &[Arc<MidiState>]) {
+        let largest = |of: &dyn Fn(&MidiState) -> u8| inputs.iter().map(|s| of(s)).max();
+        let furthest = |of: &dyn Fn(&MidiState) -> i16| {
+            inputs
+                .iter()
+                .map(|s| of(s))
+                .max_by_key(|v| v.unsigned_abs())
+                .unwrap_or(0)
+        };
+        for (i, key) in self.keys.iter().enumerate() {
+            key.store(
+                largest(&|s| s.keys[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for (i, value) in self.controllers.iter().enumerate() {
+            value.store(
+                largest(&|s| s.controllers[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for (i, value) in self.any_controllers.iter().enumerate() {
+            value.store(
+                largest(&|s| s.any_controllers[i].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        for channel in 0..CHANNELS {
+            self.bend[channel].store(
+                furthest(&|s| s.bend[channel].load(Ordering::Relaxed)),
+                Ordering::Relaxed,
+            );
+            self.pressure[channel].store(
+                largest(&|s| s.pressure[channel].load(Ordering::Relaxed)).unwrap_or(0),
+                Ordering::Relaxed,
+            );
+        }
+        self.any_bend.store(
+            furthest(&|s| s.any_bend.load(Ordering::Relaxed)),
+            Ordering::Relaxed,
+        );
+        self.any_pressure.store(
+            largest(&|s| s.any_pressure.load(Ordering::Relaxed)).unwrap_or(0),
+            Ordering::Relaxed,
+        );
         self.changes.fetch_add(1, Ordering::Release);
     }
 
@@ -485,11 +550,14 @@ fn index(channel: u8, key: u8) -> usize {
     usize::from(channel & 0x0F) * KEYS + usize::from(key & 0x7F)
 }
 
-/// Every MIDI input's state by name, and one for all of them together: what a MIDI
-/// source's `input` setting names. Cloning it shares it.
-#[derive(Clone, Default)]
+/// Every MIDI input's state by name, one for all of them together (what a MIDI
+/// source's `input` setting names), and one for the bindable ones together (what a
+/// binding, channel or `midi` modifier with no input reads). Cloning it shares it.
+#[derive(Clone)]
 pub struct MidiInputs {
     any: Arc<MidiState>,
+    /// What every bindable input sent while it was bindable (ADR-0123 §3).
+    bound: Arc<MidiState>,
     named: Arc<Mutex<BTreeMap<String, Arc<MidiState>>>>,
     /// The inputs whose MIDI may run action bindings: a JTunnel sender only once the
     /// person turned on "Use this sender's MIDI" (ADR-0123 §3, ADR-0207).
@@ -504,6 +572,20 @@ impl std::fmt::Debug for MidiInputs {
         f.debug_struct("MidiInputs")
             .field("inputs", &lock(&self.named).keys().collect::<Vec<_>>())
             .finish_non_exhaustive()
+    }
+}
+
+impl Default for MidiInputs {
+    fn default() -> Self {
+        let bound = MidiState::new();
+        bound.bindable.store(true, Ordering::Relaxed);
+        Self {
+            any: Arc::default(),
+            bound: Arc::new(bound),
+            named: Arc::default(),
+            bindable: Arc::default(),
+            clock: Arc::default(),
+        }
     }
 }
 
@@ -527,9 +609,16 @@ impl MidiInputs {
         self.clock.get().map(|clock| clock_ms(clock.as_ref()))
     }
 
-    /// The state every input feeds.
+    /// The state every input feeds, which the `midi_*` sources draw.
     pub fn any(&self) -> Arc<MidiState> {
         Arc::clone(&self.any)
+    }
+
+    /// The state every bindable input feeds while it is bindable: what a binding,
+    /// channel or `midi` modifier that names no input reads (ADR-0123 §3). An input
+    /// left out never reaches it.
+    pub fn bound(&self) -> Arc<MidiState> {
+        Arc::clone(&self.bound)
     }
 
     /// The state of the input `name`, made empty the first time it is asked for, or
@@ -545,18 +634,45 @@ impl MidiInputs {
         if named.len() >= MAX_INPUTS {
             return None;
         }
-        let state = Arc::new(MidiState::new());
+        let state = MidiState::new();
+        state
+            .bindable
+            .store(lock(&self.bindable).contains(name), Ordering::Relaxed);
+        let state = Arc::new(state);
         named.insert(name.to_owned(), Arc::clone(&state));
         Some(state)
     }
 
-    /// Lets the inputs `names`, and no others, run action bindings (ADR-0123 §3,
-    /// ADR-0207). What every input draws is unchanged.
+    /// Lets the inputs `names`, and no others, move anything: run action bindings
+    /// (ADR-0207), and move value bindings, channels and `midi` modifiers, which read an
+    /// input only while its state is [`bindable`](MidiState::bindable) and otherwise
+    /// [`bound`](Self::bound) (ADR-0123 §3). What every input draws is unchanged.
     pub fn set_bindable(&self, names: impl IntoIterator<Item = String>) {
-        *lock(&self.bindable) = names.into_iter().collect();
+        // The named lock first, as `input` takes it, so an input made meanwhile sees
+        // the new set.
+        let named = lock(&self.named);
+        let mut bindable = lock(&self.bindable);
+        let was = std::mem::replace(&mut *bindable, names.into_iter().collect());
+        for (name, state) in named.iter() {
+            state
+                .bindable
+                .store(bindable.contains(name), Ordering::Relaxed);
+        }
+        // An input dropped while it held a key or a controller leaves nothing in the
+        // bound state: it is rebuilt from what the inputs still let in hold now. A
+        // message one of them sends meanwhile may be overwritten by what it held just
+        // before, until its next message.
+        if was.iter().any(|name| !bindable.contains(name)) {
+            let kept: Vec<_> = named
+                .iter()
+                .filter(|(name, _)| bindable.contains(*name))
+                .map(|(_, state)| Arc::clone(state))
+                .collect();
+            self.bound.rebuild_from(&kept);
+        }
     }
 
-    /// The inputs whose MIDI may run action bindings, by name.
+    /// The inputs whose MIDI may move anything, by name.
     pub fn bindable(&self) -> Vec<String> {
         lock(&self.bindable).iter().cloned().collect()
     }
@@ -580,12 +696,16 @@ impl MidiInputs {
     }
 
     /// Records `message` from input `name` at `at_ms`, in that input's state and the
-    /// any-input state. An input thread looks its state up once with
-    /// [`input`](Self::input) and pushes to it and to [`any`](Self::any) itself, so
-    /// it never takes this lookup's lock per message; this is for callers that don't.
+    /// any-input state, and the bound state while the input is bindable. An input
+    /// thread looks its state up once with [`feed`](Self::feed) and pushes through
+    /// that, so it never takes this lookup's lock per message; this is for callers
+    /// that don't.
     pub fn push(&self, name: &str, at_ms: u64, message: &Message) {
         if let Some(state) = self.input(name) {
             state.push(at_ms, message);
+            if state.bindable() {
+                self.bound.push(at_ms, message);
+            }
         }
         self.any.push(at_ms, message);
     }

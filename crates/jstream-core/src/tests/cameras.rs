@@ -173,6 +173,8 @@ fn a_controller_drives_a_scene_camera() {
         "nothing sent yet"
     );
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Bitwig", "Other"].map(String::from));
     let cc = |channel: u8, value| {
         jstream_midi::Message::parse(&[0xB0 | channel, 25, value]).expect("a CC")
     };

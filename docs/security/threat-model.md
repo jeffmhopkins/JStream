@@ -754,17 +754,22 @@ somewhere it shouldn't.
   instance's name is copied, once it matches; a message declaring more than 256 records
   is refused unread, so one costs at most a few tens of thousands of steps); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
-  name and the every-input one, which the `midi_*` sources draw and value bindings,
-  channels and `midi` modifiers read. It runs action bindings (`binding.set`, so any
-  bindable action, `output.stop` included) only once the person turns on "Use this
-  sender's MIDI" for that sender (the desktop app's checkbox, the daemon's
-  `--jtunnel-midi`), off by default
-  ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md) §3,
-  [ADR-0207](../adr/0207-mute-actions-and-held-triggers.md)): the engine's binding runner
-  reads only the inputs `MidiInputs::bindable` names. A press a sender holds (a
+  name and the every-input one, which the `midi_*` sources draw (and whose clock gives
+  their beat). It moves anything only once the person turns on "Use this sender's MIDI"
+  for that sender (the desktop app's checkbox, the daemon's `--jtunnel-midi`), off by
+  default ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md) §3,
+  [ADR-0207](../adr/0207-mute-actions-and-held-triggers.md),
+  [ADR-0218](../adr/0218-every-midi-reader-goes-through-the-senders-switch.md)): the
+  engine's action-binding runner (`binding.set`, so any bindable action, `output.stop`
+  included) reads only the inputs `MidiInputs::bindable` names, and value bindings,
+  channels and `midi` modifiers read a named input only while its state is bindable
+  (reading it as a control at rest otherwise, in `Control::read`) and, naming none, only
+  the bound state, which a sender feeds only while it is let in and which is rebuilt
+  without it when it is dropped. A press a sender holds (a
   push-to-talk) is let go once the switch goes off, its binding changes, or the sender
-  has sent nothing for 500 ms, so a dropped sender can't leave a mute open. Value bindings and channels read a
-  sender's MIDI without that switch, which ADR-0123 §3 also covers; that is open.
+  has sent nothing for 500 ms, so a dropped sender can't leave a mute open. Tests show a
+  sender left out moves no action binding, value binding, channel or `midi` modifier,
+  and one switched off mid-hold leaves nothing held.
 - A sender's state packets (JTunnel's side channel, a DAW's JSON messages under keys,
   [ADR-0171](../adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2) are
   taken only from an accepted sender, and counted and dropped while the person has

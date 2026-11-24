@@ -331,6 +331,8 @@ mod tests {
             .apply(&[bound(100, 7, "master")], None)
             .expect("binds");
         let (midi, data) = (MidiInputs::new(), LiveData::new());
+        // Its MIDI may move things (ADR-0123 §3).
+        midi.set_bindable(["Pad"].map(String::from));
         let mut driver = ValueDriver::default();
         let t0 = Instant::now();
         assert!(!driver.tick(&graph, Some(&midi), &data, &Default::default(), t0));
@@ -465,6 +467,8 @@ mod tests {
             )
             .expect("binds");
         let (midi, data) = (MidiInputs::new(), LiveData::new());
+        // The pad is a sender whose MIDI is let in (ADR-0218).
+        midi.set_bindable(["Pad".to_owned()]);
         let mut driver = ValueDriver::default();
         let t0 = Instant::now();
         let mut tick = |graph: &Graph, n: u64| {
