@@ -23,6 +23,8 @@ use crate::com::OsResult;
 pub(crate) struct EncodeGpu {
     shared: Arc<Shared>,
     luid: Option<u64>,
+    /// The adapter's PCI vendor ID.
+    vendor: u32,
 }
 
 impl EncodeGpu {
@@ -40,6 +42,7 @@ impl EncodeGpu {
         Ok(Self {
             shared: Arc::clone(shared),
             luid: context.adapter_id().luid,
+            vendor: context.adapter_id().vendor,
         })
     }
 
@@ -52,6 +55,11 @@ impl EncodeGpu {
     /// The adapter's LUID, to pick encoders on the same adapter.
     pub(crate) fn luid(&self) -> Option<u64> {
         self.luid
+    }
+
+    /// The adapter's maker, which picks the direct encoder to try (`codec::direct`).
+    pub(crate) fn vendor(&self) -> crate::codec::direct::Vendor {
+        crate::codec::direct::Vendor::of_pci(self.vendor)
     }
 
     /// Queues a copy of `frame`, an encode target of this context, into the top-left of
@@ -140,6 +148,7 @@ impl fmt::Debug for EncodeGpu {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EncodeGpu")
             .field("luid", &self.luid)
+            .field("vendor", &self.vendor)
             .finish_non_exhaustive()
     }
 }

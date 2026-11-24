@@ -4178,7 +4178,7 @@ source: crates/jstream-core/src/kinds.rs
         "max_len": 31,
         "default": "",
         "label": "Sender",
-        "description": "The sender's name, as its plugin shows it. JStream receives only from senders accepted on this machine.",
+        "description": "The sender's name, as its plugin shows it, or empty for the live sender (the first accepted). JStream receives only from senders accepted on this machine.",
         "live": false
       },
       {
@@ -5225,7 +5225,7 @@ source: crates/jstream-core/src/kinds.rs
         ],
         "default": "countdown",
         "label": "Mode",
-        "description": "Count down from Duration, count up from zero, or show the time of day. Changing it restarts the count.",
+        "description": "Count down from Duration, count up from zero, or show the time of day. Changing it restarts the count, and a countdown or stopwatch starts again each time its scene goes on program.",
         "live": false
       },
       {

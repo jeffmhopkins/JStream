@@ -57,8 +57,13 @@
 //! - Folder and label IDs are non-empty and unique within their kind. Every scene's
 //!   folder and every folder's parent exists, and no folder sits inside itself. Every
 //!   label a source carries exists (ADR-0024 §3 and §4).
+//! - A folder that belongs to a scene (ADR-0222) names an existing scene that is not a
+//!   variant, and its parent belongs to the same scene; a folder of the scene list has
+//!   a parent of the scene list. A variant's folder, if any, belongs to its parent, any
+//!   other scene's to none, and a timeline's to its scene's family: the scene, or its
+//!   parent for a variant.
 //! - A keyframe scene's (a variant's, ADR-0024 §2) `variant_of` names an existing scene
-//!   that is not a variant. A variant has no items, no folder and the role `scene`, and
+//!   that is not a variant. A variant has no items and the role `scene`, and
 //!   each of its overrides names an item in its parent's tree ([`State::tree_items`]:
 //!   the parent's own, or a child of a group placed in it, at any depth) and sets at least one
 //!   field, each valid as the item's own would be: a geometry placement, an opacity
@@ -214,16 +219,21 @@ pub struct State {
     pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
     /// The master stage's chains (ADR-0080 §1).
     pub(crate) master: Chains,
-    pub(crate) hotkeys: BTreeMap<Chord, Action>,
+    /// The actions each chord runs, in the order they were bound (ADR-0208): never an
+    /// empty list.
+    pub(crate) hotkeys: BTreeMap<Chord, Vec<Action>>,
     /// The labels each binding carries (ADR-0133), ordered by ID. A chord with none has
     /// no entry, and a cleared binding takes its entry with it.
     pub(crate) hotkey_labels: BTreeMap<Chord, BTreeSet<LabelId>>,
-    /// The controller bindings (ADR-0122), ordered by trigger.
-    pub(crate) bindings: BTreeMap<Trigger, Action>,
+    /// The controller bindings (ADR-0122), ordered by trigger: the actions each trigger
+    /// runs, in the order they were bound (ADR-0208), never an empty list.
+    pub(crate) bindings: BTreeMap<Trigger, Vec<Action>>,
     /// The value bindings (ADR-0178), by ID.
     pub(crate) value_bindings: BTreeMap<String, jstream_protocol::ValueBinding>,
     /// The channels (ADR-0183), by ID.
     pub(crate) channels: BTreeMap<String, jstream_protocol::ChannelInfo>,
+    /// The shows (ADR-0210), by ID.
+    pub(crate) shows: BTreeMap<jstream_protocol::ShowId, jstream_protocol::ShowInfo>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -233,10 +243,12 @@ pub struct State {
     /// [`Graph::apply`](crate::Graph::apply) keeps it, nothing saves it, and it is not a
     /// revision. Empty until a switch sets it.
     pub(crate) placed_keyframes: BTreeMap<SceneId, SceneId>,
-    /// The internal show scene, if the engine made one: the scene drawn over program
-    /// for every output, with program as its bottom layer and its items above it. It
-    /// is an ordinary scene of `scenes`, but nothing may place it, show it on program
-    /// or point a video mix at it, so no scene can contain it.
+    /// The internal show scene (ADR-0210 decision 12), if the engine made one: the scene
+    /// drawn over program for every output, with program as its bottom layer and its
+    /// items above it. It is an ordinary scene of `scenes`, but nothing may place it,
+    /// show it on program or point a video mix at it, so no scene can contain it. Saved
+    /// in the collection file, set only by the engine through
+    /// [`Graph::set_show_scene`](crate::Graph::set_show_scene), and not a revision.
     pub(crate) show_scene: Option<SceneId>,
 }
 
@@ -263,6 +275,7 @@ impl Default for State {
             bindings: BTreeMap::new(),
             value_bindings: BTreeMap::new(),
             channels: BTreeMap::new(),
+            shows: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),
@@ -314,6 +327,16 @@ impl State {
     /// Every scene, in display order.
     pub fn scenes(&self) -> &[Scene] {
         &self.scenes
+    }
+
+    /// Every channel (ADR-0183), ordered by ID.
+    pub fn channels(&self) -> impl ExactSizeIterator<Item = &jstream_protocol::ChannelInfo> {
+        self.channels.values()
+    }
+
+    /// Every value binding (ADR-0178), ordered by ID.
+    pub fn value_bindings(&self) -> impl ExactSizeIterator<Item = &jstream_protocol::ValueBinding> {
+        self.value_bindings.values()
     }
 
     /// The scene with this ID.
@@ -421,14 +444,21 @@ impl State {
         self.sends.get(&(bus.clone(), source.clone())).copied()
     }
 
-    /// Every hotkey binding, ordered by chord: the chord and the action it runs.
-    pub fn hotkeys(&self) -> impl ExactSizeIterator<Item = (&Chord, &Action)> {
-        self.hotkeys.iter()
+    /// Every hotkey binding, ordered by chord, then by the order the chord's actions
+    /// were bound (ADR-0208): the chord and one action it runs.
+    pub fn hotkeys(&self) -> impl Iterator<Item = (&Chord, &Action)> {
+        self.hotkeys
+            .iter()
+            .flat_map(|(chord, actions)| actions.iter().map(move |action| (chord, action)))
     }
 
-    /// The action bound to this chord.
-    pub fn hotkey(&self, chord: &Chord) -> Option<&Action> {
-        self.hotkeys.get(chord)
+    /// The actions bound to this chord, in the order they were bound: empty for a chord
+    /// that isn't bound.
+    pub fn hotkey(&self, chord: &Chord) -> &[Action] {
+        self.hotkeys
+            .get(chord)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
     }
 
     /// The labels the binding of this chord carries, ordered by ID: none for a chord
@@ -448,16 +478,26 @@ impl State {
 
     /// Every binding as the wire reports it, ordered by chord, with its labels.
     pub fn hotkey_bindings(&self) -> Vec<jstream_protocol::HotkeyBinding> {
-        self.hotkeys
-            .iter()
+        self.hotkeys()
             .map(|(chord, action)| self.binding(chord, action))
             .collect()
     }
 
-    /// Every controller binding (ADR-0122), ordered by trigger: the trigger and the
-    /// action it runs.
-    pub fn bindings(&self) -> impl ExactSizeIterator<Item = (&Trigger, &Action)> {
-        self.bindings.iter()
+    /// Every controller binding (ADR-0122), ordered by trigger, then by the order the
+    /// trigger's actions were bound (ADR-0208): the trigger and one action it runs.
+    pub fn bindings(&self) -> impl Iterator<Item = (&Trigger, &Action)> {
+        self.bindings
+            .iter()
+            .flat_map(|(trigger, actions)| actions.iter().map(move |action| (trigger, action)))
+    }
+
+    /// The actions bound to this trigger, in the order they were bound (ADR-0208):
+    /// empty for a trigger that isn't bound.
+    pub fn trigger_actions(&self, trigger: &Trigger) -> &[Action] {
+        self.bindings
+            .get(trigger)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
     }
 
     /// Every folder of the scene list, in folder order.
@@ -1014,12 +1054,15 @@ impl Scene {
     }
 }
 
-/// One folder of the scene list (ADR-0024 §3): for organising only.
+/// One folder of the scene list (ADR-0024 §3), or of one scene's keyframe scenes and
+/// timelines (ADR-0222): for organising only.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
     pub(crate) id: FolderId,
     pub(crate) name: String,
     pub(crate) parent: Option<FolderId>,
+    /// The scene it belongs to; `None` for a folder of the scene list.
+    pub(crate) scene: Option<SceneId>,
 }
 
 impl Folder {
@@ -1036,6 +1079,12 @@ impl Folder {
     /// The folder it sits in, or `None` at the top level.
     pub fn parent(&self) -> Option<&FolderId> {
         self.parent.as_ref()
+    }
+
+    /// The scene whose keyframe scenes and timelines it organises (ADR-0222), or `None`
+    /// for a folder of the scene list.
+    pub fn scene(&self) -> Option<&SceneId> {
+        self.scene.as_ref()
     }
 }
 

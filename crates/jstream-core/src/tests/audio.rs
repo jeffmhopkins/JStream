@@ -1518,6 +1518,8 @@ fn a_network_audio_source_records_an_accepted_jtunnel_sender_once_it_is_heard() 
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);
@@ -1565,6 +1567,8 @@ fn a_jtunnel_senders_clock_publishes_the_tempo_values() {
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);
@@ -1907,6 +1911,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
         palette: std::collections::BTreeMap::new(),
     };
     let modifier = |id: &str, kind: MotionKind, enabled: bool| MotionModifier {
+        mode: jstream_protocol::MappingMode::Add,
         modifier_id: id.into(),
         property: MotionProperty::X,
         effect: None,
@@ -1951,6 +1956,7 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             Edit::SceneSetCameraMotion {
                 scene_id: SceneId::new("a"),
                 motion: vec![CameraMotionModifier {
+                    mode: jstream_protocol::MappingMode::Add,
                     modifier_id: "pan".into(),
                     property: CameraProperty::Pan,
                     kind: data(None, 0),
@@ -1961,6 +1967,8 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             },
             Edit::BindingSetValue {
                 binding: ValueBinding {
+                    enabled: true,
+                    mode: jstream_protocol::MappingMode::Replace,
                     binding_id: "master".into(),
                     input: data(None, 4),
                     target: ValueTarget::BusGain {
@@ -1971,6 +1979,8 @@ fn what_reads_a_senders_params_names_them_on_the_sender() {
             },
             Edit::BindingSetValue {
                 binding: ValueBinding {
+                    enabled: true,
+                    mode: jstream_protocol::MappingMode::Replace,
                     binding_id: "master-2".into(),
                     input: data(None, 1),
                     target: ValueTarget::BusGain {

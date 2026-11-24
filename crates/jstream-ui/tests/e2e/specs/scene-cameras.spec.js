@@ -96,6 +96,73 @@ test('scene properties give a scene a camera, and Alt-drag orbits it', async ({ 
   await expect.poll(async () => JSON.stringify(await corners(page))).toBe(JSON.stringify(before));
 });
 
+test('the live aim drives an axis only while a button is held', async ({ page, daemon }) => {
+  const calls = await recordCalls(page);
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const dialog = await sceneProperties(page);
+  await dialog.getByRole('checkbox', { name: '3D camera' }).check();
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole('button', { name: 'Camera mode' }).click();
+  const aim = (name) => page.getByRole('button', { name, exact: true });
+  await expect(aim('Pan left')).toBeVisible();
+  const drives = () => calls.sent('scene.drive_camera');
+  const away = await onScreen(page, 960, 540);
+
+  // Passing the pointer over the buttons sends nothing, so it stops no axis that a
+  // controller or a binding drives.
+  for (const name of ['Pan left', 'Tilt up', 'Tilt down', 'Pan right', 'Zoom out', 'Zoom in']) {
+    await aim(name).hover();
+  }
+  await page.mouse.move(away.x, away.y);
+  await page.waitForTimeout(400);
+  expect(drives()).toHaveLength(0);
+
+  // A press drives its axis alone; the pointer may wander off the button while held,
+  // and the release stops it once.
+  await aim('Pan right').hover();
+  await page.mouse.down();
+  await expect.poll(() => drives().length).toBe(1);
+  expect(drives()[0]).toMatchObject({ scene_id: 'main', pan: 12 });
+  expect(drives()[0].tilt ?? null).toBeNull();
+  await page.mouse.move(away.x, away.y, { steps: 4 });
+  await page.waitForTimeout(300);
+  expect(drives()).toHaveLength(1);
+  await page.mouse.up();
+  await expect.poll(() => drives().length).toBe(2);
+  expect(drives()[1]).toMatchObject({ scene_id: 'main', pan: 0 });
+  await page.waitForTimeout(300);
+  expect(drives()).toHaveLength(2);
+
+  // Space holds a focused button, its repeats send nothing more, and its release stops.
+  await aim('Tilt up').focus();
+  await page.keyboard.down('Space');
+  await page.keyboard.down('Space');
+  await page.keyboard.down('Space');
+  await expect.poll(() => drives().length).toBe(3);
+  expect(drives()[2]).toMatchObject({ tilt: 12 });
+  await page.waitForTimeout(300);
+  expect(drives()).toHaveLength(3);
+  await page.keyboard.up('Space');
+  await expect.poll(() => drives().length).toBe(4);
+  expect(drives()[3]).toMatchObject({ tilt: 0 });
+
+  // Enter holds one too, Shift slowly, and moving the focus away stops it, once.
+  await aim('Zoom in').focus();
+  await page.keyboard.down('Shift');
+  await page.keyboard.down('Enter');
+  await page.keyboard.up('Shift');
+  await expect.poll(() => drives().length).toBe(5);
+  expect(drives()[4]).toMatchObject({ zoom: 2 });
+  await aim('Zoom out').focus();
+  await expect.poll(() => drives().length).toBe(6);
+  expect(drives()[5]).toMatchObject({ zoom: 0 });
+  await page.keyboard.up('Enter');
+  await page.waitForTimeout(300);
+  expect(drives()).toHaveLength(6);
+});
+
 // A window capture so Follow pointer can be added. The mock describes no kinds.
 const WINDOW = [
   {

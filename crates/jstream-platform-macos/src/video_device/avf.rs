@@ -1,5 +1,6 @@
 //! The AVFoundation webcam backend: cameras from an `AVCaptureDeviceDiscoverySession`,
-//! and an `AVCaptureSession` per open camera whose frames are copied out as NV12.
+//! and an `AVCaptureSession` per open camera whose frames are copied out as NV12, or on a
+//! GPU context wrapped as BGRA textures over their own IOSurfaces.
 //!
 //! Frames arrive on the stream's own serial dispatch queue, in `Output`'s delegate
 //! callback, which catches panics (R-UNSAFE-005) and only touches the stream's `Shared`
@@ -15,12 +16,10 @@ use std::time::Duration;
 
 use dispatch2::{DispatchQueue, DispatchRetained};
 use jstream_platform::mailbox::Mailbox;
-use jstream_platform::media::{
-    ColorInfo, FrameSize, PixelFormat, Plane, VideoFrame, VideoFrameInfo,
-};
+use jstream_platform::media::{ColorInfo, FrameSize, Plane, VideoFrame, VideoFrameInfo};
 use jstream_platform::{
-    CaptureDecoder, CaptureStats, CaptureStream, DeviceId, PlatformError, VideoDeviceFormat,
-    VideoDeviceInfo, VideoDevices, VideoSurface,
+    CaptureDecoder, CaptureStats, CaptureStream, DeviceId, GpuContext, PlatformError,
+    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoSurface,
 };
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
@@ -37,15 +36,15 @@ use objc2_core_media::{
     CMSampleBuffer, CMTime, CMTimeFlags, CMVideoFormatDescriptionGetDimensions,
 };
 use objc2_core_video::{
-    CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
+    CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
     CVPixelBufferIsPlanar, kCVPixelBufferPixelFormatTypeKey,
 };
 use objc2_foundation::{NSArray, NSDictionary, NSError, NSNumber, NSString};
 
-use super::policy::{self, RawFormat};
+use super::policy::{self, Delivery, RawFormat};
 use crate::annexb::copy_rows;
 use crate::audio::permission::{self, Media, MicStep};
-use crate::fourcc::CV_420V;
+use crate::gpu::SurfaceGpu;
 use crate::pixel_buffer::{ReadLocked, presentation_time};
 use crate::{MacosVersion, check_floor};
 
@@ -63,15 +62,29 @@ const KIND: &str = "video capture device";
 ///
 /// IDs are the cameras' `uniqueID`s, which stay the same across reboots. Every format is
 /// delivered as `VideoSurface::Cpu` NV12 in video range, which AVFoundation converts or
-/// decodes (MJPEG) to, so no format needs a `CaptureDecoder`. `pts` is each frame's
-/// presentation time on the [`MachClock`](crate::MachClock) time line.
+/// decodes (MJPEG) to, so no format needs a `CaptureDecoder`; on a GPU context
+/// ([`VideoDevices::on_context`]) as `VideoSurface::Gpu` BGRA instead, with no copy.
+/// `pts` is each frame's presentation time on the [`MachClock`](crate::MachClock) time
+/// line.
 ///
 /// Listing cameras and their formats needs no permission. Opening one needs the Camera
 /// permission: when it isn't determined yet, the first open asks macOS to prompt for it,
 /// and every open reports an error naming the System Settings pane until it is granted.
 #[derive(Debug)]
 pub struct AvFoundationVideoDevices {
-    asked_camera: AtomicBool,
+    /// Whether this backend has asked macOS for the Camera permission, which it does
+    /// once. The backend on a GPU context shares it.
+    asked_camera: Arc<AtomicBool>,
+    /// The GPU context's state, on the GPU path.
+    gpu: Option<GpuPath>,
+}
+
+/// The GPU path of [`AvFoundationVideoDevices`]: the context's state, and the largest
+/// texture side its device makes.
+#[derive(Clone, Debug)]
+struct GpuPath {
+    surfaces: SurfaceGpu,
+    max_side: u32,
 }
 
 impl AvFoundationVideoDevices {
@@ -82,7 +95,8 @@ impl AvFoundationVideoDevices {
     pub fn new() -> Result<Self, PlatformError> {
         check_floor(MacosVersion::current())?;
         Ok(Self {
-            asked_camera: AtomicBool::new(false),
+            asked_camera: Arc::new(AtomicBool::new(false)),
+            gpu: None,
         })
     }
 
@@ -241,7 +255,9 @@ impl VideoDevices for AvFoundationVideoDevices {
         Ok(policy::formats(&raw))
     }
 
-    /// `decoder` is never needed: no listed format is compressed.
+    /// `decoder` is never needed: no listed format is compressed. On a GPU context, a
+    /// format larger than the device's textures is [`PlatformError::Unsupported`]
+    /// (`policy::opens_on_gpu`), so the engine opens it on the CPU path.
     fn open(
         &self,
         device: &DeviceId,
@@ -251,9 +267,15 @@ impl VideoDevices for AvFoundationVideoDevices {
         let camera = find(device)?;
         let formats = raw_formats(&camera);
         let raw: Vec<RawFormat> = formats.iter().map(|(r, _)| r.clone()).collect();
-        let index = policy::find(&raw, format).ok_or_else(|| PlatformError::Unsupported {
+        let unsupported = || PlatformError::Unsupported {
             what: format!("{format:?} on video capture device {:?}", device.as_str()),
-        })?;
+        };
+        let index = policy::find(&raw, format).ok_or_else(unsupported)?;
+        if let Some(gpu) = &self.gpu
+            && !policy::opens_on_gpu(format, gpu.max_side)
+        {
+            return Err(unsupported());
+        }
         self.check_camera()?;
         // SAFETY: a getter on a live device.
         let name = unsafe { camera.localizedName() }.to_string();
@@ -262,8 +284,34 @@ impl VideoDevices for AvFoundationVideoDevices {
             &formats[index].1,
             format,
             format!("video capture device {name:?}"),
+            self.gpu.as_ref().map(|g| g.surfaces.clone()),
         )?;
         Ok(Box::new(stream))
+    }
+
+    /// This backend on `context`, which [`MetalGpu`](crate::MetalGpu) opened: each
+    /// stream asks AVFoundation for BGRA, which it converts the camera's YCbCr to, and
+    /// delivers each pixel buffer as a `GpuFrame` over its own IOSurface
+    /// (`Bgra8UnormSrgb`, `TEXTURE_BINDING | COPY_SRC`) at the open format's size,
+    /// labelled as `policy::Delivery::color` says: the CPU path's colour space, in full
+    /// range. AVFoundation's capture buffers come from IOSurface-backed pools (ADR-0063
+    /// §10), and each goes back to its pool once the GPU is done with it. It opens every
+    /// listed format that fits in one of the device's textures.
+    ///
+    /// # Errors
+    /// [`PlatformError::InvalidState`] for a context another backend opened.
+    fn on_context(
+        &self,
+        context: &GpuContext,
+    ) -> Result<Option<Arc<dyn VideoDevices>>, PlatformError> {
+        let surfaces = SurfaceGpu::of(context, "AvFoundationVideoDevices::on_context")?;
+        Ok(Some(Arc::new(Self {
+            asked_camera: Arc::clone(&self.asked_camera),
+            gpu: Some(GpuPath {
+                surfaces,
+                max_side: context.device().limits().max_texture_dimension_2d,
+            }),
+        })))
     }
 }
 
@@ -277,6 +325,8 @@ struct Shared {
     failure: OnceLock<PlatformError>,
     /// The size frames are delivered at: the open format's.
     size: FrameSize,
+    /// What the output asks for: NV12, or BGRA on the GPU path.
+    delivery: Delivery,
     color: ColorInfo,
     /// The camera, for messages.
     what: String,
@@ -298,6 +348,8 @@ impl Shared {
 /// `Output`'s state.
 struct Ivars {
     shared: Arc<Shared>,
+    /// The GPU context's state, on the GPU path: frames are delivered as GPU frames.
+    gpu: Option<SurfaceGpu>,
     /// A frame the reader never took, reused for the next one. Only the stream's serial
     /// queue locks it, so the lock is never contended.
     spare: Mutex<Option<VideoFrame>>,
@@ -330,9 +382,10 @@ define_class!(
 );
 
 impl Output {
-    fn new(shared: Arc<Shared>) -> Retained<Self> {
+    fn new(shared: Arc<Shared>, gpu: Option<SurfaceGpu>) -> Retained<Self> {
         let this = Self::alloc().set_ivars(Ivars {
             shared,
+            gpu,
             spare: Mutex::new(None),
         });
         // SAFETY: `NSObject`'s `init`, once, on the fresh allocation.
@@ -352,8 +405,9 @@ impl Ivars {
         }
     }
 
-    /// The sample's NV12 frame, copied out, or `None` for a sample without one.
-    fn convert(&self, sample: &CMSampleBuffer) -> Result<Option<VideoFrame>, PlatformError> {
+    /// The sample's frame, NV12 copied out or on the GPU path a GPU frame, or `None` for a
+    /// sample without one.
+    fn convert(&self, sample: &CMSampleBuffer) -> Result<Option<VideoSurface>, PlatformError> {
         // SAFETY: the sample is live for the callback; the image buffer comes back with
         // its own reference.
         let Some(image) = (unsafe { sample.image_buffer() }) else {
@@ -362,9 +416,15 @@ impl Ivars {
         // SAFETY: the sample is live for the callback.
         let pts = presentation_time(unsafe { sample.presentation_time_stamp() }, FRAME)?;
         self.shared.captured.fetch_add(1, Ordering::Relaxed);
-        if CVPixelBufferGetPixelFormatType(&image) != CV_420V || !CVPixelBufferIsPlanar(&image) {
+        let delivery = self.shared.delivery;
+        if CVPixelBufferGetPixelFormatType(&image) != delivery.pixel_format_type()
+            || CVPixelBufferIsPlanar(&image) != (delivery == Delivery::Nv12)
+        {
             return Err(PlatformError::Unsupported {
-                what: "a camera frame that isn't the NV12 the session asked for".into(),
+                what: format!(
+                    "a camera frame that isn't the {:?} the session asked for",
+                    delivery.pixel_format()
+                ),
             });
         }
         let size = self.shared.size;
@@ -376,10 +436,13 @@ impl Ivars {
         }
         let info = VideoFrameInfo {
             size,
-            format: PixelFormat::Nv12,
+            format: delivery.pixel_format(),
             color: self.shared.color,
             pts,
         };
+        if let Some(gpu) = &self.gpu {
+            return gpu_frame(gpu, &image, info).map(Some);
+        }
         let mut planes = self.planes(info)?;
         let locked = ReadLocked::lock(&image, FRAME)?;
         for (index, plane) in planes.iter_mut().enumerate() {
@@ -399,7 +462,7 @@ impl Ivars {
             )?;
         }
         drop(locked);
-        Ok(Some(VideoFrame::new(info, planes)?))
+        Ok(Some(VideoSurface::Cpu(VideoFrame::new(info, planes)?)))
     }
 
     /// The planes to copy into: the spare frame's, else new ones.
@@ -411,14 +474,26 @@ impl Ivars {
         })
     }
 
-    fn publish(&self, frame: VideoFrame) {
-        if let Some(old) = self.shared.mailbox.put(VideoSurface::Cpu(frame)) {
+    fn publish(&self, frame: VideoSurface) {
+        if let Some(old) = self.shared.mailbox.put(frame) {
             self.shared.skipped.fetch_add(1, Ordering::Relaxed);
             if let (VideoSurface::Cpu(old), Ok(mut spare)) = (old, self.spare.lock()) {
                 *spare = Some(old);
             }
         }
     }
+}
+
+/// `image`, AVFoundation's BGRA pixel buffer, as a GPU frame over its IOSurface. The
+/// texture is sRGB, so sampling decodes the camera's gamma-encoded R'G'B' to linear light
+/// (`policy::Delivery::color`).
+fn gpu_frame(
+    gpu: &SurfaceGpu,
+    image: &CVPixelBuffer,
+    info: VideoFrameInfo,
+) -> Result<VideoSurface, PlatformError> {
+    let frame = gpu.bgra_frame(image, info, wgpu::TextureFormat::Bgra8UnormSrgb)?;
+    Ok(VideoSurface::Gpu(frame))
 }
 
 /// The camera and its session, for the watcher thread.
@@ -479,14 +554,21 @@ impl AvfStream {
         active: &AVCaptureDeviceFormat,
         format: &VideoDeviceFormat,
         what: String,
+        gpu: Option<SurfaceGpu>,
     ) -> Result<Self, PlatformError> {
+        let delivery = if gpu.is_some() {
+            Delivery::GpuBgra
+        } else {
+            Delivery::Nv12
+        };
         let shared = Arc::new(Shared {
             mailbox: Mailbox::new(),
             captured: AtomicU64::new(0),
             skipped: AtomicU64::new(0),
             failure: OnceLock::new(),
             size: format.size,
-            color: policy::color(format.size.height()),
+            delivery,
+            color: delivery.color(format.size.height()),
             what,
         });
         // SAFETY: a class method making an input for a live device.
@@ -495,15 +577,17 @@ impl AvfStream {
         // SAFETY: a fresh session and output, configured once below.
         let (session, output) =
             unsafe { (AVCaptureSession::new(), AVCaptureVideoDataOutput::new()) };
-        let delegate = Output::new(Arc::clone(&shared));
+        let delegate = Output::new(Arc::clone(&shared), gpu);
         let queue = DispatchQueue::new("org.jstream.camera", None);
         // `kCVPixelBufferPixelFormatTypeKey` is a `CFString`, toll-free bridged to an
         // `NSString`.
         // SAFETY: a Core Video constant, set when the framework loads and never written.
         let key =
             unsafe { &*std::ptr::from_ref(kCVPixelBufferPixelFormatTypeKey).cast::<NSString>() };
-        let nv12 = NSNumber::new_u32(CV_420V);
-        let value: &AnyObject = nv12.as_ref();
+        // Only the pixel format: AVFoundation's capture buffers are IOSurface-backed as
+        // they come (ADR-0063 §10), which the GPU path needs.
+        let pixel_format = NSNumber::new_u32(delivery.pixel_format_type());
+        let value: &AnyObject = pixel_format.as_ref();
         let settings = NSDictionary::<NSString, AnyObject>::from_slices(&[key], &[value]);
         let sink: &ProtocolObject<dyn AVCaptureVideoDataOutputSampleBufferDelegate> =
             ProtocolObject::from_ref(&*delegate);
@@ -691,5 +775,50 @@ mod hw_tests {
         }
         assert!(frames > 10, "{frames} frames in 3 s of {format:?}");
         assert!(stream.stats().frames_captured >= frames);
+    }
+
+    #[test]
+    #[ignore = "needs a camera and the Camera permission"]
+    fn capture_on_a_gpu_context_delivers_bgra_gpu_frames() {
+        use jstream_platform::GpuInterop;
+        use jstream_platform::media::ColorRange;
+        let context = crate::MetalGpu::new()
+            .open_device()
+            .expect("a Metal device");
+        let cpu = AvFoundationVideoDevices::new().expect("backend");
+        let backend = cpu
+            .on_context(&context)
+            .expect("our context")
+            .expect("a GPU path");
+        let camera = backend
+            .devices()
+            .expect("devices")
+            .into_iter()
+            .next()
+            .expect("a camera");
+        let format = backend.formats(&camera.id).expect("formats")[0];
+        let mut stream = backend.open(&camera.id, &format, None).expect("open");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let frame = loop {
+            if let Some(f) = stream.latest().expect("capturing") {
+                break f;
+            }
+            assert!(Instant::now() < deadline, "no frame within 10 s");
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        let VideoSurface::Gpu(frame) = frame else {
+            panic!("expected a GPU frame");
+        };
+        assert_eq!(frame.info().format, PixelFormat::Bgra8);
+        assert_eq!(frame.info().size, format.size);
+        assert_eq!(frame.info().color.range, ColorRange::Full);
+        assert_eq!(
+            frame.texture().format(),
+            wgpu::TextureFormat::Bgra8UnormSrgb
+        );
+        frame.stage(context.queue()).expect("staged");
+        context.queue().submit([]);
+        drop(frame);
+        drop(stream);
     }
 }

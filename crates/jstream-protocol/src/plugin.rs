@@ -97,6 +97,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("data.get", N),
     // What the person plays on their controllers (ADR-0178), as their DAW's state is.
     ("midi.last_controls", N),
+    ("midi.last_notes", N),
     // A channel's value follows the person's controllers (ADR-0183), as they are.
     ("channel.values", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
@@ -243,6 +244,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_keyframe", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),
+    ("output.toggle", Class(O)),
     ("output.set_key", N),
     ("output.clear_key", N),
     ("youtube.sign_in", N),
@@ -261,6 +263,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("preview.unsubscribe", N),
     // A session's own views (ADR-0132): a plugin shows no preview streams.
     ("preview.report", N),
+    ("preview.show", N),
+    ("preview.request_keyframe", N),
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),
@@ -286,6 +290,27 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("channel.switch", Class(L)),
     ("channel.nudge", Class(L)),
     ("source.restart", Class(L)),
+    // A mute, as `source.set_audio` and `bus.set_fader` set it (ADR-0207).
+    ("source.mute", Class(E)),
+    ("bus.mute", Class(E)),
+    // A show switches program and runs cues, as a timeline does (ADR-0210), so writing
+    // or running one is "never" until a PR decides which class may.
+    ("show.set", N),
+    ("show.delete", N),
+    ("show.play", N),
+    ("show.stop", N),
+    ("show.pause", N),
+    ("show.continue", N),
+    ("show.back", N),
+    ("show.skip", N),
+    ("show.go_to", N),
+    ("show.go_to_number", N),
+    ("show.seek", N),
+    ("show.arm", N),
+    // An overlay changes what is on air, as `scene.switch` does, so it is the live class's.
+    ("overlay.show", Class(L)),
+    ("overlay.hide", Class(L)),
+    ("overlay.toggle", Class(L)),
     ("source.seek", Class(L)),
     // Holding the media clock stops every animation for every client (ADR-0172); a
     // plugin never does.

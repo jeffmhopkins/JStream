@@ -549,7 +549,7 @@ fn edit() -> BoxedStrategy<Edit> {
         1 => (prop_oneof![3 => 1u32..4000, 1 => any::<u32>()], prop_oneof![3 => 1u32..4000, 1 => any::<u32>()])
             .prop_map(|(width, height)| Edit::CanvasSetSize { width, height }),
         3 => (chord(), action()).prop_map(|(chord, action)| Edit::HotkeySet { chord, action }),
-        1 => chord().prop_map(|chord| Edit::HotkeyClear { chord }),
+        1 => chord().prop_map(|chord| Edit::HotkeyClear { action: None, chord }),
     ]
     .boxed()
 }

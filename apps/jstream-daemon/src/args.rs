@@ -75,11 +75,17 @@ Options:
                        plugin's tunnel name and the LAN address and port it
                        sends from (repeatable). Off without it: no socket is
                        open. A `network_audio` source naming the sender then
-                       records its audio
+                       records its audio; one with no sender named records
+                       the first given (ADR-0221)
   --jtunnel-no-state <name>
                        ignore the DAW state the accepted JTunnel sender <name>
                        sends (ADR-0171): its transport, tracks and clips, which
                        data.list and data.get read otherwise (repeatable)
+  --jtunnel-midi <name>
+                       let the MIDI the accepted JTunnel sender <name> sends
+                       run the collection's MIDI action bindings (ADR-0123 §3,
+                       ADR-0207); without it its MIDI is only drawn
+                       (repeatable)
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -195,6 +201,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut register_vcam = false;
     let mut unregister_vcam = false;
     let mut jtunnel_no_state: Vec<String> = Vec::new();
+    let mut jtunnel_midi: Vec<String> = Vec::new();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
@@ -297,6 +304,13 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 }
                 jtunnel_no_state.push(name.clone());
             }
+            "--jtunnel-midi" => {
+                let name = value()?;
+                if jtunnel_midi.contains(name) {
+                    return Err(format!("`--jtunnel-midi` names the sender `{name}` twice"));
+                }
+                jtunnel_midi.push(name.clone());
+            }
             "--log-dir" => {
                 let dir = value()?;
                 if options.log_dir.replace(dir.clone()).is_some() {
@@ -365,6 +379,16 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             ));
         };
         *sender = sender.clone().with_state(false);
+    }
+    // "Use this sender's MIDI" (ADR-0123 §3) is off for an accepted sender; this turns
+    // it on, only for a sender accepted here.
+    for name in jtunnel_midi {
+        let Some(sender) = options.jtunnel.iter_mut().find(|s| s.name() == name) else {
+            return Err(format!(
+                "`--jtunnel-midi` names `{name}`, which no `--jtunnel-accept` accepts"
+            ));
+        };
+        *sender = sender.clone().with_midi(true);
     }
     if lan {
         options.lan = Some(Lan {
@@ -442,6 +466,21 @@ mod tests {
         );
         assert!(
             error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-no-state A --jtunnel-no-state A")
+                .contains("twice")
+        );
+        // ADR-0123 §3: a sender's MIDI runs bindings only when named, and only for an
+        // accepted sender.
+        let options = serve(
+            "--jtunnel-accept Bitwig@192.168.1.5:9000 --jtunnel-accept Live@10.0.0.2:9000 --jtunnel-midi Live",
+        );
+        let midi: Vec<bool> = options.jtunnel.iter().map(|s| s.uses_midi()).collect();
+        assert_eq!(midi, [false, true]);
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-midi B")
+                .contains("no `--jtunnel-accept`")
+        );
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-midi A --jtunnel-midi A")
                 .contains("twice")
         );
     }

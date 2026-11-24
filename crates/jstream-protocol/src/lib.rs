@@ -3,7 +3,7 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#bindings, crates/jstream-protocol/README.md#ptz, crates/jstream-protocol/README.md#camera-aim, crates/jstream-protocol/README.md#agent-approval, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads, crates/jstream-protocol/README.md#timelines, docs/adr/0115-timelines-on-the-wire.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#bindings, crates/jstream-protocol/README.md#ptz, crates/jstream-protocol/README.md#camera-aim, crates/jstream-protocol/README.md#agent-approval, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads, crates/jstream-protocol/README.md#timelines, docs/adr/0115-timelines-on-the-wire.md, crates/jstream-protocol/README.md#shows, docs/adr/0210-shows-a-run-order-with-bookmarks.md
 
 #![forbid(unsafe_code)]
 
@@ -47,6 +47,7 @@ mod query;
 mod rendering;
 mod schema;
 mod settings;
+mod show;
 mod timeline;
 mod transition;
 mod values;
@@ -59,12 +60,12 @@ pub use activity::{
 pub use agent::{AgentApproval, AgentTransport, ApprovalDecision, ApprovalOutcome, ApprovedAgent};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
-    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
+    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, MuteTo, SendInfo, SourceAudio, SourceMeter,
     gain_db_problem,
 };
 pub use binding::{
-    Binding, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo, Trigger, ValueBinding,
-    ValueTarget,
+    Binding, DataOn, MAX_DATA_VALUE_LEN, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo,
+    MidiNoteInfo, PtzAxis, Trigger, ValueBinding, ValueTarget,
 };
 pub use camera_aim::{
     CameraAim, CameraAimInfo, MAX_AIM_PAN_DEG, MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, camera_aim_check,
@@ -109,13 +110,13 @@ pub use geometry::{
     DrawnVertex, FitMode, Focus, GeometryError, GroupPose, ItemGeometry, LegacyBox, LegacyQuad,
     LocalPoint, MAX_BLUR_PX, MAX_DRAWN_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W,
     Placed, PlacementForm, ProjectedQuad, SceneCamera, Size, Solid, SolidBounds, Surface, Vec3,
-    legacy_quad, outline_contains,
+    legacy_quad, lens_blur, outline_contains,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey,
-    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
+    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, ShowId, SourceId, TimelineId,
     TransitionPresetId, VideoMixId,
 };
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
@@ -127,6 +128,7 @@ pub use kind::{
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
+    live_problem,
 };
 pub use mix::{
     DEFAULT_BASE_FPS, FAST_BASE_FPS, MixInput, MixResolution, VideoMix, VideoMixInfo,
@@ -134,7 +136,7 @@ pub use mix::{
 };
 pub use motion::{
     MAX_DATA_FIELD_LEN, MAX_DATA_KEY_LEN, MAX_DATA_STATE_LEN, MAX_DATA_STATES, MAX_MOTION_ID_LEN,
-    MAX_MOTION_MATERIAL_LEN, MAX_MOTION_MODIFIERS, MAX_MOTION_PARAM_LEN, MotionClock,
+    MAX_MOTION_MATERIAL_LEN, MAX_MOTION_MODIFIERS, MAX_MOTION_PARAM_LEN, MappingMode, MotionClock,
     MotionColorFrom, MotionCurve, MotionEffect, MotionKind, MotionMeasure, MotionMidiControl,
     MotionModifier, MotionProblem, MotionProperty, MotionSetting, MotionShape, check_motion,
     check_motion_id,
@@ -188,6 +190,14 @@ pub use rendering::{
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
+pub use show::{
+    AudioClip, AudioTrack, DEFAULT_IMAGE_MS, KeyframeMarker, LoopLeave, MAX_PROGRAM_CLIPS,
+    MAX_SHOW_BOOKMARKS, MAX_SHOW_FADE_MS, MAX_SHOW_LOOPS, MAX_SHOW_MS, MAX_SHOW_NAME_LEN,
+    MAX_SHOW_NOTE_LEN, MAX_SHOW_TRACKS, MAX_SHOW_WAIT_MS, MAX_SHOWS, MAX_TRACK_ENTRIES,
+    MIN_SHOW_LOOP_MS, NextMonitor, OverlayClip, OverlayTrack, ProgramClip, RunningShow,
+    SHOW_NUMBERED_BOOKMARKS, SequenceTrack, ShowBookmark, ShowChange, ShowCue, ShowEnd, ShowInfo,
+    ShowLoop, ShowState,
+};
 pub use timeline::{
     ChannelEdge, KeyframeEdge, LaneCurve, LanePoint, LaneTarget, MAX_CUES, MAX_LANE_POINTS,
     MAX_LANES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,

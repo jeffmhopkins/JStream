@@ -10,6 +10,7 @@ use jstream_protocol::{
 
 fn info(id: &str, duration_ms: u32) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         lanes: Vec::new(),
         starts: Vec::new(),
         stops: Vec::new(),

@@ -734,13 +734,22 @@ somewhere it shouldn't.
 - It sends only subscribe and bye packets and names packets, only to accepted senders'
   addresses, which must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
   `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
-  socket (a legacy unicast query, so senders answer that socket; no socket joins the
-  group or binds port 5353). It never announces itself and never sends audio or MIDI.
+  socket. It never announces itself and never sends audio or MIDI.
+- Senders answer and announce to the group, so a second socket, the mDNS listener
+  ([ADR-0221](../adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)),
+  binds port 5353 with address reuse beside the system's responder and joins the group
+  while the receiver runs. Nothing is sent from it. It takes only an mDNS message from a
+  LAN address's port 5353, into the same parser and list as below, and drops the rest
+  uncounted; it reads at most 16 datagrams per turn of the thread, so other programs'
+  mDNS traffic can't hold up playout. Another local program on 5353 sees the same
+  group traffic it always did; JStream adds nothing to it.
+- In the desktop app one accepted sender is live at a time (ADR-0221): only it is
+  subscribed to, so a reader naming no input reads only that sender's data.
 - A names packet ([ADR-0181](../adr/0181-jstream-names-a-jtunnel-senders-params.md))
   tells an accepted sender whose state is on what the collection calls its modulation
   params, so its DAW shows them. It carries only the names of what reads the sender's
   `params` key (an item's source and property, a scene's camera property, a value
-  binding's target, a channel's name or ID), each at most 40 bytes with no control characters, at most 32 of
+  binding's target, which may be a PTZ camera's name and axis, a channel's name or ID), each at most 40 bytes with no control characters, at most 32 of
   them. It goes beside the keepalive while any slot is named, and as an empty list four
   more times once none is. A sender with its state off is sent none. The receiver never
   parses one.
@@ -754,8 +763,22 @@ somewhere it shouldn't.
   instance's name is copied, once it matches; a message declaring more than 256 records
   is refused unread, so one costs at most a few tens of thousands of steps); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
-  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
-  doesn't trigger bindings (ADR-0142 §2).
+  name and the every-input one, which the `midi_*` sources draw (and whose clock gives
+  their beat). It moves anything only once the person turns on "Use this sender's MIDI"
+  for that sender (the desktop app's checkbox, the daemon's `--jtunnel-midi`), off by
+  default ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md) §3,
+  [ADR-0207](../adr/0207-mute-actions-and-held-triggers.md),
+  [ADR-0220](../adr/0220-every-midi-reader-goes-through-the-senders-switch.md)): the
+  engine's action-binding runner (`binding.set`, so any bindable action, `output.stop`
+  included) reads only the inputs `MidiInputs::bindable` names, and value bindings,
+  channels and `midi` modifiers read a named input only while its state is bindable
+  (reading it as a control at rest otherwise, in `Control::read`) and, naming none, only
+  the bound state, which a sender feeds only while it is let in and which is rebuilt
+  without it when it is dropped. A press a sender holds (a
+  push-to-talk) is let go once the switch goes off, its binding changes, or the sender
+  has sent nothing for 500 ms, so a dropped sender can't leave a mute open. Tests show a
+  sender left out moves no action binding, value binding, channel or `midi` modifier,
+  and one switched off mid-hold leaves nothing held.
 - A sender's state packets (JTunnel's side channel, a DAW's JSON messages under keys,
   [ADR-0171](../adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2) are
   taken only from an accepted sender, and counted and dropped while the person has
@@ -782,13 +805,16 @@ somewhere it shouldn't.
   ([ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)) pass the same LAN
   check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server) for
   what they may send and receive. Unlike the JTunnel socket, a controller endpoint binds
-  only the one address the person gives.
+  only the one address the person gives. A value binding aiming a head's axis
+  (ADR-0209) sends only to the heads the machine lists, as a shot does; a binding
+  naming a camera this machine doesn't list sends nothing.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw
 (ADR-0123 §6), as with JTunnel anywhere. An accepted sender, and anything on the path to
-its address, learns the names of the sources, scenes, buses and channels bound to its
-params (ADR-0181); its state switch turns that off.
+its address, learns the names of the sources, scenes, buses, channels and PTZ cameras
+bound to its params (ADR-0181, [ADR-0209](../adr/0209-value-bindings-aim-ptz-cameras.md));
+its state switch turns that off.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
 same network who already targets this machine. The check is of the source address a
 datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN

@@ -1232,6 +1232,7 @@ fn drift_x(
         item_id: ItemId::new(item),
         scene_id: scene.map(SceneId::new),
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "drift".into(),
             property: jstream_protocol::MotionProperty::X,
             effect: None,
@@ -1419,6 +1420,7 @@ fn pulse(item: &str, scene: Option<&str>) -> Edit {
         item_id: ItemId::new(item),
         scene_id: scene.map(SceneId::new),
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "pulse".into(),
             property: jstream_protocol::MotionProperty::Opacity,
             effect: None,
@@ -1523,6 +1525,7 @@ fn a_data_modifier_poses_an_item_from_live_data() {
             item_id: ItemId::new("a1"),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "play".into(),
                 property: jstream_protocol::MotionProperty::X,
                 effect: None,
@@ -1584,6 +1587,7 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
             item_id: ItemId::new("a1"),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "fader".into(),
                 property: jstream_protocol::MotionProperty::X,
                 effect: None,
@@ -1623,6 +1627,8 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
     );
 
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Faders"].map(String::from));
     let cc = |value| jstream_midi::Message::parse(&[0xB0, 7, value]).expect("a CC");
     midi.push("Faders", 0, &cc(127));
     // No follower yet (as in a preview): the control as it is, unsmoothed.
@@ -1663,6 +1669,7 @@ fn a_preview_with_no_output_smooths_a_midi_modifier_on_the_clock() {
             item_id: ItemId::new("a1"),
             scene_id: None,
             motion: vec![jstream_protocol::MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "fader".into(),
                 property: jstream_protocol::MotionProperty::X,
                 effect: None,
@@ -1703,6 +1710,8 @@ fn a_preview_with_no_output_smooths_a_midi_modifier_on_the_clock() {
     );
 
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Faders".to_owned()]);
     midi.push(
         "Faders",
         0,
@@ -1796,6 +1805,7 @@ fn jolt_and_drift() -> Edit {
         scene_id: None,
         motion: vec![
             MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "jolt".into(),
                 property: MotionProperty::Y,
                 effect: None,
@@ -1811,6 +1821,7 @@ fn jolt_and_drift() -> Edit {
                 amount: None,
             },
             MotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "drift".into(),
                 property: MotionProperty::X,
                 effect: None,
@@ -2255,6 +2266,7 @@ fn pulse_halo(param: &str, amplitude: f32) -> Edit {
         item_id: ItemId::new("a1"),
         scene_id: None,
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "pulse".into(),
             property: jstream_protocol::MotionProperty::Effect,
             effect: Some(jstream_protocol::MotionEffect {
@@ -2716,6 +2728,7 @@ fn a_data_modifier_sets_an_effect_colour_from_a_palette() {
         item_id: ItemId::new("a1"),
         scene_id: None,
         motion: vec![jstream_protocol::MotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: "clip".into(),
             property: jstream_protocol::MotionProperty::Effect,
             effect: Some(jstream_protocol::MotionEffect {

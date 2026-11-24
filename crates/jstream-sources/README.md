@@ -48,7 +48,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   and a `media` file plays from its start; the default does nothing. `seek(at, to)`
   plays the source on from `to` into its timeline, for `source.seek`: a `media` file
   goes there; the default restarts it as `restart` does, so a kind with nothing to seek
-  starts over. `duration()` is one play's length, for `SourceSize`'s `duration_ms`: a
+  starts over. `counts_from_zero()` (default `false`; `true` for a `timer`) says the
+  source counts from its time zero, so the engine restarts it for a show,
+  `source.restart` and `source.seek` by moving that zero instead of calling `restart`
+  or `seek` (it still calls `show`, after the zero moved), and a build that keeps its time keeps the restart
+  ([ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). `duration()` is one play's length, for `SourceSize`'s `duration_ms`: a
   `media` file's, when known; the default is `None`. `sound()` gives a kind's sound that
   plays while the program shows it (`MediaAudio`, a `media` file's), for the engine to
   mix; the default is `None`. `update(settings)` applies a change
@@ -239,14 +243,36 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)), and its latest control
   change with how many it has had (`last_control`), which `MidiInputs::last_controls` lists
   per named input for learning a value binding
-  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)). A reader skips a log slot a push is writing. CC 120
+  ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)), as
+  `MidiInputs::last_notes` lists each named input's latest note-on from its note log
+  with how many note events it has pushed, for learning a note
+  ([ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)). Beside the note log
+  it keeps a log of its control and program changes (`ControlEvent`, `ControlKind`), and
+  both count what was pushed (`pushed`, `controls_pushed`) so a reader can ask for what
+  came since a count (`notes_since`, `controls_since`), as the engine's MIDI action
+  bindings do ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)).
+  `MidiInputs::set_bindable` names the inputs whose MIDI may move anything
+  (`bindable`), the JTunnel senders whose "Use this sender's MIDI" is on (ADR-0123 §3),
+  and marks each named state (`MidiState::bindable`, one atomic; a state made later
+  takes the set it's made in). `bound()` is a state like `any()` that each input feeds
+  only while it is bindable, rebuilt from the inputs still bindable (a key held in any,
+  each value the largest) when `set_bindable` drops one
+  ([ADR-0220](../../docs/adr/0220-every-midi-reader-goes-through-the-senders-switch.md)):
+  what the engine's value bindings, channels and `midi`
+  modifiers read when they name no input; a named input that isn't bindable they read
+  as one that never sent anything. What every input draws doesn't change.
+  `MidiState::alive(at_ms)` (or `MidiFeed::alive`) records that the input's sender was
+  heard from, MIDI or not, and `alive_ms` reads it back,
+  `None` for an input never marked, such as a MIDI port: the bindings let a held press go
+  once a marked input falls silent. A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
   `drawn(name)` is the state a source's `input` setting draws. An input thread pushes
-  through a `MidiFeed` (`feed(name)`): its own state and the every-input one, looked up
-  once, and a `jstream-midi` `Tempo` tracker its clock and transport messages run,
-  which publishes a `TempoReading` (time, last timing clock, BPM, beat, playing) to both
-  states (`MidiState::tempo`) through a sequence-numbered cell, without a lock. Only a
+  through a `MidiFeed` (`feed(name)`): its own state, the every-input one and the
+  bound one, looked up once, and a `jstream-midi` `Tempo` tracker its clock and
+  transport messages run, which publishes a `TempoReading` (time, last timing clock,
+  BPM, beat, playing) to its own and the every-input state (`MidiState::tempo`)
+  through a sequence-numbered cell, without a lock. Only a
   timing clock (`F8`) counts as a running clock. The every-input state takes one feed's
   clock at a time, until that clock has been silent for `CLOCK_TIMEOUT_MS` (500); a
   lone stop or song position doesn't take it from a clock that runs. `set_clock` gives it the
@@ -489,7 +515,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   §6) is audio-only too: a network sender's audio, recorded by `jstream-core`'s JTunnel
   receiver rather than the platform's audio I/O. `transport` is `jtunnel` (the only one
   so far), `sender` the tunnel name (at most `MAX_SENDER_NAME`, 31 bytes, trimmed; free
-  text like a device ID, and recorded only once this machine accepts it), and
+  text like a device ID, and recorded only once this machine accepts it; empty, the
+  default, records the first accepted sender, the desktop app's live one,
+  [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), and
   `latency_ms` how long frames wait before they play (`LATENCY_MS`: 5 to 500, 40 by
   default; out of range reads as the default). Its target is
   `AudioTarget::Network { transport: Transport::Jtunnel, sender, latency_ms }`.
@@ -543,7 +571,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   (#1040) is a counter whose value means nothing: changing it, to any other number,
   starts the count again at the same `mode` and `duration`, in one edit (and its undo
   starts it again too). `mode`, `duration` and `restart` are the settings that aren't
-  live. A `clock` shows the wall-clock time of day
+  live. A countdown or stopwatch also starts again, with no edit, whenever the program
+  shows it again after plans that didn't (its scene goes on program, or its item is
+  shown), and for `source.restart`; `source.seek` counts on as if it had started that
+  long ago ([ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). The engine
+  does each by moving the time zero (`counts_from_zero`). A `clock` shows the wall-clock time of day
   (`clock_format` `24h`, `12h` with AM or PM, or either without seconds) in the
   machine's time zone, or the IANA zone `time_zone` names, through `jiff` (with no zone
   found for the machine it shows UTC; an unknown name is a setting error). Every frame
@@ -759,7 +791,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   moves (a message since the last look, or, with the tempo granted, a song playing) the
   next page frame is due too; while it rests, the source looks again every quarter
   second, unless the engine gave it no MIDI state. A page granted live data is looked
-  at every page frame, since data lands at any time. `youtube_chat` never sets any
+  at every page frame, since data lands at any time. With nothing waiting to be sent,
+  the next look is a page frame after the last look, never one timed from an update long
+  past, which would be due at once and keep the planner busy (#1556). `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,

@@ -15,7 +15,19 @@
 //! [`SessionPreviews`]: its binary channel (a bounded queue, read through
 //! `Control::binary`) and its open streams by channel. `preview.subscribe` checks the
 //! request, picks the codec and registers the stream with the engine's [`PreviewHub`];
-//! `preview.unsubscribe` and the session's end drop it.
+//! `preview.unsubscribe` and the session's end drop it. `preview.show` changes the scene
+//! an open stream shows (**Moving a stream**), and `preview.request_keyframe` sets its keyframe
+//! flag, so a client whose decoder fell behind resumes on the next picture.
+//!
+//! **Moving a stream.** A stream's scene is the one thing about it that changes while it
+//! is open. The hub moves it on its first pass after the engine has planned the new
+//! scene, and until then goes on sending the old one. A staged H.264 stream whose
+//! [`SharedEncode`] it has alone, and whose new picture no other session encodes, keeps
+//! that session: its render-thread tap is cut and a tap of the new picture handed over
+//! in its place, so the encoder, any hardware session it holds and the stream's sender
+//! carry on, and the session is asked for a keyframe. Otherwise the stream opens again
+//! on the new picture, joining its session if one is open. The hub's own streams just
+//! draw the new scene, as a keyframe.
 //!
 //! **The program stage.** A stream of the program or of a scene is drawn by the program
 //! stage (ADR-0117 §6): the hub holds the stage while such a stream is open, opening it
@@ -40,9 +52,11 @@
 //!
 //! **Codecs.** `preview.subscribe` picks the first codec the client accepts that the
 //! engine has: H.264 when the platform lists an H.264 encoder, JPEG and PNG always.
-//! H.264 runs on a `jstream-encode` [`VideoSession`] of the platform's software encoder
-//! (so a preview never takes a hardware session from an output), opened on the hub
-//! thread, and reopened when the picture size changes; if it can't be opened, the
+//! H.264 runs on a `jstream-encode` [`VideoSession`], opened on the hub thread and
+//! reopened when the picture size changes: a staged stream's on a hardware encoder while
+//! one of the stage's [`HardwareSlot`]s is free, which an output takes back, and every
+//! other on the platform's software encoder. Each asks for about half a bit per pixel,
+//! up to 1080p at 30 fps in software and 1080p at 60 fps on hardware; if it can't be opened, the
 //! stream falls back to JPEG when the client accepts it, and ends otherwise. Every frame
 //! names its codec. JPEG is this module's own baseline encoder ([`jpeg`]). PNG, which is
 //! lossless, is for a client taking a screenshot (ADR-0096), with `video.snapshot`'s
@@ -116,9 +130,24 @@ pub(crate) const KEYFRAME_EVERY: Duration = Duration::from_secs(2);
 /// an editing view must show text sharply (#1203).
 const JPEG_QUALITY: u8 = 95;
 
-/// The highest average H.264 bit rate a preview stream asks for, in kbit/s: 1080p at
-/// 30 fps at about half a bit per pixel.
+/// The highest average H.264 bit rate a preview stream asks of a software encoder, in
+/// kbit/s: 1080p at 30 fps at about half a bit per pixel.
 const MAX_H264_KBPS: u64 = 32_000;
+
+/// The highest average H.264 bit rate a preview stream asks of a hardware encoder, in
+/// kbit/s: 1080p at 60 fps at about half a bit per pixel, which a hardware encoder costs
+/// no more CPU to make. Over a software encoder's cap it keeps a 60 fps canvas's text
+/// and fine detail as sharp as a 30 fps one's.
+const MAX_HARDWARE_H264_KBPS: u64 = 64_000;
+
+/// The average bit rate, in kbit/s, of a preview of `width` × `height` at `fps`: about
+/// half a bit per pixel, so text and fine detail survive (#1203), up to `max`. The
+/// stream stays on this machine or the local network, where 30 Mbit/s for 1080p at
+/// 30 fps costs little. 640 × 360 at 15 fps is about 1.7 Mbit/s.
+fn preview_kbps((width, height): (u32, u32), fps: u32, max: u64) -> u32 {
+    let kbps = (u64::from(width) * u64::from(height) * u64::from(fps) / 2_000).clamp(100, max);
+    u32::try_from(kbps).unwrap_or(u32::MAX)
+}
 
 /// Draw errors in a row that a stream rides out by skipping the picture. One more
 /// ends it.
@@ -380,7 +409,7 @@ impl SessionPreviews {
             channel,
             codec,
             settings,
-            scene: opening.scene,
+            scene: Mutex::new(opening.scene),
             source_id: opening.source_id,
             draft: opening.draft,
             codecs: opening.codecs,
@@ -434,6 +463,67 @@ impl SessionPreviews {
         stream.planned()
     }
 
+    /// `preview.show`: the stream on `channel` shows `scene` (the program mix for
+    /// `None`) from its next picture, which is a keyframe. The hub moves it on its next
+    /// pass, once the engine has planned `scene`; until then it goes on showing what it
+    /// showed. Returns whether what the engine plans for the streams changed.
+    ///
+    /// # Errors
+    /// `invalid_argument` on `channel` for a channel not open, or a stream of a source.
+    pub(crate) fn show(
+        &self,
+        hub: &PreviewHub,
+        channel: u32,
+        scene: Option<SceneId>,
+    ) -> Result<bool, ProtocolError> {
+        let stream = self.open(channel)?;
+        if stream.source_id.is_some() || stream.draft.is_some() {
+            return Err(ProtocolError::invalid_argument(
+                "channel",
+                format!(
+                    "preview channel {channel} shows a source, which `preview.show` can't change"
+                ),
+            ));
+        }
+        let changed = {
+            let mut shown = lock(&stream.scene);
+            let changed = *shown != scene;
+            if changed {
+                tracing::debug!(channel, scene = ?scene, "preview stream shows another picture");
+                *shown = scene;
+            }
+            changed
+        };
+        if changed {
+            stream.keyframe.store(true, Ordering::Release);
+            hub.wake();
+        }
+        Ok(changed)
+    }
+
+    /// `preview.request_keyframe`: the next picture on `channel` is a keyframe. Nothing for a
+    /// channel not open.
+    pub(crate) fn keyframe(&self, hub: &PreviewHub, channel: u32) {
+        if let Some(stream) = lock(&self.streams).get(&channel) {
+            stream.keyframe.store(true, Ordering::Release);
+            hub.wake();
+        }
+    }
+
+    /// The live stream on `channel`.
+    fn open(&self, channel: u32) -> Result<Arc<PreviewStream>, ProtocolError> {
+        lock(&self.streams)
+            .get(&channel)
+            .filter(|stream| stream.live())
+            .cloned()
+            .ok_or_else(|| {
+                ProtocolError::invalid_argument(
+                    "channel",
+                    format!("this session has no preview channel {channel} open"),
+                )
+            })
+    }
+
     /// Ends every stream and the binary channel: the session is gone. Returns whether
     /// any stream it closed showed a scene.
     pub(crate) fn close(&self) -> bool {
@@ -464,8 +554,8 @@ pub(crate) struct PreviewStream {
     /// The codec chosen at subscription; the hub may fall back from it ([`Work::codec`]).
     codec: PreviewCodec,
     settings: PreviewSettings,
-    /// The scene it shows, or `None` for the program mix.
-    scene: Option<SceneId>,
+    /// The scene it shows, or `None` for the program mix; `preview.show` changes it.
+    scene: Mutex<Option<SceneId>>,
     /// The collection's source it shows alone instead.
     source_id: Option<SourceId>,
     /// The draft source it shows instead, planned once at the subscription.
@@ -521,6 +611,7 @@ fn meter_h264(stream: &PreviewStream, session: &VideoSession) -> Option<StreamGu
     let streams = stream.streams.as_ref()?;
     let (fps, target_kbps) = profile::streams::encoder_target(session.info(), None);
     let handle = session.stats_handle();
+    let encoder = profile::streams::encoder_of(session.stats_handle());
     let counts = Arc::clone(&stream.counts);
     let base = handle.stats().unwrap_or_default();
     let (base_sent, base_bytes, base_lost) = counts.read();
@@ -528,11 +619,12 @@ fn meter_h264(stream: &PreviewStream, session: &VideoSession) -> Option<StreamGu
     Some(streams.add(StreamMeter {
         stream: ProfileStream::Preview {
             channel: stream.channel,
-            scene_id: stream.scene.clone(),
+            scene_id: stream.scene(),
             source_id: stream.source_id.clone(),
         },
         fps,
         target_kbps,
+        encoder,
         read: Box::new(move || {
             let video = match handle.stats() {
                 Some(stats) => {
@@ -569,7 +661,12 @@ fn meter_h264(stream: &PreviewStream, session: &VideoSession) -> Option<StreamGu
 impl PreviewStream {
     /// Whether the engine plans what it shows for it: a scene, or a source alone.
     fn planned(&self) -> bool {
-        self.scene.is_some() || self.source_id.is_some()
+        lock(&self.scene).is_some() || self.source_id.is_some()
+    }
+
+    /// The scene it shows now, or `None` for the program mix (or a source).
+    fn scene(&self) -> Option<SceneId> {
+        lock(&self.scene).clone()
     }
 
     /// Whether it shows the program mix.
@@ -672,22 +769,22 @@ impl Work {
 }
 
 impl H264 {
-    /// Opens the platform's H.264 encoder at `width` × `height`, software preferred,
+    /// Opens the platform's H.264 encoder at `width` × `height`, as `hardware` says,
     /// for frames pushed in `input_format`.
     fn open(
         codecs: &dyn Codecs,
         (width, height): (u32, u32),
         fps: u32,
         input_format: PixelFormat,
+        hardware: HardwarePreference,
     ) -> Result<Self, String> {
         let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
         let frame_period = Timebase::new(1, fps).map_err(|err| err.to_string())?;
-        // About 0.5 bit per pixel per frame, so text and fine detail survive (#1203): the
-        // stream stays on this machine or the local network, where 30 Mbit/s for 1080p
-        // at 30 fps costs little. 640 × 360 at 15 fps is about 1.7 Mbit/s.
-        let kbps = (u64::from(width) * u64::from(height) * u64::from(fps) / 2_000)
-            .clamp(100, MAX_H264_KBPS);
-        let kbps = u32::try_from(kbps).unwrap_or(32_000);
+        let max = match hardware {
+            HardwarePreference::Prefer | HardwarePreference::Require => MAX_HARDWARE_H264_KBPS,
+            HardwarePreference::Avoid => MAX_H264_KBPS,
+        };
+        let kbps = preview_kbps((width, height), fps, max);
         let config = VideoEncoderConfig {
             codec: Codec::H264,
             size,
@@ -698,7 +795,7 @@ impl H264 {
                 max_kbps: kbps * 2,
             },
             keyframe_interval: fps.saturating_mul(KEYFRAME_EVERY.as_secs() as u32),
-            hardware: HardwarePreference::Avoid,
+            hardware,
         };
         let options = SessionOptions {
             input_capacity: 2,
@@ -778,15 +875,265 @@ const STAGE_RETRY_FAILED: Duration = Duration::from_secs(5);
 /// `jstream-preview-send` thread sends its packets, or encodes and sends its pictures,
 /// as they come. The hub only opens it, asks for keyframes and closes it.
 struct Staged {
-    session: Option<VideoSession>,
+    /// The encoder session its packets come from, which other streams of the same
+    /// picture may share ([`SharedEncode`]). `None` for a JPEG or PNG stream.
+    session: Option<Arc<SharedEncode>>,
     sender: Option<JoinHandle<()>>,
     /// Set before the session is closed, so the sender knows its end was asked for.
     closing: Arc<AtomicBool>,
     codec: PreviewCodec,
     size: FrameSize,
+    /// The scene the stage draws for it, or `None` for the program mix.
+    scene: Option<SceneId>,
     stage: Weak<Program>,
     /// Its meter in `profile.get`, dropped with it.
     _profiled: Option<StreamGuard>,
+}
+
+/// The most hardware H.264 sessions the previews of a program stage hold at once. Each
+/// is one distinct picture (a scene or the program, at a size and rate), however many
+/// streams show it ([`SharedEncode`]). Four covers the views a studio layout shows at
+/// once (the canvas, the program monitor, a Next monitor and a projector), and stays
+/// under the session limits consumer GPUs have had. Nothing relies on getting them: an
+/// output that misses its encoder takes every preview session back.
+const PREVIEW_HARDWARE_SESSIONS: u32 = 4;
+
+/// The hardware H.264 sessions the previews of a program stage may hold (#1691), up to
+/// [`PREVIEW_HARDWARE_SESSIONS`]. A program or scene stream the stage draws tries the
+/// hardware encoder while one is free, so the canvas doesn't cost a CPU core on a
+/// software encoder. Any other stream encodes in software.
+///
+/// Outputs come first (ADR-0080 §3): an output whose own open did not get a hardware
+/// encoder [`reclaim`](Self::reclaim)s them all, the streams holding them reopen in
+/// software, and the output opens again. The stage owns the slot, so its outputs and
+/// the hub see the same one.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct HardwareSlot(Arc<SlotShared>);
+
+#[derive(Debug, Default)]
+struct SlotShared {
+    state: Mutex<SlotState>,
+    /// Woken when the slot is given up.
+    freed: Condvar,
+}
+
+#[derive(Debug, Default)]
+struct SlotState {
+    /// The preview hardware sessions that hold one.
+    taken: u32,
+    /// Outputs opening now that want them back: no stream takes one meanwhile.
+    reclaiming: u32,
+}
+
+/// One hardware session of the slot, taken until it is dropped.
+#[derive(Debug)]
+struct HardwareTaken(Arc<SlotShared>);
+
+/// An output's hold on a slot it reclaimed, until its own encoder has opened.
+#[derive(Debug)]
+pub(crate) struct Reclaimed(Arc<SlotShared>);
+
+impl HardwareSlot {
+    /// A hardware session, if fewer than [`PREVIEW_HARDWARE_SESSIONS`] are held and no
+    /// output is reclaiming them.
+    fn take(&self) -> Option<HardwareTaken> {
+        let mut state = lock(&self.0.state);
+        (state.taken < PREVIEW_HARDWARE_SESSIONS && state.reclaiming == 0).then(|| {
+            state.taken += 1;
+            HardwareTaken(Arc::clone(&self.0))
+        })
+    }
+
+    /// Whether an output wants the hardware sessions back from the streams that hold
+    /// them.
+    fn asked_back(&self) -> bool {
+        let state = lock(&self.0.state);
+        state.taken > 0 && state.reclaiming > 0
+    }
+
+    /// How many hardware sessions preview streams hold, for the count of hardware
+    /// sessions in use.
+    pub(crate) fn taken(&self) -> usize {
+        usize::try_from(lock(&self.0.state).taken).unwrap_or(usize::MAX)
+    }
+
+    /// Takes the hardware sessions back for an output: asks the streams holding them
+    /// to reopen in software and waits up to `wait` for every one to close. `None`
+    /// when no stream held one, or when they were not all given up in time; otherwise
+    /// no stream takes one until the returned hold is dropped.
+    pub(crate) fn reclaim(&self, wait: Duration) -> Option<Reclaimed> {
+        let mut state = lock(&self.0.state);
+        if state.taken == 0 {
+            return None;
+        }
+        state.reclaiming += 1;
+        let hold = Reclaimed(Arc::clone(&self.0));
+        let deadline = Instant::now() + wait;
+        while state.taken > 0 {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                // The lock goes before `hold`, whose drop takes it.
+                drop(state);
+                return None;
+            };
+            state = match self.0.freed.wait_timeout(state, left) {
+                Ok((state, _)) => state,
+                Err(poisoned) => poisoned.into_inner().0,
+            };
+        }
+        drop(state);
+        Some(hold)
+    }
+}
+
+impl Drop for HardwareTaken {
+    fn drop(&mut self) {
+        let mut state = lock(&self.0.state);
+        state.taken = state.taken.saturating_sub(1);
+        drop(state);
+        self.0.freed.notify_all();
+    }
+}
+
+impl Drop for Reclaimed {
+    fn drop(&mut self) {
+        let mut state = lock(&self.0.state);
+        state.reclaiming = state.reclaiming.saturating_sub(1);
+    }
+}
+
+/// One H.264 encoder session of a program stage's previews, shared by every stream that
+/// shows the same picture: the same scene (or the program) at the same size and rate.
+/// The stage draws and reads that picture back once, the session encodes it once, and
+/// each stream sends the packets on from its own subscription, which starts on a
+/// keyframe the session is asked for. Several views of one scene so cost one encode.
+/// It closes when its last stream lets go of it.
+struct SharedEncode {
+    session: VideoSession,
+    /// The scene the stage draws into it, or `None` for the program mix. A stream that
+    /// has it alone moves it to another scene with `preview.show` ([`Self::show`]).
+    scene: Mutex<Option<SceneId>>,
+    /// Set to let the render thread's tap of the session go, when the session moves to
+    /// another scene.
+    cut: Mutex<Arc<AtomicBool>>,
+    /// The stage draws it every `divisor`th base tick.
+    divisor: u32,
+    size: FrameSize,
+    fps: u32,
+    /// Which session this is, unique per process, for tests of what reopens.
+    #[cfg(test)]
+    serial: u64,
+    /// The stage's hardware session, while this encoder is a hardware one.
+    hardware: Option<HardwareTaken>,
+}
+
+impl SharedEncode {
+    /// Whether it holds a hardware session an output wants back: its streams then
+    /// open again, in software, and no stream joins it.
+    fn gives_way(&self, slot: &HardwareSlot) -> bool {
+        self.hardware.is_some() && slot.asked_back()
+    }
+
+    /// Moves it to `scene` on `stage` (`preview.show`): the render thread lets go of
+    /// its tap of the old picture before it is handed the tap of the new one, so no
+    /// tick pushes both, and the session is asked for a keyframe, which the new
+    /// picture's first frame becomes. The encoder, and any hardware session it holds,
+    /// stay open, and the stream's reader sees one stream go on.
+    fn show(&self, stage: &Program, scene: Option<SceneId>) {
+        let mut cut = lock(&self.cut);
+        cut.store(true, Ordering::Release);
+        *cut = stage.attach_preview(self.size, self.divisor, scene.clone(), self.session.input());
+        *lock(&self.scene) = scene;
+        self.session.request_keyframe();
+    }
+}
+
+/// The [`SharedEncode`]s open on a program stage, which owns this list.
+#[derive(Default)]
+pub(crate) struct SharedEncodes(Mutex<Vec<Weak<SharedEncode>>>);
+
+impl std::fmt::Debug for SharedEncodes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SharedEncodes").finish_non_exhaustive()
+    }
+}
+
+impl SharedEncodes {
+    /// The open session for `scene` at `size` and `fps`, unless it is giving its
+    /// hardware session back to an output.
+    fn find(
+        &self,
+        scene: Option<&SceneId>,
+        size: FrameSize,
+        fps: u32,
+        slot: &HardwareSlot,
+    ) -> Option<Arc<SharedEncode>> {
+        let mut open = lock(&self.0);
+        open.retain(|encode| encode.strong_count() > 0);
+        open.iter().filter_map(Weak::upgrade).find(|encode| {
+            lock(&encode.scene).as_ref() == scene
+                && encode.size == size
+                && encode.fps == fps
+                && !encode.gives_way(slot)
+        })
+    }
+
+    fn add(&self, encode: &Arc<SharedEncode>) {
+        lock(&self.0).push(Arc::downgrade(encode));
+    }
+
+    /// Each open session's identity and the scene it shows, for tests of what moves.
+    #[cfg(test)]
+    pub(crate) fn shown(&self) -> Vec<(u64, Option<SceneId>)> {
+        lock(&self.0)
+            .iter()
+            .filter_map(Weak::upgrade)
+            .map(|encode| (encode.serial, lock(&encode.scene).clone()))
+            .collect()
+    }
+
+    /// How many sessions are open, for tests.
+    #[cfg(test)]
+    pub(crate) fn open(&self) -> usize {
+        lock(&self.0)
+            .iter()
+            .filter(|encode| encode.strong_count() > 0)
+            .count()
+    }
+}
+
+/// Opens a staged stream's H.264 encoder: on hardware while `slot` is free, falling back
+/// to software when no hardware encoder opens, or in software while another stream holds
+/// the slot. The slot stays taken while the session is a hardware one.
+fn open_staged_h264(
+    codecs: &dyn Codecs,
+    size: (u32, u32),
+    fps: u32,
+    format: PixelFormat,
+    slot: &HardwareSlot,
+) -> Result<(H264, Option<HardwareTaken>), String> {
+    if let Some(taken) = slot.take() {
+        match H264::open(codecs, size, fps, format, HardwarePreference::Prefer) {
+            Ok(h264) if h264.session.info().codec.hardware => return Ok((h264, Some(taken))),
+            // `Prefer` fell back to software inside the platform: the slot is free again.
+            // A software encoder keeps the software cap, which only a rate above 1080p30
+            // reaches: such a session opens again, in software.
+            Ok(h264)
+                if preview_kbps(size, fps, MAX_HARDWARE_H264_KBPS)
+                    == preview_kbps(size, fps, MAX_H264_KBPS) =>
+            {
+                return Ok((h264, None));
+            }
+            Ok(h264) => drop(h264),
+            // Linux's `Prefer` has no software fallback when VA-API refuses. A platform
+            // that lets go of a closed session late can also refuse the open that
+            // follows a resize; software until the next open is harmless.
+            Err(reason) => tracing::info!(
+                error = %reason,
+                "no hardware H.264 encoder for the preview; it encodes in software"
+            ),
+        }
+    }
+    H264::open(codecs, size, fps, format, HardwarePreference::Avoid).map(|h264| (h264, None))
 }
 
 /// The format the program stage's render thread pushes a preview's pictures of `size`
@@ -810,21 +1157,54 @@ impl Staged {
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
         clock: StreamClock,
+        slot: &HardwareSlot,
     ) -> Result<Self, String> {
         // The stage draws every `divisor`th base tick, so the encoder is told the rate
         // it gets: never above the base rate, which a 60 fps ask of a 30 fps stage is.
         let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
         let fps = (stage.base_fps / divisor).max(1);
-        let H264 {
-            session, packets, ..
-        } = H264::open(
-            codecs,
-            (size.width(), size.height()),
-            fps,
-            staged_format(size),
-        )?;
-        let profiled = meter_h264(stream, &session);
-        stage.attach_preview(size, divisor, stream.scene.clone(), session.input());
+        let encodes = stage.preview_encodes();
+        // Another stream of the same picture already has it encoded: this one takes
+        // the same packets, from the keyframe its subscription asks for.
+        let scene = stream.scene();
+        let (session, packets) = match encodes.find(scene.as_ref(), size, fps, slot) {
+            Some(session) => {
+                let packets = session.session.subscribe();
+                (session, packets)
+            }
+            None => {
+                let (
+                    H264 {
+                        session, packets, ..
+                    },
+                    hardware,
+                ) = open_staged_h264(
+                    codecs,
+                    (size.width(), size.height()),
+                    fps,
+                    staged_format(size),
+                    slot,
+                )?;
+                let cut = stage.attach_preview(size, divisor, scene.clone(), session.input());
+                let session = Arc::new(SharedEncode {
+                    session,
+                    scene: Mutex::new(scene.clone()),
+                    cut: Mutex::new(cut),
+                    divisor,
+                    #[cfg(test)]
+                    serial: {
+                        static SERIAL: AtomicU64 = AtomicU64::new(0);
+                        SERIAL.fetch_add(1, Ordering::Relaxed)
+                    },
+                    size,
+                    fps,
+                    hardware,
+                });
+                encodes.add(&session);
+                (session, packets)
+            }
+        };
+        let profiled = meter_h264(stream, &session.session);
         let closing = Arc::new(AtomicBool::new(false));
         let sender = {
             let stream = Arc::clone(stream);
@@ -844,6 +1224,7 @@ impl Staged {
             closing,
             codec: PreviewCodec::H264,
             size,
+            scene,
             stage: Arc::downgrade(stage),
             _profiled: profiled,
         })
@@ -861,7 +1242,8 @@ impl Staged {
     ) -> Result<Self, String> {
         let (input, pictures) = picture_queue();
         let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
-        stage.attach_pictures(size, divisor, stream.scene.clone(), input);
+        let scene = stream.scene();
+        stage.attach_pictures(size, divisor, scene.clone(), input);
         let closing = Arc::new(AtomicBool::new(false));
         let sender = {
             let stream = Arc::clone(stream);
@@ -881,9 +1263,50 @@ impl Staged {
             closing,
             codec,
             size,
+            scene,
             stage: Arc::downgrade(stage),
             _profiled: None,
         })
+    }
+
+    /// Whether its encoder holds one of the stage's hardware sessions while an output
+    /// wants them back: the stream then opens again, in software.
+    fn gives_way(&self, slot: &HardwareSlot) -> bool {
+        self.session
+            .as_ref()
+            .is_some_and(|session| session.gives_way(slot))
+    }
+
+    /// Moves its encoder to `scene` (`preview.show`) when no other stream shares it and
+    /// no open session of `scene`'s picture can be joined instead; `false` when it has to
+    /// open again for `scene`, which joins or opens that session (a JPEG or PNG stream
+    /// always does, which costs no encoder). Its packets go on from the same
+    /// subscription, so its sender, its clock and its reader carry on.
+    fn show(
+        &mut self,
+        stream: &PreviewStream,
+        stage: &Arc<Program>,
+        scene: &Option<SceneId>,
+        slot: &HardwareSlot,
+    ) -> bool {
+        let Some(session) = self.session.as_ref() else {
+            return false;
+        };
+        let alone = Arc::strong_count(session) == 1;
+        if !alone
+            || stage
+                .preview_encodes()
+                .find(scene.as_ref(), session.size, session.fps, slot)
+                .is_some()
+        {
+            return false;
+        }
+        session.show(stage, scene.clone());
+        self.scene.clone_from(scene);
+        // `profile.get` names the scene it shows now.
+        self._profiled = None;
+        self._profiled = meter_h264(stream, &session.session);
+        true
     }
 
     /// Whether it is open in `codec` at `size` on `stage`.
@@ -900,10 +1323,12 @@ impl Staged {
 impl Drop for Staged {
     fn drop(&mut self) {
         self.closing.store(true, Ordering::Release);
-        // The session finishes, the render thread lets go of its input, and the
-        // sender's subscription ends.
-        // A picture stream's sender (no session) sees `closing` within its wait and
-        // ends by itself; joining it would hold the hub up for that wait.
+        // The stream lets go of the session. If it was the last one on it, the session
+        // finishes, the render thread lets go of its input and the sender's
+        // subscription ends; otherwise the sender sees `closing` within its wait
+        // (`PACKET_WAIT`).
+        // A picture stream's sender (no session) sees `closing` within its longer wait
+        // and ends by itself; joining it would hold the hub up for that wait.
         if self.session.take().is_none() {
             return;
         }
@@ -954,14 +1379,22 @@ impl StreamClock {
     }
 }
 
-/// `pts_us`, or the last time sent through `last` if that is later, recorded as the
-/// last.
+/// `pts_us`, or just after the last time sent through `last` if that is as late,
+/// recorded as the last: a stream's times always go forward, so a decoder never gets
+/// two pictures at one time, as it would when a stream changes sender with media time
+/// running ahead of its age (#1775 train review).
 fn not_back(last: &AtomicI64, pts_us: i64) -> i64 {
-    last.fetch_max(pts_us, Ordering::AcqRel).max(pts_us)
+    let after = |before: i64| pts_us.max(before.saturating_add(1));
+    match last.fetch_update(Ordering::AcqRel, Ordering::Acquire, |before| {
+        Some(after(before))
+    }) {
+        Ok(before) | Err(before) => after(before),
+    }
 }
 
 /// The sender thread of a [`Staged`] stream: sends each packet as it comes, timed by
-/// `clock`. A session that ends without being closed ends the stream.
+/// `clock`, until the stream closes it. A session that ends without being closed ends
+/// the stream.
 fn send_packets(
     stream: &PreviewStream,
     packets: &Subscription,
@@ -970,9 +1403,12 @@ fn send_packets(
     closing: &AtomicBool,
     clock: &mut StreamClock,
 ) {
-    loop {
-        match packets.recv() {
-            Ok(packet) => {
+    // The session may outlive this stream, when other streams share it, so the wait
+    // for a packet is bounded and `closing` ends it.
+    while !closing.load(Ordering::Acquire) {
+        match packets.recv_timeout(PACKET_WAIT) {
+            Ok(None) => {}
+            Ok(Some(packet)) => {
                 let pts = packet
                     .pts()
                     .rescale(Timebase::MICROS, Rounding::Nearest)
@@ -1084,21 +1520,35 @@ fn stageable(stream: &PreviewStream, work: Option<&Work>, can_stage: bool) -> bo
 }
 
 /// Opens, or keeps, `stream`'s [`Staged`] session at its picture size of `canvas` (the
-/// program's, or its scene's), and passes a keyframe request on.
+/// program's, or its scene's), and passes a keyframe request on. An H.264 session
+/// opens on hardware while the stage's [`HardwareSlot`] is free, and opens again, in
+/// software, when an output wants the slot back.
 fn serve_staged(
     stream: &Arc<PreviewStream>,
     work: &mut Work,
     stage: &Arc<Program>,
-    canvas: (u32, u32),
+    (canvas, scene): ((u32, u32), Option<SceneId>),
     rev: &Arc<AtomicU64>,
 ) -> Result<(), String> {
     let (width, height) = stream.settings.picture_size(canvas.0, canvas.1);
     let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
-    if !work
-        .staged
-        .as_ref()
-        .is_some_and(|staged| staged.is(work.codec, size, stage))
+    let slot = stage.preview_hardware();
+    if let Some(staged) = work.staged.as_mut()
+        && staged.scene != scene
+        && staged.is(work.codec, size, stage)
+        && !staged.gives_way(slot)
+        && staged.show(stream, stage, &scene, slot)
     {
+        tracing::info!(
+            channel = stream.channel,
+            scene = ?scene,
+            "a preview stream's encoder moves to another picture"
+        );
+        stream.keyframe.store(false, Ordering::Release);
+    }
+    if !work.staged.as_ref().is_some_and(|staged| {
+        staged.scene == scene && staged.is(work.codec, size, stage) && !staged.gives_way(slot)
+    }) {
         // The old session (or the hub's own) closes first.
         work.staged = None;
         work.h264 = None;
@@ -1106,7 +1556,7 @@ fn serve_staged(
         // picture can be matched to its stream in the log (#1562).
         tracing::info!(
             channel = stream.channel,
-            scene = ?stream.scene,
+            scene = ?scene,
             codec = ?work.codec,
             width,
             height,
@@ -1124,6 +1574,7 @@ fn serve_staged(
                 stage,
                 rev,
                 StreamClock::of(work),
+                slot,
             )?;
             // A new session starts on a keyframe.
             stream.keyframe.store(false, Ordering::Release);
@@ -1139,7 +1590,8 @@ fn serve_staged(
         .and_then(|staged| staged.session.as_ref())
         && stream.keyframe.swap(false, Ordering::AcqRel)
     {
-        session.request_keyframe();
+        // Every stream on the session gets the keyframe; it costs them nothing.
+        session.session.request_keyframe();
     }
     Ok(())
 }
@@ -1220,7 +1672,7 @@ impl PreviewHub {
             .iter()
             .filter_map(Weak::upgrade)
             .filter(|stream| stream.live())
-            .filter_map(|stream| stream.scene.clone())
+            .filter_map(|stream| stream.scene())
             .collect()
     }
 
@@ -1255,7 +1707,7 @@ impl PreviewHub {
             .streams
             .iter()
             .filter_map(Weak::upgrade)
-            .filter(|stream| stream.scene.as_ref() == Some(scene_id))
+            .filter(|stream| stream.scene().as_ref() == Some(scene_id))
             .collect();
         for stream in streams {
             stream.end(rev, reason);
@@ -1299,6 +1751,14 @@ impl PreviewHub {
             tracing::error!("preview thread panicked");
         }
         Ok(())
+    }
+}
+
+impl PreviewHub {
+    /// Wakes the thread for a pass now, so a stream's new picture or keyframe doesn't
+    /// wait for its next due time.
+    pub(crate) fn wake(&self) {
+        self.inner.wake.notify_all();
     }
 }
 
@@ -1406,7 +1866,7 @@ fn run(
             stream.shows_program() && !stageable(stream, works.get(&stream.id), stage.is_some())
         });
         let shows_scenes = streams.iter().any(|stream| {
-            stream.scene.is_some() && !stageable(stream, works.get(&stream.id), stage.is_some())
+            stream.scene().is_some() && !stageable(stream, works.get(&stream.id), stage.is_some())
         });
         // A source's own snapshot is captured as a draft's is.
         let drafts: Vec<Arc<RenderSnapshot>> = streams
@@ -1430,7 +1890,8 @@ fn run(
                 .as_ref()
                 .filter(|_| stageable(stream, Some(work), true))
             {
-                let canvas = match &stream.scene {
+                let scene = stream.scene();
+                let canvas = match &scene {
                     None => Some(program_canvas),
                     // A planned scene with no canvas (the collection has none) draws at
                     // 16 × 16, as the hub's own drawing of it does (`serve`).
@@ -1447,7 +1908,7 @@ fn run(
                     wake_at = wake_at.min(now + period);
                     continue;
                 };
-                match serve_staged(stream, work, stage, canvas, &rev_now) {
+                match serve_staged(stream, work, stage, (canvas, scene), &rev_now) {
                     Ok(()) => {
                         let period = Duration::from_secs(1) / stream.settings.fps;
                         wake_at = wake_at.min(now + period);
@@ -1469,7 +1930,8 @@ fn run(
             }
             // Drawn by the hub from here: the stage no longer feeds it.
             work.staged = None;
-            let planned = match (&stream.source_id, &stream.scene) {
+            let scene = stream.scene();
+            let planned = match (&stream.source_id, &scene) {
                 (Some(source_id), _) => Some(sources.get(source_id)),
                 (None, Some(scene_id)) => Some(scenes.get(scene_id)),
                 (None, None) => None,
@@ -1830,6 +2292,9 @@ fn open_h264(stream: &PreviewStream, work: &mut Work, size: FrameSize) -> Result
         (size.width(), size.height()),
         stream.settings.fps,
         PixelFormat::Rgba8,
+        // The hub's own drawing (a source, a draft, or no program stage) stays in
+        // software: only a staged stream takes the hub's hardware slot.
+        HardwarePreference::Avoid,
     )?;
     h264.profiled = meter_h264(stream, &h264.session);
     work.h264 = Some(h264);
@@ -1959,7 +2424,7 @@ mod clock_tests {
             "timed by how long the stream is open: {start}"
         );
         assert_eq!(first.at(41_000), start + 40_000, "then by media time");
-        assert_eq!(first.at(21_000), start + 40_000, "never back");
+        assert_eq!(first.at(21_000), start + 40_001, "never back, nor the same");
         // A later stage's sender, its media time starting anew, goes on from there.
         std::thread::sleep(Duration::from_millis(5));
         let mut next = StreamClock::new(opened, Arc::clone(&last));
@@ -1975,6 +2440,9 @@ mod clock_tests {
     fn a_stream_moved_to_another_sender_goes_on_from_the_last_time_sent() {
         let opened = Instant::now();
         let last = Arc::new(AtomicI64::new(0));
+        // Opened a moment ago: a first picture at age 0 µs would be sent at 1, just after
+        // the last time (0), and the media time after it would lag by that 1.
+        std::thread::sleep(Duration::from_millis(1));
         let mut first = StreamClock::new(opened, Arc::clone(&last));
         let start = first.at(0);
         // Media time running ahead of the wall clock: far past what the stream's age says.
@@ -1982,10 +2450,14 @@ mod clock_tests {
         assert_eq!(ahead, start + 10_000_000);
         // The next stage's sender opens now, its first picture timed by the stream's age.
         let mut next = StreamClock::new(opened, Arc::clone(&last));
-        assert_eq!(next.at(0), ahead, "not back to the stream's age");
+        assert_eq!(
+            next.at(0),
+            ahead + 1,
+            "not back to the stream's age, nor the same"
+        );
         // Nor does the hub, timing by the stream's age too.
-        assert_eq!(not_back(&last, 1_000), ahead);
-        assert_eq!(not_back(&last, ahead + 1), ahead + 1);
+        assert_eq!(not_back(&last, 1_000), ahead + 2);
+        assert_eq!(not_back(&last, ahead + 10), ahead + 10);
     }
 }
 
@@ -2002,5 +2474,263 @@ mod format_tests {
         assert_eq!(staged_format(size(960, 540)), PixelFormat::Nv12);
         assert_eq!(staged_format(size(961, 540)), PixelFormat::Rgba8);
         assert_eq!(staged_format(size(960, 541)), PixelFormat::Rgba8);
+    }
+}
+
+#[cfg(test)]
+mod hardware_tests {
+    use super::{HardwareSlot, open_staged_h264};
+    use jstream_media::{Packet, PixelFormat};
+    use jstream_platform::fake::FakeCodecs;
+    use jstream_platform::{
+        AudioEncoder, AudioEncoderConfig, CodecInfo, Codecs, HardwarePreference, PlatformError,
+        VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// The fake encoder, reported as a hardware one when opened with `Prefer`, or
+    /// refused then when `refuse` is set. With `one`, it has a single hardware session
+    /// to give, and `Prefer` opens software while that one is open, as an encoder at
+    /// its session limit does. Records each preference it was opened with.
+    #[derive(Default)]
+    struct HardwareCodecs {
+        refuse: bool,
+        one: Option<Arc<AtomicUsize>>,
+        asked: Mutex<Vec<HardwarePreference>>,
+    }
+
+    struct Hardware {
+        inner: Box<dyn VideoEncoder>,
+        info: CodecInfo,
+        /// The count of open hardware sessions it is one of.
+        open: Option<Arc<AtomicUsize>>,
+    }
+
+    impl Drop for Hardware {
+        fn drop(&mut self) {
+            if let Some(open) = &self.open {
+                open.fetch_sub(1, Ordering::AcqRel);
+            }
+        }
+    }
+
+    impl VideoEncoder for Hardware {
+        fn info(&self) -> &CodecInfo {
+            &self.info
+        }
+        fn can_accept(&self) -> bool {
+            self.inner.can_accept()
+        }
+        fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
+            self.inner.encode(frame)
+        }
+        fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+            self.inner.poll(out)
+        }
+        fn request_keyframe(&mut self) -> Result<(), PlatformError> {
+            self.inner.request_keyframe()
+        }
+        fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+            self.inner.finish(out)
+        }
+    }
+
+    impl Codecs for HardwareCodecs {
+        fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+            FakeCodecs.list()
+        }
+        fn video_encoder(
+            &self,
+            config: &VideoEncoderConfig,
+        ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+            self.asked.lock().expect("asked").push(config.hardware);
+            if config.hardware != HardwarePreference::Prefer {
+                return FakeCodecs.video_encoder(config);
+            }
+            if self.refuse {
+                return Err(PlatformError::Unsupported {
+                    what: "no hardware encoder here".into(),
+                });
+            }
+            let inner = FakeCodecs.video_encoder(config)?;
+            if let Some(open) = &self.one
+                && open
+                    .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_err()
+            {
+                return Ok(inner);
+            }
+            let mut info = inner.info().clone();
+            info.hardware = true;
+            Ok(Box::new(Hardware {
+                inner,
+                info,
+                open: self.one.clone(),
+            }))
+        }
+        fn audio_encoder(
+            &self,
+            config: &AudioEncoderConfig,
+        ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+            FakeCodecs.audio_encoder(config)
+        }
+        fn video_decoder(
+            &self,
+            config: &VideoDecoderConfig,
+        ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+            FakeCodecs.video_decoder(config)
+        }
+    }
+
+    fn open(
+        codecs: &HardwareCodecs,
+        slot: &HardwareSlot,
+    ) -> (super::H264, Option<super::HardwareTaken>) {
+        open_staged_h264(codecs, (640, 360), 30, PixelFormat::Nv12, slot).expect("opens")
+    }
+
+    /// A staged preview encodes on the hardware encoder rather than a software one that
+    /// costs a CPU core (#1691), and so do the next distinct pictures, up to the cap;
+    /// past it a preview is software, and a freed session is taken again.
+    #[test]
+    fn staged_previews_encode_on_hardware_up_to_the_cap() {
+        let codecs = HardwareCodecs::default();
+        let slot = HardwareSlot::default();
+        let mut held: Vec<_> = (0..super::PREVIEW_HARDWARE_SESSIONS)
+            .map(|_| open(&codecs, &slot))
+            .collect();
+        assert!(
+            held.iter()
+                .all(|(h264, taken)| h264.session.info().codec.hardware && taken.is_some()),
+            "each is on hardware and holds a session of the slot"
+        );
+        assert_eq!(slot.taken(), held.len());
+        let (over, none) = open(&codecs, &slot);
+        assert!(
+            !over.session.info().codec.hardware,
+            "past the cap is software"
+        );
+        assert!(none.is_none());
+        held.pop();
+        let (again, taken) = open(&codecs, &slot);
+        assert!(
+            again.session.info().codec.hardware,
+            "the freed session is taken again"
+        );
+        assert!(taken.is_some());
+        assert_eq!(
+            codecs.asked.lock().expect("asked").last(),
+            Some(&HardwarePreference::Prefer)
+        );
+    }
+
+    /// A machine with no hardware encoder (VA-API's `Prefer` refuses rather than fall
+    /// back) still gets its preview, in software, and leaves the slot free.
+    #[test]
+    fn a_refused_hardware_encoder_falls_back_to_software() {
+        let codecs = HardwareCodecs {
+            refuse: true,
+            ..HardwareCodecs::default()
+        };
+        let slot = HardwareSlot::default();
+        let (h264, held) = open(&codecs, &slot);
+        assert!(!h264.session.info().codec.hardware);
+        assert!(held.is_none());
+        assert!(slot.take().is_some(), "the slot is free");
+        assert_eq!(
+            *codecs.asked.lock().expect("asked"),
+            [HardwarePreference::Prefer, HardwarePreference::Avoid]
+        );
+    }
+
+    /// Outputs come first (ADR-0080 §3): on an encoder with one hardware session to
+    /// give, an output whose open found it held by a preview stream takes it back. The
+    /// stream opens again in software, and the output's next open is on hardware.
+    #[test]
+    fn an_output_takes_the_hardware_session_back_from_a_preview() {
+        let codecs = HardwareCodecs {
+            one: Some(Arc::default()),
+            ..HardwareCodecs::default()
+        };
+        let slot = HardwareSlot::default();
+        let (preview, held) = open(&codecs, &slot);
+        assert!(preview.session.info().codec.hardware && held.is_some());
+        assert_eq!(slot.taken(), 1, "counted as a hardware session in use");
+        let output = || {
+            super::H264::open(
+                &codecs,
+                (1280, 720),
+                30,
+                PixelFormat::Nv12,
+                HardwarePreference::Prefer,
+            )
+            .expect("opens")
+        };
+        // The one session is the preview's, so the output's open lands on software.
+        let first = output();
+        assert!(!first.session.info().codec.hardware);
+        drop(first);
+        std::thread::scope(|scope| {
+            let started = scope.spawn(|| {
+                let hold = slot
+                    .reclaim(Duration::from_secs(10))
+                    .expect("given up in time");
+                let again = output();
+                drop(hold);
+                again
+            });
+            // The preview thread's next look at its stream.
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !slot.asked_back() {
+                assert!(Instant::now() < deadline, "the output never asked");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            // As `Staged` drops them: the session, then the slot.
+            drop(preview);
+            drop(held);
+            let (software, none) = open(&codecs, &slot);
+            assert!(!software.session.info().codec.hardware);
+            assert!(none.is_none(), "the stream holds no slot in software");
+            let output = started.join().expect("the output's open");
+            assert!(
+                output.session.info().codec.hardware,
+                "the output got the session"
+            );
+        });
+        assert_eq!(slot.taken(), 0);
+    }
+
+    /// A slot no stream holds has nothing to take back, and one not given up in time
+    /// is left with its stream, which can be asked again.
+    #[test]
+    fn a_reclaim_of_a_free_or_stuck_slot_returns_at_once_or_at_its_wait() {
+        let slot = HardwareSlot::default();
+        assert!(slot.reclaim(Duration::from_secs(10)).is_none(), "free");
+        let held = slot.take().expect("free");
+        assert!(slot.reclaim(Duration::from_millis(20)).is_none(), "stuck");
+        assert!(!slot.asked_back(), "no output is waiting any more");
+        drop(held);
+        assert!(slot.take().is_some(), "and the slot can be taken again");
+    }
+}
+
+#[cfg(test)]
+mod rate_tests {
+    use super::{MAX_H264_KBPS, MAX_HARDWARE_H264_KBPS, preview_kbps};
+
+    /// A preview asks for about half a bit per pixel: a software encoder up to 1080p at
+    /// 30 fps, a hardware one up to 1080p at 60 fps, so a 60 fps canvas on hardware
+    /// isn't squeezed to a quarter bit per pixel.
+    #[test]
+    fn a_hardware_preview_keeps_half_a_bit_per_pixel_at_1080p60() {
+        let full = (1920, 1080);
+        assert_eq!(preview_kbps(full, 30, MAX_H264_KBPS), 31_104);
+        assert_eq!(preview_kbps(full, 30, MAX_HARDWARE_H264_KBPS), 31_104);
+        assert_eq!(preview_kbps(full, 60, MAX_H264_KBPS), 32_000, "capped");
+        assert_eq!(preview_kbps(full, 60, MAX_HARDWARE_H264_KBPS), 62_208);
+        assert_eq!(preview_kbps((640, 360), 15, MAX_H264_KBPS), 1_728);
+        assert_eq!(preview_kbps((16, 16), 1, MAX_H264_KBPS), 100, "a floor");
     }
 }

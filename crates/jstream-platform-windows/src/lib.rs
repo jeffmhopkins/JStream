@@ -32,7 +32,7 @@
 //! helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping),
 //! the H.264 decoder's helpers (configuration check, the display aperture, cropping
 //! into I420 or NV12, short buffers, odd offsets and chroma past the stride refused),
-//! the first-frame fallback with fake encoders (`codec::fallback`: a refused first
+//! the direct encoders' helpers (`codec::direct`: the vendor of a PCI ID, the `JSTREAM_DIRECT_ENCODERS` values, the input slots freed as packets come out, including frames the encoder dropped and a refused frame taken back, each vendor's settings, and NVENC's and AMF's FFI layouts, asserted at compile time), the first-frame fallback with fake encoders (`codec::fallback`: a refused first
 //! frame reopened in software, a later refusal failing, `Busy` keeping it armed, a
 //! failed software open, and when it applies), the GPU capture ring's slot choice
 //! (reuse, drop when full, release on resize), the credential helpers (target names of
@@ -61,7 +61,11 @@
 //! encode targets with wgpu for 60 frames, checking that the encoder has let go of each
 //! target before it is written again, encode them, refuse a CPU frame, and check the
 //! packets as the CPU encode tests do: each codec's framing, and the parameter sets (or
-//! AV1 sequence header) in the first keyframe. HEVC and AV1 run only on a GPU that
+//! AV1 sequence header) in the first keyframe; they run on the MFT, and the `_directly`
+//! ones on the GPU vendor's own encoder (NVENC or AMF), which also forces a keyframe at
+//! frame 10 and checks its packet is one with an SPS. The live 1080p30 tests feed the
+//! H.264 MFT from encode targets and from CPU frames, and the vendor's encoder from
+//! encode targets, and print where the time went. HEVC and AV1 run only on a GPU that
 //! encodes them (AV1 needs an NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer). The
 //! capture tests list the displays, capture the primary display for a second, checking
 //! the frames' format and `pts`, start a capture of a destroyed window, which must be

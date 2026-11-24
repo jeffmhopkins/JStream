@@ -239,7 +239,7 @@ impl Collection {
         Ok(vec![Edit::FilterRemove { owner, filter_id }])
     }
 
-    fn find_filter(
+    pub(super) fn find_filter(
         &mut self,
         owner: &FilterOwner,
         filter_id: &FilterId,

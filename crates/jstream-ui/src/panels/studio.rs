@@ -21,7 +21,7 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::menu::Entry;
 use crate::panels::curve::CurveEditor;
-use crate::panels::number::NumberField;
+use crate::panels::number::{NumberField, number_or_default, number_spec};
 use crate::panels::outputs::{action, edit};
 use crate::session::Session;
 use futures_util::StreamExt;
@@ -1817,6 +1817,8 @@ fn ParamField(
     };
     let label = param.with_value(|p| p.label.clone());
     let hint = param.with_value(|p| p.description.clone());
+    // A number field labels its own input, so its row is no label around it.
+    let is_number = param.with_value(|p| number_spec(&p.ty).is_some());
     let control = match param.with_value(|p| p.ty.clone()) {
         ParamType::Enum { options } => {
             let current = current.clone();
@@ -1896,22 +1898,43 @@ fn ParamField(
             }
             .into_any()
         }
-        ParamType::Int { min, max, step, .. } => {
-            let current = current.clone();
-            let set = set.clone();
+        ty @ (ParamType::Int { .. } | ParamType::Float { .. }) => {
+            // The shared click-drag field (#1734), sent once on release: each value
+            // saves the preset, one undo step.
+            let Some(spec) = number_spec(&ty) else {
+                return ().into_any();
+            };
+            let whole = matches!(ty, ParamType::Int { .. });
+            // An absent or `null` setting starts from its default (#1740's review, N1).
+            let default = param.with_value(|p| p.default.clone());
+            let value = {
+                let current = current.clone();
+                Signal::derive(move || {
+                    Some(number_or_default(
+                        current().trim().parse::<f64>().ok(),
+                        &default,
+                        spec,
+                    ))
+                })
+            };
+            let set = Callback::new({
+                let set = set.clone();
+                move |v: f64| {
+                    set(if whole {
+                        format!("{}", v.round() as i64)
+                    } else {
+                        format!("{:.*}", spec.decimals, v)
+                    });
+                    true
+                }
+            });
             view! {
-                <input
-                    type="number"
-                    min=min.map(|n| n.to_string())
-                    max=max.map(|n| n.to_string())
-                    step=step.map(|n| n.to_string())
-                    prop:value=current
-                    on:change=move |event| set(event_target_value(&event))
-                />
+                <NumberField named=Signal::stored(label.clone()) value step=spec.step
+                    decimals=spec.decimals min=spec.min max=spec.max send=move |v| set.run(v) />
             }
             .into_any()
         }
-        ParamType::Float { .. } | ParamType::String { .. } => {
+        ParamType::String { .. } => {
             let current = current.clone();
             let set = set.clone();
             view! {
@@ -1925,11 +1948,26 @@ fn ParamField(
         ParamType::Int { unit, .. } | ParamType::Float { unit, .. } => unit.clone(),
         _ => None,
     });
-    view! {
-        <label class="prop-row" title=hint>
-            <span class="prop-label">{label}{unit.map(|unit| format!(" ({unit})"))}</span>
-            <span class="prop-control">{control}</span>
-        </label>
+    let caption = format!(
+        "{label}{}",
+        unit.map(|unit| format!(" ({unit})")).unwrap_or_default()
+    );
+    if is_number {
+        view! {
+            <div class="prop-row" title=hint>
+                <span class="prop-label">{caption}</span>
+                <span class="prop-control">{control}</span>
+            </div>
+        }
+        .into_any()
+    } else {
+        view! {
+            <label class="prop-row" title=hint>
+                <span class="prop-label">{caption}</span>
+                <span class="prop-control">{control}</span>
+            </label>
+        }
+        .into_any()
     }
 }
 

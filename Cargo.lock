@@ -2767,6 +2767,9 @@ dependencies = [
 [[package]]
 name = "jstream-anim"
 version = "0.0.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "jstream-audio"
@@ -2802,14 +2805,14 @@ dependencies = [
 
 [[package]]
 name = "jstream-browser-helper"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.13"
 dependencies = [
  "jstream-browser",
 ]
 
 [[package]]
 name = "jstream-cli"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.13"
 dependencies = [
  "jstream-control",
  "jstream-mcp",
@@ -2870,6 +2873,7 @@ dependencies = [
  "png",
  "serde",
  "serde_json",
+ "socket2",
  "thiserror 2.0.21",
  "tracing",
  "wat",
@@ -2887,7 +2891,7 @@ dependencies = [
 
 [[package]]
 name = "jstream-daemon"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.13"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -2913,7 +2917,7 @@ dependencies = [
 
 [[package]]
 name = "jstream-desktop"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.13"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -3086,10 +3090,13 @@ dependencies = [
  "objc2-core-media",
  "objc2-core-video",
  "objc2-foundation",
+ "objc2-io-surface",
+ "objc2-metal",
  "objc2-screen-capture-kit",
  "objc2-security",
  "objc2-video-toolbox",
  "tracing",
+ "wgpu",
 ]
 
 [[package]]
@@ -3225,7 +3232,7 @@ version = "0.0.0"
 
 [[package]]
 name = "jstream-ui"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.13"
 dependencies = [
  "futures-util",
  "jstream-control",
@@ -3251,7 +3258,7 @@ version = "0.0.0"
 
 [[package]]
 name = "jstream-vcam-windows"
-version = "0.1.0-alpha.11"
+version = "0.1.0-alpha.13"
 dependencies = [
  "jstream-vcam-proto",
  "windows",
@@ -4060,6 +4067,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "180788110936d59bab6bd83b6060ffdfffb3b922ba1396b312ae795e1de9d81d"
 dependencies = [
  "bitflags 2.13.2",
+ "libc",
  "objc2",
  "objc2-core-foundation",
 ]
@@ -4074,6 +4082,7 @@ dependencies = [
  "block2",
  "objc2",
  "objc2-foundation",
+ "objc2-io-surface",
 ]
 
 [[package]]

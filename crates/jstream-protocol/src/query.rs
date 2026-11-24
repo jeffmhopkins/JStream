@@ -271,6 +271,12 @@ pub enum Query {
     /// state, so no `rev`; an input that has sent no control change is left out.
     #[serde(rename = "midi.last_controls")]
     MidiLastControls,
+    /// Each MIDI input's latest note-on (since 0.189, ADR-0202), by input name: what a
+    /// client that learns a note for a binding watches. Runtime state, so no `rev`; an
+    /// input whose latest notes hold no note-on is left out. It reads each input's last
+    /// 16 note events, so a note-off doesn't move it.
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes,
     /// Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by
     /// ID. Runtime state, so no `rev`.
     #[serde(rename = "channel.values")]
@@ -495,6 +501,7 @@ impl Query {
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
             Query::MidiLastControls => "midi.last_controls",
+            Query::MidiLastNotes => "midi.last_notes",
             Query::ChannelValues => "channel.values",
             Query::DataList => "data.list",
             Query::DataGet { .. } => "data.get",
@@ -548,7 +555,8 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         encoder: Option<EncoderSessionInfo>,
         /// How many video encoder sessions the engine has open now, for every output,
-        /// and how many of them are hardware ones. Hardware encoders cap their
+        /// and how many of them are hardware ones. A preview stream's session counts
+        /// in both while it is a hardware one (since 0.185). Hardware encoders cap their
         /// concurrent sessions per GPU vendor and driver, and the engine doesn't guess
         /// the cap. Missing (from a server older than 0.13) parses as 0.
         #[serde(default)]
@@ -642,12 +650,18 @@ pub enum QueryResult {
         /// Every value binding (ADR-0178), ordered by ID. Omitted when there are none,
         /// and missing (from a server older than 0.168) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        value_bindings: Vec<ValueBinding>,
+        // Boxed, as `channels` is, to keep a call's result small.
+        value_bindings: Box<Vec<ValueBinding>>,
         /// Every channel (ADR-0183), ordered by ID. Omitted when there are none, and
         /// missing (from a server older than 0.169) parses as empty.
         // Boxed, as `master` is, to keep a call's result small.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         channels: Box<Vec<ChannelInfo>>,
+        /// Every show (ADR-0210), ordered by ID. Omitted when there are none, and
+        /// missing (from a server older than 0.180) parses as empty.
+        // Boxed, as `channels` is, to keep a call's result small.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        shows: Box<Vec<crate::ShowInfo>>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -738,6 +752,14 @@ pub enum QueryResult {
         /// decision 1, since 0.147). Omitted by an older server, which draws every effect.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rendering: Option<crate::RenderFeatures>,
+        /// The show running (ADR-0210, since 0.180), where its play head is and what it
+        /// is doing. Omitted when no show runs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        show: Option<Box<crate::RunningShow>>,
+        /// The scenes up over program as overlays (ADR-0210, since 0.180), bottom first,
+        /// whether a show or `overlay.show` put them there. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        overlays: Vec<SceneId>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]
@@ -879,6 +901,12 @@ pub enum QueryResult {
     MidiLastControls {
         /// Each input's latest control change, ordered by input name.
         controls: Vec<MidiControlInfo>,
+    },
+    /// The result of `midi.last_notes` (0.178).
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes {
+        /// Each input's latest note-on, ordered by input name.
+        notes: Vec<crate::MidiNoteInfo>,
     },
     /// The result of `channel.values` (0.169).
     #[serde(rename = "channel.values")]
@@ -1041,6 +1069,7 @@ impl QueryResult {
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
             QueryResult::MidiLastControls { .. } => "midi.last_controls",
+            QueryResult::MidiLastNotes { .. } => "midi.last_notes",
             QueryResult::ChannelValues { .. } => "channel.values",
             QueryResult::DataList { .. } => "data.list",
             QueryResult::DataGet { .. } => "data.get",

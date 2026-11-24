@@ -80,6 +80,8 @@ pub fn path(name: &str) -> &'static str {
         // The panels' tool bars (UI-FEATURES SC-11, OB-10), drawn for JStream.
         "headphones" => "M4 15v-3a8 8 0 0 1 16 0v3 M4 14h4v6H4z M16 14h4v6h-4z",
         "plus" => "M12 5v14 M5 12h14",
+        // A key cap: the keys that mute or talk (ADR-0207).
+        "key" => "M4 6h16v12H4z M7 9h.01 M10 9h.01 M13 9h.01 M16 9h.01 M8 14h8",
         // A sequence (ADR-0184): a lane rising through its points.
         "sequence" => "M3 18l5-7 4 3 5-8 4 4",
         "trash" => "M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6",

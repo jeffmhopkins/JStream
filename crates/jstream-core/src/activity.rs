@@ -4,7 +4,8 @@
 //!
 //! A **root** is a scene the Program mix shows, with a weight: the program scene at 1,
 //! as only a cut exists so far (ADR-0030; a transition's two scenes and its audio curve
-//! come with T1). A nested scene source whose audio is on and follows `always` is an
+//! come with T1), and the internal show scene at 1, whose overlays are drawn over
+//! program (ADR-0210 decision 12). A nested scene source whose audio is on and follows `always` is an
 //! extra root of weight 1. A source is **reachable** from a scene through its visible
 //! items, following nested scene sources whose audio is on, to any depth, into scenes
 //! whose `include_audio` option is on (ADR-0089): a scene with it off adds nothing
@@ -21,7 +22,13 @@ use std::collections::{BTreeMap, BTreeSet};
 /// The activity gain of every audio source in `state` while `program` is on the
 /// Program mix. Sources without audio are left out.
 pub(crate) fn activity_gains(state: &State, program: Option<&SceneId>) -> BTreeMap<SourceId, f32> {
-    let roots: Vec<(&SceneId, f32)> = program.map(|scene| (scene, 1.0)).into_iter().collect();
+    // The show scene (ADR-0210 decision 12) is drawn over program wherever program is,
+    // so the overlays it shows are heard as program is.
+    let roots: Vec<(&SceneId, f32)> = program
+        .into_iter()
+        .chain(state.show_scene())
+        .map(|scene| (scene, 1.0))
+        .collect();
     weighted_gains(state, &roots)
 }
 
@@ -244,6 +251,30 @@ mod tests {
 
     fn gain(gains: &std::collections::BTreeMap<SourceId, f32>, id: &str) -> f32 {
         gains[&SourceId::new(id)]
+    }
+
+    /// The show scene's overlays are heard as program is (ADR-0210 decision 12): a
+    /// scene shown as an overlay over program is reached, and one whose overlay item
+    /// is hidden is not.
+    #[test]
+    fn the_show_scenes_overlays_are_heard_over_program() {
+        let mut graph = graph();
+        apply(
+            &mut graph,
+            vec![
+                scene("show"),
+                nested("over_b", "b"),
+                item("show", "o1", "over_b"),
+            ],
+        );
+        assert!(graph.set_show_scene(Some(SceneId::new("show"))));
+        let a = SceneId::new("a");
+        let gains = activity_gains(graph.state(), Some(&a));
+        assert_eq!(gain(&gains, "media"), 1.0, "program");
+        assert_eq!(gain(&gains, "b_media"), 1.0, "the overlay over it");
+        apply(&mut graph, vec![hide("o1")]);
+        let gains = activity_gains(graph.state(), Some(&a));
+        assert_eq!(gain(&gains, "b_media"), 0.0, "its overlay is down");
     }
 
     /// A keyframe scene that hides a group's child stops what the child shows from

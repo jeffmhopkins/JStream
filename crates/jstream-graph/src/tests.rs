@@ -1643,7 +1643,10 @@ mod property {
             46 => {
                 let chord = Chord::new(["F1", "Ctrl+KeyA", "Shift+Ctrl+KeyA"][rng.below(3)]);
                 if rng.below(3) == 0 {
-                    Edit::HotkeyClear { chord }
+                    Edit::HotkeyClear {
+                        action: None,
+                        chord,
+                    }
                 } else {
                     let action = if rng.below(2) == 0 {
                         Action::SceneSwitch {
@@ -1714,6 +1717,7 @@ mod property {
                 },
             },
             54 => Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new(pool(rng, "f")),
                 name: pool(rng, "folder "),
                 parent: maybe_folder(rng),
@@ -4225,6 +4229,7 @@ mod cameras;
 mod channels;
 mod filters;
 mod keyframes;
+mod scene_folders;
 mod timelines;
 mod values;
 
@@ -4696,12 +4701,17 @@ mod hotkeys {
             applied.inverse.edits,
             vec![Edit::HotkeyClear {
                 chord: Chord::new("F1"),
+                action: Some(switch("a")),
             }]
         );
-        assert_eq!(graph.state().hotkey(&Chord::new("F1")), Some(&switch("a")));
+        assert_eq!(
+            graph.state().hotkey(&Chord::new("F1")).first(),
+            Some(&switch("a"))
+        );
         let applied = apply_ok(
             &mut graph,
             vec![Edit::HotkeyClear {
+                action: None,
                 chord: Chord::new("F1"),
             }],
         );
@@ -4726,7 +4736,7 @@ mod hotkeys {
             ],
         );
         assert_eq!(
-            graph.state().hotkey(&Chord::new("Ctrl+WheelDown")),
+            graph.state().hotkey(&Chord::new("Ctrl+WheelDown")).first(),
             Some(&zoom(-1))
         );
         assert_eq!(
@@ -4741,12 +4751,13 @@ mod hotkeys {
         apply_ok(&mut graph, vec![set("Equal", zoom(1))]);
     }
 
-    /// Rebinding is a clear then a set, in one batch.
+    /// Rebinding is a clear then a set, in one batch; a set alone adds an action
+    /// (ADR-0208), and an equal one is refused.
     #[test]
     fn a_bound_chord_is_rebound_by_a_clear_and_a_set() {
         let mut graph = bound();
         assert_eq!(
-            apply_err(&mut graph, vec![set("F1", switch("b"))]),
+            apply_err(&mut graph, vec![set("F1", switch("a"))]),
             ProtocolError::AlreadyExists {
                 entity: EntityKind::Hotkey,
                 id: "F1".into(),
@@ -4756,12 +4767,83 @@ mod hotkeys {
             &mut graph,
             vec![
                 Edit::HotkeyClear {
+                    action: None,
                     chord: Chord::new("F1"),
                 },
                 set("F1", switch("b")),
             ],
         );
-        assert_eq!(graph.state().hotkey(&Chord::new("F1")), Some(&switch("b")));
+        assert_eq!(graph.state().hotkey(&Chord::new("F1")), [switch("b")]);
+    }
+
+    /// ADR-0208: a chord runs several actions in the order they were bound; clearing one
+    /// keeps the others, and every inverse puts the chord back exactly, order and labels
+    /// included.
+    #[test]
+    fn a_chord_runs_several_actions_in_order() {
+        let mut graph = bound();
+        let f1 = Chord::new("F1");
+        apply_ok(
+            &mut graph,
+            vec![set("F1", start("yt")), set("F1", switch("b"))],
+        );
+        assert_eq!(
+            graph.state().hotkey(&f1),
+            [switch("a"), start("yt"), switch("b")]
+        );
+        assert_eq!(
+            graph
+                .state()
+                .hotkey_bindings()
+                .iter()
+                .filter(|b| b.chord == f1)
+                .count(),
+            3
+        );
+        // Clearing the first action restores it in its place.
+        let applied = apply_ok(
+            &mut graph,
+            vec![Edit::HotkeyClear {
+                chord: f1.clone(),
+                action: Some(switch("a")),
+            }],
+        );
+        assert_eq!(graph.state().hotkey(&f1), [start("yt"), switch("b")]);
+        assert_eq!(
+            applied.inverse.edits,
+            vec![
+                Edit::HotkeyClear {
+                    chord: f1.clone(),
+                    action: Some(start("yt")),
+                },
+                Edit::HotkeyClear {
+                    chord: f1.clone(),
+                    action: Some(switch("b")),
+                },
+                set("F1", switch("a")),
+                set("F1", start("yt")),
+                set("F1", switch("b")),
+            ]
+        );
+        // Deleting a scene takes only the actions naming it; undo puts them back.
+        let applied = apply_ok(&mut graph, delete_scene("b"));
+        assert_eq!(graph.state().hotkey(&f1), [start("yt")]);
+        assert_eq!(
+            applied.removed_hotkeys,
+            vec![
+                HotkeyBinding::new(f1.clone(), &switch("b")),
+                HotkeyBinding::new(Chord::new("F3"), &switch("b")),
+            ]
+        );
+        // Clearing without an action clears them all.
+        apply_ok(
+            &mut graph,
+            vec![Edit::HotkeyClear {
+                chord: f1.clone(),
+                action: None,
+            }],
+        );
+        assert!(graph.state().hotkey(&f1).is_empty());
     }
 
     #[test]
@@ -4849,23 +4931,24 @@ mod hotkeys {
         assert_eq!(chords(&applied), ["Ctrl+Digit1", "F1", "F2"]);
     }
 
-    /// ADR-0040 §3: if another client bound a restored chord since, the inverse fails
-    /// rather than overwriting that binding.
+    /// ADR-0040 §3, with ADR-0208: if another client bound a restored chord since, the
+    /// inverse adds the restored action beside that binding rather than overwriting it,
+    /// and undo history sees the two batches touch the same binding.
     #[test]
-    fn undoing_a_delete_fails_when_its_chord_was_bound_again() {
+    fn undoing_a_delete_keeps_a_binding_made_since() {
         let mut graph = bound();
         let applied = graph.apply(&delete_scene("b"), None).expect("applies");
-        apply_ok(&mut graph, vec![set("F3", switch("c"))]);
+        apply_ok(&mut graph, vec![set("F3", switch("a"))]);
+        graph
+            .apply(&applied.inverse.edits, None)
+            .expect("the inverse applies");
         assert_eq!(
-            graph.apply(&applied.inverse.edits, None),
-            Err(ProtocolError::AlreadyExists {
-                entity: EntityKind::Hotkey,
-                id: "F3".into(),
-            })
+            graph.state().hotkey(&Chord::new("F3")),
+            [switch("a"), switch("b")]
         );
         // And the two batches touch the same binding, so undo history sees the conflict
         // before applying anything.
-        let rebind = crate::Touched::of(&[set("F3", switch("c"))], &[]);
+        let rebind = crate::Touched::of(&[set("F3", switch("a"))], &[]);
         assert!(applied.touched.conflicts_with(&rebind));
     }
 
@@ -4881,7 +4964,7 @@ mod hotkeys {
                 .all(|b| b.chord.as_str() != "F9")
         );
         assert_eq!(
-            graph.state().hotkey(&Chord::new("F9")),
+            graph.state().hotkey(&Chord::new("F9")).first(),
             Some(&Action::AudioResetLoudness {})
         );
     }
@@ -5048,7 +5131,10 @@ mod hotkeys {
         );
         apply_ok(&mut graph, applied.inverse.edits);
         assert_eq!(chords(&graph), ["F5", "F6"]);
-        assert_eq!(graph.state().hotkey(&Chord::new("F5")), Some(&with_preset));
+        assert_eq!(
+            graph.state().hotkey(&Chord::new("F5")).first(),
+            Some(&with_preset)
+        );
     }
 
     fn pad(note: u8) -> jstream_protocol::Trigger {
@@ -5063,7 +5149,7 @@ mod hotkeys {
         Edit::BindingSet { trigger, action }
     }
 
-    /// Controller bindings (ADR-0122) follow the hotkeys' rules: one binding per trigger,
+    /// Controller bindings (ADR-0122) follow the hotkeys' rules: one equal action per trigger,
     /// set and clear are inverses, and a delete takes the bindings naming its target with
     /// it, both kinds in the same edit, and undo restores them after the target.
     #[test]
@@ -5072,10 +5158,13 @@ mod hotkeys {
         let applied = apply_ok(&mut graph, vec![bind(pad(36), switch("a"))]);
         assert_eq!(
             applied.inverse.edits,
-            vec![Edit::BindingClear { trigger: pad(36) }]
+            vec![Edit::BindingClear {
+                trigger: pad(36),
+                action: Some(switch("a")),
+            }]
         );
         assert_eq!(
-            apply_err(&mut graph, vec![bind(pad(36), switch("b"))]),
+            apply_err(&mut graph, vec![bind(pad(36), switch("a"))]),
             ProtocolError::AlreadyExists {
                 entity: EntityKind::Binding,
                 id: "MIDI note 36 on channel 10".into(),
@@ -5091,7 +5180,7 @@ mod hotkeys {
             &mut graph,
             vec![bind(any, switch("b")), bind(pad(37), start("yt"))],
         );
-        assert_eq!(graph.state().bindings().len(), 3);
+        assert_eq!(graph.state().bindings().count(), 3);
 
         let applied = apply_ok(&mut graph, delete_scene("a"));
         assert_eq!(
@@ -5112,7 +5201,7 @@ mod hotkeys {
             ]
         );
         apply_ok(&mut graph, applied.inverse.edits);
-        assert_eq!(graph.state().bindings().len(), 3);
+        assert_eq!(graph.state().bindings().count(), 3);
 
         // delete.plan lists them beside the hotkeys.
         let Some(Ok(jstream_protocol::QueryResult::DeletePlan { bindings, .. })) =

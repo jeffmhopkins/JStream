@@ -121,6 +121,15 @@ pub struct SceneCamera {
     /// focuses. Default `false`, which isn't written.
     #[serde(default, skip_serializing_if = "is_false")]
     pub autofocus: bool,
+    /// Whether the depth of field behaves like a real lens with a fixed aperture (since
+    /// 0.191, ADR-0223): `blur_px` is then the blur far behind the
+    /// focus of the framing camera (45°, focused at its framing distance), and the blur a
+    /// view draws with grows with the square of its focal length and shrinks as its focus
+    /// moves away, [`lens_blur`]: zooming in or focusing closer softens the background, so
+    /// a dolly zoom changes it. Off, `blur_px` is the blur whatever the zoom and focus.
+    /// Default `false`, which isn't written.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fixed_aperture: bool,
 }
 
 fn is_false(value: &bool) -> bool {
@@ -151,6 +160,7 @@ impl SceneCamera {
             focus_px: None,
             blur_px: Finite32::ZERO,
             autofocus: false,
+            fixed_aperture: false,
         }
     }
 
@@ -222,12 +232,31 @@ impl SceneCamera {
             focus: match self.focus_px {
                 Some(focus) if self.blur_px.get() > 0.0 => Some(Focus {
                     distance: focus.get(),
-                    blur: self.blur_px.get(),
+                    blur: if self.fixed_aperture {
+                        lens_blur(self.blur_px.get(), height, self.fov_deg.get(), focus.get())
+                    } else {
+                        self.blur_px.get()
+                    },
                 }),
                 _ => None,
             },
         })
     }
+}
+
+/// The blur far behind the focus, in canvas pixels, of a camera with a fixed aperture
+/// ([`SceneCamera::fixed_aperture`]) whose `blur_px` is `aperture`, seen at `fov_deg` on a
+/// canvas `height` pixels high and focused `focus` scene pixels away:
+/// `aperture · f² / (f₄₅ · focus)`, with `f` its focal length and `f₄₅` the framing
+/// camera's, which is also the framing camera's distance, so the framing camera blurs by
+/// `aperture` exactly. A thin lens's blur far away is its aperture's diameter times
+/// `f / focus`, and a fixed f-number makes that diameter grow with `f`. At most
+/// [`MAX_BLUR_PX`].
+pub fn lens_blur(aperture: f32, height: f32, fov_deg: f32, focus: f32) -> f32 {
+    let focal = focal_length(height, fov_deg);
+    let framing = focal_length(height, DEFAULT_FOV_DEG);
+    let blur = f64::from(aperture) * focal * focal / (framing * f64::from(focus));
+    (blur as f32).min(MAX_BLUR_PX)
 }
 
 /// `(height / 2) / tan(fov / 2)`, in pixels.

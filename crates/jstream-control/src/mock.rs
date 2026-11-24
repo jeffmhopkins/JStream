@@ -22,9 +22,13 @@
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
 //! session. It does no persistence or real output work, and knows no transition preset
 //! but the initial `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are
-//! not mocked. Neither are timelines (ADR-0115): the `timeline.*` edits and actions,
-//! `source.restart` and `source.seek`, so `studio.get` never lists a timeline playing, nor keyframe tracks
-//! (ADR-0116): `scene.set_keyframe`, so `studio.get` lists no placed keyframe.
+//! not mocked. Timelines (ADR-0115) are stored and checked (`timeline.set`,
+//! `timeline.delete`), and `timeline.play`, `timeline.seek` and `timeline.stop` send
+//! their `timeline.changed` and list the timeline in `studio.get`, but the mock keeps no
+//! clock: a timeline it plays stays where it started until stopped or deleted, never
+//! ending, looping or firing a cue, and a play's delay or a trigger is ignored.
+//! `source.restart` and `source.seek` are not mocked, nor keyframe tracks (ADR-0116):
+//! `scene.set_keyframe`, so `studio.get` lists no placed keyframe.
 //!
 //! The mock has no render thread, so a gesture's values are released the moment it ends,
 //! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
@@ -44,16 +48,16 @@ use jstream_protocol::LabelId;
 use jstream_protocol::{
     Action, Batch, Binding, BlendMode, BusId, Call, CallResult, CameraControlInfo, Canvas,
     CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, Chord, ClientId, Crop, Edit,
-    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo,
-    GeometryError, GestureId, GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding,
-    INITIAL_PRESET, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition,
-    LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, MAX_VALUES, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SharedValue, SourceAudio, SourceId,
-    SourceInfo, SourceKind, SourceSize, TransitionPresetId, TransitionStarted, TransitionsInfo,
-    Trigger, VideoMix, VideoMixId, VideoMixInfo, Welcome, check_value_name, check_value_size,
-    is_live_adjustable, prefix_covers,
+    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, FilterId, FilterOwner,
+    Finite32, FontInfo, GeometryError, GestureId, GestureInfo, Hello, HistoryCall,
+    HistoryDirection, HotkeyBinding, INITIAL_PRESET, IdempotencyKey, ItemGeometry, ItemId,
+    ItemInfo, ItemTransform, ItemTransition, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES,
+    MAX_VALUES, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PixelSize,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
+    SharedValue, SourceAudio, SourceId, SourceInfo, SourceKind, SourceSize, TransitionPresetId,
+    TransitionStarted, TransitionsInfo, Trigger, VideoMix, VideoMixId, VideoMixInfo, Welcome,
+    check_value_name, check_value_size, is_live_adjustable, live_problem, prefix_covers,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -167,6 +171,44 @@ impl MockEngine {
         }
         drop(state);
         self
+    }
+
+    /// Lists PTZ cameras `names`, each reachable at home, as a host's camera list does
+    /// (ADR-0146 §1): `ptz.list` reports them, and a `ptz.*` action naming one succeeds
+    /// and moves its reported pose (an aim to where it says, Home to 0, 0; a drive, a
+    /// recall or a store moves nothing, since the mock has no head). Without it the mock
+    /// controls no camera.
+    #[must_use]
+    pub fn with_ptz_cameras<'a>(self, names: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut state = lock(&self.shared);
+        state.ptz_cameras = names
+            .into_iter()
+            .enumerate()
+            .map(|(i, name)| jstream_protocol::PtzCameraInfo {
+                camera: name.to_owned(),
+                address: format!("127.0.0.1:{}", 52381 + i),
+                transport: jstream_protocol::PtzTransport::ViscaIp,
+                visca_address: 1,
+                reachable: true,
+                pose: Some(jstream_protocol::PtzPose {
+                    pan: Some(0),
+                    tilt: Some(0),
+                    zoom: Some(0),
+                    focus: Some(4096),
+                }),
+                error: None,
+                sent: 0,
+                replies: 0,
+                dropped: 0,
+            })
+            .collect();
+        drop(state);
+        self
+    }
+
+    /// The `ptz.*` actions the listed cameras took, oldest first.
+    pub fn ptz_actions(&self) -> Vec<Action> {
+        lock(&self.shared).ptz_actions.clone()
     }
 
     /// Sets how many undo steps each client keeps (100 by default, as in the engine). The
@@ -319,6 +361,10 @@ struct Removed {
 #[derive(Default)]
 struct State {
     collection: Collection,
+    /// The PTZ cameras [`MockEngine::with_ptz_cameras`] lists, which `ptz.list` reports
+    /// and `ptz.*` actions move, and the actions they took, in order (ADR-0146).
+    ptz_cameras: Vec<jstream_protocol::PtzCameraInfo>,
+    ptz_actions: Vec<Action>,
     /// Each MIDI input's latest control change, which `midi.last_controls` reports and
     /// [`MockEngine::move_control`] sets (ADR-0178).
     midi_controls: Vec<jstream_protocol::MidiControlInfo>,
@@ -363,21 +409,53 @@ struct State {
     holders: BTreeMap<Param, (ClientId, GestureId)>,
     /// The codecs [`MockEngine::with_codec_downloads`] offers, ordered by ID.
     codec_downloads: Vec<jstream_protocol::CodecDownloadInfo>,
+    /// The timelines `timeline.play` started, with the scene that holds each: runtime
+    /// state, like the studio. The mock keeps no clock, so each stays where it started
+    /// (or was sought to) until `timeline.stop` or its deletion: it never ends or loops.
+    playing: BTreeMap<jstream_protocol::TimelineId, (SceneId, u32)>,
 }
 
-/// A parameter a live value overrides: an item's placement or its crop, as the item has
-/// it (`None`) or as a keyframe scene overrides it (#846), or one setting of a source
-/// (ADR-0091). Ordered as the engine orders them, placements first, so `live.changed`
-/// and `live.list` list values in the same order.
+/// A parameter a live value overrides: an item's placement, crop or opacity, as the item
+/// has it (`None`) or as a keyframe scene overrides it (#846), one setting of a source
+/// (ADR-0091) or of a filter, or a source's, a bus's or a send's gain (ADR-0213). Ordered
+/// as the engine orders them, placements first, so `live.changed` and `live.list` list
+/// values in the same order.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Param {
     Placement(Option<SceneId>, ItemId),
     Crop(Option<SceneId>, ItemId),
     Setting(SourceId, String),
+    FilterSetting(FilterOwner, FilterId, String),
+    Opacity(Option<SceneId>, ItemId),
+    SourceGain(SourceId),
+    BusGain(BusId),
+    SendGain(SourceId, BusId),
 }
 
-/// `value` as one value per parameter: a source's settings patch split into one setting
-/// each, any other value as it is.
+/// Whether what `param` sets is still in `collection`.
+fn param_exists(collection: &mut Collection, param: &Param) -> bool {
+    match param {
+        Param::Placement(keyframe, item_id)
+        | Param::Crop(keyframe, item_id)
+        | Param::Opacity(keyframe, item_id) => {
+            collection.items.contains_key(item_id)
+                && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
+        }
+        Param::Setting(source_id, _) | Param::SourceGain(source_id) => {
+            collection.sources.contains_key(source_id)
+        }
+        Param::FilterSetting(owner, filter_id, _) => {
+            collection.find_filter(owner, filter_id).is_ok()
+        }
+        Param::BusGain(bus_id) => collection.buses.contains_key(bus_id),
+        Param::SendGain(source_id, bus_id) => collection
+            .sends
+            .contains_key(&(bus_id.clone(), source_id.clone())),
+    }
+}
+
+/// `value` as one value per parameter: a source's or a filter's settings patch split
+/// into one setting each, any other value as it is.
 fn split_value(value: Edit) -> Vec<Edit> {
     match value {
         Edit::SourceSetSettings { source_id, patch } => patch
@@ -387,6 +465,22 @@ fn split_value(value: Edit) -> Vec<Edit> {
                 one.insert(id, v.clone());
                 Edit::SourceSetSettings {
                     source_id: source_id.clone(),
+                    patch: one,
+                }
+            })
+            .collect(),
+        Edit::FilterSetSettings {
+            owner,
+            filter_id,
+            patch,
+        } => patch
+            .iter()
+            .map(|(id, v)| {
+                let mut one = Settings::new();
+                one.insert(id, v.clone());
+                Edit::FilterSetSettings {
+                    owner: owner.clone(),
+                    filter_id: filter_id.clone(),
                     patch: one,
                 }
             })
@@ -404,10 +498,24 @@ fn param_of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Para
             Some(Param::Placement(keyframe, item_id.clone()))
         }
         Edit::ItemSetCrop { item_id, .. } => Some(Param::Crop(keyframe, item_id.clone())),
+        Edit::ItemSetOpacity { item_id, .. } => Some(Param::Opacity(keyframe, item_id.clone())),
         Edit::SourceSetSettings { source_id, patch } => patch
             .iter()
             .next()
             .map(|(id, _)| Param::Setting(source_id.clone(), id.to_owned())),
+        Edit::FilterSetSettings {
+            owner,
+            filter_id,
+            patch,
+        } => patch
+            .iter()
+            .next()
+            .map(|(id, _)| Param::FilterSetting(owner.clone(), filter_id.clone(), id.to_owned())),
+        Edit::SourceSetAudio { source_id, .. } => Some(Param::SourceGain(source_id.clone())),
+        Edit::BusSetFader { bus_id, .. } => Some(Param::BusGain(bus_id.clone())),
+        Edit::SendSet {
+            source_id, bus_id, ..
+        } => Some(Param::SendGain(source_id.clone(), bus_id.clone())),
         _ => None,
     }
 }
@@ -618,17 +726,21 @@ struct Collection {
     output_buses: BTreeMap<OutputId, BusId>,
     /// The video mixes, ordered by ID: name and mix.
     video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
-    /// The hotkey bindings, ordered by chord.
-    hotkeys: BTreeMap<Chord, Action>,
+    /// The hotkey bindings, ordered by chord: each chord's actions in the order they
+    /// were bound (ADR-0208), never an empty list.
+    hotkeys: BTreeMap<Chord, Vec<Action>>,
     /// The labels each binding carries, ordered by ID (ADR-0133); no entry for none.
     hotkey_labels: BTreeMap<Chord, Vec<LabelId>>,
-    /// The controller bindings (ADR-0122), ordered by trigger.
-    bindings: BTreeMap<Trigger, Action>,
+    /// The controller bindings (ADR-0122), ordered by trigger: each trigger's actions in
+    /// the order they were bound (ADR-0208), never an empty list.
+    bindings: BTreeMap<Trigger, Vec<Action>>,
     /// The value bindings (ADR-0178), by ID. The mock checks their shape, not their
     /// targets.
     value_bindings: BTreeMap<String, jstream_protocol::ValueBinding>,
     /// The channels (ADR-0183), by ID.
     channels: BTreeMap<String, jstream_protocol::ChannelInfo>,
+    /// The shows (ADR-0210), by ID.
+    shows: BTreeMap<jstream_protocol::ShowId, jstream_protocol::ShowInfo>,
     /// The scene list's folders, in folder order (ADR-0024 §3).
     folders: Vec<jstream_protocol::FolderInfo>,
     /// The labels, in label order (ADR-0024 §4).
@@ -668,6 +780,7 @@ impl Default for Collection {
             bindings: BTreeMap::new(),
             value_bindings: BTreeMap::new(),
             channels: BTreeMap::new(),
+            shows: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
         }
@@ -719,6 +832,8 @@ struct Scene {
     variant_of: Option<SceneId>,
     /// A keyframe scene's overrides of its parent's items; empty for any other scene.
     overrides: keyframe::Overrides,
+    /// Its timelines (ADR-0115), as `timeline.set` gave them.
+    timelines: Vec<jstream_protocol::TimelineInfo>,
 }
 
 /// An item: the scene that holds it, the source it places, and every property an edit
@@ -896,6 +1011,8 @@ impl State {
                 Edit::EncoderDelete { profile_id } => {
                     Some((EntityKind::Encoder, profile_id.to_string()))
                 }
+                Edit::BusDelete { bus_id } => Some((EntityKind::Bus, bus_id.to_string())),
+                Edit::ShowDelete { show_id } => Some((EntityKind::Show, show_id.to_string())),
                 _ => None,
             };
             let mut inverse = next.apply(edit, at, &running)?;
@@ -947,17 +1064,11 @@ impl State {
         cause: Option<HistoryDirection>,
     ) {
         self.sync_outputs();
-        let collection = &self.collection;
-        let exists = |param: &Param| match param {
-            Param::Placement(keyframe, item_id) | Param::Crop(keyframe, item_id) => {
-                collection.items.contains_key(item_id)
-                    && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
-            }
-            Param::Setting(source_id, _) => collection.sources.contains_key(source_id),
-        };
-        self.holders.retain(|param, _| exists(param));
+        let collection = &mut self.collection;
+        self.holders
+            .retain(|param, _| param_exists(collection, param));
         for values in self.gestures.values_mut() {
-            values.retain(|param, _| exists(param));
+            values.retain(|param, _| param_exists(collection, param));
         }
         self.emit(Event::StateChanged {
             rev,
@@ -980,6 +1091,23 @@ impl State {
         }
         if moved {
             self.emit_studio(client_id, request_id, None);
+        }
+        // A playing timeline the edits deleted stops, with `removed`.
+        let gone: Vec<_> = self
+            .playing
+            .keys()
+            .filter(|id| self.collection.timeline_at(id).is_none())
+            .cloned()
+            .collect();
+        for timeline_id in gone {
+            if let Some((scene_id, position_ms)) = self.playing.remove(&timeline_id) {
+                self.emit(timeline_event(
+                    timeline_id,
+                    scene_id,
+                    jstream_protocol::TimelineChange::Removed,
+                    position_ms,
+                ));
+            }
         }
     }
 
@@ -1119,6 +1247,29 @@ impl State {
         Ok(CallResult::action())
     }
 
+    /// Applies `source.mute` or `bus.mute`'s edit as the engine does (ADR-0207): checked
+    /// but not applied when it changes nothing, and never an undo step.
+    fn set_muted(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        edit: Edit,
+        unchanged: bool,
+    ) -> Result<CallResult, ProtocolError> {
+        if unchanged {
+            let running = self.running();
+            self.collection
+                .clone()
+                .apply(edit, 0, &running)
+                .map_err(action_field)?;
+            return Ok(CallResult::action());
+        }
+        let (rev, _, _) = self.apply(vec![edit]).map_err(action_field)?;
+        self.history.log_only(client_id, rev);
+        self.changed(client_id, request_id, rev, None);
+        Ok(CallResult::action())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -1179,6 +1330,34 @@ impl State {
             Action::ItemToggle { item_id, scene_id } => {
                 return self.set_shown(client_id, request_id, item_id, scene_id, None);
             }
+            Action::SourceMute { source_id, to } => {
+                let source = self
+                    .collection
+                    .sources
+                    .get(&source_id)
+                    .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+                let now = source.audio.is_some_and(|audio| audio.muted);
+                let edit = Edit::SourceSetAudio {
+                    source_id,
+                    enabled: None,
+                    follow: None,
+                    gain_db: None,
+                    muted: Some(to.muted(now)),
+                };
+                return self.set_muted(client_id, request_id, edit, to.muted(now) == now);
+            }
+            Action::BusMute { bus_id, to } => {
+                let now = self
+                    .collection
+                    .bus_muted(&bus_id)
+                    .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
+                let edit = Edit::BusSetFader {
+                    bus_id,
+                    gain_db: None,
+                    muted: Some(to.muted(now)),
+                };
+                return self.set_muted(client_id, request_id, edit, to.muted(now) == now);
+            }
             // The engine zooms its render thread's follow camera; the mock has none, so it
             // only checks the call as the engine does (ADR-0113 §4).
             Action::SceneZoomCamera { scene_id, steps } => {
@@ -1218,14 +1397,41 @@ impl State {
             | Action::PtzRecall { .. }
             | Action::PtzStore { .. }
             | Action::PtzFocus { .. } => {
-                if let Some((_, Some((field, reason)))) =
-                    jstream_protocol::ptz_action_check(&action)
-                {
+                let Some((camera, problem)) = jstream_protocol::ptz_action_check(&action) else {
+                    return Err(ProtocolError::Internal {
+                        reason: "not a PTZ action".into(),
+                    });
+                };
+                if let Some((field, reason)) = problem {
                     return Err(invalid(0, field, reason));
                 }
-                return Err(ProtocolError::ActionFailed {
-                    reason: "this machine controls no PTZ cameras".into(),
-                });
+                if self.ptz_cameras.is_empty() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: "this machine controls no PTZ cameras".into(),
+                    });
+                }
+                let camera = camera.to_owned();
+                let Some(head) = self.ptz_cameras.iter_mut().find(|c| c.camera == camera) else {
+                    return Err(ProtocolError::invalid_argument(
+                        "camera",
+                        format!("this machine has no PTZ camera called `{camera}`"),
+                    ));
+                };
+                let pose = head.pose.get_or_insert_with(Default::default);
+                match &action {
+                    Action::PtzAim { pose: to, .. } => {
+                        pose.pan = to.pan.or(pose.pan);
+                        pose.tilt = to.tilt.or(pose.tilt);
+                        pose.zoom = to.zoom.or(pose.zoom);
+                        pose.focus = to.focus.or(pose.focus);
+                    }
+                    Action::PtzHome { .. } => (pose.pan, pose.tilt) = (Some(0), Some(0)),
+                    _ => {}
+                }
+                head.sent += 1;
+                head.replies += 1;
+                self.ptz_actions.push(action);
+                return Ok(CallResult::action());
             }
             // The mock draws nothing, so a fire only checks its arguments (#1107).
             Action::ItemTriggerMotion {
@@ -1327,6 +1533,12 @@ impl State {
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            // As the engine: a start when the output is stopped or failed, else a stop
+            // (ADR-0208).
+            Action::OutputToggle { output_id } => {
+                let start = self.outputs.get(&output_id).is_none_or(|&s| is_idle(s));
+                (output_id, start)
+            }
             Action::LiveSet { gesture_id, values } => {
                 return self.live_set(client_id, gesture_id, values);
             }
@@ -1397,6 +1609,15 @@ impl State {
                     call: action.name().into(),
                 });
             }
+            Action::TimelinePlay { timeline_id, .. } => {
+                return self.play_timeline(timeline_id, Some(0));
+            }
+            Action::TimelineSeek { timeline_id, at_ms } => {
+                return self.play_timeline(timeline_id, Some(at_ms));
+            }
+            Action::TimelineStop { timeline_id } => {
+                return self.play_timeline(timeline_id, None);
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -1424,6 +1645,43 @@ impl State {
                 state,
             });
         }
+        Ok(CallResult::action())
+    }
+
+    /// `timeline.play` (from 0), `timeline.seek` (from `Some(at_ms)` within its length)
+    /// or `timeline.stop` (`None`) of `timeline_id`, with its `timeline.changed`. A play
+    /// waits no delay, and a stop of one that isn't playing changes nothing.
+    fn play_timeline(
+        &mut self,
+        timeline_id: jstream_protocol::TimelineId,
+        from: Option<u32>,
+    ) -> Result<CallResult, ProtocolError> {
+        let Some((s, n)) = self.collection.timeline_at(&timeline_id) else {
+            return Err(not_found(EntityKind::Timeline, timeline_id.as_str()));
+        };
+        let scene_id = self.collection.scenes[s].id.clone();
+        let duration_ms = self.collection.scenes[s].timelines[n].duration_ms;
+        let (change, position_ms) = match from {
+            Some(0) => (jstream_protocol::TimelineChange::Started, 0),
+            Some(at_ms) => {
+                if at_ms >= duration_ms.max(1) {
+                    return Err(ProtocolError::invalid_argument(
+                        "at_ms",
+                        format!("must be less than the timeline's {duration_ms} ms"),
+                    ));
+                }
+                (jstream_protocol::TimelineChange::Sought, at_ms)
+            }
+            None => match self.playing.remove(&timeline_id) {
+                Some((_, at)) => (jstream_protocol::TimelineChange::Stopped, at),
+                None => return Ok(CallResult::action()),
+            },
+        };
+        if from.is_some() {
+            self.playing
+                .insert(timeline_id.clone(), (scene_id.clone(), position_ms));
+        }
+        self.emit(timeline_event(timeline_id, scene_id, change, position_ms));
         Ok(CallResult::action())
     }
 
@@ -1537,7 +1795,7 @@ impl State {
                         camera_motion: scene.camera_motion.clone(),
                         ptz_shots: scene.ptz_shots.clone(),
                         camera_follow: scene.camera_follow.clone(),
-                        timelines: Vec::new(),
+                        timelines: scene.timelines.clone(),
                         items: self.collection.item_infos(scene),
                         transition_in: None,
                         transition_out: None,
@@ -1560,10 +1818,17 @@ impl State {
                     .collection
                     .bindings
                     .iter()
-                    .map(|(trigger, action)| Binding::new(trigger.clone(), action))
+                    .flat_map(|(trigger, actions)| {
+                        actions
+                            .iter()
+                            .map(|action| Binding::new(trigger.clone(), action))
+                    })
                     .collect(),
-                value_bindings: self.collection.value_bindings.values().cloned().collect(),
+                value_bindings: Box::new(
+                    self.collection.value_bindings.values().cloned().collect(),
+                ),
                 channels: Box::new(self.collection.channels.values().cloned().collect()),
+                shows: Box::new(self.collection.shows.values().cloned().collect()),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: self.collection.folders.clone(),
                 labels: self.collection.labels.clone(),
@@ -1585,7 +1850,18 @@ impl State {
                 waiting: Vec::new(),
                 program_scene: self.program.clone(),
                 preview_scene: self.preview.clone(),
-                timelines: Vec::new(),
+                timelines: self
+                    .playing
+                    .iter()
+                    .map(|(timeline_id, (scene_id, position_ms))| {
+                        jstream_protocol::PlayingTimeline {
+                            timeline_id: timeline_id.clone(),
+                            scene_id: scene_id.clone(),
+                            position_ms: *position_ms,
+                            pass: 0,
+                        }
+                    })
+                    .collect(),
                 keyframes: Vec::new(),
                 warm_scenes: Some(
                     self.warm_scenes
@@ -1593,6 +1869,9 @@ impl State {
                 ),
                 warm_gpu_mib: Some(self.warm_gpu_mib),
                 rendering: Some(self.rendering),
+                // The mock runs no show (ADR-0210).
+                show: None,
+                overlays: Vec::new(),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
@@ -1612,6 +1891,8 @@ impl State {
             Query::MidiLastControls => QueryResult::MidiLastControls {
                 controls: self.midi_controls.clone(),
             },
+            // No MIDI input plays a note here.
+            Query::MidiLastNotes => QueryResult::MidiLastNotes { notes: Vec::new() },
             // No control moves a channel here: each reads as it starts (ADR-0183).
             Query::ChannelValues => QueryResult::ChannelValues {
                 channels: self
@@ -1632,7 +1913,7 @@ impl State {
             },
             Query::DataGet { .. } => QueryResult::DataGet { remote_value: None },
             Query::PtzList => QueryResult::PtzList {
-                cameras: Vec::new(),
+                cameras: self.ptz_cameras.clone(),
             },
             // No aim is kept, so every camera is at its home (ADR-0152).
             Query::SceneCameraAim { scene_id } => {
@@ -1807,6 +2088,13 @@ impl State {
         if let Some(at) = values.iter().position(|value| !is_live_adjustable(value)) {
             return Err(invalid(format!("values.{at}.type"), "not live-adjustable"));
         }
+        if let Some((at, (field, reason))) = values
+            .iter()
+            .enumerate()
+            .find_map(|(at, value)| live_problem(value).map(|problem| (at, problem)))
+        {
+            return Err(invalid(format!("values.{at}.{field}"), reason));
+        }
         let key = (client_id.clone(), gesture_id);
         let open = self
             .gestures
@@ -1815,6 +2103,17 @@ impl State {
             .count();
         if !self.gestures.contains_key(&key) && open >= MAX_GESTURES_PER_CLIENT {
             return Err(invalid("gesture_id".into(), "16 gestures are open"));
+        }
+        // A live value changes a send's gain; it never adds a send (ADR-0213).
+        if let Some(at) = values.iter().position(|value| {
+            matches!(value, Edit::SendSet { source_id, bus_id, .. }
+                if !self.collection.sends.contains_key(&(bus_id.clone(), source_id.clone())))
+        }) {
+            return Err(invalid(
+                format!("values.{at}.bus_id"),
+                "names no send from this source to this bus; a live value only changes an \
+                 existing send's gain, so add the send in a batch",
+            ));
         }
         let running = self.running();
         let mut check = self.collection.clone();
@@ -1993,6 +2292,7 @@ impl Collection {
                     filters: Default::default(),
                     variant_of: None,
                     overrides: keyframe::Overrides::new(),
+                    timelines: Vec::new(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
             }
@@ -2058,6 +2358,8 @@ impl Collection {
                     });
                 }
                 let scene = self.scenes.remove(index);
+                // Its folders go with it (ADR-0222), and come back before its timelines.
+                let folders = self.remove_scene_folders(&scene.id)?;
                 let mut inverse = vec![match &scene.variant_of {
                     Some(parent) => Edit::SceneCreateVariant {
                         scene_id: scene.id.clone(),
@@ -2144,6 +2446,11 @@ impl Collection {
                         follow: scene.camera_follow.clone(),
                     });
                 }
+                inverse.extend(folders);
+                inverse.extend(scene.timelines.iter().map(|timeline| Edit::TimelineSet {
+                    scene_id: scene.id.clone(),
+                    timeline: timeline.clone(),
+                }));
                 inverse
             }
             Edit::SceneReorder { scene_id, index } => {
@@ -2802,12 +3109,22 @@ impl Collection {
                 if let Some(reason) = chord.problem() {
                     return Err(invalid(at, "chord", reason));
                 }
-                if self.hotkeys.contains_key(&chord) {
+                if self
+                    .hotkeys
+                    .get(&chord)
+                    .is_some_and(|actions| actions.contains(&action))
+                {
                     return Err(already_exists(EntityKind::Hotkey, chord.as_str()));
                 }
                 self.check_bindable(&action, chord.is_wheel(), at)?;
-                self.hotkeys.insert(chord.clone(), action);
-                vec![Edit::HotkeyClear { chord }]
+                self.hotkeys
+                    .entry(chord.clone())
+                    .or_default()
+                    .push(action.clone());
+                vec![Edit::HotkeyClear {
+                    chord,
+                    action: Some(action),
+                }]
             }
             // The graph's checks: the binding, then the labels (ADR-0133).
             Edit::HotkeySetLabels { chord, labels } => {
@@ -2825,29 +3142,43 @@ impl Collection {
                     labels: old.unwrap_or_default(),
                 }]
             }
-            Edit::HotkeyClear { chord } => {
-                let Some(binding) = self.take_hotkey(&chord) else {
+            Edit::HotkeyClear { chord, action } => {
+                let Some((_, restore)) = self.take_hotkey(&chord, |bound| {
+                    action.as_ref().is_none_or(|action| bound == action)
+                }) else {
                     return Err(not_found(EntityKind::Hotkey, chord.as_str()));
                 };
-                restore_hotkey(binding)
+                restore
             }
             // The graph's checks, in its order, as for hotkeys.
             Edit::BindingSet { trigger, action } => {
                 if let Some((field, reason)) = trigger.problem() {
                     return Err(invalid(at, &format!("trigger.{field}"), reason));
                 }
-                if self.bindings.contains_key(&trigger) {
+                if self
+                    .bindings
+                    .get(&trigger)
+                    .is_some_and(|actions| actions.contains(&action))
+                {
                     return Err(already_exists(EntityKind::Binding, &trigger.to_string()));
                 }
                 self.check_bindable(&action, false, at)?;
-                self.bindings.insert(trigger.clone(), action);
-                vec![Edit::BindingClear { trigger }]
+                self.bindings
+                    .entry(trigger.clone())
+                    .or_default()
+                    .push(action.clone());
+                vec![Edit::BindingClear {
+                    trigger,
+                    action: Some(action),
+                }]
             }
-            Edit::BindingClear { trigger } => {
-                let Some(action) = self.bindings.remove(&trigger) else {
+            Edit::BindingClear { trigger, action } => {
+                let Some((_, restore)) = self.take_trigger(&trigger, |bound| {
+                    action.as_ref().is_none_or(|action| bound == action)
+                }) else {
                     return Err(not_found(EntityKind::Binding, &trigger.to_string()));
                 };
-                vec![Edit::BindingSet { trigger, action }]
+                restore
             }
             // The graph's shape check; the mock doesn't look up what it names.
             Edit::BindingSetValue { binding } => {
@@ -2883,6 +3214,39 @@ impl Collection {
                 };
                 vec![Edit::ChannelSet { channel }]
             }
+            Edit::ShowSet { show } => {
+                if let Some((field, reason)) = show.problem() {
+                    return Err(invalid(at, &format!("show.{field}"), &reason));
+                }
+                let id = show.show_id.clone();
+                if !self.shows.contains_key(&id) && self.shows.len() >= jstream_protocol::MAX_SHOWS
+                {
+                    return Err(invalid(at, "show", "a collection holds at most 64 shows"));
+                }
+                match self.shows.insert(id.clone(), show) {
+                    Some(old) => vec![Edit::ShowSet { show: old }],
+                    None => vec![Edit::ShowDelete { show_id: id }],
+                }
+            }
+            Edit::ShowDelete { show_id } => {
+                let Some(show) = self.shows.remove(&show_id) else {
+                    return Err(not_found(EntityKind::Show, show_id.as_str()));
+                };
+                vec![Edit::ShowSet { show }]
+            }
+            Edit::TimelineSet { scene_id, timeline } => {
+                self.set_timeline(at, &scene_id, timeline)?
+            }
+            Edit::TimelineDelete { timeline_id } => {
+                let Some((s, n)) = self.timeline_at(&timeline_id) else {
+                    return Err(not_found(EntityKind::Timeline, timeline_id.as_str()));
+                };
+                let timeline = self.scenes[s].timelines.remove(n);
+                vec![Edit::TimelineSet {
+                    scene_id: self.scenes[s].id.clone(),
+                    timeline,
+                }]
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
@@ -2911,6 +3275,8 @@ impl Collection {
                 // The mock has only the `cut` preset every collection starts with.
                 EntityKind::Transition => id == INITIAL_PRESET,
                 EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
+                EntityKind::Bus => self.buses.keys().any(|b| b.as_str() == id),
+                EntityKind::Show => self.shows.contains_key(&jstream_protocol::ShowId::new(id)),
                 _ => false,
             };
             if !exists {
@@ -2938,18 +3304,100 @@ impl Collection {
     fn hotkey_bindings(&self, keep: impl Fn(&[LabelId]) -> bool) -> Vec<HotkeyBinding> {
         self.hotkeys
             .iter()
-            .filter_map(|(chord, action)| {
+            .flat_map(|(chord, actions)| {
                 let labels = self.hotkey_labels.get(chord).cloned().unwrap_or_default();
-                keep(&labels).then(|| HotkeyBinding::new(chord.clone(), action).with_labels(labels))
+                let keep = keep(&labels);
+                actions.iter().filter(move |_| keep).map(move |action| {
+                    HotkeyBinding::new(chord.clone(), action).with_labels(labels.clone())
+                })
             })
             .collect()
     }
 
-    /// Removes the binding of `chord` and its labels, and returns it.
-    fn take_hotkey(&mut self, chord: &Chord) -> Option<HotkeyBinding> {
-        let action = self.hotkeys.remove(chord)?;
-        let labels = self.hotkey_labels.remove(chord).unwrap_or_default();
-        Some(HotkeyBinding::new(chord.clone(), &action).with_labels(labels))
+    /// Removes the actions of `chord` that `matches` picks, as the graph does: returns
+    /// the removed bindings, each with the chord's labels, and the edits that restore the
+    /// chord exactly. `None` when no action matches.
+    fn take_hotkey(
+        &mut self,
+        chord: &Chord,
+        matches: impl Fn(&Action) -> bool,
+    ) -> Option<(Vec<HotkeyBinding>, Vec<Edit>)> {
+        let actions = self.hotkeys.get_mut(chord)?;
+        if !actions.iter().any(&matches) {
+            return None;
+        }
+        let had = std::mem::take(actions);
+        let kept: Vec<Action> = had.iter().filter(|a| !matches(a)).cloned().collect();
+        let labels = self.hotkey_labels.get(chord).cloned().unwrap_or_default();
+        let first = had.iter().position(&matches).unwrap_or_default();
+        let emptied = kept.is_empty() || first == 0;
+        // Exactly the order it had: the kept actions after the first removed one leave, so
+        // the removed ones rejoin in their places. An action bound since stays bound.
+        let mut restore: Vec<Edit> = had[first..]
+            .iter()
+            .filter(|a| !matches(a))
+            .map(|action| Edit::HotkeyClear {
+                chord: chord.clone(),
+                action: Some(action.clone()),
+            })
+            .collect();
+        if kept.is_empty() {
+            self.hotkeys.remove(chord);
+            self.hotkey_labels.remove(chord);
+        } else {
+            *actions = kept;
+        }
+        let removed = had
+            .iter()
+            .filter(|a| matches(a))
+            .map(|action| HotkeyBinding::new(chord.clone(), action).with_labels(labels.clone()))
+            .collect();
+        restore.extend(had[first..].iter().map(|action| Edit::HotkeySet {
+            chord: chord.clone(),
+            action: action.clone(),
+        }));
+        if emptied && !labels.is_empty() {
+            restore.push(Edit::HotkeySetLabels {
+                chord: chord.clone(),
+                labels,
+            });
+        }
+        Some((removed, restore))
+    }
+
+    /// Removes the actions of `trigger` that `matches` picks, as the graph does: returns
+    /// them and the edits that restore the trigger exactly. `None` when none matches.
+    fn take_trigger(
+        &mut self,
+        trigger: &Trigger,
+        matches: impl Fn(&Action) -> bool,
+    ) -> Option<(Vec<Action>, Vec<Edit>)> {
+        let actions = self.bindings.get_mut(trigger)?;
+        if !actions.iter().any(&matches) {
+            return None;
+        }
+        let had = std::mem::take(actions);
+        let kept: Vec<Action> = had.iter().filter(|a| !matches(a)).cloned().collect();
+        let first = had.iter().position(&matches).unwrap_or_default();
+        let mut restore: Vec<Edit> = had[first..]
+            .iter()
+            .filter(|a| !matches(a))
+            .map(|action| Edit::BindingClear {
+                trigger: trigger.clone(),
+                action: Some(action.clone()),
+            })
+            .collect();
+        if kept.is_empty() {
+            self.bindings.remove(trigger);
+        } else {
+            *actions = kept;
+        }
+        let removed = had.iter().filter(|a| matches(a)).cloned().collect();
+        restore.extend(had[first..].iter().map(|action| Edit::BindingSet {
+            trigger: trigger.clone(),
+            action: action.clone(),
+        }));
+        Some((removed, restore))
     }
 
     /// Removes the hotkey and controller bindings whose action names an item the
@@ -2962,19 +3410,15 @@ impl Collection {
                 entity == EntityKind::Item && !items.contains_key(&ItemId::new(id))
             })
         };
-        let chords: Vec<Chord> = self
+        let gone: Vec<Action> = self
             .hotkeys
-            .iter()
-            .filter(|(_, action)| gone(action))
-            .map(|(chord, _)| chord.clone())
+            .values()
+            .chain(self.bindings.values())
+            .flatten()
+            .filter(|action| gone(action))
+            .cloned()
             .collect();
-        let triggers: Vec<Trigger> = self
-            .bindings
-            .iter()
-            .filter(|(_, action)| gone(action))
-            .map(|(trigger, _)| trigger.clone())
-            .collect();
-        self.remove_bound(chords, triggers, removed)
+        self.remove_bound(|action| gone.contains(action), removed)
     }
 
     /// Removes the hotkey and controller bindings whose action names `entity` `id`,
@@ -2987,42 +3431,47 @@ impl Collection {
         id: &str,
         removed: &mut Removed,
     ) -> Vec<Edit> {
+        self.remove_bound(
+            |action| action.named_objects().contains(&(entity, id)),
+            removed,
+        )
+    }
+
+    /// Removes every bound action `matches` picks, from every chord and trigger (each
+    /// keeps its other actions, ADR-0208), records them, and returns the edits that
+    /// restore them.
+    fn remove_bound(
+        &mut self,
+        matches: impl Fn(&Action) -> bool,
+        removed: &mut Removed,
+    ) -> Vec<Edit> {
         let chords: Vec<Chord> = self
             .hotkeys
             .iter()
-            .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
+            .filter(|(_, actions)| actions.iter().any(&matches))
             .map(|(chord, _)| chord.clone())
             .collect();
         let triggers: Vec<Trigger> = self
             .bindings
             .iter()
-            .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
+            .filter(|(_, actions)| actions.iter().any(&matches))
             .map(|(trigger, _)| trigger.clone())
             .collect();
-        self.remove_bound(chords, triggers, removed)
-    }
-
-    /// Removes the bindings of `chords` and `triggers`, records them, and returns the
-    /// edits that restore them.
-    fn remove_bound(
-        &mut self,
-        chords: Vec<Chord>,
-        triggers: Vec<Trigger>,
-        removed: &mut Removed,
-    ) -> Vec<Edit> {
         let mut restore = Vec::new();
         for chord in chords {
-            if let Some(binding) = self.take_hotkey(&chord) {
-                removed.hotkeys.push(binding.clone());
-                restore.extend(restore_hotkey(binding));
+            if let Some((bindings, edits)) = self.take_hotkey(&chord, &matches) {
+                removed.hotkeys.extend(bindings);
+                restore.extend(edits);
             }
         }
         for trigger in triggers {
-            if let Some(action) = self.bindings.remove(&trigger) {
-                removed
-                    .bindings
-                    .push(Binding::new(trigger.clone(), &action));
-                restore.push(Edit::BindingSet { trigger, action });
+            if let Some((actions, edits)) = self.take_trigger(&trigger, &matches) {
+                removed.bindings.extend(
+                    actions
+                        .iter()
+                        .map(|action| Binding::new(trigger.clone(), action)),
+                );
+                restore.extend(edits);
             }
         }
         restore
@@ -3310,6 +3759,69 @@ impl Collection {
             .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))
     }
 
+    /// Where timeline `timeline_id` is: its scene's index and its index in that scene.
+    fn timeline_at(&self, timeline_id: &jstream_protocol::TimelineId) -> Option<(usize, usize)> {
+        self.scenes.iter().enumerate().find_map(|(s, scene)| {
+            scene
+                .timelines
+                .iter()
+                .position(|t| t.timeline_id == *timeline_id)
+                .map(|n| (s, n))
+        })
+    }
+
+    /// `timeline.set` of `timeline` in `scene_id`, checked as the graph checks it: the
+    /// scene exists, [`jstream_protocol::TimelineInfo::problem`], no other scene holds
+    /// the ID, and at most [`jstream_protocol::MAX_TIMELINES`] in the scene. Returns its
+    /// inverse.
+    fn set_timeline(
+        &mut self,
+        at: usize,
+        scene_id: &SceneId,
+        timeline: jstream_protocol::TimelineInfo,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let index = self.existing_scene(scene_id)?;
+        if let Some((field, reason)) = timeline.problem() {
+            return Err(invalid(at, &format!("timeline.{field}"), reason));
+        }
+        // Its folder is one of its scene's family's (ADR-0222).
+        if let Some(folder) = &timeline.folder {
+            let family = self.scenes[index]
+                .variant_of
+                .clone()
+                .unwrap_or_else(|| scene_id.clone());
+            self.check_folder_owner(folder, Some(&family), at, "timeline.folder")?;
+        }
+        let id = timeline.timeline_id.clone();
+        let inverse = match self.timeline_at(&id) {
+            Some((s, _)) if s != index => {
+                return Err(already_exists(EntityKind::Timeline, id.as_str()));
+            }
+            Some((s, n)) => {
+                let old = std::mem::replace(&mut self.scenes[s].timelines[n], timeline);
+                vec![Edit::TimelineSet {
+                    scene_id: scene_id.clone(),
+                    timeline: old,
+                }]
+            }
+            None => {
+                if self.scenes[index].timelines.len() >= jstream_protocol::MAX_TIMELINES {
+                    return Err(invalid(
+                        at,
+                        "timeline",
+                        format!(
+                            "a scene holds at most {} timelines",
+                            jstream_protocol::MAX_TIMELINES
+                        ),
+                    ));
+                }
+                self.scenes[index].timelines.push(timeline);
+                vec![Edit::TimelineDelete { timeline_id: id }]
+            }
+        };
+        Ok(inverse)
+    }
+
     fn existing_item(&mut self, item_id: &ItemId) -> Result<&mut Item, ProtocolError> {
         self.items
             .get_mut(item_id)
@@ -3368,7 +3880,8 @@ fn live_scene(value: &Edit) -> Option<&SceneId> {
     match value {
         Edit::ItemSetTransform { scene_id, .. }
         | Edit::ItemSetGeometry { scene_id, .. }
-        | Edit::ItemSetCrop { scene_id, .. } => scene_id.as_ref(),
+        | Edit::ItemSetCrop { scene_id, .. }
+        | Edit::ItemSetOpacity { scene_id, .. } => scene_id.as_ref(),
         _ => None,
     }
 }
@@ -3761,26 +4274,25 @@ fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
     }
 }
 
-/// The edits that put back a removed binding: its `hotkey.set`, then its
-/// `hotkey.set_labels` when it carried any (ADR-0133).
-fn restore_hotkey(binding: HotkeyBinding) -> Vec<Edit> {
-    let Some(action) = binding.action() else {
-        return Vec::new();
-    };
-    let mut edits = vec![Edit::HotkeySet {
-        chord: binding.chord.clone(),
-        action,
-    }];
-    if !binding.labels.is_empty() {
-        edits.push(Edit::HotkeySetLabels {
-            chord: binding.chord,
-            labels: binding.labels,
-        });
+/// A protocol variant added after this mock was written.
+/// A `timeline.changed` for `change`, playing unless it stopped it.
+fn timeline_event(
+    timeline_id: jstream_protocol::TimelineId,
+    scene_id: SceneId,
+    change: jstream_protocol::TimelineChange,
+    position_ms: u32,
+) -> Event {
+    use jstream_protocol::TimelineChange;
+    Event::TimelineChanged {
+        timeline_id,
+        scene_id,
+        playing: matches!(change, TimelineChange::Started | TimelineChange::Sought),
+        change,
+        position_ms,
+        pass: 0,
     }
-    edits
 }
 
-/// A protocol variant added after this mock was written.
 fn unimplemented_by_mock(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the mock engine does not implement {what}"),
@@ -3957,6 +4469,149 @@ mod tests {
             }
         ));
         assert!(drain(&mut events).is_empty());
+    }
+
+    /// Timelines (ADR-0115) are stored, checked, undone and played as far as the mock
+    /// goes: `timeline.changed` on play, seek and stop, `studio.get` listing what plays,
+    /// and a deleted playing one stops with `removed`.
+    #[test]
+    fn timelines_are_stored_and_played() {
+        use jstream_protocol::{TimelineChange, TimelineId, TimelineInfo, TimelineLoop};
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let timeline = |id: &str, ms: u32| TimelineInfo {
+            folder: None,
+            timeline_id: TimelineId::new(id),
+            name: id.to_uppercase(),
+            duration_ms: ms,
+            looping: TimelineLoop::Once,
+            cues: Vec::new(),
+            labels: Vec::new(),
+            lanes: Vec::new(),
+            starts: Vec::new(),
+            stops: Vec::new(),
+        };
+        let set = |scene: &str, t: TimelineInfo| {
+            Batch::single(Edit::TimelineSet {
+                scene_id: SceneId::new(scene),
+                timeline: t,
+            })
+        };
+        batch(&*control, Batch::single(create("main"))).expect("main");
+        batch(&*control, Batch::single(create("intro"))).expect("intro");
+        batch(&*control, set("main", timeline("seq_1", 6000))).expect("set");
+        batch(&*control, set("main", timeline("seq_1", 3000))).expect("replace");
+        let held = |control: &dyn Control| match state(control) {
+            QueryResult::StateGet { scenes, .. } => scenes
+                .iter()
+                .flat_map(|s| {
+                    s.timelines
+                        .iter()
+                        .map(|t| (s.scene_id.to_string(), t.duration_ms))
+                })
+                .collect::<Vec<_>>(),
+            other => panic!("not a state: {other:?}"),
+        };
+        assert_eq!(held(&*control), [("main".to_owned(), 3000)]);
+        let taken = batch(&*control, set("intro", timeline("seq_1", 1000)))
+            .expect_err("another scene holds it");
+        assert_eq!(code(&taken), Some("already_exists"));
+        let bad = batch(&*control, set("main", timeline("bad id", 1000))).expect_err("bad ID");
+        assert_eq!(code(&bad), Some("invalid_argument"));
+        undo(&*control).expect("undo the replace");
+        assert_eq!(held(&*control), [("main".to_owned(), 6000)]);
+
+        let mut events = control.events();
+        let seq = || TimelineId::new("seq_1");
+        action(
+            &*control,
+            Action::TimelinePlay {
+                timeline_id: seq(),
+                delay_ms: None,
+            },
+        )
+        .expect("play");
+        action(
+            &*control,
+            Action::TimelineSeek {
+                timeline_id: seq(),
+                at_ms: 1500,
+            },
+        )
+        .expect("seek");
+        let past = action(
+            &*control,
+            Action::TimelineSeek {
+                timeline_id: seq(),
+                at_ms: 6000,
+            },
+        )
+        .expect_err("past its end");
+        assert_eq!(code(&past), Some("invalid_argument"));
+        match query(&*control, Query::StudioGet).expect("studio") {
+            QueryResult::StudioGet { timelines, .. } => {
+                assert_eq!(timelines.len(), 1);
+                assert_eq!(
+                    (timelines[0].position_ms, timelines[0].scene_id.as_str()),
+                    (1500, "main")
+                );
+            }
+            other => panic!("not a studio: {other:?}"),
+        }
+        action(&*control, Action::TimelineStop { timeline_id: seq() }).expect("stop");
+        action(&*control, Action::TimelineStop { timeline_id: seq() })
+            .expect("a stop again does nothing");
+        action(
+            &*control,
+            Action::TimelinePlay {
+                timeline_id: seq(),
+                delay_ms: None,
+            },
+        )
+        .expect("play again");
+        batch(
+            &*control,
+            Batch::single(Edit::TimelineDelete { timeline_id: seq() }),
+        )
+        .expect("delete");
+        let changes: Vec<_> = drain(&mut events)
+            .into_iter()
+            .filter_map(|e| match e {
+                Event::TimelineChanged {
+                    change,
+                    playing,
+                    position_ms,
+                    ..
+                } => Some((change, playing, position_ms)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            changes,
+            [
+                (TimelineChange::Started, true, 0),
+                (TimelineChange::Sought, true, 1500),
+                (TimelineChange::Stopped, false, 1500),
+                (TimelineChange::Started, true, 0),
+                (TimelineChange::Removed, false, 0),
+            ]
+        );
+        assert_eq!(held(&*control), []);
+        let gone =
+            action(&*control, Action::TimelineStop { timeline_id: seq() }).expect_err("deleted");
+        assert_eq!(code(&gone), Some("not_found"));
+
+        // Undoing a scene's delete brings its timelines back.
+        batch(&*control, set("intro", timeline("seq_2", 1000))).expect("set");
+        batch(
+            &*control,
+            Batch::single(Edit::SceneDelete {
+                scene_id: SceneId::new("intro"),
+            }),
+        )
+        .expect("delete the scene");
+        undo(&*control).expect("undo the delete");
+        assert_eq!(held(&*control), [("intro".to_owned(), 1000)]);
     }
 
     /// Shared values (ADR-0102 decision 7) as the engine runs them: change-only
@@ -4535,6 +5190,7 @@ mod tests {
                 bindings,
                 value_bindings,
                 channels,
+                shows,
                 transitions,
                 folders,
                 labels,
@@ -4556,6 +5212,7 @@ mod tests {
                 bindings,
                 value_bindings,
                 channels,
+                shows,
                 transitions,
                 folders,
                 labels,
@@ -4750,6 +5407,9 @@ mod tests {
                 Edit::VideoMixDelete {
                     mix_id: VideoMixId::new("prog"),
                 },
+                Edit::ShowDelete {
+                    show_id: jstream_protocol::ShowId::new("evening"),
+                },
             ],
             expected_rev: None,
             idempotency_key: None,
@@ -4780,8 +5440,9 @@ mod tests {
                 master: Default::default(),
                 hotkeys: vec![],
                 bindings: vec![],
-                value_bindings: vec![],
+                value_bindings: Box::default(),
                 channels: Box::default(),
+                shows: Box::default(),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),
@@ -5519,6 +6180,105 @@ mod tests {
         assert!(batch(&*control, Batch::single(delete)).is_ok());
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
+    }
+
+    /// ADR-0213, as the engine does it: a filter's settings, an item's opacity and the
+    /// gains are live values, one parameter each; a fader value that sets more than its
+    /// gain is refused; removing a filter or a send drops its values.
+    #[test]
+    fn filter_settings_opacity_and_gains_are_live_values() {
+        let engine = MockEngine::new().with_kinds(parity::kinds());
+        let control = connected(&engine);
+        let edits: Vec<Edit> = serde_json::from_value(serde_json::json!([
+            {"type": "source.create", "source_id": "mic", "name": "Mic",
+             "kind": {"type": "builtin", "kind": "mic"}},
+            {"type": "bus.create", "bus_id": "vod", "name": "VOD"},
+            {"type": "send.set", "source_id": "mic", "bus_id": "vod", "gain_db": 0.0},
+            {"type": "filter.add", "owner": {"type": "master"}, "chain": "audio",
+             "filter_id": "lim", "kind": "gain"},
+        ]))
+        .expect("edits");
+        let mut all = vec![create("main"), webcam(), add("main", "a", "webcam")];
+        all.extend(edits);
+        let rev = batch(
+            &*control,
+            Batch {
+                edits: all,
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: None,
+            },
+        )
+        .expect("mix");
+        let values: Vec<Edit> = serde_json::from_value(serde_json::json!([
+            {"type": "filter.set_settings", "owner": {"type": "master"}, "filter_id": "lim",
+             "patch": {"gain_db": -3.0}},
+            {"type": "item.set_opacity", "item_id": "a", "opacity": 0.5},
+            {"type": "source.set_audio", "source_id": "mic", "gain_db": -6.0},
+            {"type": "bus.set_fader", "bus_id": "master", "gain_db": -6.0},
+            {"type": "send.set", "source_id": "mic", "bus_id": "vod", "gain_db": -6.0},
+        ]))
+        .expect("values");
+        let live = |values: Vec<Edit>| {
+            action(
+                &*control,
+                Action::LiveSet {
+                    gesture_id: jstream_protocol::GestureId::new("drag"),
+                    values,
+                },
+            )
+        };
+        assert!(live(values).is_ok());
+        let held = || match query(&*control, Query::LiveList) {
+            Ok(QueryResult::LiveList { gestures }) => gestures[0].values.len(),
+            other => panic!("not live.list: {other:?}"),
+        };
+        assert_eq!(held(), 5, "each is a parameter of its own");
+        let muting: Edit = serde_json::from_value(serde_json::json!(
+            {"type": "source.set_audio", "source_id": "mic", "gain_db": -6.0, "muted": true}
+        ))
+        .expect("muting");
+        match live(vec![muting]) {
+            Err(error) => match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => {
+                    assert_eq!(field, "values.0.muted");
+                }
+                other => panic!("not invalid_argument: {other:?}"),
+            },
+            Ok(other) => panic!("applied: {other:?}"),
+        }
+        let removes: Vec<Edit> = serde_json::from_value(serde_json::json!([
+            {"type": "filter.remove", "owner": {"type": "master"}, "filter_id": "lim"},
+            {"type": "send.remove", "source_id": "mic", "bus_id": "vod"},
+        ]))
+        .expect("removes");
+        let after = batch(
+            &*control,
+            Batch {
+                edits: removes,
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: None,
+            },
+        )
+        .expect("removed");
+        assert_eq!(after.0, rev.0 + 1, "live values never moved the revision");
+        assert_eq!(held(), 3, "the opacity and the two faders are left");
+        // A live value adds no send (ADR-0213 decision 1).
+        let new_send: Edit = serde_json::from_value(serde_json::json!(
+            {"type": "send.set", "source_id": "mic", "bus_id": "vod", "gain_db": -6.0}
+        ))
+        .expect("send");
+        match live(vec![new_send]) {
+            Err(error) => match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => {
+                    assert_eq!(field, "values.0.bus_id");
+                }
+                other => panic!("not invalid_argument: {other:?}"),
+            },
+            Ok(other) => panic!("applied: {other:?}"),
+        }
+        assert_eq!(held(), 3, "the refused value changed nothing");
     }
 
     /// ADR-0040 §3, as `jstream-graph` does it: deleting what a binding names removes the
@@ -6536,6 +7296,7 @@ mod tests {
         }
         fn folder(id: &str, parent: Option<&str>) -> Edit {
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new(id),
                 name: id.to_uppercase(),
                 parent: parent.map(FolderId::new),
@@ -6732,5 +7493,42 @@ mod tests {
         assert_eq!(state(&*control), organised);
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
+    }
+
+    /// A listed PTZ camera takes the actions and reports the pose an aim set
+    /// (ADR-0146, `with_ptz_cameras`); an unlisted one is `invalid_argument`.
+    #[test]
+    fn listed_ptz_cameras_take_actions() {
+        use jstream_protocol::PtzPose;
+        let engine = MockEngine::new().with_ptz_cameras(["Wide"]);
+        let control = connected(&engine);
+        action(
+            &*control,
+            Action::PtzAim {
+                camera: "Wide".into(),
+                pose: PtzPose {
+                    zoom: Some(2000),
+                    ..PtzPose::default()
+                },
+                speed: Some(12),
+            },
+        )
+        .expect("aims");
+        match query(&*control, Query::PtzList).expect("lists") {
+            QueryResult::PtzList { cameras } => {
+                assert_eq!(cameras[0].pose.and_then(|p| p.zoom), Some(2000));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(engine.ptz_actions().len(), 1);
+        assert!(
+            action(
+                &*control,
+                Action::PtzHome {
+                    camera: "Close".into()
+                }
+            )
+            .is_err()
+        );
     }
 }

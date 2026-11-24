@@ -129,8 +129,9 @@ binary on its own backends, with nothing faked, against the same receiver.
 It runs on Linux and macOS. On Linux the compositor runs on a software Vulkan adapter
 (lavapipe) and the AAC encoder is JStream's own. On macOS the harness takes the codecs
 and GPU interop the daemon builds there (`serve.rs`): VideoToolbox's H.264 encoder,
-AudioToolbox's AAC-LC encoder, and no GPU interop yet, so the engine composites on a
-Metal device of its own and reads the program back for the encoders. CI runs it on
+AudioToolbox's AAC-LC encoder, and the Metal GPU interop (`MetalGpu`), whose device the
+engine composites on and whose encode targets the VideoToolbox encoder reads with no
+copy, as the daemon does. CI runs it on
 Linux in `e2e-stream` and on macOS in `e2e-stream-macos`
 ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). On macOS the two tests that hold the
 stream to a live pace (the stream on an encoder profile, and 60 fps) run in a step of
@@ -237,8 +238,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--lan` | Also listens for devices on the network ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)): a second listener, TLS only, that admits paired devices and never the control token. Its certificate is made on first use (see **Network access** below). Default: off. |
 | `--lan-port <port>` | With `--lan`: the network listener's port, 1 to 65535. Default `4456`. |
 | `--lan-bind <addr>` | With `--lan`: listen on this one address (not a loopback one) instead of every interface. Default: every interface. |
-| `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes, no white space at either end) and the IPv4 LAN address and port it sends from, loopback, private or link-local. Repeatable, each name and each address and port once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
+| `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes, no white space at either end) and the IPv4 LAN address and port it sends from, loopback, private or link-local. Repeatable, each name and each address and port once. A `network_audio` source naming the sender records its audio. One with an empty `sender` records the first one given, and a binding or reader that names no input reads every sender given, so give one sender when a collection binds with no names ([ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)). Default: off, no JTunnel socket open. |
 | `--jtunnel-no-state <name>` | Ignores the DAW state the sender `<name>`, accepted with `--jtunnel-accept`, sends ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 1): its state packets are counted and dropped. Repeatable, each name once; a name no `--jtunnel-accept` accepts is a usage error. Default: an accepted sender's state is used, its transport, tracks, clips and so on becoming live data, read with `data.list` and `data.get`. |
+| `--jtunnel-midi <name>` | Lets the MIDI the sender `<name>`, accepted with `--jtunnel-accept`, sends run the collection's MIDI action bindings ("Use this sender's MIDI", [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md) decision 3, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)). Repeatable, each name once; a name no `--jtunnel-accept` accepts is a usage error. Default: off, its MIDI is drawn by the MIDI sources and runs no action binding. |
 | `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
 | `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
 | `--ptz-controller <spec>` | Lets a PTZ controller drive a scene camera over VISCA ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)), repeatable: `address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the VISCA address it answers as (1 to 7, default 1), then `=program`, `=preview` or `=scene:<scene id>` for what it drives, as in `192.168.1.10:52381=program`. The address is the one LAN interface it listens on, never every interface (ADR-0123 §5). Needs `--ptz-controller-allow`. Default: none, so no controller socket is open. |
@@ -298,7 +300,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   the answers to its mDNS query, which only list senders in `jtunnel.senders`
   ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
   A sender is accepted per machine, on the command line, never from the collection.
-  Its state is used unless `--jtunnel-no-state` names it (ADR-0171).
+  Its state is used unless `--jtunnel-no-state` names it (ADR-0171), and its MIDI runs
+  action bindings only if `--jtunnel-midi` names it (ADR-0123 §3).
 - **PTZ cameras** (`--ptz-camera`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)).
   Off unless a camera is listed. With one or more, the daemon starts the engine's PTZ
   control after the backends, one thread and socket per camera, and logs how many at
@@ -510,8 +513,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
     `VideoToolboxCodecs` and `AvMediaDecoders`;
-  - the stand-in `NoGpuInterop`, which sends the engine to its own device and CPU
-    frames until the Metal interop does;
+  - `MetalGpu`, the engine's device on Metal, which ScreenCaptureKit and the webcams
+    deliver GPU frames to and whose encode targets VideoToolbox encodes with no copy;
   - no virtual camera, no CLAP scan and no YouTube sign-in;
   - `MacosKeychain` as its stream key store, behind `jstream_crash::Redacting` with
     the daemon's `Secrets` through `live_redacting` as on Windows, and the same
@@ -848,7 +851,7 @@ folder another process is using, so the daemon couldn't start pages while the ap
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
   `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--ptz-controller`,
-  `--ptz-controller-allow`, `--jtunnel-accept`, `--jtunnel-no-state`, `--log-dir`,
+  `--ptz-controller-allow`, `--jtunnel-accept`, `--jtunnel-no-state`, `--jtunnel-midi`, `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` with its `tls` feature (what a host links; `tls` for `--lan`),

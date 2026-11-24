@@ -35,12 +35,15 @@ struct Args {
     token: String,
     /// With it, the agents' control token, and `token` the UI's own (ADR-0131).
     agent_token: Option<String>,
+    /// The PTZ cameras the mock lists, by name (`--ptz-camera`, repeatable; ADR-0146).
+    ptz_cameras: Vec<String>,
 }
 
 fn parse_args() -> Result<Args> {
     let mut ui_dir = None;
     let mut token = None;
     let mut agent_token = None;
+    let mut ptz_cameras = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or(format!("`{arg}` needs a value"));
@@ -48,6 +51,7 @@ fn parse_args() -> Result<Args> {
             "--ui-dir" => ui_dir = Some(PathBuf::from(value()?)),
             "--token" => token = Some(value()?),
             "--agent-token" => agent_token = Some(value()?),
+            "--ptz-camera" => ptz_cameras.push(value()?),
             other => return Err(format!("unknown argument `{other}`").into()),
         }
     }
@@ -55,6 +59,7 @@ fn parse_args() -> Result<Args> {
         ui_dir: ui_dir.ok_or("`--ui-dir <dist>` is required")?,
         token: token.ok_or("`--token <token>` is required")?,
         agent_token,
+        ptz_cameras,
     })
 }
 
@@ -194,10 +199,12 @@ fn gain(id: &str, db: f32) -> Result<Edit> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args = parse_args()?;
-    let engine = MockEngine::new().with_kinds([
-        audio_kind("audio_input", "Audio input"),
-        audio_kind("desktop_audio", "Desktop audio"),
-    ]);
+    let engine = MockEngine::new()
+        .with_kinds([
+            audio_kind("audio_input", "Audio input"),
+            audio_kind("desktop_audio", "Desktop audio"),
+        ])
+        .with_ptz_cameras(args.ptz_cameras.iter().map(String::as_str));
     seed(&engine)
         .await
         .map_err(|error| format!("seeding the mock engine: {error}"))?;
