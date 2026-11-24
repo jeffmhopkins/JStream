@@ -1,0 +1,6 @@
+{
+  "identifier": "zoom",
+  "description": "The app's own main window may zoom its webview between 50% and 150%, for the UI scale. No other command is granted.",
+  "windows": ["main"],
+  "permissions": ["allow-set-zoom"]
+}

@@ -109,7 +109,18 @@ Contents ([Design](#design) explains the choices):
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
   sender's state" (its JSON tested natively), and `desktop_ptz()`
-  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
+  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`. `set_desktop_zoom` asks the app to zoom its webview, through the global's `setZoom`,
+  for the UI scale.
+- **UI scale** (`ui_scale.rs`): `UiScale`, the page's scale in percent (`STEPS`, 50 to
+  150), which View › UI scale and Ctrl with `=`, `-` or `0` set (a chord the project
+  binds as a hotkey is left to it), kept in the browser's storage per machine. In the
+  desktop app the webview zooms; in a browser the root element gets CSS `zoom` and
+  `--ui-scale`, the style sheet divides viewport units by it, and `css`, `rect`,
+  `pointer` and `window_size` turn viewport pixels into the root's CSS pixels where menus,
+  dialogs, the dock's zone handles, number drags and the canvas place things by the
+  pointer. `pixel_ratio` is the device pixels per CSS pixel the canvas and the monitor
+  size their streams by. Projectors aren't scaled. Its steps and keys are tested
+  natively, its zoom in `ui-scale.spec.js`.
   `same_engine` says
   whether the open session is that app's own engine, and `own_engine` asks it of the
   session's `ConnectedEngine` (for Browse… and the canvas's full-resolution preview).
@@ -132,7 +143,8 @@ Contents ([Design](#design) explains the choices):
   in either mode, and `followed_preview`, the scene the canvas moves to when the preview
   scene changes in studio mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`, and a
-  3D model's depth, `SourceDepths`, from the same;
+  3D model's depth, `SourceDepths`, from the same; a media file's `duration_ms` isn't
+  kept, since nothing in the UI shows it yet;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
   and the kind descriptors read so far, the last failed call, the toast's confirmation
@@ -566,7 +578,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   backdrop cancel, and Enter presses the button marked `data-primary`. Escape reaches the
   topmost dialog wherever the focus is: a capture-phase window listener takes one pressed
   outside it (before its first field has the focus, or on a dialog under it) unless a
-  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). A primary press
+  menu is open, and cancels it under the dialog's reactive owner (#1607, #1652). On its
+  first frame the dialog focuses its first field, unless the focus is already inside it
+  (a click or key on a row before that frame keeps it), and does nothing if it closed
+  before that frame (#1703). A primary press
   on that dialog's own header drags it, as a `translate` from the centred place, clamped
   so the box stays inside the window (a box wider than the window keeps covering it; the
   top never goes above the window). The offset is remembered for the dialog's label in

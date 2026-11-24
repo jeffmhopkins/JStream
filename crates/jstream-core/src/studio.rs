@@ -38,6 +38,10 @@ const RECENT: usize = MAX_WARM_SCENES as usize;
 pub(crate) struct Studio {
     program: Option<SceneId>,
     preview: Option<SceneId>,
+    /// The scene a show runs to next, kept warm right after Preview so its media is
+    /// cued at its start and the cut to it is seamless (alpha.13 ST6). Set by the show
+    /// runner; `None` while no show runs.
+    upcoming: Option<SceneId>,
     running: Option<Running>,
     /// The scenes on program before the current one, the most recent first, never the
     /// program scene, at most [`RECENT`].
@@ -54,6 +58,7 @@ impl Default for Studio {
         Studio {
             program: None,
             preview: None,
+            upcoming: None,
             running: None,
             recent: Vec::new(),
             budget: DEFAULT_WARM_SCENES as usize,
@@ -134,7 +139,8 @@ impl Studio {
     }
 
     /// The scenes kept warm beside the program, in priority order (ADR-0117 §7): the
-    /// Preview scene, even past the budget; then the scenes `collection` keeps warm
+    /// Preview scene, even past the budget; then the upcoming scene a show runs to
+    /// next ([`Self::set_upcoming`]), past the budget too; then the scenes `collection` keeps warm
     /// (`keep_warm`), in display order; then the scenes its hotkeys and its trigger
     /// bindings switch to; then the scenes most recently on program. At most the budget
     /// in all, the Preview scene counted, never the program scene, each once.
@@ -143,6 +149,13 @@ impl Studio {
         let program = self.program.as_ref();
         if let Some(preview) = self.preview.as_ref().filter(|id| Some(*id) != program) {
             warm.push(preview.clone());
+        }
+        if let Some(upcoming) = self
+            .upcoming
+            .as_ref()
+            .filter(|id| Some(*id) != program && !warm.contains(id))
+        {
+            warm.push(upcoming.clone());
         }
         let pinned = collection
             .scenes()
@@ -167,6 +180,31 @@ impl Studio {
             }
         }
         warm
+    }
+
+    /// The scene a show runs to next, kept warm past the budget beside Preview.
+    pub(crate) fn upcoming(&self) -> Option<&SceneId> {
+        self.upcoming.as_ref()
+    }
+
+    /// Names the scene a show runs to next, or `None` when no show runs: it stays warm
+    /// past the budget and the GPU limit, as Preview does, so a media file on it is held
+    /// at its first frame and the cut to it starts nothing. `true` when it changed, so
+    /// the caller publishes the warm scenes again. A scene the collection doesn't hold
+    /// is `not_found`.
+    pub(crate) fn set_upcoming(
+        &mut self,
+        collection: &State,
+        scene_id: Option<&SceneId>,
+    ) -> Result<bool, ProtocolError> {
+        if let Some(id) = scene_id {
+            exists(collection, id)?;
+        }
+        if self.upcoming.as_ref() == scene_id {
+            return Ok(false);
+        }
+        self.upcoming = scene_id.cloned();
+        Ok(true)
     }
 
     /// Lets the running transition go once it has ended.
@@ -197,6 +235,13 @@ impl Studio {
     /// is forgotten. `true` when program or preview changed.
     pub(crate) fn reconcile(&mut self, collection: &State) -> bool {
         self.recent.retain(|id| collection.scene(id).is_some());
+        if self
+            .upcoming
+            .as_ref()
+            .is_some_and(|id| collection.scene(id).is_none())
+        {
+            self.upcoming = None;
+        }
         let show = collection.show_scene();
         let first = collection
             .scenes()
