@@ -2691,3 +2691,127 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-mode button.on { background: var(--selected); color: var(--text); font-weight: 600; }
 .show-empty { margin: auto; text-align: center; color: var(--muted); }
 .show-empty-title { color: var(--text); font-weight: 600; margin-bottom: 4px; }
+
+/* Show panel: Edit view (panels/show/edit.rs). The bar, the tool strip, the ruler, the
+   rows (a 130 px head column, then the clips), the marks over them (loops, bookmark lines
+   and flags, the armed spot, the play head) and the zoom bar. Program clips cycle five
+   colours (show-clip-c0 to -c4); sequences are teal, audio blue, keyframes violet. */
+:root {
+  --show-clip-c0: #1d3557; --show-clip-c0-edge: #34588c;
+  --show-clip-c1: #3b2a5c; --show-clip-c1-edge: #5f4692;
+  --show-clip-c2: #17483f; --show-clip-c2-edge: #2a7a6b;
+  --show-clip-c3: #4a3520; --show-clip-c3-edge: #7d5a34;
+  --show-clip-c4: #4a2330; --show-clip-c4-edge: #7d3c50;
+  --show-overlay: #232c39; --show-overlay-edge: #44505f;
+  --show-tag: #6aa5ff;
+  --show-seq: #0f2b28; --show-seq-edge: #2a7a6b; --show-seq-line: #2dd4bf; --show-seq-text: #c9f3ec; --show-event: #12332f;
+  --show-audio: #10233a; --show-audio-edge: #34588c; --show-audio-fill: #3b82c4; --show-audio-line: #7cc0ff; --show-audio-text: #d6e9ff; --show-audio-detail: #9cc3ea;
+  --show-keyframe: #a78bfa; --show-keyframe-text: #cfc3ff;
+  --show-loop-ink: #170f2e;
+  --show-armed: #7cc0ff;
+  --show-played: rgba(10, 13, 18, 0.38);
+}
+.show-edit { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.show-edit-bar { padding: 8px 0; }
+.show-btn { height: 30px; padding: 0 12px; white-space: nowrap; }
+.show-btn.on { background: var(--selected); border-color: var(--accent); }
+.show-continue { height: 34px; padding: 0 18px; border: 0; border-radius: 6px; background: var(--show-bookmark); color: var(--show-bookmark-ink); font-weight: 700; font-size: 14px; white-space: nowrap; }
+.show-continue:hover:not(:disabled) { background: var(--show-bookmark); filter: brightness(1.08); }
+.show-keycap { background: var(--raised); border: 1px solid var(--border); border-radius: 10px; padding: 2px 9px; font: inherit; font-size: 12px; color: var(--text-soft); }
+.show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.show-next b { color: var(--text); font-weight: 600; }
+.show-bar-gap { flex: 1; }
+.show-state { color: var(--show-bookmark); font-weight: 600; white-space: nowrap; }
+.show-state.idle { color: var(--muted); font-weight: 400; }
+.show-edit-body { display: flex; flex: 1; min-height: 0; }
+.show-tools { width: 40px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 8px; border-right: 1px solid var(--line); background: var(--app); }
+.show-tool { width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--muted); font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.show-tool:hover { background: var(--hover); }
+.show-tool.on { background: var(--selected); color: var(--text); }
+.show-tool-bookmark { color: var(--show-bookmark); border-color: var(--show-bookmark); font-weight: 700; }
+.show-tool-loop { color: var(--show-loop); border-color: var(--show-loop); }
+.show-timeline { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.show-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+.show-content { position: relative; --loops-h: 0px; }
+.show-content.has-loops { --loops-h: 24px; }
+.show-ruler-row { display: flex; height: 46px; border-bottom: 1px solid var(--line); }
+.show-corner { width: 130px; flex: none; border-right: 1px solid var(--line); }
+.show-ruler { position: relative; flex: 1; overflow: hidden; font: 11px "IBM Plex Mono", ui-monospace, monospace; color: var(--dim); }
+.show-ruler.armable { cursor: crosshair; }
+.show-tick { position: absolute; top: 22px; height: 24px; padding: 6px 0 0 5px; border-left: 1px solid var(--border); white-space: nowrap; }
+.show-track { display: flex; border-bottom: 1px solid var(--zone); }
+.show-track.show-group { border-top: 3px solid var(--line); }
+.show-track-program { background: var(--canvas-bg); }
+.show-track-head { width: 130px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; border-right: 1px solid var(--line); background: var(--panel); }
+.show-track-head b { font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.show-tag { display: inline-block; width: 24px; color: var(--show-tag); font: 700 11px "IBM Plex Mono", ui-monospace, monospace; }
+.show-track-icons { font-size: 9px; color: var(--faint); letter-spacing: 2px; white-space: nowrap; }
+.show-track-icons i { font-style: normal; }
+.show-track-icons .show-lock { filter: grayscale(1) brightness(0.7); }
+.show-track-icons .show-lock.on { filter: none; }
+.show-track-icons .show-mute.on { color: var(--danger-text); }
+.show-track.muted .show-track-body { opacity: 0.45; }
+.show-track-body { position: relative; flex: 1; overflow: hidden; }
+.show-clip { position: absolute; top: 5px; bottom: 5px; border: 1px solid; border-radius: 5px; padding: 5px 9px; overflow: hidden; white-space: nowrap; display: flex; flex-direction: column; justify-content: center; }
+.show-clip b { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.show-clip span { font-size: 11px; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; }
+.show-prog { top: 24px; }
+.show-clip-c0 { background: var(--show-clip-c0); border-color: var(--show-clip-c0-edge); }
+.show-clip-c1 { background: var(--show-clip-c1); border-color: var(--show-clip-c1-edge); }
+.show-clip-c2 { background: var(--show-clip-c2); border-color: var(--show-clip-c2-edge); }
+.show-clip-c3 { background: var(--show-clip-c3); border-color: var(--show-clip-c3-edge); }
+.show-clip-c4 { background: var(--show-clip-c4); border-color: var(--show-clip-c4-edge); }
+.show-ov { top: 6px; bottom: 6px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; background: var(--show-overlay); border-color: var(--show-overlay-edge); }
+.show-cut { position: absolute; top: 12px; transform: translate(-50%, -50%); z-index: 6; background: var(--canvas-bg); border: 1px solid var(--control-border); border-radius: 11px; padding: 2px 8px 2px 5px; font-size: 11px; white-space: nowrap; color: var(--text); }
+.show-cut i { font-style: normal; color: var(--show-tag); margin-right: 4px; }
+.show-timed { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(0, 0, 0, 0.35); color: var(--text-soft); font-style: normal; flex: none; }
+.show-kf { position: absolute; top: 8px; margin-left: -5px; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--show-keyframe-text); white-space: nowrap; }
+.show-kf s { width: 9px; height: 9px; background: var(--show-keyframe); transform: rotate(45deg); display: inline-block; }
+.show-ev { position: absolute; top: 11px; }
+.show-ev span { display: inline-block; background: var(--show-event); border: 1px solid var(--show-seq-edge); border-left: 3px solid var(--show-seq-line); border-radius: 4px; padding: 3px 7px; font-size: 11.5px; color: var(--show-seq-text); white-space: nowrap; }
+.show-seq { position: absolute; top: 5px; bottom: 5px; background: var(--show-seq); border: 1px solid var(--show-seq-edge); border-radius: 4px; overflow: hidden; white-space: nowrap; }
+.show-seq > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.show-seq path { fill: none; stroke: var(--show-seq-line); stroke-width: 1.2; opacity: 0.7; }
+.show-seq b { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 3px 7px; font-size: 11.5px; font-weight: 600; color: var(--show-seq-text); background: rgba(15, 43, 40, 0.8); }
+.show-au { position: absolute; top: 5px; bottom: 5px; display: flex; align-items: center; background: var(--show-audio); border: 1px solid var(--show-audio-edge); border-radius: 4px; overflow: hidden; white-space: nowrap; }
+.show-au > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.show-au .fill { fill: var(--show-audio-fill); opacity: 0.35; }
+.show-au .line { fill: none; stroke: var(--show-audio-line); stroke-width: 1.3; }
+.show-au b { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px 0 16px; font-size: 11.5px; font-weight: 600; color: var(--show-audio-text); }
+.show-au span { position: relative; font-size: 11px; color: var(--show-audio-detail); }
+.show-clip.missing, .show-seq.missing, .show-au.missing { border-style: dashed; border-color: var(--danger-text); background: repeating-linear-gradient(135deg, rgba(255, 107, 107, 0.12) 0 6px, transparent 6px 12px); }
+.show-kf.missing, .show-ev.missing { opacity: 0.6; text-decoration: line-through; }
+.show-flag-row, .show-loop-row { height: 24px; }
+.show-marks { position: absolute; left: 130px; right: 0; top: 0; bottom: 0; overflow: hidden; pointer-events: none; }
+.show-played { position: absolute; left: 0; top: 46px; bottom: calc(24px + var(--loops-h)); background: var(--show-played); z-index: 1; }
+.show-loop { position: absolute; top: 44px; bottom: 2px; z-index: 2; background: var(--show-loop-fill); border: 4px solid var(--show-loop); border-top-width: 3px; border-bottom: 0; }
+.show-loop em { position: absolute; left: -4px; right: -4px; bottom: 0; height: 20px; padding: 3px 8px; background: var(--show-loop); color: var(--show-loop-ink); font: 700 10.5px "IBM Plex Sans", system-ui, sans-serif; font-style: normal; white-space: nowrap; overflow: hidden; }
+.show-bm { position: absolute; top: 46px; bottom: var(--loops-h); width: 0; margin-left: -1px; border-left: 2px solid var(--show-bookmark); z-index: 3; }
+.show-bm.pausing { border-left-style: dashed; }
+.show-bm.edge { margin-left: 0; }
+.show-flag { position: absolute; bottom: var(--loops-h); height: 18px; margin-left: -1px; z-index: 3; padding: 3px 6px; overflow: hidden; white-space: nowrap; background: var(--show-bookmark); color: var(--show-bookmark-ink); font: 700 10px/12px "IBM Plex Mono", ui-monospace, monospace; font-style: normal; border-radius: 0 3px 3px 0; }
+.show-flag.flip { margin-left: 1px; border-radius: 3px 0 0 3px; }
+.show-flag kbd { font: 700 9px "IBM Plex Mono", ui-monospace, monospace; background: var(--show-bookmark-ink); color: var(--show-bookmark); border-radius: 2px; padding: 0 3px; margin-left: 5px; }
+.show-flag small { font: 600 9px "IBM Plex Sans", system-ui, sans-serif; margin-left: 5px; padding: 0 4px; border: 1px solid var(--show-bookmark-ink); border-radius: 6px; }
+.show-armed { position: absolute; top: 0; bottom: calc(24px + var(--loops-h)); width: 0; margin-left: -1px; border-left: 2px dashed var(--show-armed); z-index: 4; }
+.show-armed em { position: absolute; top: 24px; left: 0; padding: 2px 6px; background: var(--show-armed); color: var(--canvas-bg); font: 700 10px "IBM Plex Mono", ui-monospace, monospace; font-style: normal; white-space: nowrap; border-radius: 0 3px 3px 0; }
+.show-head { position: absolute; top: 0; bottom: calc(24px + var(--loops-h)); width: 2px; margin-left: -1px; background: var(--show-head); box-shadow: 0 0 0 1px var(--canvas-bg); z-index: 5; }
+.show-head em { position: absolute; top: 2px; left: 2px; padding: 3px 6px; background: var(--show-head); color: var(--canvas-bg); font: 700 10px "IBM Plex Mono", ui-monospace, monospace; font-style: normal; white-space: nowrap; border-radius: 0 3px 3px 0; }
+.show-head em.flip { left: auto; right: 2px; border-radius: 3px 0 0 3px; }
+.show-zoom-row { display: flex; align-items: center; height: 34px; flex: none; padding-right: 10px; }
+.show-zoom-label { width: 130px; flex: none; padding-left: 8px; font-size: 11px; color: var(--dim); white-space: nowrap; }
+.show-zoom { position: relative; flex: 1; height: 22px; background: var(--app); border: 1px solid var(--line); border-radius: 11px; cursor: pointer; touch-action: none; }
+.show-zoom:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.show-mini { position: absolute; top: 8px; height: 5px; border: 0; border-radius: 2px; opacity: 0.75; }
+.show-mini.show-clip-c0 { background: var(--show-clip-c0-edge); }
+.show-mini.show-clip-c1 { background: var(--show-clip-c1-edge); }
+.show-mini.show-clip-c2 { background: var(--show-clip-c2-edge); }
+.show-mini.show-clip-c3 { background: var(--show-clip-c3-edge); }
+.show-mini.show-clip-c4 { background: var(--show-clip-c4-edge); }
+.show-zoom-bk { position: absolute; top: 2px; bottom: 2px; width: 2px; margin-left: -1px; background: var(--show-bookmark); }
+.show-zoom-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--show-head); }
+.show-thumb { position: absolute; top: -1px; bottom: -1px; min-width: 40px; background: rgba(106, 165, 255, 0.18); border: 1px solid var(--show-tag); border-radius: 11px; cursor: grab; }
+.show-grip { position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text); border: 2px solid var(--show-tag); cursor: ew-resize; }
+.show-grip-l { left: 2px; }
+.show-grip-r { right: 2px; }
+.show-foot { flex: none; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

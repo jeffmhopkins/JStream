@@ -54,6 +54,8 @@ pub enum Command {
     Rehearse(bool),
     /// What the Next monitor shows, for the show, by ID.
     NextMonitor(String, model::NextMonitor),
+    /// Add an overlay track to the show, by ID, above its other tracks.
+    AddOverlayTrack(String),
 }
 
 /// The panel's shared state, in context for its views.
@@ -74,6 +76,8 @@ pub struct ShowPanel {
     pub clock: RwSignal<f64>,
     /// The problem bar's message, where a command that failed says so.
     pub problem: RwSignal<Option<String>>,
+    /// The key bound to Continue, as its key cap shows it ("Space"), if any.
+    pub continue_key: RwSignal<Option<String>>,
 }
 
 impl ShowPanel {
@@ -87,6 +91,7 @@ impl ShowPanel {
             mode: RwSignal::new(Mode::Edit),
             viewport: RwSignal::new(Viewport::fit(0)),
             clock: RwSignal::new(0.0),
+            continue_key: RwSignal::new(None),
         }
     }
 

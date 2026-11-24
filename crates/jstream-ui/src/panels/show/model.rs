@@ -66,9 +66,7 @@ impl ShowView {
 
     /// The first pausing bookmark after `at_ms`.
     pub fn next_pause(&self, at_ms: u32) -> Option<&BookmarkView> {
-        self.bookmarks
-            .iter()
-            .find(|b| b.pausing && b.at_ms > at_ms)
+        self.bookmarks.iter().find(|b| b.pausing && b.at_ms > at_ms)
     }
 }
 
@@ -160,6 +158,10 @@ pub struct ClipView {
     pub missing: bool,
     /// For an audio clip: its fade in and out, in ms.
     pub fades: Option<(u32, u32)>,
+    /// For a sequence clip: the shape of what it plays, as points (fraction of the clip's
+    /// width, value from 0 to 1) joined by straight lines and drawn across the clip.
+    /// Empty draws no line.
+    pub curve: Vec<(f32, f32)>,
 }
 
 impl ClipView {
@@ -298,6 +300,7 @@ pub(crate) mod demo {
             timed: false,
             missing: false,
             fades: None,
+            curve: Vec::new(),
         }
     }
 
@@ -311,45 +314,182 @@ pub(crate) mod demo {
         }
     }
 
-    /// The mockup's show: five program clips over 11 minutes, six bookmarks and a loop.
+    fn track(id: &str, kind: TrackKind, clips: Vec<ClipView>) -> TrackView {
+        TrackView {
+            id: id.to_owned(),
+            kind,
+            clips,
+            muted: false,
+            locked: false,
+        }
+    }
+
+    fn detailed(mut c: ClipView, detail: &str) -> ClipView {
+        c.detail = detail.to_owned();
+        c
+    }
+
+    fn curved(mut c: ClipView, curve: &[(f32, f32)]) -> ClipView {
+        c.curve = curve.to_vec();
+        c
+    }
+
+    fn faded(mut c: ClipView, fade_in: u32, fade_out: u32, timed: bool) -> ClipView {
+        c.fades = Some((fade_in, fade_out));
+        c.timed = timed;
+        c
+    }
+
+    /// The mockup's show: five program clips over 11 minutes, two overlay tracks,
+    /// keyframes, two sequence tracks with one-off events, two audio tracks, six
+    /// bookmarks and a loop.
     pub fn friday() -> ShowView {
         let scene = |s: &str| ClipKind::Scene(s.to_owned());
+        let key = |s: &str| ClipKind::Keyframe(s.to_owned());
+        let seq = |s: &str| ClipKind::Sequence(s.to_owned());
+        let event = |s: &str| ClipKind::Event(s.to_owned());
+        let audio = |s: &str| ClipKind::Audio(s.to_owned());
         let mut intro = clip("c2", 180_000, 60_000, "intro.mp4", scene("intro"));
         intro.timed = true;
+        intro.detail = "1:00 · video length".to_owned();
         intro.transition_in = Some("Fade 0.5 s".to_owned());
         let mut main = clip("c3", 240_000, 180_000, "Main", scene("main"));
+        main.detail = "3:00 · bookmarks at 1:30 and the end".to_owned();
         main.transition_in = Some("Move 0.8 s".to_owned());
         let mut demo = clip("c4", 420_000, 180_000, "Segment · Demo", scene("demo"));
+        demo.detail = "3:00 · bookmark at the end".to_owned();
         demo.transition_in = Some("Cut".to_owned());
         let mut outro = clip("c5", 600_000, 60_000, "Outro", scene("outro"));
+        outro.detail = "1:00".to_owned();
         outro.transition_in = Some("Fade 1 s".to_owned());
+        let wave: Vec<(f32, f32)> = (0..=20u8)
+            .map(|n| (f32::from(n) / 20.0, if n % 2 == 0 { 0.35 } else { 0.65 }))
+            .collect();
         ShowView {
             id: "friday".to_owned(),
             name: "Friday show".to_owned(),
             tracks: vec![
-                TrackView {
-                    id: "v1".to_owned(),
-                    kind: TrackKind::Program,
-                    clips: vec![
-                        clip("c1", 0, 180_000, "Starting soon", scene("soon")),
+                track(
+                    "v3",
+                    TrackKind::Overlay(3),
+                    vec![
+                        detailed(
+                            clip("o1", 240_000, 84_000, "Lower third · Host", scene("lower")),
+                            "1:24",
+                        ),
+                        detailed(
+                            clip("o2", 456_000, 108_000, "▣ sponsor.png", scene("sponsor")),
+                            "1:48",
+                        ),
+                    ],
+                ),
+                track(
+                    "v2",
+                    TrackKind::Overlay(2),
+                    vec![detailed(
+                        clip("o3", 240_000, 360_000, "Logo bug", scene("logo")),
+                        "stays up through both bookmarks",
+                    )],
+                ),
+                track(
+                    "v1",
+                    TrackKind::Program,
+                    vec![
+                        detailed(
+                            clip("c1", 0, 180_000, "Starting soon", scene("soon")),
+                            "3:00",
+                        ),
                         intro,
                         main,
                         demo,
                         outro,
                     ],
-                    muted: false,
-                    locked: false,
-                },
-                TrackView {
-                    id: "k".to_owned(),
-                    kind: TrackKind::Keyframes,
-                    clips: vec![
-                        clip("k1", 240_000, 0, "Wide", ClipKind::Keyframe("wide".to_owned())),
-                        clip("k2", 330_000, 0, "Close", ClipKind::Keyframe("close".to_owned())),
+                ),
+                track(
+                    "k",
+                    TrackKind::Keyframes,
+                    vec![
+                        clip("k1", 240_000, 0, "Wide", key("wide")),
+                        clip("k2", 330_000, 0, "Close", key("close")),
+                        clip("k3", 378_000, 0, "Two-up", key("two-up")),
+                        clip("k4", 510_000, 0, "Screen full", key("screen")),
                     ],
-                    muted: false,
-                    locked: false,
-                },
+                ),
+                track(
+                    "s1",
+                    TrackKind::Sequences(1),
+                    vec![
+                        curved(
+                            clip("q1", 0, 175_000, "Countdown", seq("countdown")),
+                            &[(0.0, 0.1), (1.0, 0.9)],
+                        ),
+                        curved(
+                            clip("q2", 180_000, 54_000, "Lights up", seq("lights-up")),
+                            &[(0.0, 0.1), (0.4, 0.15), (0.6, 0.75), (1.0, 0.8)],
+                        ),
+                        clip("e1", 330_000, 0, "Show Title", event("show-title")),
+                        curved(
+                            clip("q3", 420_000, 54_000, "Demo sting", seq("sting")),
+                            &[(0.0, 0.15), (0.3, 0.8), (0.6, 0.2), (1.0, 0.7)],
+                        ),
+                        clip("e2", 540_000, 0, "Hide Title", event("hide-title")),
+                        curved(
+                            clip("q4", 600_000, 60_000, "Lights down", seq("lights-down")),
+                            &[(0.0, 0.8), (0.5, 0.75), (0.6, 0.2), (1.0, 0.1)],
+                        ),
+                    ],
+                ),
+                track(
+                    "s2",
+                    TrackKind::Sequences(2),
+                    vec![curved(
+                        clip(
+                            "q5",
+                            240_000,
+                            360_000,
+                            "Ticker · loops, keeps running while paused",
+                            seq("ticker"),
+                        ),
+                        &wave,
+                    )],
+                ),
+                track(
+                    "a1",
+                    TrackKind::Audio(1),
+                    vec![faded(
+                        detailed(
+                            clip("a1", 240_000, 360_000, "Mic · Host", audio("mic")),
+                            "fade in 0.5 s · fade out 1 s",
+                        ),
+                        500,
+                        1000,
+                        false,
+                    )],
+                ),
+                track(
+                    "a2",
+                    TrackKind::Audio(2),
+                    vec![
+                        faded(
+                            detailed(
+                                clip("a2", 0, 240_000, "♪ bed.mp3", audio("bed")),
+                                "fade out 4 s",
+                            ),
+                            0,
+                            4000,
+                            true,
+                        ),
+                        faded(
+                            detailed(
+                                clip("a3", 564_000, 96_000, "♪ bed.mp3", audio("bed")),
+                                "fade in 3 s",
+                            ),
+                            3000,
+                            0,
+                            true,
+                        ),
+                    ],
+                ),
             ],
             bookmarks: vec![
                 mark("b1", "Waiting", 0, false, "F1"),
