@@ -225,7 +225,7 @@ release = "beta.1"
 title = "PTZ cameras over VISCA-over-IP, with their presets in keyframes"
 status = "hardware"
 issues = [1182, 1181]
-prs = [1423, 1486, 1496, 1499]
+prs = [1423, 1486, 1496, 1499, 1709]
 note = "Shipped in alpha.5, whose Windows hardware run checks it"
 
 [[target]]

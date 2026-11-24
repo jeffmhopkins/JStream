@@ -169,6 +169,44 @@ impl MockEngine {
         self
     }
 
+    /// Lists PTZ cameras `names`, each reachable at home, as a host's camera list does
+    /// (ADR-0146 §1): `ptz.list` reports them, and a `ptz.*` action naming one succeeds
+    /// and moves its reported pose (an aim to where it says, Home to 0, 0; a drive, a
+    /// recall or a store moves nothing, since the mock has no head). Without it the mock
+    /// controls no camera.
+    #[must_use]
+    pub fn with_ptz_cameras<'a>(self, names: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut state = lock(&self.shared);
+        state.ptz_cameras = names
+            .into_iter()
+            .enumerate()
+            .map(|(i, name)| jstream_protocol::PtzCameraInfo {
+                camera: name.to_owned(),
+                address: format!("127.0.0.1:{}", 52381 + i),
+                transport: jstream_protocol::PtzTransport::ViscaIp,
+                visca_address: 1,
+                reachable: true,
+                pose: Some(jstream_protocol::PtzPose {
+                    pan: Some(0),
+                    tilt: Some(0),
+                    zoom: Some(0),
+                    focus: Some(4096),
+                }),
+                error: None,
+                sent: 0,
+                replies: 0,
+                dropped: 0,
+            })
+            .collect();
+        drop(state);
+        self
+    }
+
+    /// The `ptz.*` actions the listed cameras took, oldest first.
+    pub fn ptz_actions(&self) -> Vec<Action> {
+        lock(&self.shared).ptz_actions.clone()
+    }
+
     /// Sets how many undo steps each client keeps (100 by default, as in the engine). The
     /// oldest steps are dropped first, and 0 keeps none.
     #[must_use]
@@ -319,6 +357,10 @@ struct Removed {
 #[derive(Default)]
 struct State {
     collection: Collection,
+    /// The PTZ cameras [`MockEngine::with_ptz_cameras`] lists, which `ptz.list` reports
+    /// and `ptz.*` actions move, and the actions they took, in order (ADR-0146).
+    ptz_cameras: Vec<jstream_protocol::PtzCameraInfo>,
+    ptz_actions: Vec<Action>,
     /// Each MIDI input's latest control change, which `midi.last_controls` reports and
     /// [`MockEngine::move_control`] sets (ADR-0178).
     midi_controls: Vec<jstream_protocol::MidiControlInfo>,
@@ -1224,14 +1266,41 @@ impl State {
             | Action::PtzRecall { .. }
             | Action::PtzStore { .. }
             | Action::PtzFocus { .. } => {
-                if let Some((_, Some((field, reason)))) =
-                    jstream_protocol::ptz_action_check(&action)
-                {
+                let Some((camera, problem)) = jstream_protocol::ptz_action_check(&action) else {
+                    return Err(ProtocolError::Internal {
+                        reason: "not a PTZ action".into(),
+                    });
+                };
+                if let Some((field, reason)) = problem {
                     return Err(invalid(0, field, reason));
                 }
-                return Err(ProtocolError::ActionFailed {
-                    reason: "this machine controls no PTZ cameras".into(),
-                });
+                if self.ptz_cameras.is_empty() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: "this machine controls no PTZ cameras".into(),
+                    });
+                }
+                let camera = camera.to_owned();
+                let Some(head) = self.ptz_cameras.iter_mut().find(|c| c.camera == camera) else {
+                    return Err(ProtocolError::invalid_argument(
+                        "camera",
+                        format!("this machine has no PTZ camera called `{camera}`"),
+                    ));
+                };
+                let pose = head.pose.get_or_insert_with(Default::default);
+                match &action {
+                    Action::PtzAim { pose: to, .. } => {
+                        pose.pan = to.pan.or(pose.pan);
+                        pose.tilt = to.tilt.or(pose.tilt);
+                        pose.zoom = to.zoom.or(pose.zoom);
+                        pose.focus = to.focus.or(pose.focus);
+                    }
+                    Action::PtzHome { .. } => (pose.pan, pose.tilt) = (Some(0), Some(0)),
+                    _ => {}
+                }
+                head.sent += 1;
+                head.replies += 1;
+                self.ptz_actions.push(action);
+                return Ok(CallResult::action());
             }
             // The mock draws nothing, so a fire only checks its arguments (#1107).
             Action::ItemTriggerMotion {
@@ -1654,7 +1723,7 @@ impl State {
             },
             Query::DataGet { .. } => QueryResult::DataGet { remote_value: None },
             Query::PtzList => QueryResult::PtzList {
-                cameras: Vec::new(),
+                cameras: self.ptz_cameras.clone(),
             },
             // No aim is kept, so every camera is at its home (ADR-0152).
             Query::SceneCameraAim { scene_id } => {
@@ -6869,5 +6938,42 @@ mod tests {
         assert_eq!(state(&*control), organised);
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
+    }
+
+    /// A listed PTZ camera takes the actions and reports the pose an aim set
+    /// (ADR-0146, `with_ptz_cameras`); an unlisted one is `invalid_argument`.
+    #[test]
+    fn listed_ptz_cameras_take_actions() {
+        use jstream_protocol::PtzPose;
+        let engine = MockEngine::new().with_ptz_cameras(["Wide"]);
+        let control = connected(&engine);
+        action(
+            &*control,
+            Action::PtzAim {
+                camera: "Wide".into(),
+                pose: PtzPose {
+                    zoom: Some(2000),
+                    ..PtzPose::default()
+                },
+                speed: Some(12),
+            },
+        )
+        .expect("aims");
+        match query(&*control, Query::PtzList).expect("lists") {
+            QueryResult::PtzList { cameras } => {
+                assert_eq!(cameras[0].pose.and_then(|p| p.zoom), Some(2000));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(engine.ptz_actions().len(), 1);
+        assert!(
+            action(
+                &*control,
+                Action::PtzHome {
+                    camera: "Close".into()
+                }
+            )
+            .is_err()
+        );
     }
 }

@@ -13816,6 +13816,31 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PtzAxis": {
+      "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.178).",
+      "oneOf": [
+        {
+          "const": "pan",
+          "description": "The pan position, -524287 to 524287.",
+          "type": "string"
+        },
+        {
+          "const": "tilt",
+          "description": "The tilt position, -32767 to 32767.",
+          "type": "string"
+        },
+        {
+          "const": "zoom",
+          "description": "The zoom position, 0 (the widest) to 65535.",
+          "type": "string"
+        },
+        {
+          "const": "focus",
+          "description": "The focus position, 0 to 65535. Driving it puts the head's focus in manual.",
+          "type": "string"
+        }
+      ]
+    },
     "PtzCameraInfo": {
       "description": "One PTZ camera in a `ptz.list` result.",
       "properties": {
@@ -19414,6 +19439,29 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "source_id",
             "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+          "properties": {
+            "axis": {
+              "$ref": "#/$defs/PtzAxis",
+              "description": "Which axis."
+            },
+            "camera": {
+              "description": "The camera's name on the machine's PTZ camera list.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ptz_axis",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "camera",
+            "axis"
           ],
           "type": "object"
         }

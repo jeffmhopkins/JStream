@@ -395,7 +395,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.180 because the rendering switches say how many pixels 3D models
+`PROTOCOL_VERSION` is 0.181 because a value binding can drive one axis of a PTZ
+camera's position: `ValueTarget`'s `ptz_axis {camera, axis}` with `PtzAxis` (`pan`,
+`tilt`, `zoom` or `focus`), in the head's own counts, which the engine sends as aims
+([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)); 0.180 because the
+rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
@@ -1586,10 +1590,16 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
   modifier's own check refuses, as `binding.<field>`.
 - **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
   `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
-  {source_id}`, `bus_gain {bus_id}` and `send_gain {source_id, bus_id}`.
+  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}` and (0.181,
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) `ptz_axis {camera,
+  axis}`, one axis (`PtzAxis`: `pan`, `tilt`, `zoom`, `focus`) of a PTZ camera's
+  position in the head's own counts, whole numbers within `PtzAxis::range`. A
+  `ptz_axis` names the camera by name, as a shot does; `ValueBinding::problem` refuses a
+  name `ptz.*` would refuse, at `binding.target.camera`.
 - **`binding.set_value {binding}`** sets a binding by ID, whole, a new one (inverse
   `binding.clear_value`) or in place of one (inverse `binding.set_value` with the old).
-  The collection refuses, at `binding.target` or `binding.target.param`, a setting its
+  A `ptz_axis` target is not looked up: the camera belongs to the machine. Otherwise
+  the collection refuses, at `binding.target` or `binding.target.param`, a setting its
   kind doesn't mark `live` or that isn't an `int`, `float` or `bool`, a `scene` source's
   fader and a send that doesn't exist; `not_found` for a missing source, filter or bus;
   and `invalid_argument` at `binding` for a 257th ([`MAX_VALUE_BINDINGS`]).
@@ -3082,6 +3092,8 @@ after 1.0:
   `ItemEasing` values `ease_in`, `hold` and `cubic_bezier` (ADR-0129) on the same
   terms: a client older than 0.99 can't parse `state.get` or an item listing once a
   preset, an item or a keyframe's timing uses one.
+  0.181 adds the `ValueTarget` value `ptz_axis` (ADR-0209) on the same terms: a client
+  older than 0.181 can't parse `state.get` once a value binding aims a PTZ head's axis.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

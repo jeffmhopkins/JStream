@@ -703,6 +703,17 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..value_bindings().remove(0)
             },
         },
+        // A value binding aiming a PTZ camera's zoom (ADR-0209).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "wide_zoom".into(),
+                target: ValueTarget::PtzAxis {
+                    camera: "wide".into(),
+                    axis: crate::PtzAxis::Zoom,
+                },
+                ..value_bindings().remove(0)
+            },
+        },
         Edit::BindingSetValue {
             binding: ValueBinding {
                 binding_id: "mic_send".into(),

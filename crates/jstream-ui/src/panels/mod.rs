@@ -37,6 +37,7 @@ pub mod motion;
 pub mod number;
 pub mod outputs;
 pub mod properties;
+pub mod ptz;
 pub mod scene_properties;
 pub(crate) mod scenes;
 pub mod sequence;

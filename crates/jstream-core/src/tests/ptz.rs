@@ -313,3 +313,102 @@ fn preview_never_moves_a_camera_the_program_frames() {
     assert!(wide.wait(|h| recalled(h) == [1, 2]), "{:?}", wide.state());
     assert!(close.wait(|h| recalled(h) == [3, 3]), "{:?}", close.state());
 }
+
+/// ADR-0209: a value binding on a PTZ axis aims the head as its control moves: zoom on
+/// its own, and pan with the tilt the head last answered. Nothing moves until the control
+/// does, a camera this machine doesn't list is skipped, and the collection keeps no pose.
+#[test]
+fn value_bindings_aim_ptz_axes() {
+    use jstream_protocol::{
+        Finite32, MotionCurve, MotionKind, MotionMidiControl, PtzAxis, ValueBinding, ValueTarget,
+    };
+    let bound =
+        |id: &str, controller: u8, camera: &str, axis: PtzAxis, to: f32| Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: id.into(),
+                input: MotionKind::Midi {
+                    control: MotionMidiControl::Cc,
+                    controller: Some(controller),
+                    channel: None,
+                    input: None,
+                    smoothing_ms: 0,
+                    curve: MotionCurve::Linear,
+                    from: Finite32::ZERO,
+                    to: Finite32::new(to).expect("finite"),
+                },
+                target: ValueTarget::PtzAxis {
+                    camera: camera.into(),
+                    axis,
+                },
+                amount: None,
+            },
+        };
+    let cc = |controller: u8, value: u8| {
+        jstream_midi::Message::parse(&[0xB0, controller, value]).expect("a CC")
+    };
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let head = FakeHead::start(PtzTransport::ViscaIp);
+    engine
+        .start_ptz(&PtzSetup::new(vec![head.camera("wide")]).expect("setup"))
+        .expect("start");
+    // The head is somewhere first, so a pan binding has a tilt to keep.
+    call(
+        &control,
+        Action::PtzAim {
+            camera: "wide".into(),
+            pose: PtzPose {
+                pan: Some(10),
+                tilt: Some(-30),
+                ..PtzPose::default()
+            },
+            speed: None,
+        },
+    )
+    .expect("aims");
+    assert!(head.wait(|h| (h.pan, h.tilt) == (10, -30)));
+    batch(
+        &control,
+        edits(vec![
+            bound("zoom", 1, "wide", PtzAxis::Zoom, 1270.0),
+            bound("pan", 2, "wide", PtzAxis::Pan, 1270.0),
+            bound("elsewhere", 1, "tele", PtzAxis::Zoom, 100.0),
+        ]),
+    )
+    .expect("binds a camera this machine may not list");
+    // Wait for `ptz.list` to have the head's pose, which the pan binding keeps tilt from.
+    assert!(
+        (0..200).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            matches!(
+                query(&control, Query::PtzList),
+                Ok(QueryResult::PtzList { cameras })
+                    if cameras[0].pose.is_some_and(|p| p.tilt == Some(-30))
+            )
+        }),
+        "the head answers where it is"
+    );
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(
+        !head
+            .state()
+            .commands
+            .iter()
+            .any(|c| matches!(c, Command::ZoomDirect(_))),
+        "nothing moves before the control does"
+    );
+    let midi = engine.midi_inputs();
+    midi.push("Pad", 0, &cc(1, 64));
+    assert!(head.wait(|h| h.zoom == 640), "{:?}", head.state());
+    midi.push("Pad", 1, &cc(2, 127));
+    assert!(
+        head.wait(|h| (h.pan, h.tilt) == (1270, -30)),
+        "pan moves, tilt stays: {:?}",
+        head.state()
+    );
+    let stored = match query(&control, Query::StateGet).expect("state.get") {
+        QueryResult::StateGet { value_bindings, .. } => value_bindings.len(),
+        other => panic!("not a state: {other:?}"),
+    };
+    assert_eq!(stored, 3, "the bindings are kept; no pose is");
+}

@@ -9888,6 +9888,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "bus_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "properties": {
+                  "axis": {
+                    "$ref": "#/$defs/PtzAxis",
+                    "description": "Which axis."
+                  },
+                  "camera": {
+                    "description": "The camera's name on the machine's PTZ camera list.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz_axis",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "axis"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -19911,6 +19934,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "source_id",
                   "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "properties": {
+                  "axis": {
+                    "$ref": "#/$defs/PtzAxis",
+                    "description": "Which axis."
+                  },
+                  "camera": {
+                    "description": "The camera's name on the machine's PTZ camera list.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz_axis",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "axis"
                 ],
                 "type": "object"
               }
@@ -32796,6 +32842,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "bus_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "properties": {
+                  "axis": {
+                    "$ref": "#/$defs/PtzAxis",
+                    "description": "Which axis."
+                  },
+                  "camera": {
+                    "description": "The camera's name on the machine's PTZ camera list.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz_axis",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "axis"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -45262,6 +45331,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "source_id",
                   "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "properties": {
+                  "axis": {
+                    "$ref": "#/$defs/PtzAxis",
+                    "description": "Which axis."
+                  },
+                  "camera": {
+                    "description": "The camera's name on the machine's PTZ camera list.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz_axis",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "axis"
                 ],
                 "type": "object"
               }
@@ -69414,6 +69506,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "source_id",
                   "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.178), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "properties": {
+                  "axis": {
+                    "$ref": "#/$defs/PtzAxis",
+                    "description": "Which axis."
+                  },
+                  "camera": {
+                    "description": "The camera's name on the machine's PTZ camera list.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz_axis",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "axis"
                 ],
                 "type": "object"
               }

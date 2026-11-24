@@ -72,8 +72,9 @@ real UI shows the engine's real state instead.
 | [Stream stats, live chat and agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Channels and sequences](#automation) | 9 | 1 | 8 | 0 | 0 | 0 |
 | [Mappings](#mappings) | 3 | 0 | 3 | 0 | 0 | 0 |
+| [PTZ cameras](#ptz) | 5 | 5 | 0 | 0 | 0 | 0 |
 | [Keyboard](#keyboard) | 8 | 7 | 0 | 0 | 0 | 1 |
-| **Total** | **158** | **133** | **16** | **0** | **5** | **4** |
+| **Total** | **163** | **138** | **16** | **0** | **5** | **4** |
 <!-- @generated end ui-summary -->
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
@@ -148,7 +149,7 @@ and Stream stats shows the half of its row that needs no YouTube sign-in
 | DK-04 | Collapse | Clicking a lone panel's title collapses it (not in a tab group, not the only group in its zone); in a side-by-side zone it becomes a narrow strip with its title turned. | ✅ | |
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. Unlike the spec's `cursor: grab`, a tab keeps the arrow pointer, on the maintainer's alpha feedback; the grabbing hand shows only while it drags. |
-| DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Sources left; Inspector, Arrange, Filters, chat, stats and agent right; Mixer, Outputs, Transitions and Mappings bottom). | ✅ | |
+| DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Sources left; Inspector, Arrange, Filters, chat, stats, agent, Channels and PTZ cameras right; Mixer, Outputs, Transitions, Sequence and Mappings bottom). | ✅ | |
 | DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Sources; right Inspector (weight 2), Filters+Arrange; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has. Unlike the prototype, Editing puts the Inspector, Filters and Arrange as tabs of one full-height group on the right, Inspector shown, so the Filters panel and an opened filter's settings get the whole column. Live puts Stream stats, Outputs and Agent activity as tabs in one group, Stream stats shown; Live chat only says what it waits on, so Live leaves it out until the engine supports it. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | ✅ | The engine's server keeps the dock, saved layouts included, in its UI settings (`ui_settings.get`/`set`, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)), in the data folder the desktop app and the daemon share. The browser keeps a copy too, shown first and used alone with no server in front, and a change the server never got (the page closed within the send delay) is sent on the next load rather than lost. Another open client picks up a change when its workspace next opens. |
@@ -529,6 +530,25 @@ for alpha.12 (sources, channels and targets, with mapping mode).
 | MP-02 | Sources tab | Each JTunnel sender's 32 Mods to name and arm, what the armed source drives, and the other sources. | 🟡 | Four columns by eight rows: number, name box, target count and live bar. Naming a Mod makes it a channel with the Mod as its only input, moving the Mod's direct mappings onto it in one undo step; renaming renames the channel. Enter and Tab go to the next name, Escape restores, pasted lines fill the following Mods, and names are capped at the 40 bytes a DAW shows. A cell, a MIDI control seen, a channel or a key that switches one arms it; `[` and `]` step the armed Mod, a named one as its channel, and Escape disarms (the arrow keys don't, since they nudge items on the canvas). Not built yet: "Move these mappings to another sender", and audio levels as sources. Arming is app-wide: the mapping bar ([VC-04](#automation)) shows the armed source and maps it by a drag on a setting. |
 | MP-03 | Triggers tab | Each key, MIDI trigger, DAW event, audio level crossing and channel crossing with every action it runs, and "+ Action". | 🟡 | The keys and MIDI triggers are the Keys & MIDI list from Settings ([KB-07](#keyboard)): "+ Key", "+ MIDI trigger", a filter, each action a chip with ✕, "+ Action" and Remove. Under it, Sequences lists every sequence's starts and stops as sentences ("Stage power rises" → "Starts Sequence 1"), with Edit (the Sequence panel on that sequence) and Remove. Not built yet: DAW events (scene launched, track selected) and audio level crossings, which need the engine's data triggers and audio reader. |
 
+<a id="ptz"></a>
+## PTZ cameras
+<!-- @section
+covers = ["crates/jstream-ui/src/panels/ptz.rs", "crates/jstream-ui/src/ptz_cameras.rs"]
+-->
+
+Not in the prototype: [ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md) (PTZ heads,
+their actions and scene shots) and
+[ADR-0209](adr/0209-value-bindings-aim-ptz-cameras.md) (the desktop app's camera list,
+the panel, and value bindings that aim a head).
+
+| ID | Feature | Requirement | Status | Notes |
+|---|---|---|---|---|
+| PZ-01 | Camera list | Add, edit and remove the machine's PTZ cameras in the desktop app, with a switch. | ✅ | Settings › Devices, "Control PTZ cameras" (`ptz_cameras.rs`): name, address and port (VISCA over IP's 52381 added when left out), transport and VISCA address, with Edit and Remove; saved by the app's own command, which checks the list as the engine would and applies it at once. In a browser the list is the daemon's `--ptz-camera`, and the page shows nothing. |
+| PZ-02 | PTZ panel | Pick a camera, see whether it answers, and pan, tilt, zoom and focus it at a chosen speed. | ✅ | A dock panel, "PTZ cameras", by default on the right (`panels/ptz.rs`), reading `ptz.list` twice a second while shown. Eight arrows around Home drive while held (`ptz.drive`) and stop on release, on leaving, when the focus leaves the pad or the window, and when the panel closes; the arrow keys drive the focused pad. Wide and Tele, focus Auto, One push and Manual with Near and Far, and one Speed, 1 to 24. The gear opens the camera list; with none listed an empty state says how to add one. |
+| PZ-03 | Presets | Recall and save presets, name them, and recall one from a key. | ✅ | Buttons 1 to 16 and a field for 0 to 127. A click recalls (`ptz.recall`); Save arms the next click to store (`ptz.store`), Esc disarms. A preset's menu recalls, saves, names it (kept per machine in the UI settings, `ptz.preset_names`), sets or removes the key that recalls it (`hotkey.set`), and makes it the selected scene's shot. |
+| PZ-04 | Position and mapping | Show and type the head's pose, and map a controller or channel to an axis. | ✅ | Pan, tilt, zoom and focus as the head last answered, each a number field that aims it there (`ptz.aim`, pan and tilt together), each with the control button ([VC-01](#automation)) on a `ptz_axis` value target (protocol 0.181), over a typical head's range. |
+| PZ-05 | Scene shot | Show and set the selected scene's shot of the camera. | ✅ | "Shot in …" with Use position (the head's pose now) and Clear, and a preset's Use as scene shot, sent as `scene.set_ptz_shots` with the scene's other shots kept. |
+
 <a id="keyboard"></a>
 ## Keyboard
 <!-- @section
@@ -578,7 +598,9 @@ not remove them; they move into the prototype's look.
   this sender's state" ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md), on
   once the sender is accepted, until unticked), saved the same
   way, with the senders heard on the network, each accepted only after a confirmation,
-  then "Accept a PTZ controller" with its endpoints and allowed controllers
+  then "Control PTZ cameras" with the machine's camera list ([PZ-01](#ptz),
+  `ptz_cameras.rs`), which applies at once, then "Accept a PTZ controller" with its
+  endpoints and allowed controllers
   ([ADR-0153](adr/0153-ptz-controller-idle-stop-counters-and-setting.md),
   `ptz_controllers.rs`), saved the same way.
   It is the

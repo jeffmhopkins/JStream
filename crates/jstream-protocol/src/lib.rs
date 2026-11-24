@@ -64,8 +64,8 @@ pub use audio::{
     gain_db_problem,
 };
 pub use binding::{
-    Binding, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo, Trigger, ValueBinding,
-    ValueTarget,
+    Binding, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo, PtzAxis, Trigger,
+    ValueBinding, ValueTarget,
 };
 pub use camera_aim::{
     CameraAim, CameraAimInfo, MAX_AIM_PAN_DEG, MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, camera_aim_check,

@@ -7598,6 +7598,8 @@ impl State {
         if changed && self.refresh_shown() {
             self.redraw();
         }
+        // The PTZ axes the bindings drive (ADR-0209): aims, never edits.
+        self.ptz.follow_axes(self.driver.aims());
         // The triggers last, so a channel trigger sees this tick's value.
         let program = self.studio.program().cloned();
         let orders = self.sequences.check(

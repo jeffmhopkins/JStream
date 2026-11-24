@@ -423,7 +423,8 @@ source; a source's or a bus's fader; a send), use a value binding: `binding.set_
 with a `binding_id`, the `midi` or `data` fields a modifier takes (`kind`, `controller`, \
 `channel`, `input`, `smoothing_ms`, `curve`, `from`, `to`), and a `target` \
 (`source_setting` or `filter_setting` with its `param`, `source_gain`, `bus_gain`, \
-`send_gain`). Its value replaces the setting, in the setting's unit and kept within its \
+`send_gain`, or `ptz_axis` with a PTZ `camera` name and an `axis`: `pan`, `tilt`, `zoom` or \
+`focus`, in the head's own counts, which aims the head rather than changing a setting). Its value replaces the setting, in the setting's unit and kept within its \
 range (a fader in dB, so `from` -60 and `to` 0 is a usable throw; a `bool` is on at one \
 half), once the control first moves, so the project opens as saved; nothing is stored, \
 and `binding.clear_value` hands the setting back. Only `live` settings take one \

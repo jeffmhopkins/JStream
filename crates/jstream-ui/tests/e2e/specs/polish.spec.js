@@ -76,6 +76,7 @@ test('the View menu lists all fourteen panels, and adds one that waits on the en
   await expect(view.getByRole('menuitemcheckbox')).toHaveText([
     /Scenes/, /Sources/, /Inspector/, /Arrange/, /Filters/, /Live chat/, /Stream stats/,
     /Audio mixer/, /Outputs/, /Agent activity/, /Transitions/, /Channels/, /Sequence/, /Mappings/,
+    /PTZ cameras/,
   ]);
   const chat = view.getByRole('menuitemcheckbox', { name: /Live chat/ });
   await expect(chat).toHaveAttribute('aria-checked', 'false');

@@ -30,7 +30,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
   `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
   audio, so they get mixer channels), and the encoder profile `High quality`. It has no outputs. It stops
-  when its standard input closes. Given `--agent-token <token>`, it serves as the
+  when its standard input closes. Each `--ptz-camera <name>` lists a PTZ camera,
+  reachable at home, which `ptz.*` actions move (`MockEngine::with_ptz_cameras`). Given `--agent-token <token>`, it serves as the
   desktop app does with agents on: the page's `--token` is the window's token, the
   agent token is the one an agent presents, and the server asks before a new agent
   connects, keeping the always-allowed ones in memory. It is a crate of its own because `jstream-ui` (layer
@@ -517,6 +518,17 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   tab, which makes its channel, shown in the Mappings tab as "Camera roll (Mod 20)" with
   the Mod's live value; and the Triggers tab saying nothing runs yet and no sequence
   starts by itself, then binding F8 to switch to Intro.
+- **PTZ cameras** (`ptz.spec.js`, [ADR-0209](../../../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)):
+  with no camera listed, the panel's empty state naming `--ptz-camera`; with two
+  (`--ptz-camera`), the picker, the head answering, a typed zoom aiming it, the control
+  button on each axis, a preset named and saved from its menu and Save, and the selected
+  scene's shot set from the position and from a preset, then cleared, with the other
+  camera keeping its own pose; a drive held on the pad's arrow key stopped when the
+  focus leaves the pad, and a held Near stopped when the focus leaves it, read off the
+  page's WebSocket; and as the desktop app (its global stubbed, as
+  `browse.spec.js` does), the gear opening Settings › Devices' camera list, a camera
+  added without a port saved with VISCA over IP's, and a name taken already refused
+  unsaved.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
