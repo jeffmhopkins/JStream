@@ -1107,7 +1107,8 @@ fn depth_of_field(camera: &mut SceneCamera, on: bool) {
 
 /// Turns `camera`'s fixed aperture on or off (ADR-0223), keeping the blur it draws with
 /// at its zoom and focus now: on, `blur_px` becomes the aperture that blurs by it here;
-/// off, the blur the aperture gives here. Either at most [`MAX_BLUR_PX`].
+/// off, the blur the aperture gives here. Either at most [`MAX_BLUR_PX`], so at an
+/// extreme zoom or focus, where the blur kept would need more, it draws less than before.
 fn real_lens(camera: &mut SceneCamera, on: bool, height: u32) {
     if camera.fixed_aperture != on
         && let Some(focus) = camera.focus_px
