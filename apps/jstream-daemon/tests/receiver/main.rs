@@ -250,14 +250,16 @@ impl Fakes {
     }
 
     /// The fakes, with the codecs and GPU interop the daemon builds on macOS
-    /// (`serve.rs`): VideoToolbox and AudioToolbox, and no interop, so the engine
-    /// composites on a Metal device of its own and reads the program back for the
-    /// encoders.
+    /// (`serve.rs`): VideoToolbox and AudioToolbox, and the Metal interop, whose device
+    /// the engine composites on; it reads the program back for the encoders.
     #[cfg(target_os = "macos")]
     fn backends(&self, _dir: &Path) -> (Backends, &'static str) {
-        use jstream_platform_macos::{NoGpuInterop, VideoToolboxCodecs};
+        use jstream_platform_macos::{MetalGpu, VideoToolboxCodecs};
         (
-            self.with(Arc::new(VideoToolboxCodecs::new()), Arc::new(NoGpuInterop)),
+            self.with(
+                Arc::new(VideoToolboxCodecs::new()),
+                Arc::new(MetalGpu::new()),
+            ),
             "VideoToolbox H.264",
         )
     }

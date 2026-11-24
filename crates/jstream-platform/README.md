@@ -339,6 +339,12 @@ reached through `Codecs::on_context` imports each one as a surface and waits for
 value. A device that can't export them has none. On one whose render node no VA-API
 encoder runs on, `Codecs::on_context` gives no GPU encoder, and the engine encodes CPU
 frames ([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
+On macOS, `MetalGpu` opens the device on Metal, and ScreenCaptureKit capture
+(`ScreenCaptureKitCapture::on_context`) wraps each frame's own IOSurface as a texture,
+with no copy; its `FrameSync` signals the context's shared event after render's read,
+and the frame keeps its pixel buffer until the event gets there. It has no encode
+targets yet, so the encoders take CPU frames
+([jstream-platform-macos](../jstream-platform-macos/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -368,7 +374,8 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
       then integrated before discrete, with NV12 only where it can export encode
       targets. A capture whose frames don't import on it falls back to CPU frames, and
       an encoder on another GPU leaves the context without GPU encode, so a hybrid
-      machine is not reported.
+      machine is not reported. On macOS (`MetalGpu`) it is the high-performance Metal
+      adapter, and the `AdapterId`'s `luid` is the Metal device's IORegistry ID.
     - `jstream-render` uses this device when the engine has one, so capture, render and
       encode share one adapter. With no interop it opens its own, hardware adapter first
       with the software one as the fallback.

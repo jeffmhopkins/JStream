@@ -14,8 +14,9 @@
 //! through AVFoundation, behind the Camera permission (`AvFoundationVideoDevices`), the
 //! VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
 //! `split_access_unit` and its frames put in presentation order by `Reorder`, and
-//! local media files through AVFoundation's asset reader (`AvMediaDecoders`), with a
-//! stand-in for the GPU interop not built yet (`NoGpuInterop`), the process's CPU
+//! local media files through AVFoundation's asset reader (`AvMediaDecoders`), the GPU
+//! interop on Metal (`MetalGpu`), whose device capture delivers IOSurface frames to with
+//! no copy, a stand-in with no device (`NoGpuInterop`), the process's CPU
 //! time (`MacosProcessCpu`) and its threads' (`MacosThreadCpu`), and for the desktop app
 //! its global hotkeys (`GlobalHotkeys`: Carbon hotkeys, and a Quartz event tap for wheel
 //! chords behind the Accessibility permission) and its Browse dialogs (`pick_path`,
@@ -28,7 +29,7 @@
 //! exist only on macOS. On other platforms the crate builds its platform-independent
 //! helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-macos/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0063-macos-platform-support.md, docs/adr/0144-the-desktop-app-on-macos.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0014-media-clock.md
+//! Docs: crates/jstream-platform-macos/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, docs/adr/0063-macos-platform-support.md, docs/adr/0144-the-desktop-app-on-macos.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0014-media-clock.md
 
 mod aac;
 mod annexb;
@@ -43,6 +44,7 @@ mod codec;
 mod decode;
 mod dialog;
 mod fourcc;
+mod gpu;
 mod hotkeys;
 mod keychain;
 mod media_file;
@@ -85,6 +87,8 @@ pub use fourcc::{
     CV_420V, CV_BGRA, CV_RGBA, CV_X420, CV_Y420, cv_pixel_format, fourcc, fourcc_str, os_status,
     pixel_format_from_cv,
 };
+#[cfg(target_os = "macos")]
+pub use gpu::MetalGpu;
 #[cfg(target_os = "macos")]
 pub use hotkeys::GlobalHotkeys;
 pub use hotkeys::Held as HotkeyHeld;
