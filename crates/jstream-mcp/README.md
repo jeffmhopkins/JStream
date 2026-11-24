@@ -146,7 +146,8 @@ itself, #1107), the `preview` actions, `scene.zoom_camera`
 puts back and nothing stores), `scene.drive_camera` and `scene.aim_camera`
 ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md), which another
 aim puts back and nothing stores), `source.restart` (ADR-0115, which a switch to a scene
-that restarts on show does too), `scene.set_keyframe`
+that restarts on show does too), `source.seek` (which plays a video on from a point,
+and another seek puts back), `scene.set_keyframe`
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md), which another switch puts back
 and nothing stores), `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the

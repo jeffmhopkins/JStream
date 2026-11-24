@@ -1029,6 +1029,7 @@ impl Studio {
                 source_id,
                 size,
                 depth,
+                ..
             } => {
                 // Only a change of depth touches the depths, so a resize of a flat
                 // source doesn't re-lay the canvas twice.
@@ -1556,11 +1557,13 @@ mod tests {
                     height: 360,
                 }),
                 depth: None,
+                duration_ms: None,
             },
             SourceSize {
                 source_id: SourceId::new("dark"),
                 size: None,
                 depth: None,
+                duration_ms: None,
             },
         ]);
         assert_eq!(sizes.len(), 1, "a source with no size is left out");

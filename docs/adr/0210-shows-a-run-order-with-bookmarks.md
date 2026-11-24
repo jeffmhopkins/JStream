@@ -72,7 +72,8 @@ no new way of doing anything, only a saved order of the actions that exist.
 4. **Bookmarks** are named points in show time, pausing (the default) or non-pausing, in
    time order with no two at one time. A pausing bookmark stops the show until Continue,
    and may continue by itself after `continue_after_ms`. Each has an "arrive with" preset
-   for jumps to it, a name and an operator's note. The show's own `preset_id` is the
+   for jumps to it, a name, and show notes for the operator: Markdown, up to 16 KiB, which
+   the Run view shows in an expandable panel. The show's own `preset_id` is the
    default for jumps and loop wraps.
 
 5. **Continue is one bindable action**, `show.continue`: waiting at a pausing bookmark, or where `show.pause` held it, it

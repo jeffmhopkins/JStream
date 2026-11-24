@@ -1,5 +1,5 @@
 //! Shows ([ADR-0210](../../../docs/adr/0210-shows-a-run-order-with-bookmarks.md), since
-//! 0.177): a saved run order of scenes, laid out on tracks in show time, with bookmarks
+//! 0.178): a saved run order of scenes, laid out on tracks in show time, with bookmarks
 //! the show pauses at or jumps to, and loops.
 //!
 //! A show is a collection object (`show.set`, `show.delete`, listed in `state.get`'s
@@ -35,8 +35,9 @@ pub const MAX_SHOW_BOOKMARKS: usize = 256;
 pub const MAX_SHOW_LOOPS: usize = 64;
 /// The longest show name, and the longest name of a track, bookmark or loop, in bytes.
 pub const MAX_SHOW_NAME_LEN: usize = 256;
-/// The longest note on a bookmark, in bytes.
-pub const MAX_SHOW_NOTE_LEN: usize = 1024;
+/// The longest note on a bookmark, in bytes: 16 KiB of Markdown, room for a segment's
+/// show notes.
+pub const MAX_SHOW_NOTE_LEN: usize = 16_384;
 /// The longest fade an audio clip takes in or out, in milliseconds.
 pub const MAX_SHOW_FADE_MS: u32 = 60_000;
 /// The longest a pausing bookmark waits before it continues by itself, in milliseconds:
@@ -317,7 +318,8 @@ pub struct ShowBookmark {
     /// one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continue_after_ms: Option<u32>,
-    /// A note for the operator, at most 1024 bytes. Omitted means empty.
+    /// The bookmark's show notes for the operator, in Markdown (CommonMark), at most
+    /// 16 KiB, which the Run view shows in an expandable panel. Omitted means empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
 }
@@ -684,7 +686,7 @@ impl ShowInfo {
                 return Some((format!("{at}.name"), "must be at most 256 bytes".into()));
             }
             if bookmark.note.len() > MAX_SHOW_NOTE_LEN {
-                return Some((format!("{at}.note"), "must be at most 1024 bytes".into()));
+                return Some((format!("{at}.note"), "must be at most 16384 bytes".into()));
             }
             match bookmark.continue_after_ms {
                 Some(_) if !bookmark.pausing => {
