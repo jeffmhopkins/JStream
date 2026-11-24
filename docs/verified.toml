@@ -8559,7 +8559,7 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
 
 ["INTEGRATION-streamdeck#build"."body"]
-stamp = { hash = "b3:3a3185e70a73355a", by = "agent:claude", note = "plugin.test.ts: a key with no show picked plays the show open in JStream (show.open) and follows it when another opens. | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:d0d850f641419760", by = "agent:claude", note = "plugin test now checks program lands on the keyframe scene, and the Go to keyframe key's switch and placed paths | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/package.json"]
 stamp = { hash = "b3:d67843ed82f78f37", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
@@ -8577,7 +8577,7 @@ stamp = { hash = "b3:a8b6e42e72f1dd6b", by = "agent:claude", note = "daemon test
 stamp = { hash = "b3:c9b45998b6182c09", by = "agent:claude", note = "tests added: daemon test for deny then allow via askToPair, plugin test pairs by ask; commands unchanged" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/plugin.test.ts"]
-stamp = { hash = "b3:d799cb1f042d3c1a", by = "agent:claude", note = "tests added: daemon test for deny then allow via askToPair, plugin test pairs by ask; commands unchanged | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:9008954806426a51", by = "agent:claude", note = "plugin test now checks program lands on the keyframe scene, and the Go to keyframe key's switch and placed paths | kept from the merged side: daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#build"."file:integrations/streamdeck/test/unit.test.ts"]
 stamp = { hash = "b3:4a9bcd854ebb2994", by = "agent:claude", note = "daemon test finds the daemon by mDNS and checks a changed certificate isn't retried; plugin.test's keyframe scene key; tslib 0BSD noted; 12 of 12 against the daemon (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
@@ -8595,7 +8595,7 @@ stamp = { hash = "b3:4458a76284b426ae", by = "agent:streamdeck-thread", note = "
 stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/actions/index.ts"]
-stamp = { hash = "b3:9eac583ee3f1cfb4", by = "agent:claude", note = "Live state: show.open read with ui_settings.get every 2 s while a show key is visible and on a press; discovery lists one entry per instance and address. | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:ce468cad74d7a55a", by = "agent:claude", note = "actions/index.ts change is the keyframe keys' calls and lit state; design bullets (live state, key images) still hold | kept from the merged side: client.ts stops on FingerprintMismatch like a 401; listener limit 50; sceneKeyframes list; discovery cites ADR-0233 (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#design"."file:integrations/streamdeck/src/hub.ts"]
 stamp = { hash = "b3:b17f9b1451bbb679", by = "agent:claude", note = "Pairing bullet: no ask while paired, a code pairing aborts the ask (hub.ts AbortController), 503 message in tls.ts" }
@@ -8640,13 +8640,13 @@ stamp = { hash = "b3:f3932e429559f2cf", by = "agent:claude", note = "step 4 is n
 stamp = { hash = "b3:fc1fa0f22ddceea3", by = "agent:claude", note = "step 4 is now Allow it in JStream, with Use a code instead as the fallback the panel offers on deny/timeout/old JStream | kept from the merged side: Forget says the device stays paired in JStream until revoked; a changed certificate stops retries; Find JStream names the announcement setting and --lan-quiet; Go to keyframe name (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#keys"."body"]
-stamp = { hash = "b3:1317f3bd398d4ba7", by = "agent:claude", note = "Show row: Selected show (running, else the Show panel's open show, else the only one) for keys with no show picked. | kept from the merged side: Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:a322561f61aeaf1a", by = "agent:claude", note = "Switch scene with a keyframe now switches program to the keyframe scene; Go to keyframe switches within its family on program, else scene.set_keyframe (ADR-0116: set_keyframe only affects where a scene is placed) | kept from the merged side: Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/base.ts"]
 stamp = { hash = "b3:2a1dd344a5b3c0cb", by = "agent:streamdeck-thread", note = "new section: re-read against the plugin's manifest, inspector, actions, client and tests; the daemon and plugin tests pass against jstream-daemon --lan" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/actions/index.ts"]
-stamp = { hash = "b3:9eac583ee3f1cfb4", by = "agent:claude", note = "Show row: Selected show (running, else the Show panel's open show, else the only one) for keys with no show picked. | kept from the merged side: Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
+stamp = { hash = "b3:ce468cad74d7a55a", by = "agent:claude", note = "Switch scene with a keyframe now switches program to the keyframe scene; Go to keyframe switches within its family on program, else scene.set_keyframe (ADR-0116: set_keyframe only affects where a scene is placed) | kept from the merged side: Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
 ["INTEGRATION-streamdeck#keys"."file:integrations/streamdeck/src/lists.ts"]
 stamp = { hash = "b3:335639140afddd29", by = "agent:claude", note = "Switch scene's keyframe option and Go to keyframe (never creates one), checked against index.ts (re-stamped after merging the train, whose changes don't touch this section's inputs)" }

@@ -149,9 +149,19 @@ async function selectedShowNow(live: Live): Promise<string | undefined> {
 
 type SceneSettings = { scene_id?: string; preset_id?: string; keyframe_id?: string };
 
+/** Whether `sceneId` is `familyId` or one of its keyframe scenes. */
+function inFamily(live: Live, sceneId: string | null | undefined, familyId: string): boolean {
+	if (!sceneId) return false;
+	if (sceneId === familyId) return true;
+	return live.state.scenes.some((x) => x.scene_id === sceneId && x.variant_of === familyId);
+}
+
 /**
- * Switches program to a scene, optionally at one of its keyframes. Lit red while it's on
- * program (at that keyframe, when one is picked), green while on preview.
+ * Switches program to a scene, or straight to one of its keyframe scenes. A keyframe
+ * scene is a scene of its own on program, and switching to it from its family plays as a
+ * Move (ADR-0049); `scene.set_keyframe` only changes where another scene places it
+ * (ADR-0116), so it would leave program as it was. Lit red while it's on program (that
+ * keyframe, when one is picked), green while on preview.
  */
 @action({ UUID: `${PLUGIN}.scene` })
 export class SceneAction extends JStreamAction<SceneSettings> {
@@ -162,30 +172,25 @@ export class SceneAction extends JStreamAction<SceneSettings> {
 		const keyframe = s.keyframe_id ? live.state.scenes.find((x) => x.scene_id === s.keyframe_id && x.variant_of === scene.scene_id) : undefined;
 		if (s.keyframe_id && !keyframe) return { glyph: "scene", look: "unset", title: "Pick a\nkeyframe" };
 		const title = fitTitle(keyframe ? keyframe.name : scene.name);
-		const atKeyframe = !keyframe || (live.studio.keyframes ?? []).some((k) => k.keyframe_id === keyframe.scene_id);
-		if (live.studio.program_scene === scene.scene_id) {
-			return { glyph: "scene", look: atKeyframe ? "on" : "off", color: COLORS.program, title };
+		if (keyframe) {
+			if (live.studio.program_scene === keyframe.scene_id) return { glyph: "scene", look: "on", color: COLORS.program, title };
+			if (live.studio.preview_scene === keyframe.scene_id) return { glyph: "scene", look: "on", color: COLORS.preview, title };
+			return { glyph: "scene", look: "off", title };
 		}
-		if (live.studio.preview_scene === scene.scene_id) return { glyph: "scene", look: "on", color: COLORS.preview, title };
+		if (inFamily(live, live.studio.program_scene, scene.scene_id)) return { glyph: "scene", look: "on", color: COLORS.program, title };
+		if (inFamily(live, live.studio.preview_scene, scene.scene_id)) return { glyph: "scene", look: "on", color: COLORS.preview, title };
 		return { glyph: "scene", look: "off", title };
 	}
 
 	protected async press(s: SceneSettings, live: Live): Promise<void> {
 		if (!s.scene_id) throw new Error("no scene picked");
+		let target = s.scene_id;
 		if (s.keyframe_id) {
 			const keyframe = live.state.scenes.find((x) => x.scene_id === s.keyframe_id && x.variant_of === s.scene_id);
 			if (!keyframe) throw new Error("no keyframe picked");
-			const place: Action = { type: "scene.set_keyframe", scene_id: s.scene_id, keyframe_id: keyframe.scene_id };
-			if (live.studio.program_scene === s.scene_id) {
-				// Already on program: move it to the keyframe with the transition.
-				if (s.preset_id) place.preset_id = s.preset_id;
-				await client.action(place);
-				return;
-			}
-			// Placed first, so the scene goes live already in the keyframe's pose.
-			await client.action(place);
+			target = keyframe.scene_id;
 		}
-		const a: Action = { type: "scene.switch", scene_id: s.scene_id };
+		const a: Action = { type: "scene.switch", scene_id: target };
 		if (s.preset_id) a.preset_id = s.preset_id;
 		await client.action(a);
 	}
@@ -193,21 +198,32 @@ export class SceneAction extends JStreamAction<SceneSettings> {
 
 type KeyframeSettings = { keyframe_id?: string; preset_id?: string };
 
-/** Moves a scene to one of its keyframes (Go to keyframe). Lit while it is at that keyframe. */
+/**
+ * Moves a scene to one of its keyframes (Go to keyframe). While its scene or another of
+ * its keyframes is on program, it switches program to the keyframe, which plays as a
+ * Move; otherwise it sets the keyframe the scene is drawn through where other scenes
+ * place it (`scene.set_keyframe`, ADR-0116). Lit while program shows it, or while it is
+ * the placed keyframe.
+ */
 @action({ UUID: `${PLUGIN}.keyframe` })
 export class KeyframeAction extends JStreamAction<KeyframeSettings> {
 	protected view(s: KeyframeSettings, live: Live | undefined): View {
 		if (!live) return { glyph: "keyframe", look: "offline" };
 		const keyframe = live.state.scenes.find((x) => x.scene_id === s.keyframe_id && x.variant_of);
 		if (!keyframe) return { glyph: "keyframe", look: "unset", title: "Pick a\nkeyframe" };
-		const placed = (live.studio.keyframes ?? []).some((k) => k.keyframe_id === keyframe.scene_id);
-		return { glyph: "keyframe", look: placed ? "on" : "off", color: COLORS.keyframe, title: fitTitle(keyframe.name) };
+		const shown =
+			live.studio.program_scene === keyframe.scene_id ||
+			(!inFamily(live, live.studio.program_scene, keyframe.variant_of!) &&
+				(live.studio.keyframes ?? []).some((k) => k.keyframe_id === keyframe.scene_id));
+		return { glyph: "keyframe", look: shown ? "on" : "off", color: COLORS.keyframe, title: fitTitle(keyframe.name) };
 	}
 
 	protected async press(s: KeyframeSettings, live: Live): Promise<void> {
 		const keyframe = live.state.scenes.find((x) => x.scene_id === s.keyframe_id && x.variant_of);
 		if (!keyframe) throw new Error("no keyframe picked");
-		const a: Action = { type: "scene.set_keyframe", scene_id: keyframe.variant_of, keyframe_id: keyframe.scene_id };
+		const a: Action = inFamily(live, live.studio.program_scene, keyframe.variant_of!)
+			? { type: "scene.switch", scene_id: keyframe.scene_id }
+			: { type: "scene.set_keyframe", scene_id: keyframe.variant_of, keyframe_id: keyframe.scene_id };
 		if (s.preset_id) a.preset_id = s.preset_id;
 		await client.action(a);
 	}
