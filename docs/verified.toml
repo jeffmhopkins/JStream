@@ -8538,7 +8538,7 @@ stamp = { hash = "b3:b3c1af2c942651ae", by = "agent:dxc-packaging", note = 'The 
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:0c6f219f41b3ab74", by = "agent:release-alpha11", note = "Workspace version is 0.1.0-alpha.11 (Cargo.toml, Cargo.lock via cargo update -w); the runbook's version section reads it from Cargo.toml and holds" }
+stamp = { hash = "b3:65228e1589533ca7", by = "agent:release-alpha13", note = "Re-read against the bump to 0.1.0-alpha.13 in Cargo.toml (and Cargo.lock's six workspace apps): the section names no version number, and the apps still take it with version.workspace. alpha.12 was skipped at the maintainer's request, which the SemVer pre-release scheme it describes allows." }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
