@@ -1248,7 +1248,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   moved camera rather than the stored one, with none before any frame, none for a 2D
   scene and `not_found` for a missing one (GPU, skipped without an adapter); and the
   recorder's publishes (at most every `PUBLISH_MIN`, again every `REFRESH_EVERY`, a
-  scene no longer drawn gone, a stopped drawer stale, the most recent drawer winning).
+  scene no longer drawn gone, a stopped drawer stale, the most recent drawer winning, and
+  a steady frame keeping each scene's entry in place and publishing nothing).
 - **PTZ controllers and the live aim** (`src/ptz/controller/tests.rs`, `src/aim/tests.rs`,
   `src/tests/cameras.rs`, `src/tests/transitions.rs`): a VISCA controller emulator on
   loopback over all three transports, driving, aiming, zooming and reading a keyframe

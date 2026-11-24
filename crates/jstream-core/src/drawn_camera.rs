@@ -8,8 +8,9 @@
 //! publishes the frame's cameras into its [`DrawerSlot`](crate::profile::DrawerSlot) as
 //! one immutable [`DrawnCameras`], when they change, at most every [`PUBLISH_MIN`], and
 //! again every [`REFRESH_EVERY`] while they don't, so a reader can tell a scene still
-//! drawn from one no longer drawn. A steady frame allocates nothing; the set it replaces
-//! goes where the caller says (the render thread's collector, R-RT-003).
+//! drawn from one no longer drawn. It keeps each scene's entry from frame to frame, so a
+//! frame between publishes allocates nothing; the set a publish replaces goes where the
+//! caller says (the render thread's collector, R-RT-003).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -35,65 +36,93 @@ pub(crate) struct DrawnCameras {
     pub(crate) cameras: BTreeMap<SceneId, SceneCamera>,
 }
 
-/// A drawer's side: the cameras of the frame being drawn, and what it published last.
+/// A drawer's side: each scene's camera as drawn last, kept from frame to frame so a
+/// steady frame allocates nothing, and when it published last.
 #[derive(Debug, Default)]
 pub(crate) struct CameraRecorder {
-    frame: BTreeMap<SceneId, SceneCamera>,
-    /// The cameras last published and when, or `None` before the first publish.
-    sent: Option<(Instant, BTreeMap<SceneId, SceneCamera>)>,
+    /// Each scene drawn since the last publish: its camera as drawn last, and whether
+    /// the frame being drawn drew it.
+    held: BTreeMap<SceneId, Held>,
+    /// Whether the cameras differ from the ones published last: a scene's camera moved,
+    /// a scene is new, or a scene went undrawn.
+    changed: bool,
+    /// When the cameras were published last, or `None` before the first publish.
+    sent: Option<Instant>,
+}
+
+#[derive(Debug)]
+struct Held {
+    camera: SceneCamera,
+    seen: bool,
 }
 
 impl CameraRecorder {
     /// Notes that the frame being drawn drew `scene` through `camera`; a 2D scene's pass,
-    /// `None`, notes nothing.
+    /// `None`, notes nothing. A scene drawn twice in one frame (on program and nested in
+    /// another scene) keeps the camera of its last pass, which is the same camera unless
+    /// the two passes move it differently.
     pub(crate) fn drew(&mut self, scene: &SceneId, camera: Option<SceneCamera>) {
         let Some(camera) = camera else {
             return;
         };
-        // The entry nearly always exists: clone the scene only to insert it.
-        match self.frame.get_mut(scene) {
-            Some(held) => *held = camera,
+        // A scene drawn last frame is updated in place: the key is cloned only for a
+        // scene new since the last publish.
+        match self.held.get_mut(scene) {
+            Some(held) => {
+                if held.camera != camera {
+                    held.camera = camera;
+                    self.changed = true;
+                }
+                held.seen = true;
+            }
             None => {
-                self.frame.insert(scene.clone(), camera);
+                self.held.insert(scene.clone(), Held { camera, seen: true });
+                self.changed = true;
             }
         }
     }
 
-    /// Ends the frame drawn: publishes its cameras into `slot` when they changed and
-    /// [`PUBLISH_MIN`] has passed since the last publish, or [`REFRESH_EVERY`] has, and
-    /// hands the set it replaces to `retire`. Then starts the next frame empty.
+    /// Ends the frame drawn: publishes the cameras it drew into `slot` when they changed
+    /// and [`PUBLISH_MIN`] has passed since the last publish, or [`REFRESH_EVERY`] has,
+    /// and hands the set it replaces to `retire`. Only a publish allocates (the set it
+    /// publishes) and drops the scenes this frame didn't draw.
     pub(crate) fn end_frame(
         &mut self,
         now: Instant,
         slot: Option<&ArcSwapOption<DrawnCameras>>,
         retire: impl FnOnce(Arc<DrawnCameras>),
     ) {
-        let due = match &self.sent {
-            None => !self.frame.is_empty(),
-            Some((at, sent)) => {
-                let since = now.saturating_duration_since(*at);
-                since >= REFRESH_EVERY || (since >= PUBLISH_MIN && *sent != self.frame)
+        if self.held.values().any(|held| !held.seen) {
+            self.changed = true;
+        }
+        let due = match self.sent {
+            None => self.held.values().any(|held| held.seen),
+            Some(at) => {
+                let since = now.saturating_duration_since(at);
+                since >= REFRESH_EVERY || (since >= PUBLISH_MIN && self.changed)
             }
         };
         if due {
-            match &mut self.sent {
-                Some((at, sent)) => {
-                    *at = now;
-                    sent.clone_from(&self.frame);
-                }
-                None => self.sent = Some((now, self.frame.clone())),
-            }
+            self.held.retain(|_, held| held.seen);
+            self.sent = Some(now);
+            self.changed = false;
             if let Some(slot) = slot {
                 let published = Arc::new(DrawnCameras {
                     at: now,
-                    cameras: self.frame.clone(),
+                    cameras: self
+                        .held
+                        .iter()
+                        .map(|(scene, held)| (scene.clone(), held.camera))
+                        .collect(),
                 });
                 if let Some(old) = slot.swap(Some(published)) {
                     retire(old);
                 }
             }
         }
-        self.frame.clear();
+        for held in self.held.values_mut() {
+            held.seen = false;
+        }
     }
 }
 
@@ -195,6 +224,33 @@ mod tests {
             latest([&slot], &scene("a"), at + FRESH_FOR + PUBLISH_MIN),
             None
         );
+    }
+
+    #[test]
+    fn a_steady_frame_keeps_its_entries_and_publishes_nothing() {
+        let slot = ArcSwapOption::empty();
+        let mut recorder = CameraRecorder::default();
+        let start = Instant::now();
+        recorder.drew(&scene("a"), Some(camera(1.0)));
+        recorder.end_frame(start, Some(&slot), drop);
+        // Between publishes the entry stays, updated in place: no scene is inserted
+        // again (no key cloned, no node made), and an unchanged camera changes nothing.
+        let key = recorder.held.keys().next().map(std::ptr::from_ref);
+        for frame in 1..4 {
+            recorder.drew(&scene("a"), Some(camera(1.0)));
+            let mut published = false;
+            recorder.end_frame(start + PUBLISH_MIN * frame, Some(&slot), |_| {
+                published = true;
+            });
+            assert!(!published, "nothing changed and no refresh is due");
+            assert!(!recorder.changed);
+            assert_eq!(recorder.held.len(), 1);
+            assert_eq!(
+                recorder.held.keys().next().map(std::ptr::from_ref),
+                key,
+                "the same entry, not a new one"
+            );
+        }
     }
 
     #[test]
