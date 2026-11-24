@@ -1328,6 +1328,8 @@ mod tests {
                 source_id: SourceId::new(source),
             },
             amount: None,
+            enabled: true,
+            mode: jstream_control::protocol::MappingMode::Replace,
         }
     }
 
