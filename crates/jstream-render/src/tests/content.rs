@@ -853,6 +853,82 @@ fn a_layer_is_drawn_again_only_when_what_it_draws_has_changed() {
     super::near(&again, 6, 8, [0, 0, 0, 255], 0);
 }
 
+/// A kept layer whose still loses its texture for a tick, and gets a new one of the
+/// same pixels the tick after, shows the still again: the item left out is a draw
+/// fewer, and the new image is never the one the layer was kept with, even with as
+/// many draws in the same places. Both blending spaces.
+#[test]
+fn a_kept_layer_shows_a_still_again_after_its_texture_was_missing() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let canvas = FrameSize::new(32, 32).expect("invariant: non-zero");
+    let red = [255, 0, 0, 255];
+    let green = [0, 255, 0, 255];
+    for blending in [Blending::Linear, Blending::Srgb] {
+        compositor.set_blending(blending);
+        let layer = compositor.layer(32, 32).expect("layer");
+        let back = solid(compositor, 2, 2, green);
+        let mut kept = compositor.kept_layers();
+        // Draws the green square, and the red still when it has a texture; says
+        // whether the layer was left as it was.
+        let mut draw = |compositor: &mut Compositor, still: Option<&Image>| {
+            let mut items = vec![item(
+                &back,
+                at([4.0, 6.0], [4.0, 4.0], 0.0),
+                Crop::NONE,
+                1.0,
+            )];
+            if let Some(still) = still {
+                items.push(item(
+                    still,
+                    at([20.0, 6.0], [4.0, 4.0], 0.0),
+                    Crop::NONE,
+                    1.0,
+                ));
+            }
+            let scene = Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &items,
+            };
+            compositor
+                .render_into(&scene, &layer)
+                .expect("into the layer");
+            let was = kept;
+            kept = compositor.kept_layers();
+            kept > was
+        };
+        let first = solid(compositor, 2, 2, red);
+        assert!(!draw(compositor, Some(&first)), "the first draw");
+        assert!(draw(compositor, Some(&first)), "kept while nothing moves");
+        super::near(&shown(compositor, &layer), 22, 8, red, 0);
+
+        // The still's texture is gone for a tick: its item is not drawn.
+        drop(first);
+        assert!(!draw(compositor, None), "a draw fewer is drawn");
+        let without = shown(compositor, &layer);
+        super::near(&without, 22, 8, [0, 0, 0, 255], 0);
+        super::near(&without, 6, 8, green, 0);
+
+        // Its pixels are back, in a new image.
+        let again = solid(compositor, 2, 2, red);
+        assert!(!draw(compositor, Some(&again)), "the new image is drawn");
+        super::near(&shown(compositor, &layer), 22, 8, red, 0);
+        assert!(draw(compositor, Some(&again)), "and then kept");
+
+        // The same number of draws in the same places, with a new image of other
+        // pixels where the still was: never taken for the kept draw.
+        drop(again);
+        let other = solid(compositor, 2, 2, [0, 0, 255, 255]);
+        assert!(!draw(compositor, Some(&other)), "another image, same place");
+        let swapped = shown(compositor, &layer);
+        super::near(&swapped, 22, 8, [0, 0, 255, 255], 0);
+        super::near(&swapped, 6, 8, green, 0);
+    }
+}
+
 /// A scene that places a layer is drawn again when that layer was, and kept when it
 /// was kept: a nested scene that did not change costs its parents nothing either.
 #[test]

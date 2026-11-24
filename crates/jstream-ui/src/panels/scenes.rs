@@ -431,6 +431,7 @@ pub fn Scenes() -> impl IntoView {
             .unwrap_or_default();
         panel.carry.set(Some(crate::panels::show::Carry {
             scene: scene.to_string(),
+            source: None,
             name,
             x: f64::from(event.client_x()),
             y: f64::from(event.client_y()),

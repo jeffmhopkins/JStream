@@ -112,57 +112,92 @@ impl CameraMotion {
         }
         let engine_s = at.as_secs_f64();
         let shown_s = shown.map(|since| (engine_s - since.as_secs_f64()).max(0.0));
-        let mut out = camera;
-        let mut position = [0.0_f32; 3];
-        let mut target = [0.0_f32; 3];
-        let (mut pan, mut tilt) = (0.0_f64, 0.0_f64);
-        let mut autofocus = if camera.autofocus { 1.0_f32 } else { 0.0 };
-        let mut drives_autofocus = false;
+        // What the `add` modifiers add to each property, and what the last `replace`
+        // one sets it to with its amount (ADR-0203), by `CAMERA_SLOTS`' order.
+        let mut add = [0.0_f32; CAMERA_SLOTS.len()];
+        let mut set: [Option<(f32, f32)>; CAMERA_SLOTS.len()] = [None; CAMERA_SLOTS.len()];
         for (property, modifier) in self.0.iter() {
-            let value = jstream_anim::evaluate_scaled(
+            let Some(slot) = CAMERA_SLOTS.iter().position(|p| p == property) else {
+                continue;
+            };
+            let by = jstream_anim::evaluate_scaled(
                 std::slice::from_ref(modifier),
                 engine_s,
                 shown_s,
                 |_| None,
                 &heard,
                 &amount,
-            )
-            .x;
-            let value = value as f32;
-            match property {
-                CameraProperty::PositionX => position[0] += value,
-                CameraProperty::PositionY => position[1] += value,
-                CameraProperty::PositionZ => position[2] += value,
-                CameraProperty::TargetX => target[0] += value,
-                CameraProperty::TargetY => target[1] += value,
-                CameraProperty::TargetZ => target[2] += value,
-                CameraProperty::Fov => {
-                    out.fov_deg = finite(
-                        (out.fov_deg.get() + value).clamp(MIN_FOV_DEG, MAX_FOV_DEG),
-                        out.fov_deg,
-                    );
+            );
+            if modifier.replace {
+                if let Some(to) = by.set[jstream_anim::Property::X as usize] {
+                    set[slot] = Some(to);
                 }
-                CameraProperty::Roll => {
-                    out.roll_deg = finite(out.roll_deg.get() + value, out.roll_deg);
-                }
-                CameraProperty::Focus => {
-                    out.focus_px = out.focus_px.map(|f| finite((f.get() + value).max(1.0), f));
-                }
-                CameraProperty::Blur => {
-                    out.blur_px = finite(
-                        (out.blur_px.get() + value).clamp(0.0, MAX_BLUR_PX),
-                        out.blur_px,
-                    );
-                }
-                CameraProperty::Pan if value.is_finite() => pan += f64::from(value),
-                CameraProperty::Tilt if value.is_finite() => tilt += f64::from(value),
-                CameraProperty::Autofocus if value.is_finite() => {
-                    autofocus += value;
-                    drives_autofocus = true;
-                }
-                _ => {}
+            } else if by.x.is_finite() {
+                add[slot] += by.x;
             }
         }
+        // A property's own value as its `replace` modifier sets it, plus its adds.
+        let on = |property: CameraProperty, own: f32| {
+            let slot = CAMERA_SLOTS
+                .iter()
+                .position(|p| *p == property)
+                .unwrap_or(0);
+            let base = match set[slot] {
+                Some((value, weight)) => own + (value - own) * weight,
+                None => own,
+            };
+            base + add[slot]
+        };
+        let driven = |property: CameraProperty| {
+            CAMERA_SLOTS
+                .iter()
+                .position(|p| *p == property)
+                .is_some_and(|slot| set[slot].is_some() || add[slot] != 0.0)
+        };
+        let mut out = camera;
+        let p = camera.position;
+        let t = camera.target;
+        let position = [
+            on(CameraProperty::PositionX, p.x.get()) - p.x.get(),
+            on(CameraProperty::PositionY, p.y.get()) - p.y.get(),
+            on(CameraProperty::PositionZ, p.z.get()) - p.z.get(),
+        ];
+        let target = [
+            on(CameraProperty::TargetX, t.x.get()) - t.x.get(),
+            on(CameraProperty::TargetY, t.y.get()) - t.y.get(),
+            on(CameraProperty::TargetZ, t.z.get()) - t.z.get(),
+        ];
+        if driven(CameraProperty::Fov) {
+            out.fov_deg = finite(
+                on(CameraProperty::Fov, out.fov_deg.get()).clamp(MIN_FOV_DEG, MAX_FOV_DEG),
+                out.fov_deg,
+            );
+        }
+        if driven(CameraProperty::Roll) {
+            out.roll_deg = finite(on(CameraProperty::Roll, out.roll_deg.get()), out.roll_deg);
+        }
+        if driven(CameraProperty::Focus) {
+            out.focus_px = out
+                .focus_px
+                .map(|f| finite(on(CameraProperty::Focus, f.get()).max(1.0), f));
+        }
+        if driven(CameraProperty::Blur) {
+            out.blur_px = finite(
+                on(CameraProperty::Blur, out.blur_px.get()).clamp(0.0, MAX_BLUR_PX),
+                out.blur_px,
+            );
+        }
+        // The pan and tilt turn the view from where it looks, so their own value is 0.
+        let turn = |property| {
+            let v = on(property, 0.0);
+            if v.is_finite() { f64::from(v) } else { 0.0 }
+        };
+        let (pan, tilt) = (turn(CameraProperty::Pan), turn(CameraProperty::Tilt));
+        let drives_autofocus = driven(CameraProperty::Autofocus);
+        let autofocus = on(
+            CameraProperty::Autofocus,
+            if camera.autofocus { 1.0 } else { 0.0 },
+        );
         let moved = |v: Vec3, by: [f32; 3]| {
             Vec3::new(v.x.get() + by[0], v.y.get() + by[1], v.z.get() + by[2]).unwrap_or(v)
         };
@@ -182,6 +217,23 @@ impl CameraMotion {
         crate::aim::turn(moved, (pan, tilt, 1.0))
     }
 }
+
+/// The camera properties motion drives, in the order `apply_scaled` keeps them.
+const CAMERA_SLOTS: [CameraProperty; 13] = [
+    CameraProperty::PositionX,
+    CameraProperty::PositionY,
+    CameraProperty::PositionZ,
+    CameraProperty::TargetX,
+    CameraProperty::TargetY,
+    CameraProperty::TargetZ,
+    CameraProperty::Fov,
+    CameraProperty::Roll,
+    CameraProperty::Focus,
+    CameraProperty::Blur,
+    CameraProperty::Pan,
+    CameraProperty::Tilt,
+    CameraProperty::Autofocus,
+];
 
 fn finite(value: f32, otherwise: Finite32) -> Finite32 {
     Finite32::new(value).unwrap_or(otherwise)
@@ -1355,6 +1407,7 @@ mod tests {
     fn camera_motion_adds_to_the_camera_and_holds_its_ranges() {
         let f = |v: f32| Finite32::new(v).expect("finite");
         let drift = |id: &str, property, rate| jstream_protocol::CameraMotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property,
             kind: MotionKind::Drift {
@@ -1479,6 +1532,7 @@ mod tests {
         let f = |v: f32| Finite32::new(v).expect("finite");
         let button = |from: f32, to: f32| {
             CameraMotion::of(&[jstream_protocol::CameraMotionModifier {
+                mode: jstream_protocol::MappingMode::Add,
                 modifier_id: "af".into(),
                 property: CameraProperty::Autofocus,
                 kind: MotionKind::Midi {
@@ -1517,9 +1571,56 @@ mod tests {
     /// ADR-0176: a MIDI modifier maps its smoothed level onto its range, and pan and tilt
     /// turn the view about the camera's position.
     #[test]
+    fn a_replace_reader_sets_a_camera_property_and_adds_go_on_top() {
+        use jstream_protocol::MappingMode::{Add, Replace};
+        let f = |v: f32| Finite32::new(v).expect("finite");
+        let fader = |id: &str, mode, property, from, to| jstream_protocol::CameraMotionModifier {
+            mode,
+            modifier_id: id.into(),
+            property,
+            kind: MotionKind::Data {
+                input: None,
+                key: "params".into(),
+                field: "values.19".into(),
+                range: [Finite32::ZERO, Finite32::ONE],
+                states: Default::default(),
+                smoothing_ms: 0,
+                curve: jstream_protocol::MotionCurve::Linear,
+                from: f(from),
+                to: f(to),
+                color_from: None,
+                palette: Default::default(),
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+            amount: None,
+        };
+        let motion = CameraMotion::of(&[
+            fader("zoom", Replace, CameraProperty::Fov, 10.0, 90.0),
+            fader("nudge", Add, CameraProperty::Fov, 0.0, 5.0),
+            fader("x", Replace, CameraProperty::PositionX, -500.0, 500.0),
+        ]);
+        let moved = motion.apply(base(), ms(0), None, |_| Some(0.5));
+        assert_eq!(moved.fov_deg.get(), 52.5, "set to 50, plus 2.5");
+        assert!(moved.position.x.get().abs() < 1e-3, "{:?}", moved.position);
+        // At half its amount, it goes halfway from the camera's own 40.
+        let half = motion.apply_scaled(
+            base(),
+            ms(0),
+            None,
+            |_| Some(1.0),
+            |id| {
+                if id == "zoom" { 0.5 } else { 1.0 }
+            },
+        );
+        assert_eq!(half.fov_deg.get(), 65.0 + 5.0);
+    }
+
+    #[test]
     fn a_controller_moves_the_camera_and_turns_it() {
         let f = |v: f32| Finite32::new(v).expect("finite");
         let fader = |id: &str, property, from, to| jstream_protocol::CameraMotionModifier {
+            mode: jstream_protocol::MappingMode::Add,
             modifier_id: id.into(),
             property,
             kind: MotionKind::Midi {

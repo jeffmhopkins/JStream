@@ -235,7 +235,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   closes on a second click of its ×, and the Inspector doesn't collapse once it is alone
   in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live, with Stream stats, Outputs and Agent activity as
-  tabs on the right, and resets to Editing.
+  tabs on the right, and resets to Editing. A drop past the bottom's row adds a second
+  full-width row under it, with its splitter, and a third past that; the outer left
+  stacks full-height columns outwards the same way; all of it survives a reload, and
+  moving the second row's panel out removes that row, the third moving in.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
   and shows the size readout, a click on empty canvas clears both, and selecting another
@@ -262,6 +265,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the left handle crops outside crop mode, and Clear crop gives the whole picture back;
   W % and H % read the size against the source's, set it, follow `source.size_changed`
   and go disabled without a size.
+- **The browser's menu and selection** (`chrome.spec.js`): a right-click on the header's
+  brand, readout and menu button, a dock tab, a panel heading and the canvas tools is
+  swallowed, while the Sources panel's search field keeps the browser's menu and opens no
+  panel menu; in Connection details the header swallows and a value doesn't, and in About
+  a version value and a link don't. A drag from
+  a dock tab across the panels, and a double-click on a tab or a caption, select no text,
+  while a double-click in the search field selects its word. File, Edit and View drop
+  straight from their buttons, each open button the same colour as its menu.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off, Select all, and New group, which
   groups the selection into "Group 1") and on the margin, which Escape closes; the arrow keys move through a menu, skipping a disabled

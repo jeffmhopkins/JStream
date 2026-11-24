@@ -1,12 +1,14 @@
 //! The Show panel's Edit view: the timeline. Its bar (the show picker and its menu, Edit /
-//! Run, Stop show, Back, Continue and what it will do, Rehearse, Lock, the status, the
+//! Run, Stop show, Back, Continue and what it will do, Lock, the status, the
 //! "+ Overlay track" and "+ Audio track" buttons and Fit show), the tool strip, the ruler
 //! with the play head's flag, the tracks, the bookmark lines with their flags along the bottom, the
 //! loops' bars under them, and the zoom bar over the whole show.
 //!
 //! Moving around: Ctrl+wheel zooms about the pointer, Shift+wheel scrolls, and the zoom
-//! bar does both ([`zoom`]). While the show runs, a click on the ruler arms that spot for
-//! the next Continue; it never jumps.
+//! bar does both ([`zoom`]). A click or a drag on the ruler, or a drag of the play head,
+//! moves the play head: while the show runs it seeks (`show.seek`), and while it doesn't
+//! it sets where Play starts. The Run view's strip arms a spot instead, so a click there
+//! never jumps program.
 //!
 //! Editing: a click selects a clip, marker, cue, bookmark or loop (Delete removes it,
 //! Escape lets go). With Select, a drag moves or trims what it takes ([`gesture`]); the
@@ -23,7 +25,6 @@ pub mod geom;
 pub mod gesture;
 pub mod zoom;
 
-use super::drop::DEFAULT_FADE_MS;
 use super::edits;
 use super::model::{ClipKind, ClipView, RunPhase, ShowView, TrackKind, TrackView};
 use super::time::{Viewport, clock};
@@ -140,6 +141,9 @@ fn grab_kind(track: TrackKind, clip: &ClipView) -> &'static str {
         (TrackKind::Program, _) => "program",
         (TrackKind::Overlay(_), _) => "overlay",
         (TrackKind::Audio(_), _) => "audio",
+        // Linked audio grabs its scene clip, which shares its ID (ADR-0216).
+        (TrackKind::Linked(1), _) => "program",
+        (TrackKind::Linked(_), _) => "overlay",
         _ => "marker",
     }
 }
@@ -249,6 +253,15 @@ fn clip_view(
             </div>
         }
         .into_any(),
+        (_, ClipKind::Linked(_)) => view! {
+            <div class="show-au show-linked" class:missing=clip.missing class:show-sel=selected
+                data-clip=id data-kind=grab style:left=left style:width=width
+                title=format!("{title} · linked to its scene clip")>
+                <b><i class="show-link" aria-hidden="true">"🔗"</i>{name(clip)}</b>
+                <span>{clip.detail.clone()}</span>
+            </div>
+        }
+        .into_any(),
         (_, ClipKind::Audio(_)) => {
             let fades = clip.fades.unwrap_or((0, 0));
             view! {
@@ -300,13 +313,16 @@ fn cuts(track: &TrackView, view: Viewport) -> Vec<AnyView> {
 }
 
 /// One track's row: its head and its clips. `slot` draws the "Drop a scene or a file"
-/// target `slot`% across V1, while something is dragged over the tracks.
+/// target `slot`% across V1, while something is dragged over the tracks; `rename` is
+/// the name field over the head while the track is being renamed.
 fn track_row(
     track: &TrackView,
     previous: Option<TrackKind>,
     view: Viewport,
     selected: Option<&str>,
     (over, slot): (bool, Option<f64>),
+    (lifted, target): (bool, bool),
+    rename: Option<AnyView>,
 ) -> AnyView {
     let kind = track.kind;
     let mut body: Vec<AnyView> = track
@@ -330,14 +346,23 @@ fn track_row(
     }
     let muted = track.muted;
     let locked = track.locked;
+    let title = if track.name.is_empty() {
+        kind.title().to_owned()
+    } else {
+        track.name.clone()
+    };
     view! {
         <div class=format!("show-track show-track-{}", kind.class())
             class:show-group=geom::starts_group(previous, kind)
             class:muted=muted
             class:drop-over=over
+            class:lifted=lifted
+            class:reorder-target=target
             style:height=format!("{}px", geom::row_px(kind))>
-            <div class="show-track-head">
-                <b><span class="show-tag">{kind.tag()}</span>{kind.title()}</b>
+            <div class="show-track-head" data-track-head=track.id.clone() data-kind=kind.class()
+                title="Drag to reorder · right-click for the track's menu">
+                <b><span class="show-tag">{kind.tag()}</span>{title}</b>
+                {rename}
                 <span class="show-track-icons">
                     <i class="show-mute" class:on=muted title=if muted { "Muted" } else { "Plays" }>"◉"</i>
                     <i class="show-lock" class:on=locked title=if locked { "Locked" } else { "Unlocked" }>"🔒"</i>
@@ -364,8 +389,6 @@ enum Click {
     Cut(String),
     /// Open the keyframe menu for a marker at a time.
     Keyframe(f64),
-    /// Arm a spot for the next Continue.
-    Arm(f64),
 }
 
 /// A press on the timeline, from the pointer down to its release.
@@ -465,13 +488,7 @@ pub fn EditView() -> impl IntoView {
     let paused = move || matches!(phase(), RunPhase::Paused { .. });
     let locked = move || show.with(|s| s.as_ref().is_some_and(|s| s.locked));
     let locked_now = move || show.with_untracked(|s| s.as_ref().is_some_and(|s| s.locked));
-    let continue_ = move |_| {
-        if running.get_untracked() {
-            send(Command::Continue);
-        } else {
-            send(Command::Play(show_id()));
-        }
-    };
+    let continue_ = move |_| send(Command::Continue);
     let next = move || {
         let head = panel.run.with(|r| r.at_ms);
         let at_too = !running.get() || paused();
@@ -493,15 +510,27 @@ pub fn EditView() -> impl IntoView {
     };
     let state = move || {
         let now = panel.clock.get();
-        let text = panel
-            .run
-            .with(|r| show.with(|s| s.as_ref().map(|s| status(s, r, now))));
-        let glyph = paused().then_some("❚❚ ");
+        let text = if running.get() {
+            panel
+                .run
+                .with(|r| show.with(|s| s.as_ref().map(|s| status(s, r, now))))
+        } else {
+            // Another show may be running; this one isn't.
+            let other = panel.run.with(|r| r.show.clone()).and_then(|id| {
+                panel
+                    .shows
+                    .with(|shows| shows.iter().find(|s| s.id == id).map(|s| s.name.clone()))
+            });
+            Some(match other {
+                Some(name) => format!("Stopped · {name} is running"),
+                None => "Stopped".to_owned(),
+            })
+        };
+        let glyph = (running.get() && paused()).then_some("❚❚ ");
         view! {
             <span class="show-state" class:idle=move || !running.get()>{glyph}{text}</span>
         }
     };
-    let rehearsing = move || panel.run.with(|r| r.rehearsing);
     let add_audio_track = move || {
         let mut added = true;
         panel.set_show(&show_id(), |s| added = edits::add_audio_track(s).is_some());
@@ -518,18 +547,27 @@ pub fn EditView() -> impl IntoView {
             <button type="button" class="show-btn" disabled=move || !running.get()
                 title="Back to the previous pausing bookmark"
                 on:click=move |_| send(Command::Back)>"⏮ Back"</button>
-            <button type="button" class="primary show-continue"
-                disabled=move || matches!(phase(), RunPhase::Transition)
-                on:click=continue_>
-                {move || if running.get() { "Continue ▸" } else { "Play ▸" }}
+            <button type="button" class="show-btn show-play"
+                class:on=move || running.get() && !paused()
+                title=move || if running.get() && !paused() {
+                    "Pause where the play head is"
+                } else {
+                    "Play from the play head"
+                }
+                on:click=move |_| send(if running.get_untracked() && !paused() {
+                    Command::Pause
+                } else {
+                    Command::Play(show_id())
+                })>
+                {move || if running.get() && !paused() { "❚❚ Pause" } else { "▶ Play" }}
             </button>
+            <button type="button" class="primary show-continue"
+                disabled=move || !running.get() || matches!(phase(), RunPhase::Transition)
+                title="Play on from a pause, or on to the next pausing bookmark"
+                on:click=continue_>"Continue ▸"</button>
             {move || panel.continue_key.get().map(|k| view! { <kbd class="show-key">{k}</kbd> })}
             {next}
             <span class="show-bar-gap"></span>
-            <button type="button" class="show-btn" class:on=rehearsing
-                aria-pressed=move || rehearsing().to_string()
-                title="Run on preview, leaving program alone"
-                on:click=move |_| send(Command::Rehearse(!rehearsing()))>"Rehearse"</button>
             <button type="button" class="show-btn" class:on=locked
                 aria-pressed=move || locked().to_string()
                 title=move || if locked() { "Editing is locked: unlock it" } else { "Lock the show against edits" }
@@ -596,6 +634,25 @@ pub fn EditView() -> impl IntoView {
     let selected = panel.selected;
     let press = StoredValue::new(None::<Press>);
     let pending = StoredValue::new(None::<Click>);
+    // A scrub of the play head along the ruler, while it lasts: when it last sent a seek.
+    let scrub = StoredValue::new(None::<f64>);
+    // A track head being dragged to reorder the rows: its ID, and the head it is over.
+    let lifting = RwSignal::new(None::<(String, Option<String>)>);
+    let scrub_to = move |ms: f64, shift: bool, last: bool| {
+        let at = if shift {
+            ms.max(0.0) as u32
+        } else {
+            snap_now(ms)
+        };
+        let now = crate::store::now_ms();
+        let running = untrack(|| panel.is_running());
+        // While a show runs each seek jumps program, so a drag sends at most ~12 a second.
+        let due = scrub.get_value().is_none_or(|sent| now - sent >= 80.0);
+        if !running || due || last {
+            panel.move_head(at);
+            scrub.set_value(Some(now));
+        }
+    };
     let tip = RwSignal::new(None::<Tip>);
     let renaming = RwSignal::new(None::<String>);
     let bookmark_menu = move |e: &leptos::ev::MouseEvent, id: String| {
@@ -733,11 +790,53 @@ pub fn EditView() -> impl IntoView {
         );
         menus.open(e, entries);
     };
-    let track_menu = move |e: &leptos::ev::MouseEvent, track: String, kind: String, at: u32| {
+    // A track's menu: on its head (`head`) the track's own entries too, and clips go in at
+    // the play head; on its body they go in where it was clicked.
+    let track_menu = move |e: &leptos::ev::MouseEvent,
+                           track: String,
+                           kind: String,
+                           at: u32,
+                           head: bool| {
         let Some(menus) = menus else { return };
         let off = locked_now();
         let mut entries = Vec::new();
-        if kind == TrackKind::Audio(1).class() {
+        let at = if head { untrack(|| panel.head()) } else { at };
+        let view = show.with_untracked(|s| {
+            s.as_ref()
+                .and_then(|s| s.tracks.iter().find(|t| t.id == track).cloned())
+        });
+        let own = matches!(
+            view.as_ref().map(|t| t.kind),
+            Some(TrackKind::Overlay(_) | TrackKind::Audio(_))
+        );
+        if let Some(t) = view
+            .clone()
+            .filter(|t| matches!(t.kind, TrackKind::Program | TrackKind::Overlay(_)))
+        {
+            let scenes = panel
+                .collection(|c| super::inspector::scene_options(c, None))
+                .unwrap_or_default();
+            let items: Vec<Entry> = scenes
+                .into_iter()
+                .map(|(scene, name)| {
+                    let t = t.clone();
+                    Entry::item(name.clone(), move || {
+                        drops::place_scene(&panel, &show_id(), &t, (&scene, &name), at, false);
+                    })
+                    .disabled_if(off)
+                })
+                .collect();
+            entries.push(if items.is_empty() {
+                Entry::unavailable("Add scene (no scenes yet)")
+            } else {
+                Entry::submenu(format!("Add scene at {}", clock(at)), items)
+            });
+            entries.push(Entry::Sep);
+        }
+        // Any source's audio, from anywhere in the project: on this A track, or on a new
+        // one from any other row (ADR-0216's linked audio is the scene's own).
+        {
+            let on = (kind == TrackKind::Audio(1).class()).then(|| track.clone());
             let sources = panel
                 .collection(|c| {
                     c.sources
@@ -747,44 +846,87 @@ pub fn EditView() -> impl IntoView {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            let items: Vec<Entry> = sources
-                .into_iter()
-                .map(|(source, name)| {
-                    let track = track.clone();
-                    Entry::item(name.clone(), move || {
-                        let mut fits = true;
-                        panel.set_show(&show_id(), |s| {
-                            fits = edits::add_audio_clip(
-                                s,
-                                &track,
-                                source.clone(),
-                                at,
-                                drops::DEFAULT_SCENE_MS,
-                                (DEFAULT_FADE_MS, DEFAULT_FADE_MS),
-                            )
-                            .is_some();
-                        });
-                        if !fits {
-                            panel.refuse(format!("{name} doesn't fit on this track there."));
-                        }
-                    })
-                    .disabled_if(off)
-                })
-                .collect();
-            entries.push(if items.is_empty() {
-                Entry::unavailable("Add audio clip (no audio sources)")
+            let items = |whole: bool| -> Vec<Entry> {
+                sources
+                        .iter()
+                        .cloned()
+                        .map(|(source, name)| {
+                            let on = on.clone();
+                            Entry::item(name.clone(), move || {
+                                let mut fits = true;
+                                panel.set_show(&show_id(), |s| {
+                                    fits = edits::place_source_audio(
+                                        s,
+                                        on.as_deref(),
+                                        source.clone(),
+                                        at,
+                                        drops::DEFAULT_SCENE_MS,
+                                        whole,
+                                    )
+                                    .is_some();
+                                });
+                                if !fits {
+                                    panel.refuse(format!(
+                                        "{name} doesn't fit on this track there: try another A track, or a row that isn't one for a new track."
+                                    ));
+                                }
+                            })
+                            .disabled_if(off)
+                        })
+                        .collect()
+            };
+            let new = if on.is_some() { "" } else { " (new A track)" };
+            if sources.is_empty() {
+                entries.push(Entry::unavailable("Add source audio (no audio sources)"));
             } else {
-                Entry::submenu("Add audio clip", items)
-            });
+                entries.push(Entry::submenu(
+                    format!("Add source audio at {}{new}", clock(at)),
+                    items(false),
+                ));
+                entries.push(Entry::submenu(
+                    format!("Add source audio for the whole show{new}"),
+                    items(true),
+                ));
+            }
             entries.push(Entry::Sep);
         }
-        entries.push(
-            Entry::item("+ Overlay track", move || {
-                send(Command::AddOverlayTrack(show_id()));
-            })
-            .disabled_if(off),
-        );
-        entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
+        if head && own {
+            let rename_id = track.clone();
+            entries.push(
+                Entry::item("Rename track", move || {
+                    renaming.set(Some(rename_id.clone()))
+                })
+                .disabled_if(off),
+            );
+            entries.push(Entry::Sep);
+        }
+        // New tracks come from an empty spot's menu, not a track's own (UI-DESIGN ›
+        // Menus); the bar has them too.
+        if !head {
+            entries.push(
+                Entry::item("+ Overlay track", move || {
+                    send(Command::AddOverlayTrack(show_id()));
+                })
+                .disabled_if(off),
+            );
+            entries.push(Entry::item("+ Audio track", add_audio_track).disabled_if(off));
+        }
+        // Removal is the last group (UI-DESIGN › Menus).
+        if head && own {
+            let delete_id = track.clone();
+            entries.push(
+                Entry::item("Delete track", move || {
+                    panel.set_show(&show_id(), |s| {
+                        edits::delete_track(s, &delete_id);
+                    });
+                })
+                .danger()
+                .disabled_if(off),
+            );
+        }
+        while matches!(entries.last(), Some(Entry::Sep)) {
+            entries.pop();
+        }
         menus.open(e, entries);
     };
     let remove_selected = move || {
@@ -815,8 +957,35 @@ pub fn EditView() -> impl IntoView {
         if let Some(r) = root.get_untracked() {
             let _ = r.focus();
         }
+        if let Some(head) = closest(&target, "[data-track-head]") {
+            e.prevent_default();
+            if let Some(el) = e
+                .current_target()
+                .and_then(|t| t.dyn_into::<Element>().ok())
+            {
+                let _ = el.set_pointer_capture(e.pointer_id());
+            }
+            let id = head.get_attribute("data-track-head").unwrap_or_default();
+            lifting.set(Some((id, None)));
+            return;
+        }
         let ms = ms_at(f64::from(e.client_x()));
         let tool = tool.get_untracked();
+        // The play head, or the ruler with a tool that doesn't draw on it, scrubs.
+        let on_ruler = closest(&target, ".show-ruler").is_some()
+            && !matches!(tool, Tool::Loop | Tool::Bookmark);
+        if on_ruler || closest(&target, ".show-head").is_some() {
+            e.prevent_default();
+            if let Some(el) = e
+                .current_target()
+                .and_then(|t| t.dyn_into::<Element>().ok())
+            {
+                let _ = el.set_pointer_capture(e.pointer_id());
+            }
+            scrub.set_value(None);
+            scrub_to(ms, e.shift_key(), true);
+            return;
+        }
         let base = base_now();
         let view = show.get_untracked();
         let clip_of = |id: &str| {
@@ -857,9 +1026,6 @@ pub fn EditView() -> impl IntoView {
         } else if closest(&target, ".show-ruler").is_some() {
             if tool == Tool::Loop {
                 grab = Some(Grab::NewLoop);
-            }
-            if running.get_untracked() {
-                click = Click::Arm(ms);
             } else if tool == Tool::Bookmark {
                 click = Click::Bookmark(ms);
             }
@@ -932,10 +1098,7 @@ pub fn EditView() -> impl IntoView {
         }
         if locked_now() {
             grab = None;
-            if !matches!(
-                click,
-                Click::Arm(_) | Click::Cut(_) | Click::BookmarkMenu(_)
-            ) {
+            if !matches!(click, Click::Cut(_) | Click::BookmarkMenu(_)) {
                 click = Click::Nothing;
             }
         }
@@ -959,6 +1122,20 @@ pub fn EditView() -> impl IntoView {
         }));
     };
     let moving = move |e: leptos::ev::PointerEvent| {
+        if let Some((id, over)) = lifting.get_untracked() {
+            let now = crate::host::element_at(f64::from(e.client_x()), f64::from(e.client_y()))
+                .and_then(|el| closest(&el, "[data-track-head]"))
+                .and_then(|el| el.get_attribute("data-track-head"))
+                .filter(|o| *o != id);
+            if now != over {
+                lifting.set(Some((id, now)));
+            }
+            return;
+        }
+        if scrub.get_value().is_some() {
+            scrub_to(ms_at(f64::from(e.client_x())), e.shift_key(), false);
+            return;
+        }
         let Some(mut p) = press.get_value() else {
             return;
         };
@@ -984,7 +1161,37 @@ pub fn EditView() -> impl IntoView {
         p.last = Some(d);
         press.set_value(Some(p));
     };
-    let up = move |_: leptos::ev::PointerEvent| {
+    let up = move |e: leptos::ev::PointerEvent| {
+        if let Some((id, over)) = lifting.get_untracked() {
+            lifting.set(None);
+            let Some(onto) = over else { return };
+            if locked_now() {
+                panel.refuse("The show is locked: unlock it to edit.");
+                return;
+            }
+            let kinds = show.with_untracked(|s| {
+                let kind = |t: &str| {
+                    s.as_ref()
+                        .and_then(|s| s.tracks.iter().find(|x| x.id == t))
+                        .map(|x| x.kind)
+                };
+                kind(&id).zip(kind(&onto))
+            });
+            let Some((from, to)) = kinds else { return };
+            if let Some(why) = geom::reorder_refusal(from, to) {
+                panel.refuse(why);
+                return;
+            }
+            panel.set_show(&show_id(), |s| {
+                edits::move_track(s, &id, &onto);
+            });
+            return;
+        }
+        if scrub.get_value().is_some() {
+            scrub_to(ms_at(f64::from(e.client_x())), e.shift_key(), true);
+            scrub.set_value(None);
+            return;
+        }
         let Some(p) = press.get_value() else {
             return;
         };
@@ -1021,6 +1228,8 @@ pub fn EditView() -> impl IntoView {
         }
     };
     let cancel = move || {
+        lifting.set(None);
+        scrub.set_value(None);
         press.set_value(None);
         tip.set(None);
         panel.preview.set(None);
@@ -1055,7 +1264,6 @@ pub fn EditView() -> impl IntoView {
             Click::BookmarkMenu(id) => bookmark_menu(&e, id),
             Click::Cut(id) => cut_menu(&e, id),
             Click::Keyframe(ms) => keyframe_menu(&e, snap_now(ms)),
-            Click::Arm(ms) => send(Command::Arm(Some(ms.max(0.0) as u32))),
         }
     };
     let context = move |e: leptos::ev::MouseEvent| {
@@ -1072,10 +1280,33 @@ pub fn EditView() -> impl IntoView {
                 .get_attribute("data-clip")
                 .or_else(|| el.get_attribute("data-loop"))
                 .unwrap_or_default();
-            selected.set(Some(id));
+            selected.set(Some(id.clone()));
             let Some(menus) = menus else { return };
             let loop_id = el.get_attribute("data-loop");
             let mut entries = Vec::new();
+            // An overlay or an A clip can stretch over the whole show in one step.
+            if matches!(
+                el.get_attribute("data-kind").as_deref(),
+                Some("overlay" | "audio")
+            ) && loop_id.is_none()
+            {
+                let clip = id.clone();
+                entries.push(
+                    Entry::item("Span the whole show", move || {
+                        let mut spans = true;
+                        panel.set_show(&show_id(), |s| {
+                            spans = edits::span_show(s, &clip);
+                        });
+                        if !spans {
+                            panel.refuse(
+                                "It can't span the whole show: another clip on its track is in the way, or it already does.",
+                            );
+                        }
+                    })
+                    .disabled_if(locked_now()),
+                );
+                entries.push(Entry::Sep);
+            }
             if let Some(l) = loop_id {
                 entries.push(
                     Entry::item("Rename", move || renaming.set(Some(l.clone())))
@@ -1089,12 +1320,21 @@ pub fn EditView() -> impl IntoView {
                     .disabled_if(locked_now()),
             );
             menus.open(&e, entries);
+        } else if let Some(el) = closest(&target, "[data-track-head]") {
+            track_menu(
+                &e,
+                el.get_attribute("data-track-head").unwrap_or_default(),
+                el.get_attribute("data-kind").unwrap_or_default(),
+                ms,
+                true,
+            );
         } else if let Some(el) = closest(&target, "[data-track]") {
             track_menu(
                 &e,
                 el.get_attribute("data-track").unwrap_or_default(),
                 el.get_attribute("data-kind").unwrap_or_default(),
                 ms,
+                false,
             );
         }
     };
@@ -1196,10 +1436,34 @@ pub fn EditView() -> impl IntoView {
             panel.refuse("The show is locked: unlock it to edit.");
             return;
         }
-        if let Some(track) = track_of(&h.track) {
-            let at = snap_now(h.at_ms);
-            drops::place_scene(&panel, &show_id(), &track, (&c.scene, &c.name), at, h.slot);
+        let Some(track) = track_of(&h.track) else {
+            return;
+        };
+        let at = snap_now(h.at_ms);
+        if let Some(source) = c.source {
+            // A source's audio: on the A track it was let go on, or a new one.
+            let on = matches!(track.kind, TrackKind::Audio(_)).then_some(track.id.as_str());
+            let mut fits = true;
+            panel.set_show(&show_id(), |s| {
+                fits = edits::place_source_audio(
+                    s,
+                    on,
+                    source.as_str().into(),
+                    at,
+                    drops::DEFAULT_SCENE_MS,
+                    false,
+                )
+                .is_some();
+            });
+            if !fits {
+                panel.refuse(format!(
+                    "{}'s audio doesn't fit on that track there.",
+                    c.name
+                ));
+            }
+            return;
         }
+        drops::place_scene(&panel, &show_id(), &track, (&c.scene, &c.name), at, h.slot);
     });
     // A browser's drag of files clears itself when the drag-overs stop coming.
     Effect::new(move |_| {
@@ -1261,10 +1525,38 @@ pub fn EditView() -> impl IntoView {
             })
             .collect_view()
     };
+    // Renaming a bookmark, a loop or a track: a name field over its flag, bar or head.
+    let rename_field = NodeRef::<leptos::html::Input>::new();
+    Effect::new(move |_| {
+        if renaming.get().is_some() {
+            request_animation_frame(move || {
+                if let Some(el) = rename_field.get_untracked() {
+                    let _ = el.focus();
+                    el.select();
+                }
+            });
+        }
+    });
+    let finish_rename = move |keep: bool| {
+        let Some(id) = renaming.get_untracked() else {
+            return;
+        };
+        renaming.set(None);
+        if keep && let Some(el) = rename_field.get_untracked() {
+            let name = el.value();
+            if !name.trim().is_empty() {
+                panel.set_show(&show_id(), |s| {
+                    edits::rename(s, &id, &name);
+                });
+            }
+        }
+    };
     let rows = move || {
         let v = viewport.get();
         let sel = selected.get();
         let over = hover.get();
+        let naming = renaming.get();
+        let lift = lifting.get();
         show.with(|s| {
             let Some(s) = s else {
                 return Vec::new();
@@ -1284,6 +1576,32 @@ pub fn EditView() -> impl IntoView {
                         v,
                         sel.as_deref(),
                         (is_over, slot),
+                        lift.as_ref().map_or((false, false), |(id, over)| {
+                            (*id == t.id, over.as_deref() == Some(t.id.as_str()))
+                        }),
+                        (naming.as_deref() == Some(t.id.as_str())).then(|| {
+                            let name = if t.name.is_empty() {
+                                t.kind.title().to_owned()
+                            } else {
+                                t.name.clone()
+                            };
+                            view! {
+                                <input class="show-track-rename" aria-label="Track name"
+                                    node_ref=rename_field value=name
+                                    on:pointerdown=|e| e.stop_propagation()
+                                    on:keydown=move |e| {
+                                        match e.key().as_str() {
+                                            "Enter" => finish_rename(true),
+                                            "Escape" => finish_rename(false),
+                                            _ => return,
+                                        }
+                                        e.prevent_default();
+                                        e.stop_propagation();
+                                    }
+                                    on:blur=move |_| finish_rename(true) />
+                            }
+                            .into_any()
+                        }),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -1380,32 +1698,6 @@ pub fn EditView() -> impl IntoView {
                 .collect::<Vec<_>>()
         })
     };
-    // Renaming a bookmark or a loop: a name field over its flag or bar.
-    let rename_field = NodeRef::<leptos::html::Input>::new();
-    Effect::new(move |_| {
-        if renaming.get().is_some() {
-            request_animation_frame(move || {
-                if let Some(el) = rename_field.get_untracked() {
-                    let _ = el.focus();
-                    el.select();
-                }
-            });
-        }
-    });
-    let finish_rename = move |keep: bool| {
-        let Some(id) = renaming.get_untracked() else {
-            return;
-        };
-        renaming.set(None);
-        if keep && let Some(el) = rename_field.get_untracked() {
-            let name = el.value();
-            if !name.trim().is_empty() {
-                panel.set_show(&show_id(), |s| {
-                    edits::rename(s, &id, &name);
-                });
-            }
-        }
-    };
     let rename_box = move || {
         let id = renaming.get()?;
         let (at, name, is_loop) = show.with(|s| {
@@ -1449,15 +1741,20 @@ pub fn EditView() -> impl IntoView {
         })
     };
     let head = move || {
-        if !running.get() {
+        let cursor = panel.cursor.get();
+        if !running.get() && cursor.is_none() {
             return None;
         }
         let at = panel.head();
         let v = viewport.get();
         let played = ((f64::from(at) - v.start_ms) / v.span_ms * 100.0).clamp(0.0, 100.0);
-        let text = panel
-            .run
-            .with(|r| geom::head_text(r, at, panel.clock.get()));
+        let text = if running.get() {
+            panel
+                .run
+                .with(|r| geom::head_text(r, at, panel.clock.get()))
+        } else {
+            format!("{} · Play starts here", clock(at))
+        };
         let line = at_pct(v, at).map(|left| {
             // The flag hangs left of the line where it would run off the right edge.
             let flip =
@@ -1522,15 +1819,13 @@ pub fn EditView() -> impl IntoView {
                             on:dragover=drag_over on:drop=dropped>
                             <div class="show-ruler-row">
                                 <div class="show-corner"></div>
-                                <div class="show-ruler" class:armable=move || running.get()
-                                    title=move || {
-                                        if running.get() {
-                                            "Click to arm this spot for the next Continue"
-                                        } else if tool.get() == Tool::Loop {
-                                            "Drag along the ruler to make a loop"
-                                        } else {
-                                            ""
-                                        }
+                                <div class="show-ruler"
+                                    class:scrubs=move || !matches!(tool.get(), Tool::Loop | Tool::Bookmark)
+                                    title=move || match tool.get() {
+                                        Tool::Loop => "Drag along the ruler to make a loop",
+                                        Tool::Bookmark => "Click to add a bookmark",
+                                        _ if running.get() => "Click or drag to move the play head (Shift: no snapping)",
+                                        _ => "Click or drag to set where Play starts (Shift: no snapping)",
                                     }>{ticks}</div>
                             </div>
                             {rows}

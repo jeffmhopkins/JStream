@@ -17,6 +17,7 @@ pub mod edits;
 pub mod inspect_edits;
 pub mod inspector;
 pub mod model;
+pub mod prompter;
 pub mod run;
 pub mod time;
 pub mod wire;
@@ -46,15 +47,21 @@ pub enum Command {
     Play(String),
     /// Stop the running show.
     Stop,
+    /// Hold the running show's play head where it is (`show.pause`); Play or Continue
+    /// plays on.
+    Pause,
     /// Continue: play on from a pause, or to the next pausing bookmark (`show.continue`).
     Continue,
     /// Back to the previous pausing bookmark.
     Back,
     /// Jump to a bookmark, by ID, at once.
     GoTo(String),
-    /// Arm a spot, in show time, for the next Continue (a ruler or strip click while the
-    /// show runs). `None` disarms.
+    /// Arm a spot, in show time, for the next Continue (a click on the Run view's strip
+    /// while the show runs). `None` disarms.
     Arm(Option<u32>),
+    /// Move the running show's play head to a spot, in show time, at once (a click or a
+    /// drag on the Edit view's ruler).
+    Seek(u32),
     /// Lock or unlock editing of the show, by ID.
     Lock(String, bool),
     /// Run on preview, leaving program alone, or not.
@@ -100,16 +107,27 @@ pub struct ShowPanel {
     pub carry: RwSignal<Option<Carry>>,
     /// Whether the show picker is a name field, renaming the open show.
     pub renaming: RwSignal<bool>,
+    /// Where Play starts the open show, while none runs: set by a click or a drag on the
+    /// ruler, `None` for its start.
+    pub cursor: RwSignal<Option<u32>>,
+    /// Whether the Run view's bookmark notes are unfolded: the panel's own state, never
+    /// saved.
+    pub notes_open: RwSignal<bool>,
+    /// The notes' teleprompter settings, kept by the browser.
+    pub prompter: RwSignal<prompter::Prompter>,
 }
 
-/// A scene dragged from the Scenes panel towards the Show panel's tracks. The Scenes
-/// panel sets it as the pointer moves and marks it dropped when the button comes up;
-/// the Edit view places the scene where it was let go and clears it.
+/// A scene dragged from the Scenes panel, or a source's audio from the Sources panel or
+/// a mixer strip, towards the Show panel's tracks. The panel it comes from sets it as
+/// the pointer moves and marks it dropped when the button comes up; the Edit view
+/// places it where it was let go and clears it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Carry {
-    /// The scene's ID.
+    /// The scene's ID; empty for a source's audio.
     pub scene: String,
-    /// Its name, for the pausing bookmark at its end.
+    /// The source whose audio it is, for a source's audio.
+    pub source: Option<String>,
+    /// Its name, for the pausing bookmark at a scene's end.
     pub name: String,
     /// Where the pointer is, in the page's CSS pixels.
     pub x: f64,
@@ -117,6 +135,39 @@ pub struct Carry {
     pub y: f64,
     /// Whether the button came up: place it.
     pub dropped: bool,
+}
+
+impl ShowPanel {
+    /// Carries source `source`'s audio (called `name`) towards the tracks, with the
+    /// pointer at `event`; `dropped` when the button came up there.
+    pub fn carry_source(
+        &self,
+        source: &str,
+        name: &str,
+        event: &leptos::ev::PointerEvent,
+        dropped: bool,
+    ) {
+        self.carry.set(Some(Carry {
+            scene: String::new(),
+            source: Some(source.to_owned()),
+            name: name.to_owned(),
+            x: f64::from(event.client_x()),
+            y: f64::from(event.client_y()),
+            dropped,
+        }));
+    }
+}
+
+/// Where the browser keeps the show last opened.
+const OPEN_KEY: &str = "jstream.show.open";
+
+/// The show last opened in this browser, if any.
+fn remembered_show() -> Option<String> {
+    window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .and_then(|s| s.get_item(OPEN_KEY).ok().flatten())
 }
 
 impl ShowPanel {
@@ -137,6 +188,9 @@ impl ShowPanel {
             preview: RwSignal::new(None),
             carry: RwSignal::new(None),
             renaming: RwSignal::new(false),
+            notes_open: RwSignal::new(true),
+            cursor: RwSignal::new(None),
+            prompter: RwSignal::new(prompter::Prompter::default()),
         }
     }
 
@@ -162,10 +216,25 @@ impl ShowPanel {
         self.run.with(|r| r.show.is_some() && r.show == id)
     }
 
-    /// The play head now.
+    /// The play head now: the runner's while it runs the open show, else where Play will
+    /// start the open show.
     pub fn head(&self) -> u32 {
-        let now = self.clock.get();
-        self.run.with(|r| r.head_at(now))
+        if self.is_running() {
+            let now = self.clock.get();
+            self.run.with(|r| r.head_at(now))
+        } else {
+            self.cursor.get().unwrap_or(0)
+        }
+    }
+
+    /// Moves the play head to `at_ms`: a seek while the open show runs, else where Play
+    /// will start it. Another show running doesn't move.
+    pub fn move_head(&self, at_ms: u32) {
+        if untrack(|| self.is_running()) {
+            self.send(Command::Seek(at_ms));
+        } else {
+            self.cursor.set(Some(at_ms));
+        }
     }
 
     /// A panel that follows the studio's shows and running show, and sends its commands
@@ -173,8 +242,24 @@ impl ShowPanel {
     pub fn connected(studio: Studio, session: SessionContext) -> ShowPanel {
         let panel = ShowPanel {
             engine: Some((studio, session)),
+            prompter: RwSignal::new(prompter::Prompter::restore()),
+            open: RwSignal::new(remembered_show()),
             ..ShowPanel::new(studio.problem)
         };
+        // Where Play starts belongs to the show it was set on.
+        Effect::new(move |seen: Option<Option<String>>| {
+            let open = panel.open.get();
+            if seen.is_some_and(|seen| seen != open) {
+                panel.cursor.set(None);
+            }
+            open
+        });
+        // The show last opened in this browser opens again next time.
+        Effect::new(move |_| {
+            if let (Some(id), Ok(Some(storage))) = (panel.open.get(), window().local_storage()) {
+                let _ = storage.set_item(OPEN_KEY, &id);
+            }
+        });
         Effect::new(move |_| {
             let locked = panel.locked.get();
             let shows = studio.collection.with(|c| {
@@ -260,6 +345,19 @@ impl ShowPanel {
             (wire::action_of(&command, open.as_deref()), session.get())
         {
             studio.act(&session, action);
+        }
+        // Play starts from the start, then goes where the ruler put the play head.
+        if let Command::Play(_) = command
+            && let Some(at_ms) = self.cursor.get_untracked().filter(|at| *at > 0)
+            && let Some(session) = session.get()
+        {
+            studio.act(
+                &session,
+                jstream_control::protocol::Action::ShowSeek { at_ms },
+            );
+        }
+        if matches!(command, Command::Play(_) | Command::Stop) {
+            self.cursor.set(None);
         }
     }
 
@@ -407,13 +505,16 @@ pub fn status(show: &ShowView, run: &RunView, now: f64) -> String {
             run.off_script.as_deref().unwrap_or_default()
         ),
         RunPhase::Paused { bookmark, since } => {
-            let name = show
-                .bookmarks
-                .iter()
-                .find(|b| &b.id == bookmark)
-                .map_or("a bookmark", |b| b.name.as_str());
             let waited = (now - since).max(0.0) as u32;
-            format!("Paused at {name} · {}", time::clock(waited))
+            match show.bookmarks.iter().find(|b| &b.id == bookmark) {
+                Some(b) => format!("Paused at {} · {}", b.name, time::clock(waited)),
+                // `show.pause` holds the play head anywhere.
+                None => format!(
+                    "Paused at {} · {}",
+                    time::clock(run.at_ms),
+                    time::clock(waited)
+                ),
+            }
         }
     }
 }

@@ -767,7 +767,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   moves (a message since the last look, or, with the tempo granted, a song playing) the
   next page frame is due too; while it rests, the source looks again every quarter
   second, unless the engine gave it no MIDI state. A page granted live data is looked
-  at every page frame, since data lands at any time. `youtube_chat` never sets any
+  at every page frame, since data lands at any time. With nothing waiting to be sent,
+  the next look is a page frame after the last look, never one timed from an update long
+  past, which would be due at once and keep the planner busy (#1556). `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,

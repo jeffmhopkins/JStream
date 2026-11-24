@@ -434,7 +434,7 @@ fn capture(
             pose(compositor, shown.model, shown.shown);
             let (drives, driving) = crate::sourced::materials(
                 shot.source_drives(shown.item),
-                |m| shot.source_value(shown.item, m, at),
+                |m, own| shot.source_value(shown.item, m, at, own),
                 |m| shot.tint(shown.item, m),
             );
             let (texture, reflection) = super::model_maps(shot, cache, shown.source, shown.shown);

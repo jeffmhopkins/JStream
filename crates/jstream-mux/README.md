@@ -20,7 +20,8 @@ muxers are written in Rust, no FFmpeg). It writes H.264 and AAC into **FLV**, th
 container M1a's RTMP(S) output sends to YouTube
 ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), along with HEVC and
 AV1 through [enhanced RTMP](https://github.com/veovera/enhanced-rtmp/blob/main/docs/enhanced/enhanced-rtmp-v2.md);
-and it writes H.264 and AAC into **fragmented MP4**, the container recording writes. It consumes
+and it writes H.264, HEVC or AV1 with AAC into **fragmented MP4**, the container recording
+writes. It consumes
 [`jstream-media`](../jstream-media/README.md#purpose) `Packet`s, does no network I/O,
 has no `unsafe`, and depends only on `jstream-media` and `thiserror`.
 
@@ -79,8 +80,13 @@ Contents:
   default-base-is-moof, a version-1 `tfdt` and a `trun` giving every sample's duration,
   size, flags and, for video, composition offset) and its `mdat`. `Fmp4Writer` writes
   them to any `std::io::Write`. A file cut short keeps every complete fragment.
-  - Video is track 1 (`avc1` with `avcC`, 90 kHz), audio is track 2, or track 1 without
-    video (`mp4a` with an `esds` holding the `AudioSpecificConfig`, ticking at the
+  - Video is track 1 (90 kHz), its codec given by `VideoConfig`: H.264 (`avc1` with
+    `avcC`), HEVC (`hvc1` with `hvcC`, every array marked complete, since the record
+    holds every parameter set and the frames only repeat them) or AV1 (`av01` with
+    `av1C`). `ftyp` adds the `avc1` brand for H.264 (and audio-only files) and `av01` for
+    AV1; HEVC has none. H.264 and HEVC frames keep their in-band parameter sets and AV1
+    keyframes their sequence header, as encoders emit them. Audio is track 2, or track 1
+    without video (`mp4a` with an `esds` holding the `AudioSpecificConfig`, ticking at the
     sample rate). Timestamps are each packet's dts and pts rescaled to the track's time
     scale, rounded to nearest, from a configurable origin, so the tracks stay in sync
     with no edit list.
@@ -91,8 +97,10 @@ Contents:
     strictly increase and each track's newest sample waits for the next one. At
     `finish` it gets the duration of the sample before it (one AAC frame or 1/30 s if
     it is alone).
-  - Without a configured `AvcDecoderConfig`, the init segment waits for the first video
-    packet, which must be a keyframe carrying SPS and PPS; audio before it is buffered.
+  - Without a configured decoder record (`VideoConfig::Avc(None)`, `Hevc(None)` or
+    `Av1(None)`), the init segment waits for the first video packet, which must be a
+    keyframe carrying it (SPS and PPS; VPS, SPS and PPS; a sequence header OBU); audio
+    before it is buffered. A video track takes only its own codec's packets.
     The first video packet must be a keyframe in any case. Packets before the origin,
     composition offsets or durations beyond 32 bits, and non-increasing decode times are
     errors, and a rejected packet leaves the muxer unchanged.
@@ -106,8 +114,9 @@ Contents:
   `HEVCDecoderConfigurationRecord`, built from VPS, SPS and PPS. Profile, tier, level,
   compatibility and constraint flags, chroma format, bit depths and temporal layering
   come from the first SPS. One array each holds the VPS, SPS and PPS, marked incomplete
-  because frames keep their in-band copies; spatial segmentation, parallelism and frame
-  rate are written as unknown (0). These match FFmpeg's FLV muxer byte for byte on the
+  for FLV (`to_bytes`) because frames keep their in-band copies, or complete for MP4's
+  `hvc1` (`to_bytes_complete`); spatial segmentation, parallelism and frame rate are
+  written as unknown (0). The FLV record matches FFmpeg's FLV muxer byte for byte on the
   test stream.
 - **`av1`:** OBU splitting (`av1::obus`), `av1::to_sample` (which rejects a temporal unit
   holding only delimiters and padding, so no empty frame is written), and `Av1CodecConfig`, the AV1
@@ -125,5 +134,5 @@ Contents:
 - **Errors:** one `thiserror` enum, `MuxError`.
 
 **Not yet:** signalling enhanced RTMP in the RTMP `connect` (`fourCcList`, which is
-`jstream-outputs`' job), HEVC and AV1 in MP4, non-fragmented MP4, and a mid-stream change
+`jstream-outputs`' job), non-fragmented MP4, and a mid-stream change
 of parameter sets (a new sequence header or sample entry).

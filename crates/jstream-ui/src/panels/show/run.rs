@@ -1,5 +1,5 @@
 //! The Show panel's Run view, for show time: its bar (the show picker, Edit / Run, Stop
-//! show, Lock, Rehearse on preview, the Next monitor's Live / Still / Off and the status),
+//! show, Lock, the Next monitor's Live / Still / Off and the status),
 //! the Now and Next cards over a big Continue, the bookmarks as buttons in show order, the
 //! clocks, what is up right now, and the tracks folded into one strip.
 //!
@@ -83,6 +83,65 @@ fn with_transition(transition: Option<&str>) -> String {
     }
 }
 
+/// The bookmark notes the Run view shows: the bookmark the show is at, and the next one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notes {
+    /// The bookmark the show is at, or last passed, and its note.
+    pub here: Option<(String, String)>,
+    /// The next bookmark after it, and its note.
+    pub next: Option<(String, String)>,
+}
+
+/// The notes for where the show is: paused, the bookmark it waits at; otherwise the last
+/// bookmark at or before the play head (none before the first one), then the one after.
+pub fn notes(show: &ShowView, run: &model::RunView, head: u32) -> Notes {
+    let marks = &show.bookmarks;
+    let here = match &run.phase {
+        RunPhase::Paused { bookmark, .. } if marks.iter().any(|b| &b.id == bookmark) => {
+            marks.iter().position(|b| &b.id == bookmark)
+        }
+        _ => marks.iter().rposition(|b| b.at_ms <= head),
+    };
+    let next = match here {
+        Some(i) => marks.get(i + 1),
+        None => marks.iter().find(|b| b.at_ms > head),
+    };
+    let pair = |b: &BookmarkView| (b.name.clone(), b.note.trim().to_owned());
+    Notes {
+        here: here.map(|i| pair(&marks[i])),
+        next: next.map(pair),
+    }
+}
+
+/// A note's paragraphs (split at blank lines), each with whether it is a direction to the
+/// operator rather than words to say: a paragraph wrapped in single asterisks,
+/// `*Check the sound.*`, shown in italics without them.
+pub fn paragraphs(note: &str) -> Vec<(bool, String)> {
+    note.split("\n\n")
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let inner = p.strip_prefix('*').and_then(|p| p.strip_suffix('*'));
+            match inner {
+                Some(text)
+                    if !text.is_empty() && !text.starts_with('*') && !text.ends_with('*') =>
+                {
+                    (true, text.trim().to_owned())
+                }
+                _ => (false, p.to_owned()),
+            }
+        })
+        .collect()
+}
+
+/// A note drawn as its paragraphs, directions in italics.
+fn script(note: &str) -> impl IntoView + use<> {
+    paragraphs(note)
+        .into_iter()
+        .map(|(direction, text)| view! { <p class:direction=direction>{text}</p> })
+        .collect_view()
+}
+
 /// The NOW card: what is on program and what the runner is doing.
 pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
     let (clip, key) = on_program(show, head, settled(run));
@@ -94,13 +153,15 @@ pub fn now(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Card {
         RunPhase::Stopped => "Stopped".to_owned(),
         RunPhase::Transition => "In transition".to_owned(),
         RunPhase::Paused { bookmark, since } => {
-            let name = show
-                .bookmarks
-                .iter()
-                .find(|b| &b.id == bookmark)
-                .map_or("a bookmark", |b| b.name.as_str());
             let waited = (now - since).max(0.0) as u32;
-            format!("Paused at bookmark {name} for {}", time::clock(waited))
+            match show.bookmarks.iter().find(|b| &b.id == bookmark) {
+                Some(b) => format!("Paused at bookmark {} for {}", b.name, time::clock(waited)),
+                None => format!(
+                    "Paused at {} for {}",
+                    time::clock(head),
+                    time::clock(waited)
+                ),
+            }
         }
         RunPhase::Playing => match &run.looping {
             Some((id, pass)) => {
@@ -143,7 +204,7 @@ fn fires_at(show: &ShowView, at: u32) -> Vec<String> {
             ClipKind::Sequence(_) => Some(format!("Start {}", c.label)),
             ClipKind::Event(what) => Some(what.clone()),
             ClipKind::Audio(_) => Some(format!("Play {}", c.label)),
-            ClipKind::Keyframe(_) => None,
+            ClipKind::Keyframe(_) | ClipKind::Linked(_) => None,
         })
         .collect()
 }
@@ -292,8 +353,13 @@ pub struct BookmarkCard {
     pub here: bool,
     /// Whether a loop starts here (the violet top edge).
     pub loop_start: bool,
-    /// Whether the play head is past it (dimmed).
+    /// Whether the play head is past it, and past the bookmark after it (dimmed).
     pub past: bool,
+    /// Whether it is the bookmark the show is in: paused at, or last passed (highlighted).
+    pub current: bool,
+    /// Whether it comes next: the one after the current one, or the first while the show
+    /// is stopped.
+    pub next: bool,
 }
 
 /// What is on program at a bookmark, for its card.
@@ -314,6 +380,23 @@ fn bookmark_scene(show: &ShowView, b: &BookmarkView) -> String {
 
 /// The bookmark buttons, in show order.
 pub fn cards(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Vec<BookmarkCard> {
+    let running = run.show.is_some();
+    let current = match &run.phase {
+        RunPhase::Paused { bookmark, .. } if show.bookmarks.iter().any(|b| &b.id == bookmark) => {
+            show.bookmarks.iter().position(|b| &b.id == bookmark)
+        }
+        _ if running => show.bookmarks.iter().rposition(|b| b.at_ms <= head),
+        _ => None,
+    };
+    let next = match current {
+        Some(i) => i + 1,
+        None if running => show
+            .bookmarks
+            .iter()
+            .position(|b| b.at_ms > head)
+            .unwrap_or(usize::MAX),
+        None => 0,
+    };
     show.bookmarks
         .iter()
         .enumerate()
@@ -339,7 +422,9 @@ pub fn cards(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Vec<
                 at: time::clock(b.at_ms),
                 key: b.key.clone(),
                 here: waited.is_some(),
-                past: waited.is_none() && run.show.is_some() && b.at_ms < head,
+                past: running && current.is_some_and(|c| i < c),
+                current: current == Some(i),
+                next: next == i,
                 tag,
                 loop_start,
             }
@@ -535,6 +620,7 @@ pub fn RunView() -> impl IntoView {
                     <UpNowCard />
                 </div>
             </div>
+            <NotesPanel />
             <FoldedStrip />
             <p class="show-run-foot">
                 "Run view: the same show with the tracks folded into one strip · a click on the strip arms that spot for the next Continue, it does not jump · Edit brings the tracks back"
@@ -548,9 +634,8 @@ pub fn RunView() -> impl IntoView {
 fn RunBar() -> impl IntoView {
     let panel = expect_context::<ShowPanel>();
     let id = move || panel.show().map(|s| s.id).unwrap_or_default();
-    let running = move || panel.run.with(|r| r.show.is_some());
+    let running = move || panel.is_running();
     let locked = move || panel.show().is_some_and(|s| s.locked);
-    let rehearsing = move || panel.run.with(|r| r.rehearsing);
     let monitor = move || panel.show().map(|s| s.next_monitor).unwrap_or_default();
     let pick = move |m: NextMonitor| move |_| panel.send(Command::NextMonitor(id(), m));
     let mon = move |m: NextMonitor, label: &'static str| {
@@ -578,11 +663,6 @@ fn RunBar() -> impl IntoView {
                 aria-pressed=move || locked().to_string()
                 on:click=move |_| panel.send(Command::Lock(id(), !locked()))>
                 {move || if locked() { "🔒 Edits locked" } else { "🔓 Lock edits" }}
-            </button>
-            <button type="button" class="show-btn"
-                aria-pressed=move || rehearsing().to_string()
-                on:click=move |_| panel.send(Command::Rehearse(!rehearsing()))>
-                {move || if rehearsing() { "Rehearse on preview: on" } else { "Rehearse on preview: off" }}
             </button>
             <span class="show-seg-label" aria-hidden="true">"Next monitor"</span>
             <div class="segmented" role="group" aria-label="Next monitor">
@@ -623,6 +703,7 @@ fn NowNext() -> impl IntoView {
         )
     };
     let busy = move || panel.run.with(|r| r.phase == RunPhase::Transition);
+    let playing = move || panel.run.with(|r| r.phase == RunPhase::Playing) && panel.is_running();
     view! {
         {move || cards().map(|(n, x)| view! {
             <div class="show-card">
@@ -639,6 +720,15 @@ fn NowNext() -> impl IntoView {
         <button type="button" class="primary show-continue" class:busy=busy aria-disabled=move || busy().to_string()
             on:click=move |_| if !busy() { panel.send(Command::Continue) }>"Continue ▸"</button>
         <div class="show-run-back">
+            <button type="button" class="show-btn show-play" class:on=playing
+                title=move || if playing() { "Pause where the play head is" } else { "Play" }
+                on:click=move |_| panel.send(if playing() {
+                    Command::Pause
+                } else {
+                    Command::Play(panel.show().map(|s| s.id).unwrap_or_default())
+                })>
+                {move || if playing() { "❚❚ Pause" } else { "▶ Play" }}
+            </button>
             <button type="button" class="show-btn" on:click=move |_| panel.send(Command::Back)>"⏮ Back"</button>
             {move || panel.run.with(|r| r.continue_keys.clone()).into_iter().map(binding).collect_view()}
         </div>
@@ -657,30 +747,55 @@ fn Bookmarks() -> impl IntoView {
         let now = panel.clock.get();
         panel.run.with(|run| cards(&show, run, head, now))
     };
+    // The current row stays in view, a third of the way down, as the show moves on.
+    let rows = NodeRef::<leptos::html::Ol>::new();
+    let current = Memo::new(move |_| list().iter().position(|c| c.here || c.current));
+    Effect::new(move |_| {
+        let (Some(at), Some(list)) = (current.get(), rows.get()) else {
+            return;
+        };
+        let Some(row) = list
+            .children()
+            .item(at as u32)
+            .and_then(|el| leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlElement>(el).ok())
+        else {
+            return;
+        };
+        let top = row.offset_top() - list.client_height() / 3;
+        list.set_scroll_top(top.max(0));
+    });
     view! {
         <div class="show-run-marks">
-            <h6 class="eyebrow">"Bookmarks"<span>" · click or press the key to go there now"</span></h6>
-            <div class="show-run-grid">
+            <h6 class="eyebrow">"Run of show"<span>" · click or press the key to go there now"</span></h6>
+            <ol class="show-rundown" node_ref=rows>
                 {move || list().into_iter().map(|c| {
                     let id = c.id.clone();
+                    let title = format!("Go to {} now", c.name);
+                    let flag = if c.here || c.current {
+                        Some("NOW")
+                    } else if c.next {
+                        Some("NEXT")
+                    } else {
+                        None
+                    };
                     view! {
-                        <button type="button" class="show-mark-card" class:here=c.here
-                            class:loop-start=c.loop_start class:past=c.past
-                            on:click=move |_| panel.send(Command::GoTo(id.clone()))>
-                            <span class="show-mark-n">{c.number}</span>
-                            <b>{c.name}</b>
-                            <span class="show-mark-scene">{c.scene}</span>
-                            <span class="show-mark-foot">
-                                <span>
-                                    <span class=format!("show-tag show-tag-{}", c.tag.class())>{c.tag.label()}</span>
-                                    " " {c.at}
-                                </span>
-                                {c.key.map(|k| view! { <kbd class="show-key">{k}</kbd> })}
-                            </span>
-                        </button>
+                        <li>
+                            <button type="button" class="show-row" class:here=c.here
+                                class:current=c.current class:next=c.next class:past=c.past
+                                class:loop-start=c.loop_start
+                                title=title
+                                on:click=move |_| panel.send(Command::GoTo(id.clone()))>
+                                <span class="show-row-n">{c.number}</span>
+                                <span class="show-row-at">{c.at}</span>
+                                <span class="show-row-name"><b>{c.name}</b><i>{c.scene}</i></span>
+                                <span class=format!("show-tag show-tag-{}", c.tag.class())>{c.tag.label()}</span>
+                                <span class="show-row-flag">{flag}</span>
+                                <span class="show-row-key">{c.key.map(|k| view! { <kbd class="show-key">{k}</kbd> })}</span>
+                            </button>
+                        </li>
                     }
                 }).collect_view()}
-            </div>
+            </ol>
         </div>
     }
 }
@@ -734,6 +849,157 @@ fn UpNowCard() -> impl IntoView {
                 }}
             </ul>
         </div>
+    }
+}
+
+/// The bookmark notes, folded under a header that names the bookmark: its note, then the
+/// next bookmark's. With the teleprompter on, the note is large and rolls up at the rate
+/// set while Roll is on, from the top again at each bookmark.
+#[component]
+fn NotesPanel() -> impl IntoView {
+    use super::prompter::{self, Prompter};
+    let panel = expect_context::<ShowPanel>();
+    let read = Memo::new(move |_| {
+        let show = panel.show()?;
+        let head = panel.head();
+        Some(panel.run.with(|run| notes(&show, run, head)))
+    });
+    let here = Memo::new(move |_| read.with(|n| n.as_ref().and_then(|n| n.here.clone())));
+    let open = panel.notes_open;
+    let look = panel.prompter;
+    let set = move |f: &dyn Fn(Prompter) -> Prompter| {
+        look.update(|p| *p = f(*p));
+        look.get_untracked().keep();
+    };
+    // Seconds read before the current roll began, and when it began (None: paused).
+    let read_ms = RwSignal::new(0.0_f64);
+    let since = RwSignal::new(None::<f64>);
+    let body = NodeRef::<leptos::html::Div>::new();
+    let text = NodeRef::<leptos::html::Div>::new();
+    let to_top = move || {
+        if let Some(b) = body.get_untracked() {
+            b.set_scroll_top(0);
+        }
+    };
+    Effect::new(move |seen: Option<Option<(String, String)>>| {
+        let now = here.get();
+        if seen.is_some_and(|seen| seen != now) {
+            read_ms.set(0.0);
+            if since.get_untracked().is_some() {
+                since.set(Some(panel.clock.get_untracked()));
+            }
+            to_top();
+        }
+        now
+    });
+    Effect::new(move |_| {
+        let at = panel.clock.get();
+        let (Some(start), true) = (since.get(), look.with(|p| p.on)) else {
+            return;
+        };
+        let (Some(b), Some(t)) = (body.get(), text.get()) else {
+            return;
+        };
+        let words = here.with(|h| h.as_ref().map_or(0, |(_, note)| prompter::words(note)));
+        let elapsed = (read_ms.get_untracked() + at - start) / 1000.0;
+        let top = prompter::scroll_top(
+            elapsed,
+            look.with_untracked(|p| p.wps),
+            words,
+            f64::from(t.offset_height()),
+            f64::from(b.client_height()),
+        );
+        b.set_scroll_top(top as i32);
+    });
+    let roll = move |_| {
+        let now = panel.clock.get_untracked();
+        match since.get_untracked() {
+            Some(start) => {
+                read_ms.update(|r| *r += now - start);
+                since.set(None);
+            }
+            None => since.set(Some(now)),
+        }
+    };
+    let restart = move |_| {
+        read_ms.set(0.0);
+        if since.get_untracked().is_some() {
+            since.set(Some(panel.clock.get_untracked()));
+        }
+        to_top();
+    };
+    let title = move || match here.get() {
+        Some((name, _)) => format!("NOTES · {name}"),
+        None => "NOTES".to_owned(),
+    };
+    let next = move || {
+        read.get()?
+            .next
+            .filter(|(_, note)| !note.is_empty())
+            .map(|(name, note)| {
+                view! {
+                    <div class="show-notes-next">
+                        <h6 class="eyebrow">"Next"<span>" · "{name}</span></h6>
+                        <div class="show-notes-said selectable">{script(&note)}</div>
+                    </div>
+                }
+            })
+    };
+    let note = move || match here.get() {
+        Some((_, note)) if !note.is_empty() => {
+            view! { <div class="show-notes-here selectable">{script(&note)}</div> }.into_any()
+        }
+        Some(_) => {
+            view! { <p class="show-notes-here hint">"No notes for this bookmark."</p> }.into_any()
+        }
+        None => view! { <p class="show-notes-here hint">"Notes show from the first bookmark."</p> }
+            .into_any(),
+    };
+    let on = move || look.with(|p| p.on);
+    view! {
+        <section class="show-notes" class:open=move || open.get() class:prompter=on>
+            <div class="show-notes-bar">
+                <button type="button" class="show-notes-head" aria-expanded=move || open.get().to_string()
+                    on:click=move |_| open.update(|o| *o = !*o)>
+                    <span class="show-notes-caret">{move || if open.get() { "▾" } else { "▸" }}</span>
+                    {title}
+                </button>
+                <Show when=move || open.get()>
+                    <label class="show-notes-toggle" title="Large text that rolls up at the rate set">
+                        "Teleprompter"
+                        <input type="checkbox" class="toggle" prop:checked=on
+                            on:change=move |ev| {
+                                let on = event_target_checked(&ev);
+                                set(&|p| Prompter { on, ..p });
+                            } />
+                    </label>
+                    <Show when=on>
+                        <span class="show-notes-tools">
+                            <button type="button" class="show-btn" title="Smaller text"
+                                on:click=move |_| set(&|p| p.sized(false))>"A−"</button>
+                            <span class="show-notes-value">{move || format!("{} px", look.with(|p| p.size))}</span>
+                            <button type="button" class="show-btn" title="Larger text"
+                                on:click=move |_| set(&|p| p.sized(true))>"A+"</button>
+                            <button type="button" class="show-btn" title="Slower"
+                                on:click=move |_| set(&|p| p.paced(false))>"−"</button>
+                            <span class="show-notes-value">{move || format!("{} words/s", look.with(|p| p.wps))}</span>
+                            <button type="button" class="show-btn" title="Faster"
+                                on:click=move |_| set(&|p| p.paced(true))>"+"</button>
+                            <button type="button" class="show-btn" class:on=move || since.get().is_some()
+                                on:click=roll>{move || if since.get().is_some() { "❚❚ Pause" } else { "▶ Roll" }}</button>
+                            <button type="button" class="show-btn" title="Back to the top" on:click=restart>"⟲"</button>
+                        </span>
+                    </Show>
+                </Show>
+            </div>
+            <Show when=move || open.get()>
+                <div class="show-notes-body" node_ref=body
+                    style:font-size=move || on().then(|| format!("{}px", look.with(|p| p.size)))>
+                    <div class="show-notes-text selectable" node_ref=text>{note}</div>
+                    {move || (!on()).then(next)}
+                </div>
+            </Show>
+        </section>
     }
 }
 
@@ -811,6 +1077,7 @@ mod tests {
         TrackView {
             id: id.to_owned(),
             kind,
+            name: String::new(),
             clips,
             muted: false,
             locked: false,
@@ -1091,5 +1358,105 @@ mod tests {
         assert!((s.loops[0].1 - 27.273).abs() < 0.01);
         assert_eq!(strip_ms(&show, 0.5), 330_000);
         assert_eq!(strip_ms(&show, 2.0), 660_000);
+    }
+
+    #[test]
+    fn notes_follow_the_bookmark_the_show_is_at() {
+        let mut show = demo::friday();
+        for b in &mut show.bookmarks {
+            b.note = match b.id.as_str() {
+                "b3" => "  Welcome everyone.\nIntroduce the guest.  ".to_owned(),
+                "b4" => "Show the build.".to_owned(),
+                _ => String::new(),
+            };
+        }
+        let pair = |a: &str, b: &str| Some((a.to_owned(), b.to_owned()));
+        // Paused at Close-up: its note, trimmed, then Demo's.
+        let paused = model::RunView {
+            phase: RunPhase::Paused {
+                bookmark: "b3".to_owned(),
+                since: 0.0,
+            },
+            ..model::RunView::default()
+        };
+        let n = notes(&show, &paused, 330_000);
+        assert_eq!(
+            n.here,
+            pair("Close-up", "Welcome everyone.\nIntroduce the guest.")
+        );
+        assert_eq!(n.next, pair("Demo", "Show the build."));
+        // Playing between Demo and Screen: Demo's note; Screen has none.
+        let playing = model::RunView {
+            phase: RunPhase::Playing,
+            ..model::RunView::default()
+        };
+        let n = notes(&show, &playing, 450_000);
+        assert_eq!(n.here, pair("Demo", "Show the build."));
+        assert_eq!(n.next, pair("Screen", ""));
+        // Past the last bookmark there is no next.
+        assert_eq!(notes(&show, &playing, 700_000).next, None);
+        // Before the first bookmark there is nothing here.
+        show.bookmarks.retain(|b| b.id != "b1");
+        let n = notes(&show, &playing, 10_000);
+        assert_eq!(n.here, None);
+        assert_eq!(n.next, pair("Intro", ""));
+    }
+
+    #[test]
+    fn a_note_splits_into_lines_to_say_and_directions() {
+        let note = "*Holding slate.*\n\nHi everyone,\nwe start soon.\n\n**Bold** stays\n\n*";
+        assert_eq!(
+            paragraphs(note),
+            [
+                (true, "Holding slate.".to_owned()),
+                (false, "Hi everyone,\nwe start soon.".to_owned()),
+                (false, "**Bold** stays".to_owned()),
+                (false, "*".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_run_of_show_marks_done_now_and_next() {
+        let show = demo::friday();
+        let flags = |run: &model::RunView, head: u32| -> Vec<(bool, bool, bool)> {
+            cards(&show, run, head, 0.0)
+                .into_iter()
+                .map(|c| (c.past, c.current, c.next))
+                .collect()
+        };
+        // Paused at Close-up (the third): two done, it is now, Demo is next.
+        let paused = model::RunView {
+            show: Some(show.id.clone()),
+            phase: RunPhase::Paused {
+                bookmark: "b3".to_owned(),
+                since: 0.0,
+            },
+            ..model::RunView::default()
+        };
+        let f = flags(&paused, 330_000);
+        assert_eq!(
+            &f[..4],
+            [
+                (true, false, false),
+                (true, false, false),
+                (false, true, false),
+                (false, false, true)
+            ]
+        );
+        // Held by show.pause between Demo and Screen: Demo is now, Screen next.
+        let held = model::RunView {
+            show: Some(show.id.clone()),
+            phase: RunPhase::Paused {
+                bookmark: String::new(),
+                since: 0.0,
+            },
+            ..model::RunView::default()
+        };
+        let f = flags(&held, 450_000);
+        assert_eq!((f[3], f[4]), ((false, true, false), (false, false, true)));
+        // Stopped: nothing done or now, the first is next.
+        let f = flags(&model::RunView::default(), 0);
+        assert_eq!((f[0], f[1]), ((false, false, true), (false, false, false)));
     }
 }

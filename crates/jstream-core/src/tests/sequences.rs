@@ -4,11 +4,14 @@
 use super::{batch, block_on, connected, create, edits, query};
 use crate::Engine;
 use jstream_control::Control;
+use jstream_media::Timebase;
+use jstream_platform::fake::FakeClock;
 use jstream_protocol::{
     Action, Call, CallResult, ChannelDriver as Driver, ChannelEdge, ChannelInfo, Edit, Finite32,
     LaneCurve, LanePoint, LaneTarget, Query, QueryResult, SceneId, TimelineId, TimelineInfo,
     TimelineLane, TimelineLoop, TimelineTrigger,
 };
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 fn act(control: &dyn Control, action: Action) {
@@ -75,10 +78,14 @@ fn set_value(channel_id: &str, value: f32) -> Action {
 }
 
 /// Rule 2: a lane with only a point at 600 ms of 0 starts from the channel's 0.8 and
-/// glides down, never jumping, ends at 0 and holds it, driven by the sequence.
+/// glides down, never jumping, ends at 0 and holds it, driven by the sequence. The lane
+/// follows the media clock, so the test steps a fake one and samples after each step:
+/// a slow runner can't skip the glide's middle (#1749).
 #[test]
 fn a_lane_glides_from_the_current_value_and_holds_its_end() {
     let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
     let control = connected(&engine);
     let mut down = timeline("down", 600);
     down.lanes = vec![TimelineLane {
@@ -115,20 +122,26 @@ fn a_lane_glides_from_the_current_value_and_holds_its_end() {
             delay_ms: None,
         },
     );
+    // Each 50 ms step of the clock moves the lane; the values tick shows it a moment
+    // later, so each sample waits for the value to move (or for the end to hold).
     let mut seen = Vec::new();
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_millis(1200) {
-        if let Some((value, _)) = level(&control, "lights") {
-            seen.push(value);
-        }
-        std::thread::sleep(Duration::from_millis(15));
+    let mut last = level(&control, "lights").map(|l| l.0);
+    seen.extend(last);
+    for _ in 0..16 {
+        clock.advance(50);
+        until(|| {
+            let now = level(&control, "lights").map(|l| l.0);
+            now != last || now == Some(0.0)
+        });
+        last = level(&control, "lights").map(|l| l.0);
+        seen.extend(last);
     }
     assert!(
         seen.first().is_some_and(|v| *v > 0.6),
         "starts near 0.8: {seen:?}"
     );
-    // How big each step is depends on how often a slow runner gets to sample, so a
-    // glide is checked as never going up and passing through several values on its way.
+    // A glide is checked as never going up and passing through several values on its
+    // way.
     assert!(
         seen.windows(2).all(|w| w[0] - w[1] > -1e-4),
         "only ever down: {seen:?}"

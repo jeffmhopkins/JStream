@@ -341,6 +341,8 @@ fn value_bindings_aim_ptz_axes() {
                     axis,
                 },
                 amount: None,
+                enabled: true,
+                mode: jstream_protocol::MappingMode::Replace,
             },
         };
     let cc = |controller: u8, value: u8| {

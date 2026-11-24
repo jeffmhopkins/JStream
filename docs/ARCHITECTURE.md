@@ -1241,12 +1241,12 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 2 MB
-  of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
-  of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
-  `hotkey` and `binding` each carry every action's, because `hotkey.set` and
-  `binding.set` take any action), and `describe_api` returns the whole protocol schema. Shrinking
-  the tools is an open question in
+  Part of this is built: each group tool carries its own ops' full schemas, but where an
+  op holds an action or edit (`hotkey.set`, a cue, `live.set`, `batch`'s `edits`), the
+  tool carries only a stub naming the variants, since the two unions refer to each other
+  and copying them whole made `tools/list` about 2 MB. `describe_api` returns the whole
+  protocol schema, or with `name` one definition or op of it. Shrinking the group tools
+  further is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
@@ -1329,8 +1329,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 <a id="gpu-pipeline"></a>
 ## GPU pipeline
 <!-- @section
-covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**"]
-depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
+covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "crates/jstream-platform-macos/src/gpu/**"]
+depends_on = ["docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0063-macos-platform-support.md"]
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -1355,6 +1355,19 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.
+
+**On macOS** ([ADR-0063](adr/0063-macos-platform-support.md) decision 8,
+`jstream-platform-macos`'s `gpu/`), the engine's wgpu device is on Metal. Capture needs no
+copy: ScreenCaptureKit's frames are IOSurface-backed BGRA pixel buffers, which the
+platform wraps as Metal textures (`newTextureWithDescriptor:iosurface:plane:`) and adopts
+into wgpu through wgpu-hal, as in steps 1 and 2. They are complete when delivered, so a
+read waits for nothing; the release is what is ordered. Each staged use signals the
+context's `MTLSharedEvent` after the submit that reads the frame, and a frame's last
+clone keeps its pixel buffer until the event reaches that value, so ScreenCaptureKit
+never writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so
+an encode target will be two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12
+IOSurface that VideoToolbox reads, as spike S6 does; until then encoding takes the
+CPU readback of step 6.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement

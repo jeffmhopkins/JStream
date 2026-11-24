@@ -324,6 +324,16 @@ impl State {
         &self.scenes
     }
 
+    /// Every channel (ADR-0183), ordered by ID.
+    pub fn channels(&self) -> impl ExactSizeIterator<Item = &jstream_protocol::ChannelInfo> {
+        self.channels.values()
+    }
+
+    /// Every value binding (ADR-0178), ordered by ID.
+    pub fn value_bindings(&self) -> impl ExactSizeIterator<Item = &jstream_protocol::ValueBinding> {
+        self.value_bindings.values()
+    }
+
     /// The scene with this ID.
     pub fn scene(&self, id: &SceneId) -> Option<&Scene> {
         self.scenes.iter().find(|s| &s.id == id)
