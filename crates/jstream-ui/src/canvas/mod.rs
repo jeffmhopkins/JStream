@@ -19,6 +19,7 @@
 
 pub mod camera;
 pub mod crop;
+pub mod drawn;
 pub mod fly;
 pub mod group;
 pub mod live;
@@ -43,8 +44,8 @@ use crop::{CropGesture, Picture};
 use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
 use jstream_control::protocol::{
-    CameraView, Crop, Edit, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneCamera,
-    SceneId,
+    CameraView, Crop, Edit, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Query, QueryResult,
+    Rev, SceneCamera, SceneId,
 };
 use leptos::ev;
 use leptos::prelude::*;
@@ -284,6 +285,9 @@ pub fn Canvas() -> impl IntoView {
     let marquee = RwSignal::new(None::<(Point, Point)>);
     // The camera an orbit or dolly shows, and its scene, until the collection has it.
     let camera_preview = RwSignal::new(None::<camera::Preview>);
+    // The engine's last answer to `scene.drawn_camera` for the shown 3D scene: the
+    // scene, its stored camera when asked, and the camera it was drawn through.
+    let drawn_read = RwSignal::new(None::<(SceneId, Option<SceneCamera>, Option<SceneCamera>)>);
     // Camera mode: in a 3D scene every drag and the wheel move the camera, and nothing
     // is selected or moved (docs/UI-FEATURES.md#canvas).
     let camera_mode = RwSignal::new(false);
@@ -806,10 +810,57 @@ pub fn Canvas() -> impl IntoView {
     // first (ADR-0094); `None` in a 2D scene.
     let seen_in = move |current: &Layout| -> Option<CameraView> {
         let camera = camera_preview.with_untracked(|p| {
-            camera::Preview::camera_in(p.as_ref(), shown_scene(current), current.camera)
+            drawn_read.with_untracked(|read| {
+                drawn::seen_through(
+                    p.as_ref(),
+                    drawn_of(read.as_ref()),
+                    shown_scene(current),
+                    current.camera,
+                )
+            })
         });
         camera::view(camera, current.canvas)
     };
+    // Reads the camera the engine drew the shown 3D scene through (`drawn`), ten times
+    // a second while the canvas shows one, one read at a time.
+    let reading = Rc::new(std::cell::Cell::new(false));
+    let read_drawn = move || {
+        let asked = layout.with_untracked(|l| {
+            let l = l.as_ref()?;
+            Some((shown_scene(l)?.clone(), l.camera?))
+        });
+        let Some((scene_id, stored)) = asked else {
+            if drawn_read.with_untracked(Option::is_some) {
+                drawn_read.set(None);
+            }
+            return;
+        };
+        let Some(open) = session.and_then(|s| s.get()) else {
+            return;
+        };
+        if reading.replace(true) {
+            return;
+        }
+        let reading = Rc::clone(&reading);
+        spawn_local(async move {
+            let query = Query::SceneDrawnCamera {
+                scene_id: scene_id.clone(),
+            };
+            // An engine before 0.192 refuses it: the stored camera stays in use.
+            let drawn = match crate::store::query(&open, query).await {
+                Ok(QueryResult::SceneDrawnCamera { camera }) => camera,
+                _ => None,
+            };
+            reading.set(false);
+            let next = Some((scene_id, Some(stored), drawn));
+            if drawn_read.try_with_untracked(|read| *read != next) == Some(true) {
+                _ = drawn_read.try_set(next);
+            }
+        });
+    };
+    if let Ok(handle) = set_interval_with_handle(read_drawn, drawn::READ_EVERY) {
+        on_cleanup(move || handle.clear());
+    }
     // The item under `point`: the topmost box, or in a 3D scene the one the engine
     // draws on top through the camera.
     // A hidden item is hit only while selected (#1732).
@@ -2068,12 +2119,19 @@ pub fn Canvas() -> impl IntoView {
     // The camera the boxes are drawn through, in a 3D scene: the dragged one first.
     let seen_now = move || -> Option<CameraView> {
         camera_preview.with(|p| {
-            layout.with(|l| {
-                let l = l.as_ref()?;
-                camera::view(
-                    camera::Preview::camera_in(p.as_ref(), shown_scene(l), l.camera),
-                    l.canvas,
-                )
+            drawn_read.with(|read| {
+                layout.with(|l| {
+                    let l = l.as_ref()?;
+                    camera::view(
+                        drawn::seen_through(
+                            p.as_ref(),
+                            drawn_of(read.as_ref()),
+                            shown_scene(l),
+                            l.camera,
+                        ),
+                        l.canvas,
+                    )
+                })
             })
         })
     };
@@ -2503,7 +2561,11 @@ pub fn Canvas() -> impl IntoView {
                 aria-label=move || format!("Scene canvas, {}", scene_name())
                 on:keydown=on_key
                 on:keyup=on_key_up
-                on:blur=move |_| fly_keys.set_value(fly::Keys::default())
+                on:blur=move |_| {
+                    fly_keys.set_value(fly::Keys::default());
+                    fly_shifted.set_value(false);
+                    fly_shift_from.set_value(None);
+                }
             >
                 <canvas
                     node_ref=screen
@@ -2684,6 +2746,9 @@ pub fn Canvas() -> impl IntoView {
                                     title="Level (R) · roll the camera back to 0, so the scene's up is up again"
                                     on:click=move |_| {
                                         turn_camera(&|camera, _| fly::level(camera));
+                                        if let Some(element) = stage.get_untracked() {
+                                            let _focused = element.focus();
+                                        }
                                     }
                                 >
                                     "Level"
@@ -3078,6 +3143,17 @@ async fn run_preview(
 /// The scene the canvas shows.
 fn shown_scene(layout: &Layout) -> Option<&SceneId> {
     layout.scene.as_ref().map(|(id, _)| id)
+}
+
+/// A held `scene.drawn_camera` answer as a [`drawn::Read`].
+fn drawn_of(
+    read: Option<&(SceneId, Option<SceneCamera>, Option<SceneCamera>)>,
+) -> Option<drawn::Read<'_>> {
+    read.map(|(scene, stored, drawn)| drawn::Read {
+        scene,
+        stored: *stored,
+        drawn: *drawn,
+    })
 }
 
 #[cfg(test)]

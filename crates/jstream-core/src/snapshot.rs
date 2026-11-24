@@ -494,6 +494,15 @@ pub(crate) type ShowFades = BTreeMap<ItemId, ShowFade>;
 /// drawn into it scaled down uniformly (ADR-0065 §5).
 const MAX_LAYER_SIDE: u32 = 8192;
 
+/// Layer pixels per canvas pixel for a box whose longest side with its outset on both
+/// sides is `padded`: 1, or less to fit [`MAX_LAYER_SIDE`]. With an outset, the box's
+/// side and the pad are each rounded up, which can add up to 3 pixels, so it leaves
+/// 2 pixels of room: the padded layer never passes the largest side (ADR-0219 decision 3).
+fn fit_scale(padded: f32, outset: f32) -> f32 {
+    let room = if outset > 0.0 { 2.0 } else { 0.0 };
+    ((MAX_LAYER_SIDE as f32 - room) / padded).min(1.0)
+}
+
 /// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned, in
 /// canvas pixels, scaled down to fit [`MAX_LAYER_SIDE`] with the effects' outset on
 /// every side when larger. The effects grow it by the outset where the first of them
@@ -536,7 +545,7 @@ impl Boxed {
         if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
             return None;
         }
-        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let scale = fit_scale(padded[0].max(padded[1]), outset);
         let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
         Some(Self {
             size,
@@ -559,7 +568,7 @@ impl Boxed {
         if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
             return None;
         }
-        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let scale = fit_scale(padded[0].max(padded[1]), outset);
         let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
         Some(Self {
             outset,
@@ -604,9 +613,17 @@ impl Boxed {
     }
 
     /// The size the layer is placed at, which its pixels are sampled across
-    /// ([`jstream_render::Image::set_extent`]).
+    /// ([`jstream_render::Image::set_extent`]): its pixels at [`Self::scale`] 1, and the
+    /// box's size in canvas pixels for a layer scaled down to fit [`MAX_LAYER_SIDE`], so
+    /// that layer's effects count their pixel settings in canvas pixels, as the pad does
+    /// (ADR-0219, #1720). A model's is its layer's, which stands for the canvas however
+    /// many pixels it is drawn with (ADR-0197).
     fn extent(&self) -> Option<FrameSize> {
-        FrameSize::new(self.layer[0], self.layer[1]).ok()
+        if self.model || self.scale >= 1.0 {
+            return FrameSize::new(self.layer[0], self.layer[1]).ok();
+        }
+        let side = |px: f32| (px.round() as u32).max(1);
+        FrameSize::new(side(self.size[0]), side(self.size[1])).ok()
     }
 
     /// The box `placement` puts an item cropped by `crop` in: its geometry, or a legacy
@@ -1302,6 +1319,19 @@ impl Shot {
         self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
     }
 
+    /// What the model item whose layer (or effects' output) is `image` shows this frame:
+    /// its model, as posed now. `None` for another layer, or a model with no frame yet.
+    fn shown_model(&self, image: &GpuKey) -> Option<&ShownModel> {
+        let (scene, item) = image.boxed_item()?;
+        let boxed = self
+            .boxes
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))?;
+        let SourceRef::Frame(source) = &boxed.source else {
+            return None;
+        };
+        self.frames.get(source)?.model.as_ref()
+    }
+
     /// Whether `image` is the layer of an item that shows a 3D model (ADR-0107): drawn
     /// in the canvas's pixels, so placed flat as [`Placement::Layer`].
     fn is_model_box(&self, image: &GpuKey) -> bool {
@@ -1676,6 +1706,16 @@ impl Shot {
                     t.camera(&t.cameras, (key, track, *seen), elapsed_ms)
                 })
                 .collect()
+        })
+    }
+
+    /// Whether the running transition moves its held screen's camera as its shown
+    /// scene's motion moves that scene's, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn held_camera_moves(&self) -> Option<bool> {
+        self.transition.as_ref().map(|t| match &t.moves {
+            (Some(from), Some(to)) => Arc::ptr_eq(from, to),
+            _ => false,
         })
     }
 
@@ -2187,19 +2227,28 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
+            // What was on screen is held through its camera before its motion: within
+            // one family (an item shown or hidden, or a keyframe placed, on program) the
+            // family's motion moved it there, so it moves it here too, and the Move
+            // starts from the camera the screen showed rather than gliding in from the
+            // camera without it.
+            let to_moves = planner.camera_moves(&running.to, &mut shot);
+            let to_family = planner.family(&running.to);
             let moves = (
                 match &running.from {
                     transition::From::Scene(from) => planner.camera_moves(from, &mut shot),
+                    transition::From::OnScreen(_) if running.by_item => to_moves.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.camera_moves(&running.to, &mut shot),
+                to_moves,
             );
             let families = (
                 match &running.from {
                     transition::From::Scene(from) => planner.family(from),
+                    transition::From::OnScreen(_) if running.by_item => to_family.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.family(&running.to),
+                to_family,
             );
             shot.transition = Some(Transitioning {
                 start: running.start,
@@ -6847,6 +6896,7 @@ pub(crate) fn compose_metered(
                 (at, canvas),
                 (live, captures),
             );
+            meter.drew_camera(&pass.scene, camera);
             under_sky(&mut items, (cache, chains), pass, canvas, camera);
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
             let took = meter.phase_since(Phase::Passes, started);
@@ -6875,6 +6925,7 @@ pub(crate) fn compose_metered(
                     (at, canvas),
                     (live, captures),
                 );
+                meter.drew_camera(&root.scene, camera);
                 under_sky(&mut items, (cache, chains), root, canvas, camera);
                 root.background
             }
@@ -6897,6 +6948,7 @@ pub(crate) fn compose_metered(
                 (at, canvas),
                 (live, captures),
             );
+            meter.drew_camera(&show_root.scene, camera);
             under_sky(&mut over, (cache, chains), show_root, canvas, camera);
             items.clear();
             items.push(fitted(under, canvas, canvas));
@@ -7108,6 +7160,7 @@ fn run_chains(
                     (at, canvas),
                     (live, captures),
                 );
+                meter.drew_camera(&pass.scene, camera);
                 under_sky(&mut items, (&*cache, &*chains), pass, canvas, camera);
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
@@ -7305,6 +7358,12 @@ fn draw_box(
     let unlit = GpuKey::UnlitBox(scene_id.clone(), item_id.clone());
     if boxed.boxed.lit {
         cache.layer(compositor, &unlit, width, height)?;
+    }
+    // Placed at its box's size in canvas pixels, whatever its texels, so its effects'
+    // pixel settings count as the pad does (ADR-0219, #1720). Set each frame: a layer
+    // reused at the same size keeps the extent it was last given.
+    if let Some(extent) = boxed.boxed.extent() {
+        cache.set_extent(&key, extent);
     }
     let flat = if boxed.boxed.lit { &unlit } else { &key };
     let (Some(image), Some(inside), Some(layer)) = (
@@ -8399,6 +8458,7 @@ fn light_camera(
         focus_px: None,
         blur_px: jstream_protocol::Finite32::ZERO,
         autofocus: false,
+        fixed_aperture: false,
     };
     camera.validate().ok().map(|()| camera)
 }
@@ -8714,8 +8774,7 @@ fn draw_sky_of(
                 *slot = cache.get(&GpuKey::Frame(part.source.clone())).map(|image| {
                     jstream_render::SkyPicture {
                         image,
-                        direction: part_direction(arrival.direction, part.offset_deg)
-                            .map(|v| v as f32),
+                        direction: arrival.part(part.offset_deg).map(|v| v as f32),
                         width_deg: (sky.sky_picture_deg * part.scale).clamp(1.0, 120.0),
                         opacity: 1.0,
                     }
@@ -8817,7 +8876,7 @@ pub(crate) fn arrival_light(
     }
     // Where the backdrop shows it, in the scene; the light shines from there.
     let rotation = crate::warp_aim::from_angles(state.angles(warp_aiming(&environment, sky)));
-    let d = part_direction(arrival.direction, part.offset_deg);
+    let d = arrival.part(part.offset_deg);
     let from = [0, 1, 2].map(|r| (0..3).map(|k| rotation[r][k] * d[k]).sum::<f64>());
     // Its colour is taken in the frame after it is picked, while it is still faint.
     let [r, g, b] = chains.picture_means.get(source)?.1;
@@ -9679,10 +9738,18 @@ fn moved_camera(
     })
 }
 
+/// The opacity under which autofocus sees through an item: mostly faded, it shows more of
+/// what is behind it than of itself.
+const MIN_FOCUS_OPACITY: f32 = 0.5;
+
 /// How far along `camera`'s viewing axis the nearest item that the passes of scene family
-/// `family` draw meets it, at `at` with each item's motion: what autofocus focuses on
-/// (ADR-0176 decision 5). An item placed through a 3D group, or with no opacity left, is
-/// passed over; a model is met at its box. `None` when the axis meets none.
+/// `family` draw meets it (the program's, a mix's, the show scene's, or a chain phase's,
+/// which draws a scene with a video chain), at `at` with each item's motion: what autofocus focuses on
+/// (ADR-0176 decision 5). An item placed through a 3D group, one blended onto what is
+/// behind it (any blend mode but `normal`), or one under [`MIN_FOCUS_OPACITY`], is
+/// passed over, since none of them hides what is behind it; a model is met at the surface it draws (ADR-0218), and a model whose
+/// mesh this frame doesn't have, or whose search isn't built yet, isn't met. `None` when
+/// the axis meets none.
 fn centre_distance(
     shot: &Shot,
     family: &SceneId,
@@ -9692,7 +9759,12 @@ fn centre_distance(
     let view = camera.view(shot.canvas).ok()?;
     let (origin, forward) = (view.position(), view.axes()[2]);
     let mut nearest: Option<f64> = None;
-    for pass in &shot.passes {
+    // A scene with a video chain is drawn by a chain phase's pass, not the program's.
+    let chain_passes = shot.chain_steps.iter().filter_map(|step| match step {
+        ChainStep::Pass(pass) => Some(&**pass),
+        ChainStep::Run(_) | ChainStep::Box(_) => None,
+    });
+    for pass in shot.drawn_passes().chain(chain_passes) {
         if pass.camera.as_ref().is_none_or(|c| c.family != *family) {
             continue;
         }
@@ -9704,16 +9776,96 @@ fn centre_distance(
             let (Placement::Geometry(geometry) | Placement::Layer(geometry)) = placement else {
                 continue;
             };
-            if opacity <= 0.0 {
+            // Only what hides what is behind it is focused on: a see-through item, one
+            // blended onto what is behind (a glow or a hologram added on), or mostly
+            // faded, is passed over, so it can't pull the focus off the scene behind it.
+            if layer.blend != BlendMode::Normal || opacity < MIN_FOCUS_OPACITY {
                 continue;
             }
-            if let Some(t) = crate::follow::ray_meets(origin, forward, geometry.corners_in_scene())
-            {
+            let met = if layer.boxed.is_some_and(|boxed| boxed.model) {
+                shot.shown_model(&layer.image)
+                    .and_then(|shown| model_distance(shown, geometry, &view))
+            } else {
+                crate::follow::ray_meets(origin, forward, geometry.corners_in_scene())
+            };
+            if let Some(t) = met {
                 nearest = Some(nearest.map_or(t, |n| n.min(t)));
             }
         }
     }
     nearest
+}
+
+/// How far along `view`'s viewing axis the surface the model `shown` draws, placed by
+/// `geometry`, first meets it (ADR-0218): the axis carried into the model's own space
+/// through the inverse of the map that places it, met against its triangles as posed
+/// now. `None` when it meets none, or the placement can't be inverted (a model scaled
+/// flat).
+fn model_distance(shown: &ShownModel, geometry: ItemGeometry, view: &CameraView) -> Option<f64> {
+    let model = &shown.model;
+    let bounds = model.bounds();
+    let bounds = jstream_protocol::SolidBounds {
+        min: bounds.min,
+        max: bounds.max,
+    };
+    // Without a view, a solid maps a model point into the scene less the item's centre
+    // in x and y; a billboard is first turned to face the camera, as it draws.
+    let solid = geometry.facing(view).solid(bounds, None).ok()?;
+    let centre = [
+        f64::from(geometry.center.x.get()),
+        f64::from(geometry.center.y.get()),
+        0.0,
+    ];
+    let at = |p: [f32; 3]| {
+        let seen = solid.in_view(p);
+        [0, 1, 2].map(|i| seen[i] + centre[i])
+    };
+    let origin = at([0.0; 3]);
+    let unit = |axis: usize| {
+        let mut p = [0.0f32; 3];
+        p[axis] = 1.0;
+        let to = at(p);
+        [0, 1, 2].map(|i| to[i] - origin[i])
+    };
+    let columns = [unit(0), unit(1), unit(2)];
+    let inverse = invert(columns)?;
+    let camera = view.position();
+    let forward = view.axes()[2];
+    let from = [0, 1, 2].map(|i| camera[i] - origin[i]);
+    let into = |v: [f64; 3]| {
+        [0, 1, 2].map(|r| inverse[r][0] * v[0] + inverse[r][1] * v[1] + inverse[r][2] * v[2])
+    };
+    // The map takes the model-space direction back to the unit `forward`, so the hit's
+    // parameter is its distance along the viewing axis in scene pixels; as for a box
+    // (`follow::ray_meets`), a surface must be more than 1 px ahead to be met. Which side
+    // of a face is its front is decided in the model's own space, so a placement that
+    // mirrors the model (a flip) changes nothing: it still draws its outward faces.
+    let palette = shown.pose.as_deref();
+    model.ray_hit(into(from), into(forward), palette, 1.0)
+}
+
+/// The determinant of the matrix whose columns are `c`.
+fn determinant(c: [[f64; 3]; 3]) -> f64 {
+    c[0][0] * (c[1][1] * c[2][2] - c[2][1] * c[1][2])
+        - c[1][0] * (c[0][1] * c[2][2] - c[2][1] * c[0][2])
+        + c[2][0] * (c[0][1] * c[1][2] - c[1][1] * c[0][2])
+}
+
+/// The inverse, by rows, of the matrix whose columns are `c`; `None` when it is
+/// singular.
+fn invert(c: [[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
+    let det = determinant(c);
+    if !(det.is_finite() && det.abs() > 1e-12) {
+        return None;
+    }
+    // m[r][k] = c[k][r]; the inverse is the adjugate over the determinant.
+    let m = |r: usize, k: usize| c[k][r];
+    let cof = |r: usize, k: usize| {
+        let (r1, r2) = ((r + 1) % 3, (r + 2) % 3);
+        let (k1, k2) = ((k + 1) % 3, (k + 2) % 3);
+        m(r1, k1) * m(r2, k2) - m(r1, k2) * m(r2, k1)
+    };
+    Some([0, 1, 2].map(|r| [0, 1, 2].map(|k| cof(k, r) / det)))
 }
 
 /// Where a transition track of `image` is placed at `geometry`: a model's layer
@@ -9925,12 +10077,18 @@ fn moving_cameras(
             None => camera,
         })
     };
+    // A screen held within the family is moved as the scene it moves to is, from the
+    // same time, so the two ends agree where the screen and the scene do.
+    let held = match (&transition.moves.0, &transition.moves.1) {
+        (Some(from), Some(to)) if Arc::ptr_eq(from, to) => Some(transition.start),
+        _ => None,
+    };
     cameras.ends = (
         moved(
             &transition.moves.0,
             &transition.families.0,
             cameras.ends.0,
-            None,
+            held,
         ),
         moved(
             &transition.moves.1,

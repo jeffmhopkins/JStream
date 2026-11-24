@@ -271,6 +271,12 @@ pub enum Query {
     /// state, so no `rev`; an input that has sent no control change is left out.
     #[serde(rename = "midi.last_controls")]
     MidiLastControls,
+    /// Each MIDI input's latest note-on (since 0.189, ADR-0202), by input name: what a
+    /// client that learns a note for a binding watches. Runtime state, so no `rev`; an
+    /// input whose latest notes hold no note-on is left out. It reads each input's last
+    /// 16 note events, so a note-off doesn't move it.
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes,
     /// Each channel's value now and whether it is on (since 0.169, ADR-0183), ordered by
     /// ID. Runtime state, so no `rev`.
     #[serde(rename = "channel.values")]
@@ -282,6 +288,17 @@ pub enum Query {
     #[serde(rename = "scene.camera_aim")]
     SceneCameraAim {
         /// The scene whose camera to read: a keyframe scene reads its family's.
+        scene_id: crate::SceneId,
+    },
+    /// The camera a 3D scene was drawn through last (since 0.192): its camera as its
+    /// camera motion, follow camera, live aim, the 3D group it rides with and autofocus
+    /// moved it for the latest picture that drew the scene, which is where its items
+    /// are seen. What an editor outlines and hits the scene's items through. Runtime
+    /// state, so no `rev`; `camera` is omitted while no picture has drawn the scene
+    /// through a camera in the last second.
+    #[serde(rename = "scene.drawn_camera")]
+    SceneDrawnCamera {
+        /// The scene, as a picture draws it: a keyframe scene by its own ID.
         scene_id: crate::SceneId,
     },
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
@@ -495,10 +512,12 @@ impl Query {
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
             Query::MidiLastControls => "midi.last_controls",
+            Query::MidiLastNotes => "midi.last_notes",
             Query::ChannelValues => "channel.values",
             Query::DataList => "data.list",
             Query::DataGet { .. } => "data.get",
             Query::SceneCameraAim { .. } => "scene.camera_aim",
+            Query::SceneDrawnCamera { .. } => "scene.drawn_camera",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
@@ -881,6 +900,14 @@ pub enum QueryResult {
         #[serde(flatten)]
         aim: crate::camera_aim::CameraAimInfo,
     },
+    /// The result of `scene.drawn_camera` (since 0.192).
+    #[serde(rename = "scene.drawn_camera")]
+    SceneDrawnCamera {
+        /// The camera the scene was drawn through last, or `None` (omitted) while no
+        /// picture has drawn it through one in the last second.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        camera: Option<crate::SceneCamera>,
+    },
     /// The result of `jtunnel.senders`.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders {
@@ -894,6 +921,12 @@ pub enum QueryResult {
     MidiLastControls {
         /// Each input's latest control change, ordered by input name.
         controls: Vec<MidiControlInfo>,
+    },
+    /// The result of `midi.last_notes` (0.178).
+    #[serde(rename = "midi.last_notes")]
+    MidiLastNotes {
+        /// Each input's latest note-on, ordered by input name.
+        notes: Vec<crate::MidiNoteInfo>,
     },
     /// The result of `channel.values` (0.169).
     #[serde(rename = "channel.values")]
@@ -1056,10 +1089,12 @@ impl QueryResult {
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
             QueryResult::MidiLastControls { .. } => "midi.last_controls",
+            QueryResult::MidiLastNotes { .. } => "midi.last_notes",
             QueryResult::ChannelValues { .. } => "channel.values",
             QueryResult::DataList { .. } => "data.list",
             QueryResult::DataGet { .. } => "data.get",
             QueryResult::SceneCameraAim { .. } => "scene.camera_aim",
+            QueryResult::SceneDrawnCamera { .. } => "scene.drawn_camera",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",

@@ -1,0 +1,35 @@
+{
+	"name": "jstream-streamdeck",
+	"private": true,
+	"version": "0.1.0",
+	"description": "A Stream Deck plugin that controls JStream over the network: scenes, keyframes, sources, sequences, effects, outputs, channels and hotkey actions, with live key state.",
+	"license": "MIT OR Apache-2.0",
+	"type": "module",
+	"scripts": {
+		"build": "rollup -c",
+		"watch": "rollup -c -w --watch.onEnd=\"streamdeck restart io.github.jeffmhopkins.jstream\"",
+		"typecheck": "tsc --noEmit",
+		"test": "node --test --experimental-strip-types test/*.test.ts",
+		"pack": "npm run build && streamdeck validate io.github.jeffmhopkins.jstream.sdPlugin && streamdeck pack io.github.jeffmhopkins.jstream.sdPlugin --output dist --force"
+	},
+	"devDependencies": {
+		"@elgato/cli": "1.10.5",
+		"@rollup/plugin-commonjs": "29.0.3",
+		"@rollup/plugin-node-resolve": "16.0.3",
+		"@rollup/plugin-terser": "1.0.2",
+		"@rollup/plugin-typescript": "12.3.1",
+		"@tsconfig/node20": "20.1.11",
+		"@types/multicast-dns": "7.2.4",
+		"@types/node": "24.19.2",
+		"@types/ws": "8.18.2",
+		"rollup": "4.68.8",
+		"tslib": "2.9.1",
+		"typescript": "5.9.3"
+	},
+	"dependencies": {
+		"@elgato/streamdeck": "3.0.6",
+		"@elgato/utils": "0.7.0",
+		"multicast-dns": "7.2.5",
+		"ws": "8.23.0"
+	}
+}

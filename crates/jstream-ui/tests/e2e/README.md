@@ -562,13 +562,22 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   menu's sixteen panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Show** (`show.spec.js`, the Show panel alone in a tall bottom dock): a new show from
   the empty panel, named in place; Intro and Main dragged from the Scenes panel onto V1,
-  with the drop slot showing during the drag and a pausing bookmark at each end; a
+  with the drop slot showing during the drag and a pausing bookmark at each end; "Next:"
+  naming what Play brings in from the play head, a click skipping the head there and
+  then naming what starts after it; a
   bookmark (B), a loop drawn on the ruler (L) and a trim of Main's right end, each one
   `show.set`, and Edit › Undo taking them back one at a time; the cut badge's transition
   menu; an audio track and a source's audio from its menu's Add source audio at m:ss, with default fades, removed with Delete; a video
   file dropped as a browser URI list, made into a source and scene in the same batch
   as the show; the lock refusing Delete; a trim held mid-drag and let go with Escape,
   sending nothing; and the picker's menu duplicating, renaming and deleting a show.
+- **Show labels** (`show-labels.spec.js`): a crowded show sent as one `show.set` over
+  the page's own socket, with short program clips, keyframes in stacks, events close
+  together and thin overlay clips. No keyframe's name or count runs into the next
+  diamond, a stack of four is named once with "+3" and lists all four in its tooltip,
+  no named event pill runs into the next, a cut badge with its label clears its
+  neighbours, and a clip's name stays inside its clip; hovering a keyframe whose name
+  was left out shows it.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
@@ -635,7 +644,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the points sent are off at 0 and on at the bar, a click or a right-click opens its menu
   (only Delete bar, typed times kept between its neighbours), and Delete removes a
   focused one, leaving a switch lane. An on/off event's chip opens its editor on a click
-  and on a right-click, and a drag moves it by as much as the pointer moved.
+  and on a right-click, and a drag moves it by as much as the pointer moved. The zoom
+  bar reads "Whole sequence · 6 s"; + from the keyboard zooms the ruler to over three
+  times its column with 0.2 s ticks and a thumb under a third of the bar, a
+  double-click on the zoomed lane at half a second adds a point at 0.5 s, a
+  double-click on the bar fits the ruler to its column again, and Ctrl+wheel over the
+  lanes zooms in.
 - **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
   `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click

@@ -9,6 +9,11 @@
 //! `item.toggle`, `item.show` and `item.hide` of the item (ADR-0101), which show and hide
 //! it with its own appear and disappear effects.
 //!
+//! A chord whose action has a release ([`Action::on_release`], ADR-0207: push-to-talk,
+//! push-to-mute, a channel held on or off) runs that release when its key goes up, or
+//! when the page loses the focus or is hidden while it is held, so a key never stays
+//! held down by a key-up the page didn't hear ([`Held`]).
+//!
 //! A chord may end in the wheel (`Ctrl+WheelUp`, ADR-0112 §3): while the page has the
 //! focus, each notch of a bound wheel chord runs its action once ([`WheelNotches`]),
 //! and the browser's own use of it (Ctrl+wheel zooms the page) is prevented.
@@ -227,6 +232,44 @@ pub fn bind_edits(collection: &Collection, action: &Action, chord: &Chord) -> Ve
     edits
 }
 
+/// The held keys whose bound action runs something on release (ADR-0207): a
+/// `push_to_talk` or `push_to_mute` mute, or a `channel.switch` hold, keyed by the
+/// chord's last key (`KeyboardEvent.code`), so letting go of that key releases it
+/// whichever modifier went up first.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Held {
+    keys: Vec<(String, Action)>,
+}
+
+impl Held {
+    /// Notes that the key `code` was pressed and ran `actions` (ADR-0208: a chord may run
+    /// several): the key now holds the release of each that has one, in their order, in
+    /// place of what it held before.
+    pub fn press(&mut self, code: &str, actions: &[Action]) {
+        self.keys.retain(|(key, _)| key != code);
+        for release in actions.iter().filter_map(Action::on_release) {
+            self.keys.push((code.to_owned(), release));
+        }
+    }
+
+    /// The releases the key `code` held, in order, now it went up.
+    pub fn release(&mut self, code: &str) -> Vec<Action> {
+        let (gone, kept) = std::mem::take(&mut self.keys)
+            .into_iter()
+            .partition(|(key, _)| key == code);
+        self.keys = kept;
+        gone.into_iter()
+            .map(|(_, release): (String, Action)| release)
+            .collect()
+    }
+
+    /// Every release still held, oldest first: the page stopped hearing keys (it lost
+    /// the focus or was hidden), so no key-up will come.
+    pub fn release_all(&mut self) -> Vec<Action> {
+        self.keys.drain(..).map(|(_, release)| release).collect()
+    }
+}
+
 /// Whether one press running both `a` and `b` would undo itself: two scene switches,
 /// or two of one item's show, hide and toggle.
 fn conflicts(a: &Action, b: &Action) -> bool {
@@ -274,6 +317,7 @@ pub(crate) fn overlay_open() -> bool {
 pub fn Hotkeys() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
+    let held = StoredValue::new(Held::default());
     let keys = window_event_listener(leptos::ev::keydown, move |event| {
         if event.default_prevented() || event.repeat() || typed_in_field(&event) || overlay_open() {
             return;
@@ -289,11 +333,35 @@ pub fn Hotkeys() -> impl IntoView {
             return;
         }
         event.prevent_default();
+        held.update_value(|held| held.press(&event.code(), &actions));
         if let Some(s) = session.get() {
             for action in actions {
                 studio.act(&s, action);
             }
         }
+    });
+    // A held key's release (ADR-0207): its key going up, or the page losing the keys.
+    let release = move |releases: Vec<Action>| {
+        if let Some(s) = session.get() {
+            for action in releases {
+                studio.act(&s, action);
+            }
+        }
+    };
+    let up = window_event_listener(leptos::ev::keyup, move |event| {
+        let releases = held
+            .try_update_value(|held| held.release(&event.code()))
+            .unwrap_or_default();
+        if !releases.is_empty() {
+            event.prevent_default();
+            release(releases);
+        }
+    });
+    let blur = window_event_listener(leptos::ev::blur, move |_| {
+        release(held.try_update_value(Held::release_all).unwrap_or_default());
+    });
+    let hidden = window_event_listener(leptos::ev::pagehide, move |_| {
+        release(held.try_update_value(Held::release_all).unwrap_or_default());
     });
     let wheel = wheel_listener(move |event, notches| {
         if event.default_prevented() || overlay_open() {
@@ -345,6 +413,9 @@ pub fn Hotkeys() -> impl IntoView {
     });
     on_cleanup(move || {
         keys.remove();
+        up.remove();
+        blur.remove();
+        hidden.remove();
         wheel.remove();
     });
 }
@@ -542,6 +613,60 @@ mod tests {
             },
         )];
         assert_eq!(default_zoom_edits(&collection, &a), None);
+    }
+
+    #[test]
+    fn a_held_key_releases_on_its_key_up_or_when_the_page_loses_the_keys() {
+        use jstream_control::protocol::{BusId, MuteTo, SourceId};
+        let talk = Action::SourceMute {
+            source_id: SourceId::new("mic"),
+            to: MuteTo::PushToTalk,
+        };
+        let mut held = Held::default();
+        // A toggle has no release: nothing is held.
+        let toggle = Action::BusMute {
+            bus_id: BusId::master(),
+            to: MuteTo::Toggle,
+        };
+        held.press("KeyT", std::slice::from_ref(&toggle));
+        assert_eq!(held, Held::default());
+        held.press("KeyM", std::slice::from_ref(&talk));
+        assert!(held.release("KeyX").is_empty());
+        assert_eq!(
+            held.release("KeyM"),
+            vec![Action::SourceMute {
+                source_id: SourceId::new("mic"),
+                to: MuteTo::Muted,
+            }]
+        );
+        assert!(held.release("KeyM").is_empty(), "released once");
+        held.press("KeyM", std::slice::from_ref(&talk));
+        held.press("KeyM", std::slice::from_ref(&talk));
+        assert_eq!(
+            held.release_all().len(),
+            1,
+            "one key holds one press's releases"
+        );
+        // A chord running several actions (ADR-0208) holds each one's release, in order.
+        let music = Action::BusMute {
+            bus_id: BusId::new("music"),
+            to: MuteTo::PushToMute,
+        };
+        held.press("KeyM", &[talk.clone(), toggle, music]);
+        assert_eq!(
+            held.release("KeyM"),
+            vec![
+                Action::SourceMute {
+                    source_id: SourceId::new("mic"),
+                    to: MuteTo::Muted,
+                },
+                Action::BusMute {
+                    bus_id: BusId::new("music"),
+                    to: MuteTo::Unmuted,
+                },
+            ]
+        );
+        assert!(held.release_all().is_empty());
     }
 
     #[test]

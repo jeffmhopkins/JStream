@@ -236,17 +236,25 @@ how soft the far background gets; things nearer or farther blur in proportion. A
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
 `blur_px` is the aperture: 0 keeps everything sharp. With `autofocus: true` the camera \
-focuses each frame on the nearest item at the centre of the frame, gliding there, and \
+focuses each frame on the nearest item at the centre of the frame, gliding there (an \
+item blended any way but `normal`, such as an additive glow or hologram, or under half \
+opaque, is seen through, so it doesn't steal the focus), and \
 `focus_px` is only where it starts; a camera motion modifier on `autofocus` (on at 0.5 \
 or more, added to 1 when the camera's switch is on) lets a CC button switch it. \
 Models blur too, each part by its own distance, so a near part of a model goes soft \
 while the focus sits on something past it. \
+With `fixed_aperture: true` the blur behaves like a real lens: `blur_px` is the blur of \
+the framing camera (45°, focused at its framing distance), and zooming in (a smaller \
+`fov_deg`) or focusing closer softens the background, by the square of the zoom and the \
+inverse of the focus distance; a dolly zoom (moving the camera back while narrowing \
+`fov_deg` to keep the subject's size) then softens the background as it goes. \
 A camera can move on its own: `scene.set_camera_motion` gives it up to 32 modifiers, the \
 kinds and clocks of `item.set_motion` (all but `audio`), on `position_x`/`_y`/`_z`, \
 `target_x`/`_y`/`_z`, `pan`, `tilt` (degrees, turning the view about the camera), `fov`, \
 `roll`, `focus`, `blur` or `autofocus`; a slow `wiggle` of 4-8 px on the position is a hand-held \
 camera. A `midi` modifier there takes the same fields as an item's (`controller`, \
-`channel`, `input` such as a JTunnel sender's name, `from`, `to`, `smoothing_ms`), so a \
+`channel`, `input`: leave it out for any input, which is how to read the live JTunnel sender, \
+`from`, `to`, `smoothing_ms`), so a \
 fader or knob moves, turns or zooms the camera; a controller reads 0 until it is first \
 sent, so make `from` the value at rest (0 keeps the stored view). A `data` one follows a \
 DAW's live data the same way. To follow the pointer over a screen capture, add a `follow_pointer` \

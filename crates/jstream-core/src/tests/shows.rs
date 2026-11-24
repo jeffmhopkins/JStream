@@ -501,6 +501,7 @@ fn a_sequence_the_show_starts_fires_its_cues_on_time() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    folder: None,
                     lanes: Vec::new(),
                     starts: Vec::new(),
                     stops: Vec::new(),

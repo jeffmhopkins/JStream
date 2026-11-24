@@ -20,6 +20,7 @@
 
 #![forbid(unsafe_code)]
 
+mod action_bindings;
 mod activity;
 mod activity_log;
 mod aim;
@@ -32,6 +33,8 @@ mod channels;
 mod clock;
 mod codec_downloads;
 mod collection;
+mod data_triggers;
+mod drawn_camera;
 mod driven;
 mod drops;
 mod effect_packs;

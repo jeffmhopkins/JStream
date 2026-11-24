@@ -84,6 +84,7 @@ fn timeline(id: &str, duration_ms: u32, looping: TimelineLoop, cues: Vec<Timelin
     Edit::TimelineSet {
         scene_id: SceneId::new("a"),
         timeline: TimelineInfo {
+            folder: None,
             lanes: Vec::new(),
             starts: Vec::new(),
             stops: Vec::new(),

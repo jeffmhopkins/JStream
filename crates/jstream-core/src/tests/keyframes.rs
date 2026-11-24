@@ -1627,6 +1627,8 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
     );
 
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Faders"].map(String::from));
     let cc = |value| jstream_midi::Message::parse(&[0xB0, 7, value]).expect("a CC");
     midi.push("Faders", 0, &cc(127));
     // No follower yet (as in a preview): the control as it is, unsmoothed.
@@ -1708,6 +1710,8 @@ fn a_preview_with_no_output_smooths_a_midi_modifier_on_the_clock() {
     );
 
     let midi = engine.midi_inputs();
+    // Its MIDI may move things (ADR-0123 §3).
+    midi.set_bindable(["Faders".to_owned()]);
     midi.push(
         "Faders",
         0,

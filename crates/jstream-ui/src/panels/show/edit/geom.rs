@@ -106,18 +106,23 @@ pub fn seeks(show: &ShowView, at_ms: u32) -> bool {
         .any(|c| c.timed && c.start_ms < at_ms && at_ms < c.end_ms())
 }
 
-/// What the next Continue brings, for "Next:" in the bar: every clip that starts at the
-/// first start from `from_ms` on (after it, or at it too when `at_too`), in track order.
-pub fn next_up(show: &ShowView, from_ms: u32, at_too: bool) -> Vec<String> {
+/// Where the next Continue brings something in, for "Next:" in the bar: the first clip
+/// start from `from_ms` on (after it, or at it too when `at_too`). A click on "Next:"
+/// skips the play head there.
+pub fn next_at(show: &ShowView, from_ms: u32, at_too: bool) -> Option<u32> {
     let ahead = |start: u32| start > from_ms || (at_too && start == from_ms);
-    let Some(first) = show
-        .tracks
+    show.tracks
         .iter()
         .flat_map(|t| &t.clips)
         .map(|c| c.start_ms)
         .filter(|s| ahead(*s))
         .min()
-    else {
+}
+
+/// What the next Continue brings, for "Next:" in the bar: every clip that starts at
+/// [`next_at`], in track order.
+pub fn next_up(show: &ShowView, from_ms: u32, at_too: bool) -> Vec<String> {
+    let Some(first) = next_at(show, from_ms, at_too) else {
         return Vec::new();
     };
     show.tracks
@@ -448,6 +453,105 @@ pub fn drop_slot_pct(view: Viewport, program_end_ms: u32) -> Option<f64> {
     Some((end - view.start_ms) / view.span_ms * 100.0)
 }
 
+/// Markers closer than this, in px, stack into one cluster: their shapes overlap, so only
+/// the first is named, with a count of the rest.
+pub const CLUSTER_PX: f64 = 10.0;
+
+/// The least room, in px, a marker's or a cut's label is drawn in. With less, the label
+/// is left out and its name is in the tooltip; a cut keeps its icon.
+pub const MIN_LABEL_PX: f64 = 24.0;
+
+/// The room a cluster's "+N" count takes, in px.
+pub const COUNT_PX: f64 = 26.0;
+
+/// The gap kept between one label's end and the next marker, in px.
+const LABEL_GAP_PX: f64 = 8.0;
+
+/// How a marker's label sits among the other markers on its row.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MarkLabel {
+    /// The most the label may be wide, in px; `None` when it is not drawn (another
+    /// marker in its cluster is named, or there is too little room).
+    pub max_width: Option<f64>,
+    /// How many markers after it are stacked under its name: a "+N" after the label. Only
+    /// a cluster's first marker has any, and none when the count has no room either.
+    pub more: usize,
+    /// The index (into the `xs` given) of the cluster's first marker: itself, when it
+    /// leads one.
+    pub lead: usize,
+    /// How far right the label moves, in px, to clear the cluster's other markers: from
+    /// the first marker to the last.
+    pub shift: f64,
+}
+
+/// Lays out the labels of one row's markers so none runs into the next. `xs` are the
+/// markers' places, in px across rows `width` px wide, in any order; `lead_px` is how
+/// far right of its place a marker's label starts. Markers within [`CLUSTER_PX`] of a
+/// cluster's first marker join that cluster. Each cluster's first marker is named, cut
+/// short (with an ellipsis, in CSS) where the next cluster starts.
+pub fn place_marks(xs: &[f64], width: f64, lead_px: f64) -> Vec<MarkLabel> {
+    let mut order: Vec<usize> = (0..xs.len()).collect();
+    order.sort_by(|&a, &b| xs[a].total_cmp(&xs[b]).then(a.cmp(&b)));
+    // Each cluster: its first marker and its members, in place order.
+    let mut clusters: Vec<(usize, Vec<usize>)> = Vec::new();
+    for &n in &order {
+        match clusters.last_mut() {
+            Some((lead, members)) if xs[n] - xs[*lead] < CLUSTER_PX => members.push(n),
+            _ => clusters.push((n, Vec::new())),
+        }
+    }
+    let mut out = vec![
+        MarkLabel {
+            max_width: None,
+            more: 0,
+            lead: 0,
+            shift: 0.0,
+        };
+        xs.len()
+    ];
+    for (c, (lead, members)) in clusters.iter().enumerate() {
+        let next = clusters
+            .get(c + 1)
+            .map_or(width + LABEL_GAP_PX, |(n, _)| xs[*n]);
+        let shift = members.last().map_or(0.0, |&m| xs[m] - xs[*lead]);
+        let mut room = next - LABEL_GAP_PX - (xs[*lead] + shift + lead_px);
+        let more = if members.is_empty() || room < COUNT_PX {
+            0
+        } else {
+            room -= COUNT_PX;
+            members.len()
+        };
+        out[*lead] = MarkLabel {
+            max_width: (room >= MIN_LABEL_PX).then_some(room),
+            more,
+            lead: *lead,
+            shift,
+        };
+        for &m in members {
+            out[m].lead = *lead;
+        }
+    }
+    out
+}
+
+/// The most each cut's transition badge may be wide, in px, so it does not run into its
+/// neighbours. A badge is centred on its cut, so it may take up to half the gap to the
+/// cut each side of it. `xs` are the cuts' places, in px, in any order.
+pub fn cut_room(xs: &[f64]) -> Vec<f64> {
+    xs.iter()
+        .enumerate()
+        .map(|(n, &x)| {
+            let gap = xs
+                .iter()
+                .enumerate()
+                .filter(|&(m, _)| m != n)
+                .map(|(_, &o)| (o - x).abs())
+                .fold(f64::INFINITY, f64::min);
+            (gap - LABEL_GAP_PX).max(0.0)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::model::{RunPhase, demo};
@@ -548,6 +652,12 @@ mod tests {
         assert_eq!(next_up(&show, 330_000, false), ["keyframe Two-up"]);
         assert_eq!(next_up(&show, 0, true)[0], "scene Starting soon");
         assert!(next_up(&show, 660_000, false).is_empty());
+        assert_eq!(next_at(&show, 0, true), Some(0));
+        // The head on a start: Next is what starts after it, so a skip moves on.
+        let on = next_at(&show, 330_000, true).unwrap_or_default();
+        assert_eq!(on, 330_000);
+        assert!(next_at(&show, on, false).is_some_and(|after| after > on));
+        assert_eq!(next_at(&show, 660_000, false), None);
     }
 
     #[test]
@@ -698,5 +808,47 @@ mod tests {
         assert!(reorder_refusal(Overlay(2), Program).is_some());
         assert!(reorder_refusal(Keyframes, Audio(1)).is_some());
         assert!(reorder_refusal(Overlay(2), Audio(1)).is_some());
+    }
+
+    #[test]
+    fn a_marker_label_stops_short_of_the_next_marker() {
+        // Two keyframes 100 px apart, labels starting 10 px right of each.
+        let placed = place_marks(&[200.0, 100.0], 1000.0, 10.0);
+        assert_eq!(placed[1].max_width, Some(100.0 - 8.0 - 10.0));
+        assert_eq!(placed[0].max_width, Some(1000.0 - 200.0 - 10.0));
+        assert!(placed.iter().all(|p| p.more == 0));
+    }
+
+    #[test]
+    fn a_label_with_too_little_room_is_left_out() {
+        let placed = place_marks(&[100.0, 125.0, 400.0], 1000.0, 10.0);
+        assert_eq!(placed[0].max_width, None);
+        assert_eq!(placed[0].lead, 0);
+        assert!(placed[1].max_width.is_some());
+    }
+
+    #[test]
+    fn stacked_markers_are_named_once_with_a_count() {
+        let placed = place_marks(&[100.0, 104.0, 108.0, 300.0], 1000.0, 10.0);
+        assert_eq!(placed[0].more, 2);
+        // Its name starts past the stack's last diamond.
+        assert_eq!(placed[0].shift, 8.0);
+        assert_eq!(placed[0].max_width, Some(300.0 - 8.0 - 118.0 - COUNT_PX));
+        for p in &placed[1..3] {
+            assert_eq!(p.max_width, None);
+            assert_eq!(p.lead, 0);
+        }
+        assert_eq!(placed[3].lead, 3);
+        // A cluster one marker past the next has no room for a name, nor for its count.
+        let tight = place_marks(&[100.0, 104.0, 120.0], 1000.0, 10.0);
+        assert_eq!(tight[0].max_width, None);
+        assert_eq!(tight[0].more, 0);
+    }
+
+    #[test]
+    fn a_cut_badge_keeps_to_half_the_gap_each_side() {
+        let room = cut_room(&[100.0, 160.0, 500.0]);
+        assert_eq!(room, vec![52.0, 52.0, 332.0]);
+        assert_eq!(cut_room(&[50.0]), vec![f64::INFINITY]);
     }
 }

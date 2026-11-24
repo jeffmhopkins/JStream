@@ -115,7 +115,7 @@ Contents ([Design](#design) explains the choices):
   and `allow_network`, which read and save the app's "Allow devices on my network",
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
-  sender's state" (its JSON tested natively), and `desktop_ptz()`
+  sender's state" and "Use this sender's MIDI" (its JSON tested natively), and `desktop_ptz()`
   and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`,
   and `desktop_ptz_cameras()` and `set_ptz_cameras`, which read and save its "Control
   PTZ cameras" as a `PtzCameraSetting` of `PtzCameraEntry`s (ADR-0209).
@@ -199,7 +199,11 @@ Contents ([Design](#design) explains the choices):
   `false`), which the desktop app reads to register the bound chords with the OS
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
   registers reaches JStream as a hotkey even while the page has the focus, so the page
-  doesn't see that key press.
+  doesn't see that key press. Each of a chord's actions that has a release
+  (`Action::on_release`: push to talk, push to mute, a channel held on or off,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)) is kept in `Held`
+  while down: its key-up sends the release, and blur or `pagehide` sends every held
+  release, tested natively.
 - **Keys and MIDI triggers** (`bindings.rs`, `panels/triggers.rs`,
   [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)): `bindings.rs`
   is pure and tested natively. `When` is a key chord or a MIDI `Trigger` with its label
@@ -236,7 +240,8 @@ Contents ([Design](#design) explains the choices):
   natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
-  the tool bars' own and a cube for the 3D model type).
+  the tool bars' own, a cube for the 3D model type and a key for the mute keys).
+  The item menu also has a Mute check for an audio source's item.
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
@@ -251,8 +256,8 @@ Contents ([Design](#design) explains the choices):
   sections whose folds `Folds` remembers by title, and ahead of either the Show page
   while the Show panel's selection names something in the open show), the
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
-  `looks` table in `looks.rs`), the control button beside a live setting, a fader or a send
-  (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
+  `looks` table in `looks.rs`), the control button beside a live setting, a fader, a send,
+  a mute or an item's visibility (the Inspector's hotkeys tab's Control row) (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
   binding are tested natively), the Map control dialog and the Learn popover its menu
   opens (`map_control.rs`, with a mapping's ends, the sources it compares and a key's
   edits tested natively), mapping mode (`mapping_mode.rs`: `MappingMode` and
@@ -269,6 +274,9 @@ Contents ([Design](#design) explains the choices):
   what moved and a Mod's reader tested natively, over `mapping_index.rs`, every
   reader grouped by source with the edits that write one back, bypass it, name a Mod and
   list and remove what starts and stops a sequence, tested natively),
+  the Sequence panel's zoom bar (`seq_zoom.rs`: the Show panel's `Viewport` over a
+  sequence counted as one length, each time column's frame and the ruler's step tested
+  natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path, each trigger's sentence, the loop button's steps and
   range and a menu line's trigger toggle tested natively; `lane_offers.rs`: the settings
@@ -328,7 +336,11 @@ Contents ([Design](#design) explains the choices):
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
-  vertical strips, and the buses),
+  vertical strips, and the buses), with `mute_keys.rs` (`MuteKeys`, the key button
+  after a channel's or bus's mute: the chords bound to its `source.mute` or `bus.mute`
+  and Toggle, Push to talk and Push to mute keys to bind, ADR-0207, its listing of
+  bound keys tested natively) and the mute's control button (`learn.rs`' `SWITCH`
+  range, a `source_mute` or `bus_mute` value target),
   also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (the preset toolbar with its picker, + and ⋯
   menu of Rename, Duplicate, Set as default and Delete…, the picked preset's editor on
@@ -411,10 +423,15 @@ Contents ([Design](#design) explains the choices):
   stub that answers them as the server does.
 - **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
   JTunnel senders" switch, accepted senders (each with its "Use this sender's state"
-  checkbox) and the senders heard on the network
+  and "Use this sender's MIDI" checkboxes) and the senders heard on the network
   (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
-  check, and `accepts`, whether a heard sender is on the list, tested natively. The
-  store's `jtunnel_changed` counts `jtunnel.senders_changed`.
+  check, `with_heard` (accept a heard sender, or move an accepted one to the address it
+  is heard at), `with_live` and `JtunnelSetting::live_name` (the one live sender,
+  [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), and `accepts`, whether a heard sender is on the list, tested natively. The
+  store's `jtunnel_changed` counts `jtunnel.senders_changed`. `bound_input` is the
+  input a learned reader names: none for an accepted JTunnel sender, so Learn, the Map
+  dialog (whose JTunnel and Other data readers name no sender) and a channel's Learn
+  MIDI bind what follows the live sender, and a MIDI port's own name.
 - **PTZ cameras** (`ptz_cameras.rs`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)
   decision 1): `PtzCameraSettingView`, the desktop app's "Control PTZ cameras" switch and
   camera list on the Devices page, with Edit filling the form for Save camera, saved
@@ -536,7 +553,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its Sources row, whose tooltip names what it is granted (`page_api_grant`, ADR-0124).
   The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
-  indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
+  indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024).
+  Under a scene come its own folders (ADR-0222), then its unfiled keyframe scenes, then
+  its unfiled sequences; a keyframe, a sequence or such a folder drags, and moves with
+  "Move to folder", only among the rows under its scene (`space_of`), as
+  `scene.set_folder`, `timeline.set` with the sequence's `folder`, or `folder.set_parent`. It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
   preset, so the engine resolves the transition); in studio mode it goes on preview
   instead (`studio.set_preview`), and a hover button puts it on program. A mouse picks
@@ -555,7 +576,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   page's own, since the engine has no such switch: the header's button turns it on and
   off, and the browser keeps it (`jstream.studio-mode`). A
   scene's keyframe scenes (ADR-0024 §2) nest under it, one level in, with the diamond,
-  folded away by its caret, and stay there: they aren't dragged. A keyframe scene has no items of its
+  folded away by its caret, and stay there: they drag only among the rows under their
+  scene, into and out of its own folders (ADR-0222). A keyframe scene has no items of its
   own; it shows its parent's at its overrides, so selecting one lists and draws those,
   and its eye, the canvas, the Inspector's placement fields and the item menu's
   placement choices send placement edits addressed to it, which write its overrides
@@ -795,7 +817,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sent as `item.set_timing` or `item.clear_override`, ADR-0129), and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
   the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
   scene, as a scene's Hotkey row is,
-  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), then a Control row with the
+  visibility's control button, ADR-0207). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
   modifier with what it moves, how (wiggle, oscillate with its shape, drift, shake, a
   one-shot impulse with its length and decay, or audio: what it hears, the program mix or
   a bus (or a source set elsewhere, shown as itself until a bus or the program mix is
@@ -937,8 +960,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Controller learn** (`learn.rs`, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
   The properties form puts a learn button after the reset button of every setting its
   kind marks `live` that is a number with both ends or a switch, for a source's settings
-  and a filter's; the mixer puts one after each channel's and bus's mute button, and after the dB
-  field of each send that exists. A
+  and a filter's; the mixer puts one after each channel's and bus's mute button (for its
+  fader), a second after its mute keys for the mute itself (a `source_mute` or `bus_mute`
+  target over the `SWITCH` range, on at half way, ADR-0207), and one after the dB
+  field of each send that exists; the Inspector's item Hotkeys fold has a Control row
+  with one for the item's visibility (`item_visible`). A
   click on it, or a right-click on the setting's row, opens the control menu. The Shell and
   every `Modal` hand a right-click to the row's own button (`row_context`: the nearest
   ancestor with exactly one `button.learn` child, found by its `data-learn`, through
@@ -1096,6 +1122,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   as the lane; its trigger bar shows `starts` and `stops` as sentences
   (`trigger_text`) and each group's "+ Trigger" opens an editor beside it for each kind,
   which never offers a channel the sequence's own lanes drive (the engine refuses one).
+  Its zoom bar (`seq_zoom.rs`) is the Show panel's: the view is a `Viewport` over a
+  sequence counted as `SEQ_LEN` long, so it zooms in to a fiftieth of any length. The
+  ruler, each lane's area, the Events lane and the play head draw the whole sequence in a
+  frame `seq_zoom::frame` widens and slides left inside a clipping `.seq-clip`, so a
+  press still finds its time from the element it lands on and no gesture changes with
+  the zoom.
   Every edit is built on the sequence as the panel's edits still on their way leave it
   (`Pending`): the panel draws that draft at once and drops it once every edit is
   answered and the collection has caught up, or at once when one is refused. Built on
@@ -1168,7 +1200,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `host::element_at`; a source's audio goes on the A track it is let go on, or a new
   one (`edits::place_source_audio`). A track head drags to reorder its kind's rows
   (`edits::move_track`, refused across kinds by `geom::reorder_refusal`), and its menu
-  renames and deletes overlay and audio tracks. A scene clip's own audio is never
+  renames and deletes overlay and audio tracks. Labels keep out of each other's way
+  from the rows' measured width: `geom::place_marks` stacks markers closer than
+  `CLUSTER_PX` and gives each stack's first marker the room up to the next stack (its
+  name cut short with a CSS ellipsis, left out under `MIN_LABEL_PX`, "+N" for the rest),
+  `geom::cut_room` gives a cut badge half the gap each side, and a clip too narrow to
+  name draws none; hover and tooltips show the whole name. A scene clip's own audio is never
   stored ([ADR-0216](../../docs/adr/0216-a-scene-clips-audio-is-drawn-linked-under-it.md)):
   `wire::heard_in` finds the sources a scene is heard through when shown, and
   `view_of` draws a read-only `TrackKind::Linked` row per video track whose clips keep
@@ -1255,7 +1292,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   parent is 2D (`camera_start`, [ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)). A note warns when items already have depth or angles
   (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
   on the camera's target with a 6 px blur and autofocus on, and shows an Autofocus check
-  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)),
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)), a
+  Real lens check (`real_lens`, the camera's `fixed_aperture`, turned on or off keeping
+  the blur it draws with,
+  [ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)),
   Focus distance and Aperture (blur), and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
@@ -1652,16 +1692,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   decisions 1 and 3), shown only when the global has `jtunnel` and `setJtunnel`: the
   switch, the accepted senders (name and `address:port`, each with a "Use this sender's
   state" checkbox, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
-  decision 1, off for a new sender, and Remove) and an add row. Each change saves the whole setting through `setJtunnel`, the app's own command,
+  decision 1, off for a new sender, and Remove) and an add row. One accepted sender is
+  live ([ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)), marked Live; each other one has Make live, which switches to it, and a
+  sender added or accepted becomes live in place of the one before, which stays. Each change saves the whole setting through `setJtunnel`, the app's own command,
   never a protocol call; a refused change is undone and the app's reason shown (the
   page itself only asks for a name, an address and a name no other sender has). The
   app applies a saved change at once, so nothing says to restart JStream.
   Below them, while the engine's receiver runs, "Senders on this network" lists what
   `jtunnel.senders` answers, read when the page opens and again on each
   `jtunnel.senders_changed`, each sender's name (its own text, shown as text) and
-  address, with "Accepted" or Accept…. Accept… asks first, naming the sender and its
-  address and what accepting lets it do (ADR-0123 §3: the first use is explicit), and
-  only Accept in that prompt adds it, through the same save. With the receiver off it
+  address, with Live, Make live or Accept…. Accept… asks first, naming the sender and its
+  address, what accepting lets it do (ADR-0123 §3: the first use is explicit) and which
+  sender it replaces as live, and only Accept in that prompt adds it, through the same
+  save. A sender accepted by its name but heard at another address (its DAW moved
+  port) has Accept… too, and accepting moves it there. With the receiver off it
   says senders show while receiving is on.
   Below it, "Control PTZ cameras" (`ptz_cameras.rs`,
   [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1), shown
@@ -1830,7 +1874,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ⋯ menu picks Off, After FX or Before FX by name and resets the integrated loudness
   (`audio.reset_loudness`). The funnel counts the master chain's filters, from
   `Studio`'s collection, once it has one, and shows that chain in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
-  (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
+  (the shared `NumberField`), mute, its mute keys and the mute's control button
+  (ADR-0207) and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
   no fader or sends of its own. Docked in a side column the mixer shows vertical strips
@@ -1854,10 +1899,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     of the travel, the quiet end compressed, and snapping to 0 dB within a quarter of
     a dB. While the pointer holds a fader the strip shows the value under it; letting
     go (or each key press) sends one `source.set_audio` or `bus.set_fader`, so a drag
-    is one undo step. Hearing the fader during the drag needs live values
-    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which `live.set` doesn't
-    take for faders yet. A source's dB field shows the fader's value during the drag
-    and sends its own value the same way: typed, stepped or scrubbed, one edit each.
+    is one undo step. The drag is heard as it goes: an `EditDrag` sends each value as a
+    gesture's `live.set` and the release's edit ends it
+    ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md), see Number fields). A
+    source's dB field shows the fader's value during the drag and sends its own value
+    the same way: typed, stepped or scrubbed, one edit each.
     Clicking a bus's readout sets 0 dB. An accepted edit is applied to the shown
     state at once, so the strip doesn't jump back before the re-read.
   - **Meters** take `meters.tick`: an RMS bar over a fainter peak bar per channel,
@@ -2063,7 +2109,13 @@ each time its scene changes.
 - **3D scenes** (`camera.rs`, [ADR-0094](../../docs/adr/0094-scene-cameras.md)). A
   scene with a camera (`Layout.camera`: its own, or a keyframe's override or else its
   parent's, from `Collection::camera_of`) draws each outline through the camera as the
-  compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
+  compositor draws the box: the camera the engine last drew the scene through
+  (`scene.drawn_camera`, read ten times a second while the canvas shows a 3D scene,
+  `canvas/drawn.rs`), so camera motion, a follow camera, a live aim or a 3D group the
+  camera rides with move the outlines and hits with the picture. An orbit, dolly or
+  flight shows its own camera while it moves, and the stored camera is used before the
+  first answer, while no picture draws the scene, and from an edit of the camera until
+  the next answer. Outlines are `drawn_polygon_seen` clipped to the near plane, so a box
   partly behind the camera is outlined, labelled and hit by the part in front of it
   (`camera::polygon`, #1054). An item whose source has a depth (a 3D model,
   `CanvasItem::solid`, [ADR-0107](../../docs/adr/0107-3d-models.md) decision 8) is

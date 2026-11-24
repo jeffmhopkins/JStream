@@ -29,7 +29,6 @@ use jstream_protocol::{SceneId, SourceId};
 use jstream_render::Reclaimed;
 
 use crate::audio::{MonitorRoute, ScopeTap};
-use crate::profile::DrawerTotals;
 use crate::runtime::pipeline::{PictureInput, VideoTap};
 use crate::runtime::vcam::VcamTap;
 use crate::snapshot::{CaptureKey, Frame, GpuKey, LiveParams, Shot};
@@ -499,9 +498,9 @@ pub(crate) enum Garbage {
     /// A monitor's feed the mixer thread let go of, once its device closed: it holds
     /// the monitor's ring and its closed flag.
     Monitor(MonitorRoute),
-    /// The profile totals the render thread's meter replaced (ADR-0103); a reader may
-    /// still hold them.
-    Profile(Arc<DrawerTotals>),
+    /// The profile totals (ADR-0103) or drawn cameras the render thread's meter
+    /// replaced; a reader may still hold them.
+    Profile(crate::profile::Retired),
 }
 
 /// The sending side of a program stage's collector thread (R-RT-003): the render
@@ -561,7 +560,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Vcam(tap) => drop(tap),
             Garbage::Scopes(taps) => drop(taps),
             Garbage::Monitor(route) => drop(route),
-            Garbage::Profile(totals) => drop(totals),
+            Garbage::Profile(retired) => retired.free(),
         }
     }
 }

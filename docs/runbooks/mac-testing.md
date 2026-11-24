@@ -143,7 +143,8 @@ data folder. It leaves Terminal's permissions alone: they may be the user's for 
 tools.
 
 The `mac-install` workflow runs when the scripts, `Cargo.lock` or what the UI build
-reads change. `pins` runs shellcheck and checks every pin in `install-tools.txt`
+reads change, on `main` and on a ready PR into `main`
+([ADR-0231](../adr/0231-prs-into-any-branch-but-main-run-the-light-ci.md)). `pins` runs shellcheck and checks every pin in `install-tools.txt`
 against `ci.yml`, `after-review.yml` and `Cargo.lock`. `install` runs the installer from
 the checkout on `macos-latest`, checks what it installed, runs `jstream.sh` without the
 browser, loads the UI with the token, checks that SIGTERM stops the daemon, and compiles

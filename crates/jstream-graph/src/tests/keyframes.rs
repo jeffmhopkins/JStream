@@ -237,6 +237,7 @@ fn a_keyframe_scene_refuses_what_it_cant_hold() {
         &mut graph,
         vec![
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new("f"),
                 name: "F".into(),
                 parent: None,
@@ -273,12 +274,13 @@ fn a_keyframe_scene_refuses_what_it_cant_hold() {
         index: 0,
     };
     assert_eq!(refused(&mut graph, into).0, "edits.0.scene_id");
-    // It sits under its parent, never in a folder.
+    // It sits under its parent, so only in one of its parent's folders (ADR-0222), not
+    // in one of the scene list's.
     let folder = Edit::SceneSetFolder {
         scene_id: SceneId::new("k"),
         folder_id: Some(FolderId::new("f")),
     };
-    assert_eq!(refused(&mut graph, folder).0, "edits.0.scene_id");
+    assert_eq!(refused(&mut graph, folder).0, "edits.0.folder_id");
     // Only the item's own scene and a keyframe scene whose tree holds it can be named.
     assert_eq!(
         refused(&mut graph, set_visible("i1", Some("b"), false)).0,

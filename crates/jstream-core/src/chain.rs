@@ -721,6 +721,21 @@ pub(crate) struct Arrival {
     /// Its centre's direction in the sky's layout (x right, y down, z toward the viewer),
     /// unit length: near straight ahead.
     pub(crate) direction: [f64; 3],
+    /// The rotation from the layout it was pinned in to the sky's layout now, once a
+    /// warp aimed ahead has laid the sky out anew while it showed (ADR-0224), so it stays
+    /// where it is seen; `None` while it is in the layout it was pinned in.
+    pub(crate) relaid: Option<crate::warp_aim::Rotation>,
+}
+
+impl Arrival {
+    /// Where in the sky's layout now its picture `offset_deg` from its first is
+    /// ([`crate::snapshot::part_direction`]), turned with the layout it was pinned in.
+    pub(crate) fn part(&self, offset_deg: [f32; 2]) -> [f64; 3] {
+        let d = crate::snapshot::part_direction(self.direction, offset_deg);
+        self.relaid.map_or(d, |r| {
+            [0, 1, 2].map(|i| (0..3).map(|k| r[i][k] * d[k]).sum::<f64>())
+        })
+    }
 }
 
 /// How far from the sky's straight ahead an arrival picture is pinned, at most, in
@@ -807,6 +822,7 @@ impl SkyState {
         (pictures, seed): (usize, u32),
     ) {
         let still = self.warp <= 0.0;
+        let was = self.warp;
         let first = self.stepped.is_none();
         let shown = self.angles(aiming);
         match self.stepped {
@@ -839,7 +855,10 @@ impl SkyState {
             ((self.warp - target) / 0.15).min(1.0)
         };
         self.aim_at(at_s, aiming, (still, first), shown);
-        self.arrive(pictures, seed);
+        // Falling, as a setting that follows a channel or a sequence down out of warp
+        // makes it, though never above its setting (ADR-0224).
+        let falling = !first && self.warp < was;
+        self.arrive(pictures, seed, falling);
         self.stepped = Some((frame, at_s));
     }
 
@@ -852,9 +871,9 @@ impl SkyState {
 
     /// Picks the arrival picture after a step (ADR-0188): of `pictures`, none while the
     /// deep sky is gone ([`deep_shown`]), and a new one at random by `seed` once none is
-    /// picked, the deep sky shows and the warp is still or dropping, pinned near straight
-    /// ahead.
-    fn arrive(&mut self, pictures: usize, seed: u32) {
+    /// picked, the deep sky shows and the warp is still, dropping or `falling` this step
+    /// (ADR-0224), pinned near straight ahead.
+    fn arrive(&mut self, pictures: usize, seed: u32, falling: bool) {
         if pictures == 0 {
             self.drop_arrival();
             return;
@@ -867,7 +886,7 @@ impl SkyState {
             self.drop_arrival();
             return;
         }
-        if self.arrival.is_some() || (self.warp > 0.0 && self.dropping <= 0.0) {
+        if self.arrival.is_some() || (self.warp > 0.0 && self.dropping <= 0.0 && !falling) {
             return;
         }
         let count = u32::try_from(pictures).unwrap_or(u32::MAX);
@@ -887,6 +906,7 @@ impl SkyState {
         self.arrival = Some(Arrival {
             index,
             direction: [across.sin() * up.cos(), -up.sin(), -across.cos() * up.cos()],
+            relaid: None,
         });
     }
 
@@ -920,8 +940,14 @@ impl SkyState {
                 since: at_s,
                 arrival: self.arrival,
             });
-            // The picture it showed is left behind with the sky it was pinned in.
-            self.drop_arrival();
+            // The picture it showed stays where it is seen, turned into the sky laid out
+            // anew, so it fades as the warp rises as the deep sky does (ADR-0224); the
+            // sky it cross-fades from shows it there too.
+            let now = from_angles(self.angles(aiming));
+            if let Some(arrival) = &mut self.arrival {
+                let turned = multiply(&inverse(&now), &from_angles(shown));
+                arrival.relaid = Some(arrival.relaid.map_or(turned, |r| multiply(&turned, &r)));
+            }
         } else if let (true, Some(aim)) = (self.warp > 0.0, self.aim) {
             // At warp: hold the travel within its limit, letting the slack go.
             let laid = multiply(&item, &aim);
@@ -1178,9 +1204,16 @@ impl Chains {
         let mut size = (input.width(), input.height());
         let mut placed = input.extent();
         for (index, filter) in running.iter_mut().enumerate() {
-            filter.filter.set_pad(chain.pad_of(index));
+            let pad = chain.pad_of(index);
+            filter.filter.set_pad(pad);
+            let input = size;
             size = filter.filter.output_size(size.0, size.1);
-            placed = filter.filter.output_size(placed.0, placed.1);
+            placed = placed_after(
+                filter.filter.output_size(placed.0, placed.1),
+                placed,
+                (input, size),
+                pad,
+            );
             let made = cache
                 .layer(compositor, &filter.key, size.0, size.1)
                 .map(|_| ());
@@ -1884,6 +1917,30 @@ fn see(
     running.scene = Some(held);
     cache.retire_filter(std::mem::replace(&mut running.filter, fresh));
     true
+}
+
+/// The extent of a filter's output, from `grown`, its input's extent `placed` grown as
+/// its texels are: the pad counts in texels (ADR-0219), so over an input with fewer
+/// texels than its extent (an item's layer scaled down to fit, #1720) it grows the
+/// extent by as many of its own pixels as it stands for, keeping the texels per extent
+/// pixel the filters after it scale by. A filter that sizes its output otherwise keeps
+/// `grown`.
+fn placed_after(
+    grown: (u32, u32),
+    placed: (u32, u32),
+    (input, output): ((u32, u32), (u32, u32)),
+    pad: u32,
+) -> (u32, u32) {
+    let twice = pad.saturating_mul(2);
+    let padded = (input.0.saturating_add(twice), input.1.saturating_add(twice));
+    if pad == 0 || output != padded || placed == input {
+        return grown;
+    }
+    let side = |placed: u32, texels: u32| {
+        let pad = (f64::from(pad) * f64::from(placed) / f64::from(texels.max(1))).round();
+        placed.saturating_add((pad as u32).saturating_mul(2))
+    };
+    (side(placed.0, input.0), side(placed.1, input.1))
 }
 
 #[cfg(test)]
@@ -4644,21 +4701,87 @@ mod tests {
         // Without pictures, none.
         sky.step(200, 14.0, (0.0, 1.0), SKY_AIM, (0, 7));
         assert!(sky.arrival.is_none());
-        // Aimed ahead, the picture goes with the sky it cross-fades from.
+        // Aimed ahead (ADR-0224), the picture stays where it is seen: the sky it
+        // cross-fades from shows it, and the sky laid out anew shows it in the same
+        // place, until the deep sky is gone.
         let aimed = crate::chain::WarpAiming {
-            angles: [40.0, 0.0, 0.0],
+            angles: [40.0, 10.0, 5.0],
             ahead: Some(10.0),
         };
         let mut sky = crate::chain::SkyState::default();
         sky.step(1, 10.0, (0.0, 1.0), aimed, (2, 7));
         let shown = sky.arrival.expect("a picture");
+        let seen = |sky: &crate::chain::SkyState, arrival: crate::chain::Arrival| {
+            let r = crate::warp_aim::from_angles(sky.angles(aimed));
+            let d = arrival.part([0.0, 0.0]);
+            [0, 1, 2].map(|i| (0..3).map(|k| r[i][k] * d[k]).sum::<f64>())
+        };
+        let before = seen(&sky, shown);
         sky.step(2, 10.1, (1.0, 1.0), aimed, (2, 7));
-        assert!(sky.arrival.is_none(), "not in the sky laid out ahead");
         assert_eq!(sky.leaving.and_then(|leaving| leaving.arrival), Some(shown));
+        let kept = sky.arrival.expect("still shown in the sky laid out ahead");
+        assert_eq!(kept.index, shown.index);
+        let after = seen(&sky, kept);
+        for (a, b) in before.iter().zip(after) {
+            assert!((a - b).abs() < 1e-9, "moved: {before:?} to {after:?}");
+        }
+        sky.step(3, 10.5, (1.0, 1.0), aimed, (2, 7));
+        assert!(sky.arrival.is_none(), "gone at warp {}", sky.warp);
         // The shown amount follows the warp as the shader's does.
         assert!((crate::chain::deep_shown(0.0, 0.0) - 1.0).abs() < 1e-6);
         assert!(crate::chain::deep_shown(0.25, 0.0).abs() < 1e-6);
         assert!(crate::chain::deep_shown(0.3, 1.0) > 0.0);
+    }
+
+    /// ADR-0224: a warp setting that follows a channel or a sequence down out of warp,
+    /// with no ramp of its own, so it is never above its setting, picks the next
+    /// picture as the deep sky starts to show again, not only once the warp is still,
+    /// so it fades in with the deep sky rather than popping in at rest.
+    #[test]
+    fn a_warp_followed_down_picks_its_arrival_as_the_sky_shows() {
+        let mut sky = crate::chain::SkyState::default();
+        sky.step(1, 10.0, (0.0, 0.0), SKY_AIM, (3, 7));
+        let first = sky.arrival.expect("a picture from the start");
+        // Up into warp, frame by frame, as a sequence takes it there.
+        for i in 0..60_u32 {
+            let warp = (f64::from(i + 1) / 60.0) as f32;
+            sky.step(
+                2 + u64::from(i),
+                10.0 + f64::from(i + 1) / 60.0,
+                (warp, 0.0),
+                SKY_AIM,
+                (3, 7),
+            );
+            assert!(
+                sky.arrival.is_none() || sky.arrival == Some(first),
+                "picked on the way in at {warp}"
+            );
+        }
+        assert!(sky.arrival.is_none(), "none at full warp");
+        // Down out of it, as a sequence takes it: exactly one other picture, picked
+        // while the warp is still falling and fading in.
+        let mut picked_at = None;
+        for i in 0..60_u32 {
+            let warp = 1.0 - (f64::from(i + 1) / 60.0) as f32;
+            sky.step(
+                100 + u64::from(i),
+                12.0 + f64::from(i + 1) / 60.0,
+                (warp, 0.0),
+                SKY_AIM,
+                (3, 7),
+            );
+            assert_eq!(sky.dropping, 0.0, "followed, never above its setting");
+            if let (None, Some(next)) = (picked_at, sky.arrival) {
+                assert_ne!(next.index, first.index);
+                picked_at = Some(sky.warp);
+            }
+        }
+        let at = picked_at.expect("a picture as it drops");
+        assert!(at > 0.0, "picked only at rest");
+        assert!(
+            crate::chain::deep_shown(at, 0.0) < 0.5,
+            "picked faint, at {at}"
+        );
     }
 
     /// ADR-0188: an environment backdrop shows its arrival picture ahead, over the sky,
@@ -7015,6 +7138,94 @@ mod tests {
             ",
             "the shadow falls past the box, below and to the right",
         );
+    }
+
+    /// A pad grows a filter's output extent by as many extent pixels as its texels stand
+    /// for, so the texels per extent pixel the next filter scales by hold (#1720); over
+    /// an input at its own size it grows both alike, as before.
+    #[test]
+    fn a_pad_grows_the_extent_in_its_own_pixels() {
+        // Half as many texels as its extent: 8 texels of pad are 16 extent pixels.
+        assert_eq!(
+            super::placed_after((16_400, 28), (16_384, 12), ((8192, 6), (8208, 22)), 8),
+            (16_416, 44)
+        );
+        // At its own size, as `output_size` grows it.
+        assert_eq!(
+            super::placed_after((80, 52), (64, 36), ((64, 36), (80, 52)), 8),
+            (80, 52)
+        );
+        // No pad: whatever the filter sizes it to.
+        assert_eq!(
+            super::placed_after((10, 10), (16_384, 12), ((8192, 6), (10, 10)), 0),
+            (10, 10)
+        );
+    }
+
+    /// An item wider than the largest layer side is drawn into a layer scaled down to
+    /// fit, placed at the box's size in canvas pixels (ADR-0219, #1720): its drop
+    /// shadow falls as far across the canvas as a small item's, and isn't cut by the
+    /// pad. Before, the layer was placed at its own size, so the shadow's 8 px counted
+    /// in layer pixels and fell 16 canvas px away; and the box and pad, each rounded up,
+    /// made the padded layer one pixel too wide for one texture, so nothing was drawn.
+    #[test]
+    fn golden_a_big_items_shadow_reaches_as_far_as_a_small_items() {
+        let shadow = || {
+            effect(
+                "cam",
+                "drop_shadow",
+                serde_json::json!({
+                    "color": "#0000ff", "offset_x": 8.0, "offset_y": 8.0, "blur": 0.0
+                }),
+            )
+        };
+        // Both boxes end at x 44 and span rows 12 to 24.
+        let mut small = placed(&[("cam", (26.0, 18.0), (36.0, 12.0), 0.0)]);
+        apply(&mut small, vec![hide("logo"), shadow()]);
+        assert_golden(
+            &shot(&small),
+            "
+            ................
+            ................
+            ................
+            ..WWWWWWWWW.....
+            ..WWWWWWWWW.....
+            ..WWWWWWWWWBB...
+            ....BBBBBBBBB...
+            ....BBBBBBBBB...
+            ................
+            ",
+            "a small item's shadow, 8 px right and down",
+        );
+        let mut big = placed(&[("cam", (44.0 - 8192.0, 18.0), (16_384.0, 12.0), 0.0)]);
+        apply(&mut big, vec![hide("logo"), shadow()]);
+        let shot = shot(&big);
+        let Some((grid, layer)) = golden_at(&shot, 100) else {
+            return;
+        };
+        let expected: String = "
+            ................
+            ................
+            ................
+            WWWWWWWWWWW.....
+            WWWWWWWWWWW.....
+            WWWWWWWWWWWBB...
+            BBBBBBBBBBBBB...
+            BBBBBBBBBBBBB...
+            ................
+            "
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .flat_map(|line| line.chars().chain(['\n']))
+        .collect();
+        assert_eq!(
+            grid, expected,
+            "the shadow falls 8 px right and down, as the small item's, uncut\n{grid}"
+        );
+        let [texels, extent] = layer.expect("cam's layer");
+        assert!(texels.0 <= 8192, "scaled down to fit: {texels:?}");
+        assert_eq!(extent, (16_384, 12), "placed at the box's size");
     }
 
     /// An item's layer grows by what its effects draw at their settings, not the most

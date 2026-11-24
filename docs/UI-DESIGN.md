@@ -54,7 +54,8 @@ keyframes violet (`--show-loop`, `--show-keyframe`), the armed spot light blue
 (`--show-armed`) and the play head white (`--show-head`); program clips take five dark
 colours in turn (`--show-clip-c0` to `c4`, and the Run view's strip `--show-seg-0` to
 `4`), and overlay, sequence and audio clips have their own (`--show-overlay`,
-`--show-seq`, `--show-audio`). A pausing bookmark's line is dashed and one that plays
+`--show-seq`, `--show-audio`). A stack of keyframes or cues counts the rest of it on a
+tint of its own colour (`--show-keyframe-count`, `--show-event-count`). A pausing bookmark's line is dashed and one that plays
 through is solid, so the difference isn't colour alone.
 
 <a id="buttons"></a>

@@ -9,7 +9,7 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
-use crate::audio::{AudioFollow, BusMonitor};
+use crate::audio::{AudioFollow, BusMonitor, MuteTo};
 use crate::binding::{Trigger, ValueBinding};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::channel::{ChannelInfo, ChannelSwitch};
@@ -755,19 +755,27 @@ pub enum Edit {
         /// The buses, in track order.
         audio_buses: Vec<BusId>,
     },
-    /// Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders
-    /// organise only: they change no rendering, switching or nesting. Inverse:
-    /// `folder.delete`.
+    /// Adds a folder to the scene list, last in folder order (ADR-0024 §3), or, with
+    /// `scene_id`, a folder under one scene for its keyframe scenes and sequences
+    /// (ADR-0222, since 0.190). Folders organise only: they change no rendering,
+    /// switching or nesting. Inverse: `folder.delete`.
     #[serde(rename = "folder.create")]
     FolderCreate {
         /// The new folder's ID, chosen by the client. Rejected if it exists.
         folder_id: FolderId,
         /// Display name.
         name: String,
-        /// The folder it sits in, which must exist, else `not_found`. Omitted means top
-        /// level.
+        /// The folder it sits in, which must exist, else `not_found`, and belong to the
+        /// same scene (or, like this one, to none), else `invalid_argument`. Omitted
+        /// means top level.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<FolderId>,
+        /// The scene whose keyframe scenes and sequences it holds (since 0.190), which
+        /// must exist, else `not_found`, and not be a keyframe scene, else
+        /// `invalid_argument`. The folder goes with the scene when it is deleted.
+        /// Omitted makes a folder of the scene list.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
     },
     /// Renames a folder. Inverse: `folder.rename` back to the previous name.
     #[serde(rename = "folder.rename")]
@@ -778,8 +786,9 @@ pub enum Edit {
         name: String,
     },
     /// Moves a folder into another folder, or to the top level (ADR-0064: folders nest).
-    /// A parent that would put the folder inside itself is `invalid_argument` (field
-    /// `parent`), and a parent that doesn't exist `not_found`. Inverse:
+    /// A parent that would put the folder inside itself, or that belongs to another
+    /// scene than the folder (ADR-0222), is `invalid_argument` (field `parent`), and a
+    /// parent that doesn't exist `not_found`. Inverse:
     /// `folder.set_parent` with the previous parent.
     #[serde(rename = "folder.set_parent")]
     FolderSetParent {
@@ -799,9 +808,10 @@ pub enum Edit {
         /// number of folders, else `invalid_argument`.
         index: u32,
     },
-    /// Deletes an empty folder. Rejected with `invalid_argument` while a scene or another
-    /// folder sits in it, listing them as `blockers`: move them out first, or send the
-    /// batch `delete.plan` returns, which moves them up to the folder's parent. Inverse:
+    /// Deletes an empty folder. Rejected with `invalid_argument` while a scene, a
+    /// timeline or another folder sits in it, listing them as `blockers`: move them out
+    /// first, or send the batch `delete.plan` returns, which moves them up to the
+    /// folder's parent. Inverse:
     /// `folder.create` with its name and parent, then `folder.reorder` to its old
     /// position (unless it was last).
     #[serde(rename = "folder.delete")]
@@ -810,7 +820,10 @@ pub enum Edit {
         folder_id: FolderId,
     },
     /// Puts a scene in a folder, or takes it out of one. The scene keeps its position in
-    /// the flat display order. Inverse: `scene.set_folder` with the previous folder.
+    /// the flat display order. A keyframe scene goes only in a folder of its parent
+    /// (ADR-0222, since 0.190), and any other scene only in a folder of the scene list,
+    /// else `invalid_argument` on `folder_id`. Inverse: `scene.set_folder` with the
+    /// previous folder.
     #[serde(rename = "scene.set_folder")]
     SceneSetFolder {
         /// The scene to file.
@@ -1922,6 +1935,35 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
+    /// Mutes or unmutes a source's audio (ADR-0207, since 0.187), as `source.set_audio`'s
+    /// `muted` would: `to` says how, and [`MuteTo`] says what a held key or note does
+    /// with `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:
+    /// `rev` moves on by one, `state.changed` follows and the collection saves it, but it
+    /// is an action, so it is never a step of the sender's undo history, and another
+    /// client's undo that would overwrite it fails with `undo_conflict`. Setting the mute
+    /// it already has succeeds and changes nothing. The mixer ramps the change over one
+    /// block, so it never clicks, and nothing is reopened. Fails with `not_found` for a
+    /// source not in the collection, and `invalid_argument` on `source_id` for one
+    /// without audio or a `scene` source, which has no mute of its own. An action takes
+    /// no `expected_rev` or idempotency key, so a caller that may retry sends `muted` or
+    /// `unmuted`, not `toggle`.
+    #[serde(rename = "source.mute")]
+    SourceMute {
+        /// The source.
+        source_id: SourceId,
+        /// What to do to its mute.
+        to: MuteTo,
+    },
+    /// Mutes or unmutes a bus, the master included (ADR-0207, since 0.187), as
+    /// `bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with
+    /// `not_found` for a bus not in the collection.
+    #[serde(rename = "bus.mute")]
+    BusMute {
+        /// The bus.
+        bus_id: BusId,
+        /// What to do to its mute.
+        to: MuteTo,
+    },
     /// Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in
     /// VISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24
     /// (negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative
@@ -2670,6 +2712,8 @@ impl Action {
             Action::ItemShow { .. } => "item.show",
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
+            Action::SourceMute { .. } => "source.mute",
+            Action::BusMute { .. } => "bus.mute",
             Action::SceneZoomCamera { .. } => "scene.zoom_camera",
             Action::SceneDriveCamera { .. } => "scene.drive_camera",
             Action::SceneAimCamera { .. } => "scene.aim_camera",
@@ -2795,9 +2839,12 @@ impl Action {
             | Action::ChannelNudge { channel_id, .. } => {
                 vec![(EntityKind::Channel, channel_id.as_str())]
             }
-            Action::SourceRestart { source_id } | Action::SourceSeek { source_id, .. } => {
+            Action::SourceRestart { source_id }
+            | Action::SourceSeek { source_id, .. }
+            | Action::SourceMute { source_id, .. } => {
                 vec![(EntityKind::Source, source_id.as_str())]
             }
+            Action::BusMute { bus_id, .. } => vec![(EntityKind::Bus, bus_id.as_str())],
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
             // A PTZ camera belongs to the machine, not the collection (ADR-0146 §1).
@@ -2998,6 +3045,8 @@ impl Action {
             | Action::TimelineStop { .. }
             | Action::TimelineSeek { .. }
             | Action::SourceRestart { .. }
+            | Action::SourceMute { .. }
+            | Action::BusMute { .. }
             | Action::OverlayShow { .. }
             | Action::OverlayHide { .. }
             | Action::OverlayToggle { .. }
@@ -3095,6 +3144,8 @@ impl Action {
             | Action::ItemShow { .. }
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
+            | Action::SourceMute { .. }
+            | Action::BusMute { .. }
             | Action::ItemTriggerMotion { .. }
             | Action::SceneSetKeyframe { .. }
             | Action::TimelinePlay { .. }
@@ -3207,6 +3258,37 @@ impl Action {
                 channel_id,
                 to: ChannelSwitch::On | ChannelSwitch::Off,
             } => Some(format!("channel switch {channel_id}")),
+            _ => None,
+        }
+    }
+
+    /// What a held key or note runs when it is released (ADR-0207, since 0.187), or
+    /// `None` for an action that does nothing on release, which is every action but
+    /// these: `source.mute` and `bus.mute` with `push_to_talk` mute again and with
+    /// `push_to_mute` unmute again, and `channel.switch` with `hold_on` switches off and with
+    /// `hold_off` on. A
+    /// hotkey's client sends it as an `action` call when the chord's key goes up (or the
+    /// client stops hearing keys while it is held), and the engine runs it itself for a
+    /// note binding's note-off and a control change binding's fall back past the middle.
+    /// A program change has no release.
+    pub fn on_release(&self) -> Option<Action> {
+        match self {
+            Action::SourceMute { source_id, to } => Some(Action::SourceMute {
+                source_id: source_id.clone(),
+                to: to.released()?,
+            }),
+            Action::BusMute { bus_id, to } => Some(Action::BusMute {
+                bus_id: bus_id.clone(),
+                to: to.released()?,
+            }),
+            Action::ChannelSwitch { channel_id, to } => Some(Action::ChannelSwitch {
+                channel_id: channel_id.clone(),
+                to: match to {
+                    ChannelSwitch::HoldOn => ChannelSwitch::Off,
+                    ChannelSwitch::HoldOff => ChannelSwitch::On,
+                    ChannelSwitch::On | ChannelSwitch::Off | ChannelSwitch::Toggle => return None,
+                },
+            }),
             _ => None,
         }
     }

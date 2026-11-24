@@ -485,6 +485,7 @@ fn cues_switch_tracks_and_a_seek_keeps_the_last_for_each_scene() {
     block_on(control.call(Call::Batch(edits(vec![Edit::TimelineSet {
         scene_id: SceneId::new("p"),
         timeline: TimelineInfo {
+            folder: None,
             lanes: Vec::new(),
             starts: Vec::new(),
             stops: Vec::new(),

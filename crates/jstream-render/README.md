@@ -849,7 +849,8 @@ engine only passes cameras the graph accepted.
 **Depth of field.** A camera with `focus_px` and a `blur_px` above 0
 ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) blurs each fragment by its own
 distance along the view: `Shape.dof` carries the focus as a `w` (`focus / f`), the far
-blur and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
+blur (the view's, which a fixed-aperture camera scales by its zoom and focus,
+[ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)) and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
 out `r = blur · |w − focus| / w`, at most that largest blur and 64 px, from the
 fragment's interpolated `w`. Under half a pixel it takes the
 one sample as before. Otherwise it averages 16 taps on a golden-angle spiral over the
@@ -1213,8 +1214,10 @@ scene's pixels, over a canvas-sized composite) and pack effects and shader sourc
 parameters the engine can't tell apart. A test fails on a pixel parameter that is neither
 scaled nor named as counting in something else. So `Pass::reach` counts in texels, from
 the scaled settings; `video_filter_outset` in extent pixels, as the settings do; and the
-pad (`set_pad`) in texels, which only an item's effects layer has, whose texels are its
-extent pixels.
+pad (`set_pad`) in texels, which only an item's effects layer has. Core places that layer
+at its box's size, and one scaled down to fit the largest layer side at the box's canvas
+size, so its texels per extent pixel are the scale core works the pad out at
+([ADR-0219](../../docs/adr/0219-a-big-items-effects-layer-is-placed-at-its-boxs-size.md), #1720).
 
 **The harness.**
 

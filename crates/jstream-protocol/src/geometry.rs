@@ -18,7 +18,7 @@ mod solid;
 
 pub use camera::{
     CameraView, DEFAULT_FOV_DEG, Focus, MAX_BLUR_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG,
-    SceneCamera, Vec3,
+    SceneCamera, Vec3, lens_blur,
 };
 pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
 pub use group::GroupPose;

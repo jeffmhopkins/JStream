@@ -256,14 +256,18 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
   taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
-  says bye when it stops; it never announces itself or sends audio or MIDI. Beside each
+  says bye when it stops; it never announces itself or sends audio or MIDI. A
+  `network_audio` source with an empty `sender` records the first accepted sender, the
+  desktop app's one live sender (ADR-0221); a reader that names no input already reads
+  it. Beside each
   keepalive it may send a names packet
   ([ADR-0181](../../docs/adr/0181-jstream-names-a-jtunnel-senders-params.md),
   `jtunnel/names.rs`): what the collection calls the sender's 32 modulation params, each
   the name of what reads its `params` key's `values.<n>` (an enabled `data` modifier on an
   item, named by its source and property, or on a scene's camera, by the scene and
   property, a value binding, by its target (a PTZ axis as the camera and axis, `Wide
-  Zoom`, ADR-0209), or a channel's input
+  Zoom`, ADR-0209; a mute or visibility switch as `Mic Mute` or `Logo Visible`,
+  ADR-0207), or a channel's input
   ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), by the channel's name or
   else its ID), a reader naming the sender winning a
   slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine
@@ -272,8 +276,13 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   whose state is on is named; the list goes while any slot is named, then as an empty
   list four more times, and a sender never named gets none. Every 10 s
   it asks the LAN for senders from that socket (an mDNS PTR query for
-  `_jtunnel._udp.local` to 224.0.0.251:5353, so a legacy unicast query that senders
-  answer directly; `JtunnelSetup::discover` names where, `None` for nobody), lists those
+  `_jtunnel._udp.local` to 224.0.0.251:5353; `JtunnelSetup::discover` names where, `None`
+  for nobody). JTunnel answers and announces to the group, so for a multicast `discover`
+  the receiver also opens the mDNS listener (`mdns_listener`,
+  [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)):
+  a read-only socket on the group's port, shared with the system's responder by address
+  reuse and joined to the group, drained non-blocking (at most 16 datagrams per turn)
+  and run without when it can't be opened. From either socket it lists the senders
   that answer from a LAN address's port 5353 in `jstream-jtunnel`'s `Directory` (at most
   `MAX_LISTED`, 64, and `MAX_LISTED_PER_HOST`, 8, from one IP address, each forgotten
   35 s after it last answered or at its goodbye; an answer is read whole up to mDNS's
@@ -289,7 +298,11 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   A state packet ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decisions 1 and 2) is counted as `state_off` and dropped unless the sender's
   `AcceptedSender::with_state` is on ("Use this sender's state", on by default for an
-  accepted sender). On,
+  accepted sender). A sender's MIDI runs action bindings and moves value bindings,
+  channels and `midi` modifiers (it is drawn either way) only while its
+  `AcceptedSender::with_midi` is on ("Use this sender's MIDI", off by default, ADR-0123
+  §3): `Engine::start_jtunnel` names those senders to `MidiInputs::set_bindable`, and
+  `stop_jtunnel` names none ([Action bindings](#contents-motion)). On,
   each sender's `StateAssembler` joins its pieces per key and the whole message goes to
   the engine's `LiveData` (`jstream-sources`, one per engine, `Engine::live_data`) under
   the sender's name, counted as `state`, or as `state_dropped` when it isn't one JSON
@@ -317,7 +330,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   and to its every-input state
   ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §2), stamped on the
   media clock at their sample offset, whether or not a source records the sender; its
-  clock and transport messages also run the sender's tempo there (§3).
+  clock and transport messages also run the sender's tempo there (§3). Each frame the
+  sender really sent, MIDI or not (not one concealed for a gap), marks its input alive
+  (`MidiFeed::alive`), so a press it holds is let go once it falls silent
+  ([Action bindings](#contents-motion)).
   A `jstream-tempo` thread (`tempo.rs`, [ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md)
   §1) starts with the receiver and, every 20 ms, reads the every-input state's tempo
   and publishes it as the shared values `tempo.bpm` (to a tenth, moved only by a tenth
@@ -339,7 +355,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   accepted-sender and setup checks, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
-  reaching its MIDI input with no source recording it, and its clock giving that input
+  reaching its MIDI input with no source recording it, its frames marking that input
+  alive after its last message, and its clock giving that input
   a tempo and publishing the `tempo.*` values. A fake mDNS responder on loopback tests
   discovery: the query sent from the receive socket, the senders that answer listed
   with whether they are accepted, a goodbye, an unreadable answer counted, a long
@@ -412,7 +429,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   scene whose family anchors its camera to such a group item (`PassCamera.anchor`) has
   its camera, after camera motion and the live aim, placed through that item the same
   way; `placed_camera` is that camera as committed, where a transition from the scene
-  starts. A family with a follow camera ignores its anchor.
+  starts. A family with a follow camera ignores its anchor. Each colour pass a frame
+  draws through a camera (a nested scene's, the root's, the show scene's and a chain
+  phase's) notes that camera in the frame's meter by the pass's scene
+  (`DrawMeter::drew_camera`), which `scene.drawn_camera` reads.
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
@@ -420,7 +440,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/channels.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
+covers = ["crates/jstream-core/src/action_bindings.rs", "crates/jstream-core/src/action_bindings/tests.rs", "crates/jstream-core/src/aim.rs", "crates/jstream-core/src/channels.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs", "crates/jstream-core/src/value_bindings.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -443,7 +463,15 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): a `midi` modifier
   following a control change, pitch bend or channel pressure on its input's state, read
   from atomics and smoothed by the same follower; a scene or source preview reads it
-  unsmoothed. A scene camera's `midi` and `data` modifiers are recorded and smoothed the
+  unsmoothed. `Control::read`, which this, value bindings and channels all read MIDI
+  through, reads a state that isn't `MidiState::bindable` as a control at rest, and a
+  modifier, binding or channel input naming no input reads `MidiInputs::bound`, never the
+  every-input state the sources draw: a JTunnel sender with "Use this sender's MIDI" off
+  moves none of them ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+  §3, [ADR-0220](../../docs/adr/0220-every-midi-reader-goes-through-the-senders-switch.md)),
+  and one switched off mid-hold leaves nothing held. Switched on, an input is read from
+  where its controls are.
+  A scene camera's `midi` and `data` modifiers are recorded and smoothed the
   same way, by scene family and modifier ID instead of item
   ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)).
   While no render thread runs (no output), `video.snapshot` and the preview
@@ -508,6 +536,39 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) makes no edit: the
   tick rounds its value to a whole count (`PtzAim`) and the engine hands those to the
   heads (`Ptz::follow_axes`, [PTZ cameras](#contents-media)).
+- **Action bindings** (`action_bindings.rs`,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)): `ActionBindings`
+  runs each MIDI action binding (`binding.set`). On each `jstream-values` tick, while
+  the collection holds a binding, it reads each input's note log and its control and
+  program-change log since its last look, in the order heard, and runs a binding's action
+  on a note-on, a control rising past 64 or a program change, and the action's release
+  (`Action::on_release`) on that note's note-off or the control falling back below 64.
+  It reads only the inputs `MidiInputs::bindable` names (a JTunnel sender with "Use
+  this sender's MIDI" on, ADR-0123 §3), each for a binding naming it or naming none.
+  The first look at an input runs nothing. A press whose action has a release is held
+  until its release is heard, and let go sooner (its release runs on the next tick) once
+  its input is no longer bindable, its trigger no longer runs that action (ADR-0208: a
+  trigger may run several, each held and let go on its own), the
+  MIDI inputs go, or its input was marked alive (a JTunnel sender) and has not been for
+  `SILENT_MS`, 500 ms, on the media clock. A MIDI port is never marked alive, so its
+  held key stays held. So a push-to-talk never stays open because its note-off was
+  lost. The actions run as their calls would, credited
+  to the engine with no audit entry, and a failure is logged at debug. Tests cover a
+  note pressed and let go between ticks, a control crossing 64 both ways, a program
+  change, a toggle ignoring its note-off, an input not let run bindings, and a held
+  press let go by each of those four, one of a trigger's two actions let go when it alone
+  is unbound, and a held key kept held for a port.
+- **Data triggers** (`data_triggers.rs`,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)): `DataTriggers`
+  runs each binding whose trigger is `data`, right after the MIDI bindings on each
+  `jstream-values` tick. It reads the trigger's field from `LiveData`, which holds only
+  the state of senders whose state is used (ADR-0171 decision 1), across every key a `*`
+  segment matches. `equals`, `rises` and `falls` run the action when the condition
+  starts to hold for any key and its release when it stops; `changes` runs it on each
+  new value. A trigger's first read and a key's first arrival fire nothing, a key that
+  goes counts as not holding, a trigger fires at most once every `MIN_GAP` (50 ms) (a press
+  that limit holds back fires once it is over if its condition still holds), and a held press is let go when its binding changes or goes. `ActionBindings` skips data
+  triggers. `midi.last_notes` answers from `MidiInputs::last_notes`.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
   each channel's inputs with the same readers and smoothing (an `audio` input's
@@ -515,12 +576,14 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   channel's `channel` inputs come first, combines, switches, averages, fades and curves
   them, and stores each level in its `ChannelCell` in `LiveData::channels`, which the
   `channel` kind and `amount` read on any thread. The `jstream-values` thread ticks it
-  before the value bindings while the collection holds a channel, and puts a scene's
+  before the value bindings while the collection holds a channel (from the moment
+  `with_collection_file` loads one, not only from the first action or edit; a channel
+  not followed yet reads 0 to what follows it), and puts a scene's
   channels back to their defaults when that scene goes on program. `channel.set_value`,
   `channel.nudge` and `channel.switch` take over until an input moves; `channel.values`
   reads the levels. A scene's reset is immediate, with no fade. A timeline's lane is one
   more input (ADR-0184): it starts from the channel's value (a seek keeps that start, unless under `latest` a control or action took the channel since), the last timeline started
-  wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
+  wins the channel, and it holds its last value at the end (see [Timelines](#timelines)). `channel.switch`'s `hold_on` and `hold_off` switch it as `on` and `off` do; their release, from a held key or note, is the opposite ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)). A held note reads 1 (`reactive.rs`'s `Control::Note`), and a
   modifier's or camera modifier's `amount` scales its value as it applies
   (`jstream_anim::evaluate_scaled`).
 - **Camera moves** (`follow.rs`,
@@ -543,7 +606,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   (`State::camera_aims`) and publishes them on the parameter channel; a pass's camera,
   and each end of a transition, is turned by its family's aim after its motion and
   follow camera. A drive belongs to the session that last set an axis moving, and
-  `forget_client` stops it.
+  `forget_client` stops it. The camera a colour pass ends up drawn through, after its
+  motion, follow camera, aim, group anchor and autofocus, is what `scene.drawn_camera`
+  reports (see *Profile* under [Contents: media](#contents-media)).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -754,7 +819,14 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   composite's. Its `ms` doesn't: on the CPU those stay in the finish phase. The preview hub's thread times none. Each
   drawer also counts the GPU submits its thread made (`DrawMeter::submitted`, from
   `jstream_render::submits_on_this_thread` at the end of a frame), which `profile.get`
-  reports per frame as `submits`. The
+  reports per frame as `submits`. A drawer's meter also carries the cameras its
+  frame drew each scene's colour pass through, after camera motion, follow, live aim,
+  a group anchor and autofocus moved them (`DrawMeter::drew_camera`, `drawn_camera.rs`),
+  and publishes them into its `DrawerSlot` as one `DrawnCameras` when they change (at
+  most every 50 ms, and every 250 ms while they don't); the collector frees the set it
+  replaces (`profile::Retired`). `scene.drawn_camera` reads both drawers' slots outside
+  the collection lock, which it takes only to check that the scene exists, and answers
+  the most recent camera published within the last second. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
   source's look and each plan, and each new GPU frame a browser page painted that a plan
   took as a paint of it (#1556), in the live sources' `SourceMeters`. The `Profiler`
@@ -814,8 +886,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/shows.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
   `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`,
-  `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `src/tests/show_scene.rs`,
-  `tests/mcp.rs`, `tests/scenarios.rs`):
+  `src/tests/value_bindings.rs`, `src/tests/channels.rs`, `src/tests/mute.rs`,
+  `src/tests/show_scene.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end, folders and labels), live values (no `rev` or collection change, a commit as one `rev` and one undo
@@ -1101,11 +1173,21 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   gain the mixer is given, smoothed, only once it moves, while `state.get` keeps the
   stored 0 dB and lists the binding, and clearing it gives the stored gain back; the
   driver's own test (`value_bindings.rs`) waits for a control to move and follows it.
+  A JTunnel sender left out of `MidiInputs::bindable` (ADR-0123 §3) moves no value
+  binding, named or listening to every input, until it is let in; `channels.rs` and
+  `reactive.rs` show the same for a channel's input and a `midi` modifier, while an
+  input let in still moves them, and a sender switched off mid-hold lets go of a channel
+  listening to every input. These tests name their inputs bindable.
   Channels (`src/tests/channels.rs`, ADR-0183): a held note drives a channel to 1 and
   its release to 0, `channel.set_value` takes over, `channel.switch` holds the off value,
-  a missing channel's action fails, and a binding's `amount` gives half the throw at
-  0.5; `channels.rs`'s own tests cover combining, fades, averaging, the order of
-  channels reading channels and a scene's reset. A
+  a missing channel's action fails, a binding's `amount` gives half the throw at
+  0.5, and a collection file's channel reads its default as soon as the file loads;
+  `channels.rs`'s own tests cover combining, fades, averaging, the order of
+  channels reading channels and a scene's reset. Mutes (`src/tests/mute.rs`,
+  ADR-0207): `source.mute` and `bus.mute` move `rev` with no undo step, an unchanged
+  mute emits nothing, a missing or soundless target is refused, a binding goes with its
+  bus, and a held MIDI pad bound to push to talk unmutes and mutes again on its release;
+  `action_bindings.rs`'s own tests cover what fires a press and a release. A
   `width` and `height` modifier stretching one side is `motion.rs`'s. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
   source built and rebuilt, drawn sharper when enlarged and left at its own size when a
@@ -1162,6 +1244,13 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   skipped, a longer transition pacing a pose), a preview moving only the cameras
   the program doesn't frame, and MIDI controls bound to a head's zoom and pan aiming
   it, pan keeping the tilt the head answered (`value_bindings_aim_ptz_axes`).
+- **The drawn camera** (`src/tests/cameras.rs`, `src/drawn_camera.rs`): a metered frame
+  of a 3D scene whose camera motion slides it is what `scene.drawn_camera` answers, the
+  moved camera rather than the stored one, with none before any frame, none for a 2D
+  scene and `not_found` for a missing one (GPU, skipped without an adapter); and the
+  recorder's publishes (at most every `PUBLISH_MIN`, again every `REFRESH_EVERY`, a
+  scene no longer drawn gone, a stopped drawer stale, the most recent drawer winning, and
+  a steady frame keeping each scene's entry in place and publishing nothing).
 - **PTZ controllers and the live aim** (`src/ptz/controller/tests.rs`, `src/aim/tests.rs`,
   `src/tests/cameras.rs`, `src/tests/transitions.rs`): a VISCA controller emulator on
   loopback over all three transports, driving, aiming, zooming and reading a keyframe
@@ -1254,7 +1343,9 @@ by default, ADR-0075), `serde` (the derives of the installed plugins' file,
 ADR-0076), `jstream-youtube` (Google sign-in and the
 Live API client behind the YouTube commands and `youtube` outputs), `serde_json` (settings
 values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
-settings, and the CLAP kinds' parameter defaults), `png`
+settings, and the CLAP kinds' parameter defaults), `socket2` (the JTunnel receiver's mDNS
+listener, which must set address reuse before it binds port 5353, ADR-0221; already in
+the tree under tokio with the same `all` feature), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
@@ -1312,7 +1403,11 @@ outside it, taking only the audio sources' wanted-set mutex to clone the receive
 the live data's own lock. `midi.last_controls` (0.168, ADR-0178) is answered on the same
 path, before the queries the graph answers: it takes the collection lock only to reach
 the MIDI inputs, and reads each one's latest control change under `MidiInputs`' leaf
-lock.
+lock. `midi.last_notes` (ADR-0202) is answered the same way, reading each input's
+latest note-on.
+`scene.drawn_camera` (0.192) takes the collection lock only to check that the scene
+exists, then reads the drawers' published cameras with no lock (see *Profile* under
+[Contents: media](#contents-media)).
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -1374,6 +1469,11 @@ audit entry and errors.
   `timeline.play`, `timeline.seek`, `timeline.stop`, `source.restart` and
   `source.seek` (see [Timelines](#timelines)), `scene.set_keyframe` (see
   [Keyframe tracks](#keyframe-tracks)),
+  `source.mute` and `bus.mute`
+  ([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md): they apply the
+  `source.set_audio` or `bus.set_fader` mute they stand for, as `item.show` below does,
+  with a `rev` and no undo step; an unchanged mute emits nothing, and a missing target is
+  `not_found`),
   and `item.show`, `item.hide` and `item.toggle`
   ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
   `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
@@ -1385,7 +1485,10 @@ audit entry and errors.
   quietly so the probe reaches none) and puts a Move toward the program scene on the
   studio, by item, with the default preset's duration and easing and its `unmatched`
   (none for a `cut`): every other item pairs with itself and holds still, and only the
-  changed one appears or disappears with its effect. A preset that lasts no time, the
+  changed one appears or disappears with its effect. In a 3D scene whose camera moves on
+  its own, the screen's camera is moved by the family's camera motion as the scene's is,
+  so the Move starts from the camera on screen and doesn't jump to the camera without
+  its motion and glide back. A preset that lasts no time, the
   initial cut included, starts no run, so the item shows or hides on the next frame
   even when it has its own effect. A `cut` that stores a duration still plays that
   effect over it. A transition in flight is
@@ -2206,7 +2309,13 @@ width scales `sky_picture_deg`, `picture_scale`, and its turn and tilt from the 
 which `part_direction` places), and the state keeps the arrival shown
 and where it is pinned (`Arrival`): none while the deep sky is gone at warp
 (`deep_shown`), and another, at random, picked once as it starts to show again with the
-warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
+warp still, dropping or lower than the step before
+([ADR-0224](../../docs/adr/0224-an-arrival-picture-fades-with-the-warp-it-follows.md),
+so a warp that follows a channel down fades it in too;
+`a_backdrop_arrives_at_another_picture_after_each_warp`,
+`a_warp_followed_down_picks_its_arrival_as_the_sky_shows`); a warp aimed ahead keeps it
+where it is seen, turned into the sky it lays out (`Arrival::relaid`), so it fades as the
+warp builds;
 `draw_sky_of` passes its pictures to the backdrop, the upload loop takes the average
 colour of the shown arrival's last picture once per version (`note_picture_mean`, kept in
 `Chains::picture_means` for the shown ones only), and `light_scene` and a probe's capture
@@ -2616,7 +2725,14 @@ the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds
 and an item whose motion drives its effects' settings (ADR-0138, `driven.rs`) is padded
 for the least and the most they reach (`Driven::extremes`), from its own settings and,
 during a Move, from the look it leaves. A box
-longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
+longer with its outset than 8192 pixels on a side is scaled down uniformly, leaving room
+for its side and the pad each rounded up (`fit_scale`), and its layer is given the box's
+size in canvas pixels as its extent, so its effects' pixel settings count in canvas
+pixels as the pad does and reach as far across the canvas as on a smaller item
+([ADR-0219](../../docs/adr/0219-a-big-items-effects-layer-is-placed-at-its-boxs-size.md), #1720,
+`golden_a_big_items_shadow_reaches_as_far_as_a_small_items`). A pad grows the extent of
+what its filter draws by as many extent pixels as its texels stand for
+(`chain::placed_after`). The item is
 drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
@@ -4632,9 +4748,7 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
-  would need to use it are designed (ADR-0076); and a way to remove one (no
-  `plugin.uninstall` yet, so an unwanted plugin stays saved, disabled, until
-  `plugins.json` is edited).
+  would need to use it are designed (ADR-0076).
 
 <a id="locking"></a>
 ## Locking
@@ -4744,7 +4858,10 @@ is the live sources' snapshot, taken with no lock), and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
 takes the live data's lock briefly, last, to find or make its watch, as a plan does. A
 `jstream-values` tick also plays the timelines whose wait is over and those a trigger
-fired, and moves the lanes, all under the same collection lock. A
+fired, moves the lanes, and runs the MIDI action bindings and data triggers that fired,
+each as its call would, all under the same collection lock; the note and control logs it
+reads are lock-free, and a data trigger takes the live data's leaf lock briefly, last, to
+read its key's message (ADR-0202). A
 channel's level is one atomic (`ChannelCell`); the cell map's lock is a leaf, taken
 briefly to find or make a cell, by a plan, a binding or the channel driver. A channel
 action takes the collection lock, then the channel driver's state under it. The WASM plugins' registry lock
@@ -4811,8 +4928,9 @@ the host's error) and an `info` with how many effects it found. A `tempo.*` valu
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
 `warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
 answers; only its event is missing). A `jstream-values` thread that can't start is a
-`warn`; the value bindings and channels then wait for the next batch or channel action
-to start it.
+`warn`; the value bindings, channels, MIDI action bindings and data triggers then wait for the next
+batch or channel action to start it. An action a MIDI binding or a data trigger runs logs as any call
+does, its failure at `debug` with the error code (ADR-0207).
 
 <a id="audit-log"></a>
 ## Audit log
@@ -4854,7 +4972,13 @@ binding reads by its trigger ("Bound MIDI note 36 on channel 10 from Pads to sce
 switch"), a clear naming one action by it ("Unbound scene switch from F8", ADR-0208),
 a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
 "Switched channel “Power” off"), and a `source.seek` by its source and its point in
-tenths of a second, cut rather than rounded ("Played “Clip” from 83.4 s"). A timeline's cues
+tenths of a second, cut rather than rounded ("Played “Clip” from 83.4 s"). A
+`source.mute` or `bus.mute` says which way it sets the mute, read before it runs
+("Muted “Mic”", "Unmuted bus “Music”",
+[ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)). An action a MIDI
+binding runs gets no entry, as a timeline's cue gets none: it runs on the
+`jstream-values` thread, not as a call, and the `binding.set` that bound it has one.
+A timeline's cues
 get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
 one, and `timeline.cue_fired` reports each cue
 ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)).
@@ -4917,7 +5041,9 @@ collection there at once, with `Graph::with_sample_labels`'s four labels when it
 none, still at its `rev`, and keeps that as the engine's collection, so the file and the
 engine agree and an unwritable path fails at startup rather than at the first change.
 A file that doesn't read or load is refused with `CollectionFileError` (`Read`, `Load`
-or `Create`, each naming the path but never the contents) and left as it is. It is
+or `Create`, each naming the path but never the contents) and left as it is. A loaded
+collection's channels, bindings and triggers are followed at once (the `jstream-values`
+thread starts with it), as an opened one's are. It is
 configured before `connect`, like the other builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before
@@ -5388,9 +5514,10 @@ or a GPU that is behind drops (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
 too; a tick that fails part-way is discarded), which allocates nothing in a steady
-frame and publishes one snapshot of its totals about once a second, the meter's only
-allocation, handing the totals it replaces to the collector (*Profile* in
-[Purpose](#purpose)). The render thread uploads no 3D model: its draw's `Chains` asks the
+frame and publishes one snapshot of its totals about once a second, and the cameras its
+frame drew its scenes through when they change (at most 20 times a second, and 4 while
+they don't), the meter's only allocations, handing what they replace to the collector
+(*Profile* in [Contents: media](#contents-media)). The render thread uploads no 3D model: its draw's `Chains` asks the
 `jstream-models` thread for each (`Chains::upload_models_aside`, see *Snapshots*;
 [ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). After its draws it
 uploads the warm scenes' stills its cache holds no texture of, from held pixels only

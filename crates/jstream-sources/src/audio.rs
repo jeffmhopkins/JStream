@@ -171,8 +171,9 @@ pub(crate) fn kinds() -> Vec<AudioKind> {
                 },
                 ParamDescriptor {
                     description: Some(
-                        "The sender's name, as its plugin shows it. JStream receives only \
-                         from senders accepted on this machine."
+                        "The sender's name, as its plugin shows it, or empty for the live sender \
+                         (the first accepted). JStream receives only from senders accepted \
+                         on this machine."
                             .into(),
                     ),
                     ..param(

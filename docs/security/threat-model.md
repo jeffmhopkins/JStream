@@ -734,8 +734,17 @@ somewhere it shouldn't.
 - It sends only subscribe and bye packets and names packets, only to accepted senders'
   addresses, which must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
   `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
-  socket (a legacy unicast query, so senders answer that socket; no socket joins the
-  group or binds port 5353). It never announces itself and never sends audio or MIDI.
+  socket. It never announces itself and never sends audio or MIDI.
+- Senders answer and announce to the group, so a second socket, the mDNS listener
+  ([ADR-0221](../adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)),
+  binds port 5353 with address reuse beside the system's responder and joins the group
+  while the receiver runs. Nothing is sent from it. It takes only an mDNS message from a
+  LAN address's port 5353, into the same parser and list as below, and drops the rest
+  uncounted; it reads at most 16 datagrams per turn of the thread, so other programs'
+  mDNS traffic can't hold up playout. Another local program on 5353 sees the same
+  group traffic it always did; JStream adds nothing to it.
+- In the desktop app one accepted sender is live at a time (ADR-0221): only it is
+  subscribed to, so a reader naming no input reads only that sender's data.
 - A names packet ([ADR-0181](../adr/0181-jstream-names-a-jtunnel-senders-params.md))
   tells an accepted sender whose state is on what the collection calls its modulation
   params, so its DAW shows them. It carries only the names of what reads the sender's
@@ -754,8 +763,22 @@ somewhere it shouldn't.
   instance's name is copied, once it matches; a message declaring more than 256 records
   is refused unread, so one costs at most a few tens of thousands of steps); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
-  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
-  doesn't trigger bindings (ADR-0142 §2).
+  name and the every-input one, which the `midi_*` sources draw (and whose clock gives
+  their beat). It moves anything only once the person turns on "Use this sender's MIDI"
+  for that sender (the desktop app's checkbox, the daemon's `--jtunnel-midi`), off by
+  default ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md) §3,
+  [ADR-0207](../adr/0207-mute-actions-and-held-triggers.md),
+  [ADR-0220](../adr/0220-every-midi-reader-goes-through-the-senders-switch.md)): the
+  engine's action-binding runner (`binding.set`, so any bindable action, `output.stop`
+  included) reads only the inputs `MidiInputs::bindable` names, and value bindings,
+  channels and `midi` modifiers read a named input only while its state is bindable
+  (reading it as a control at rest otherwise, in `Control::read`) and, naming none, only
+  the bound state, which a sender feeds only while it is let in and which is rebuilt
+  without it when it is dropped. A press a sender holds (a
+  push-to-talk) is let go once the switch goes off, its binding changes, or the sender
+  has sent nothing for 500 ms, so a dropped sender can't leave a mute open. Tests show a
+  sender left out moves no action binding, value binding, channel or `midi` modifier,
+  and one switched off mid-hold leaves nothing held.
 - A sender's state packets (JTunnel's side channel, a DAW's JSON messages under keys,
   [ADR-0171](../adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2) are
   taken only from an accepted sender, and counted and dropped while the person has

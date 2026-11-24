@@ -169,7 +169,11 @@ and another seek puts back), `scene.set_keyframe`
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md), which another switch puts back
 and nothing stores), `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
-opposite action takes back), `studio.set_warm` (ADR-0117 §7: how many scenes stay
+opposite action takes back), `source.mute` and `bus.mute`
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md), which the opposite
+mute takes back), `channel.set_value`, `channel.nudge` and `channel.switch`
+([ADR-0183](../../docs/adr/0183-virtual-control-channels.md), which another channel
+action takes back and nothing stores), `studio.set_warm` (ADR-0117 §7: how many scenes stay
 ready, which another call puts back), `studio.set_rendering`
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md): which
 costly 3D effects draw, which another call puts back) and `clock.hold`, `clock.step` and `clock.release`
@@ -260,7 +264,9 @@ several shots as one switch with `via`, an orbiting `move` preset (`camera_path`
 `orbit`) and turns in more than one angle as one rotation
 ([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
-[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a sky all around a 3D set as an
+[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md), and `fixed_aperture`, a real
+lens's blur that follows the zoom and focus for a dolly zoom,
+[ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)), a sky all around a 3D set as an
 environment light with `backdrop` on, with `stars`, `nebula`, a `galaxy` band or a
 panorama `image`, and a `warp` that ramps itself over `warp_ramp_s` (motion modifiers on
 the light's item may drive its numbers and colours)

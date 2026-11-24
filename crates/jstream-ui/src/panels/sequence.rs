@@ -10,7 +10,8 @@
 //! ends, and a click or a right-click opens its menu (on at, off at, delete). Each
 //! gesture is one `timeline.set`, so one undo step. A lane with no point at 0 starts from the channel's value, drawn dashed from
 //! where the channel is now. The play head follows `timeline.changed`, and a click on
-//! the ruler seeks there.
+//! the ruler seeks there. The zoom bar along the foot (`seq_zoom`) zooms and scrolls the
+//! lanes, as the Show panel's does.
 //!
 //! Docs: docs/adr/0184-sequences-lanes-and-triggers.md, docs/UI-FEATURES.md#automation
 
@@ -25,6 +26,8 @@ use crate::panels::lane_offers::{
 };
 use crate::panels::learn::follows;
 use crate::panels::number::NumberField;
+use crate::panels::seq_zoom;
+use crate::panels::show::time::Viewport;
 use crate::session::Session;
 use crate::store::{Collection, Studio, now_ms};
 use jstream_control::protocol::MIN_LOOP_MS;
@@ -45,6 +48,11 @@ const COLOURS: usize = 4;
 
 /// Where a dragged point snaps to without Shift, in ms.
 const SNAP_MS: u32 = 100;
+
+/// How far a lane's drawing area sits in from each side of its column, in px (the
+/// `.seq-area` margin in style.css). The ruler and the play head keep to it too, so a
+/// time lines up down every row.
+pub(crate) const AREA_INSET_PX: f64 = 8.0;
 
 /// The scene whose sequences the panel lists for `scene`: a keyframe's parent.
 pub fn family(collection: &Collection, scene: &SceneId) -> SceneId {
@@ -78,6 +86,7 @@ pub fn fresh_sequence(collection: &Collection) -> (TimelineId, String) {
 /// An empty sequence, six seconds long.
 pub fn empty_sequence(id: TimelineId, name: String) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         timeline_id: id,
         name,
         duration_ms: 6000,
@@ -593,6 +602,17 @@ pub fn Sequence() -> impl IntoView {
         });
         draft.or(found)
     });
+    // The part of the open sequence in view: all of it, until the zoom bar or the wheel
+    // zooms in; a different sequence opens whole.
+    let zoom = RwSignal::new(seq_zoom::fit());
+    let open_id = Memo::new(move |_| open.with(|o| o.as_ref().map(|(_, t)| t.timeline_id.clone())));
+    Effect::new(move |was: Option<Option<TimelineId>>| {
+        let now = open_id.get();
+        if was.is_some_and(|w| w != now) {
+            zoom.set(seq_zoom::fit());
+        }
+        now
+    });
     let apply = move |scene_id: SceneId, timeline: TimelineInfo, mut edits: Vec<Edit>| {
         if let Some(s) = session.0.get_value() {
             edits.push(Edit::TimelineSet {
@@ -948,7 +968,7 @@ pub fn Sequence() -> impl IntoView {
                     }.into_any(),
                     Some((scene, t)) => view! {
                         <Triggers timeline=t.clone() change=change />
-                        <Lanes timeline=t scene=scene change=change values=values position=Signal::derive(position) />
+                        <Lanes timeline=t scene=scene change=change values=values position=Signal::derive(position) zoom=zoom />
                     }.into_any(),
                 }}
             </div>
@@ -1465,6 +1485,8 @@ fn Lanes(
     change: impl Fn(&dyn Fn(&mut TimelineInfo)) -> bool + Copy + Send + Sync + 'static,
     values: RwSignal<HashMap<String, ChannelValueInfo>>,
     position: Signal<Option<u32>>,
+    /// The part of the sequence in view (`seq_zoom`).
+    zoom: RwSignal<Viewport>,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
@@ -1475,12 +1497,9 @@ fn Lanes(
     let bar_drag = RwSignal::new(None::<BarDrag>);
     let bar_menu = RwSignal::new(None::<BarMenu>);
     let live = move |channel: &str| values.with(|v| v.get(channel).map(|c| c.value.get()));
-    let ticks = {
-        let step = match duration {
-            0..=10_000 => 1000,
-            10_001..=60_000 => 5000,
-            _ => 30_000,
-        };
+    // The ruler's ticks, finer as the view zooms in.
+    let ticks = move || {
+        let step = seq_zoom::tick_step(duration, zoom.get());
         (0..=duration / step)
             .map(|n| {
                 let ms = n * step;
@@ -1488,6 +1507,21 @@ fn Lanes(
                 view! { <span class="seq-tick" style:left=format!("{left:.3}%")>{seconds(ms)}</span> }
             })
             .collect_view()
+    };
+    // Each time column's frame: the whole sequence, widened and slid to the part in view.
+    let frame_w = move |inset: f64| seq_zoom::frame(zoom.get(), inset).0;
+    let frame_l = move |inset: f64| seq_zoom::frame(zoom.get(), inset).1;
+    let ruler_clip = NodeRef::<leptos::html::Div>::new();
+    let wheel = move |e: leptos::ev::WheelEvent| {
+        let Some(el) = ruler_clip.get_untracked() else {
+            return;
+        };
+        let rect = el.get_bounding_client_rect();
+        let x = f64::from(e.client_x()) - rect.left();
+        if seq_zoom::wheel(zoom, &e, x, rect.width()) {
+            e.prevent_default();
+            e.stop_propagation();
+        }
     };
     let seek = move |e: leptos::ev::MouseEvent| {
         let Some(el) = e
@@ -1913,8 +1947,11 @@ fn Lanes(
                             <span class="seq-level">{level}</span>
                         </div>
                     </div>
+                    <div class="seq-clip">
                     <div
                         class="seq-area"
+                        style:width=move || frame_w(AREA_INSET_PX)
+                        style:margin-left=move || frame_l(AREA_INSET_PX)
                         on:dblclick=add
                         on:pointermove=moving
                         on:pointerup=up
@@ -1934,6 +1971,7 @@ fn Lanes(
                             }}
                         </svg>
                         {move || if switch { bars().into_any() } else { dots().into_any() }}
+                    </div>
                     </div>
                 </div>
             }
@@ -2101,19 +2139,25 @@ fn Lanes(
     };
     let empty = timeline.lanes.is_empty();
     view! {
-        <div class="seq-lanes">
+        <div class="seq-lanes" on:wheel=wheel>
             <div class="seq-ruler-row">
                 <div class="seq-lane-head seq-ruler-head"></div>
-                <div class="seq-ruler" on:click=seek title="Click to play from here">{band}{ticks}</div>
+                <div class="seq-clip" node_ref=ruler_clip>
+                    <div class="seq-ruler" on:click=seek title="Click to play from here"
+                        style:width=move || frame_w(AREA_INSET_PX) style:margin-left=move || frame_l(AREA_INSET_PX)>{band}{ticks}</div>
+                </div>
             </div>
             <div class="seq-body">
-                <crate::panels::events::Events timeline=timeline.clone() scene=scene change=change />
+                <crate::panels::events::Events timeline=timeline.clone() scene=scene change=change zoom=zoom />
                 {lanes}
                 {empty.then(|| view! {
                     <p class="hint seq-empty">"No lanes yet. Add lane picks a channel or a setting; a lane starts from where its channel is."</p>
                 })}
-                <div class="seq-head-layer">{head}</div>
+                <div class="seq-head-layer">
+                    <div class="seq-head-frame" style:width=move || frame_w(AREA_INSET_PX) style:margin-left=move || frame_l(AREA_INSET_PX)>{head}</div>
+                </div>
             </div>
+            <seq_zoom::SeqZoomBar zoom=zoom duration_ms=timeline.duration_ms position=position />
             {point_menu}
             {bar_menu_view}
         </div>

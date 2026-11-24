@@ -44,9 +44,9 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   the command that saves it.
 - **JTunnel** (`jtunnel.rs`): "Receive from JTunnel senders"
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
-  its accepted senders in the data folder's `jtunnel.json`, starting the engine's
-  JTunnel receiver from it, and `set_jtunnel`, the command that saves it and applies
-  it at once.
+  its accepted senders and the one live sender in the data folder's `jtunnel.json`,
+  starting the engine's JTunnel receiver with the live sender, and `set_jtunnel`, the
+  command that saves it and applies it at once.
 - **PTZ controllers** (`ptz.rs`): "Accept a PTZ controller"
   ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
   §3), the setting with its endpoints and allowed controllers in the data folder's
@@ -107,7 +107,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   capped log file (user-only, checked on Unix), the update check's request and the
   replies it gives a releases list, a rate limit and a malformed message, the network
   setting (off until saved on, user-only, off when malformed), the JTunnel setting (off
-  until turned on, user-only, a refused sender never saved, off when malformed), the network listener and
+  until turned on, user-only, a refused sender never saved, off when malformed, a
+  sender's MIDI running no bindings until its `midi` is on), the network listener and
   pairing it turns on, the UI folder inside a macOS app, the control token registered
   for redaction, the default project's path, its move from the data folder with its
   stream keys and recent-list place, and a screenshot's name, its never-replacing save
@@ -303,14 +304,19 @@ folder, and its log `logs\cef.log`.
 - **JTunnel senders.** Settings › Devices › "Receive from JTunnel senders" (off until
   turned on) and its list of accepted senders, each a tunnel name and the address and
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
-  in the data folder; they apply at the next start. On, the app receives each accepted
+  in the data folder and apply at once, with no restart. Several senders may be accepted, but one is
+  live at a time ([ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md)): Make live switches, and a sender accepted becomes live. The
+  readers that name no input (what Learn and Map make for a JTunnel source) follow
+  whichever sender is live. On, the app receives the live
   sender's audio and MIDI as the daemon's `--jtunnel-accept` does
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and the DAW state of
   each, unless its "Use this sender's state" is unticked, as `--jtunnel-no-state` does
-  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), and lists the
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), lets a
+  sender's MIDI run the collection's MIDI action bindings only once its "Use this
+  sender's MIDI" is ticked, as `--jtunnel-midi` does (off by default,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), and lists the
   senders that answer on the network, each not yet accepted with Accept…, which asks
-  before adding it (so turning it on with no sender, then restarting, is how to find
-  the first one). The page shows why a sender was refused, and the log names the
+  before adding it (so turning it on with no sender is how to find the first one). The page shows why a sender was refused, and the log names the
   senders at start.
 - **PTZ controllers.** Settings › Devices › "Accept a PTZ controller" (off until turned
   on), its endpoints (an address and port of this machine on the LAN, a transport, a
@@ -441,10 +447,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   setting is on but devices can't connect.
 - **JTunnel** (`jtunnel.rs`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
-  "address": "192.168.1.5:9000", "state": true}]}` in the data folder's `jtunnel.json`
+  "address": "192.168.1.5:9000", "state": true, "midi": false}], "live": "Bitwig"}` in the data folder's `jtunnel.json`
+  (`live` names the one sender received from, [ADR-0221](../../docs/adr/0221-jtunnel-senders-are-found-on-the-mdns-group-and-one-is-live.md); left out, or naming a sender no
+  longer accepted, the first accepted is live)
   (`state` is "Use this sender's state",
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 1, on
-  when left out, as for a newly accepted sender, so a file from before it reads as on), per machine
+  when left out, as for a newly accepted sender, so a file from before it reads as on;
+  `midi` is "Use this sender's MIDI", ADR-0123 decision 3, off when left out), per machine
   and never in the collection, so opening a collection never turns it on. It is written
   user-only (a leftover temporary file is removed first, so it never keeps another
   mode) and replaced whole, and only once the engine would take it
@@ -455,7 +464,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   else, never a protocol call an engine client could make. It is read at start, after
   the engine's backends, whose media clock stamps the arrivals, and applied again each
   time `set_jtunnel` saves it, so no change needs a restart (`apply`): on, the app calls
-  `Engine::start_jtunnel` with the accepted senders (none is fine: the receiver then
+  `Engine::start_jtunnel` with the live sender alone, every accepted one still checked
+  (none is fine: the receiver then
   only finds senders, `jtunnel.senders`, protocol 0.114), which replaces a receiver
   already running, so a sender accepted, removed, or with its state turned off takes
   effect at once; off, `Engine::stop_jtunnel`. A refused setting or a socket that can't

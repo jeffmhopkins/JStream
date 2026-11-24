@@ -59,7 +59,15 @@ pub(crate) fn apply(
             folder_id,
             name,
             parent,
-        } => create_folder(state, folder_id, name, parent.as_ref(), at),
+            scene_id,
+        } => create_folder(
+            state,
+            folder_id,
+            name,
+            parent.as_ref(),
+            scene_id.as_ref(),
+            at,
+        ),
         Edit::FolderRename { folder_id, name } => rename_folder(state, folder_id, name, at),
         Edit::FolderSetParent { folder_id, parent } => {
             set_parent(state, folder_id, parent.as_ref(), at)
@@ -128,7 +136,8 @@ pub(crate) fn source_meta(source: &Source) -> SourceMeta {
 }
 
 /// Everything that stops deleting folder `id`: the scenes filed in it (display order),
-/// then the folders inside it (folder order).
+/// the timelines filed in it (by scene, then ID; ADR-0222), then the folders inside it
+/// (folder order).
 pub(crate) fn folder_blockers(state: &State, id: &FolderId) -> Vec<Blocker> {
     let scenes = state
         .scenes
@@ -139,6 +148,11 @@ pub(crate) fn folder_blockers(state: &State, id: &FolderId) -> Vec<Blocker> {
             id: s.id.as_str().to_owned(),
             field: "folder".into(),
         });
+    let timelines = filed_timelines(state, id).map(|(_, t)| Blocker {
+        entity: EntityKind::Timeline,
+        id: t.timeline_id.as_str().to_owned(),
+        field: "folder".into(),
+    });
     let folders = state
         .folders
         .iter()
@@ -148,7 +162,124 @@ pub(crate) fn folder_blockers(state: &State, id: &FolderId) -> Vec<Blocker> {
             id: f.id.as_str().to_owned(),
             field: "parent".into(),
         });
-    scenes.chain(folders).collect()
+    scenes.chain(timelines).chain(folders).collect()
+}
+
+/// The timelines filed in folder `id`, by scene in display order then by ID, each with
+/// the scene that holds it.
+fn filed_timelines<'a>(
+    state: &'a State,
+    id: &'a FolderId,
+) -> impl Iterator<Item = (&'a SceneId, &'a TimelineInfo)> + 'a {
+    state.scenes.iter().flat_map(move |scene| {
+        scene
+            .timelines
+            .values()
+            .filter(move |t| t.folder.as_ref() == Some(id))
+            .map(move |t| (&scene.id, t))
+    })
+}
+
+/// The scene whose folders can hold scene `si`'s timelines (ADR-0222): its parent for a
+/// keyframe scene, else itself.
+fn family(state: &State, si: usize) -> SceneId {
+    let scene = &state.scenes[si];
+    scene.variant_of.clone().unwrap_or_else(|| scene.id.clone())
+}
+
+/// Checks that folder `folder_id` exists (`not_found`) and belongs to `owner`: a scene,
+/// or the scene list for `None` (`invalid_argument` on `field`).
+pub(crate) fn check_folder_owner(
+    state: &State,
+    folder_id: &FolderId,
+    owner: Option<&SceneId>,
+    at: usize,
+    field: &str,
+) -> Result<(), ProtocolError> {
+    let folder = &state.folders[folder_index(state, folder_id)?];
+    if folder.scene.as_ref() == owner {
+        return Ok(());
+    }
+    let has = |scene: Option<&SceneId>| match scene {
+        Some(scene) => format!("scene `{scene}`'s"),
+        None => "the scene list's".to_owned(),
+    };
+    Err(invalid(
+        at,
+        field,
+        format!(
+            "folder `{folder_id}` is one of {} folders, and this needs one of {}",
+            has(folder.scene.as_ref()),
+            has(owner)
+        ),
+    ))
+}
+
+/// Checks the folder a timeline held by scene `scene_id` names (ADR-0222): one of the
+/// scene's family's folders, or none.
+pub(crate) fn check_timeline_folder(
+    state: &State,
+    scene_id: &SceneId,
+    folder: Option<&FolderId>,
+    at: usize,
+) -> Result<(), ProtocolError> {
+    let (Some(folder), Some(si)) = (folder, state.scene_index(scene_id)) else {
+        return Ok(());
+    };
+    check_folder_owner(
+        state,
+        folder,
+        Some(&family(state, si)),
+        at,
+        "timeline.folder",
+    )
+}
+
+/// Takes the folders that belong to `scene_id` out of `state` (ADR-0222: they go with
+/// their scene) and returns the edits that put them back, in their places.
+pub(crate) fn remove_scene_folders(
+    state: &mut State,
+    scene_id: &SceneId,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let mut removed = Vec::new();
+    let mut index = 0;
+    state.folders.retain(|f| {
+        let goes = f.scene.as_ref() == Some(scene_id);
+        if goes {
+            removed.push((index, f.clone()));
+        }
+        index += 1;
+        !goes
+    });
+    // Created top level and appended, in their old order, then nested, then each moved
+    // back to its index, lowest first, which puts every one where it was.
+    let mut edits: Vec<Edit> = removed
+        .iter()
+        .map(|(_, f)| Edit::FolderCreate {
+            folder_id: f.id.clone(),
+            name: f.name.clone(),
+            parent: None,
+            scene_id: Some(scene_id.clone()),
+        })
+        .collect();
+    edits.extend(
+        removed
+            .iter()
+            .filter(|(_, f)| f.parent.is_some())
+            .map(|(_, f)| Edit::FolderSetParent {
+                folder_id: f.id.clone(),
+                parent: f.parent.clone(),
+            }),
+    );
+    for (len, (index, f)) in (state.folders.len()..).zip(&removed) {
+        if *index != len {
+            edits.push(Edit::FolderReorder {
+                folder_id: f.id.clone(),
+                index: wire_index(*index)?,
+            });
+        }
+    }
+    Ok(edits)
 }
 
 /// Everything that stops deleting label `id`: the sources carrying it, by ID, the
@@ -271,15 +402,26 @@ pub(crate) fn folder_plan(state: &State, id: &FolderId) -> Result<Vec<Edit>, Pro
         .clone();
     let mut edits: Vec<Edit> = folder_blockers(state, id)
         .into_iter()
-        .map(|blocker| match blocker.entity {
-            EntityKind::Scene => Edit::SceneSetFolder {
+        .filter_map(|blocker| match blocker.entity {
+            EntityKind::Scene => Some(Edit::SceneSetFolder {
                 scene_id: SceneId::new(blocker.id),
                 folder_id: parent.clone(),
-            },
-            _ => Edit::FolderSetParent {
+            }),
+            EntityKind::Timeline => {
+                let (scene_id, timeline) =
+                    state.timeline(&jstream_protocol::TimelineId::new(blocker.id))?;
+                Some(Edit::TimelineSet {
+                    scene_id: scene_id.id.clone(),
+                    timeline: TimelineInfo {
+                        folder: parent.clone(),
+                        ..timeline.clone()
+                    },
+                })
+            }
+            _ => Some(Edit::FolderSetParent {
                 folder_id: FolderId::new(blocker.id),
                 parent: parent.clone(),
-            },
+            }),
         })
         .collect();
     edits.push(Edit::FolderDelete {
@@ -382,6 +524,7 @@ fn create_folder(
     id: &FolderId,
     name: &str,
     parent: Option<&FolderId>,
+    scene: Option<&SceneId>,
     at: usize,
 ) -> Result<Vec<Edit>, ProtocolError> {
     check_id(id.as_str(), at, "folder_id")?;
@@ -389,13 +532,30 @@ fn create_folder(
     if state.folder(id).is_some() {
         return Err(already_exists(EntityKind::Folder, id.as_str()));
     }
+    // A scene's folders hold its keyframe scenes and timelines (ADR-0222), so a keyframe
+    // scene, which has neither of its own, has none.
+    if let Some(scene_id) = scene {
+        let si = state
+            .scene_index(scene_id)
+            .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+        if let Some(parent) = &state.scenes[si].variant_of {
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "scene `{scene_id}` is a keyframe scene of `{parent}`: its folders are its parent's"
+                ),
+            ));
+        }
+    }
     if let Some(parent) = parent {
-        folder_index(state, parent)?;
+        check_folder_owner(state, parent, scene, at, "parent")?;
     }
     state.folders.push(Folder {
         id: id.clone(),
         name: name.to_owned(),
         parent: parent.cloned(),
+        scene: scene.cloned(),
     });
     Ok(vec![Edit::FolderDelete {
         folder_id: id.clone(),
@@ -425,7 +585,8 @@ fn set_parent(
 ) -> Result<Vec<Edit>, ProtocolError> {
     let fi = folder_index(state, id)?;
     if let Some(parent) = parent {
-        folder_index(state, parent)?;
+        let scene = state.folders[fi].scene.clone();
+        check_folder_owner(state, parent, scene.as_ref(), at, "parent")?;
         // Walk up from the new parent: reaching the folder means it would sit inside
         // itself. Parents always exist and never loop, so the walk ends.
         let mut path = vec![parent.clone()];
@@ -471,6 +632,7 @@ fn delete_folder(state: &mut State, id: &FolderId, at: usize) -> Result<Vec<Edit
         folder_id: folder.id.clone(),
         name: folder.name,
         parent: folder.parent,
+        scene_id: folder.scene,
     }];
     // Re-created folders are appended, so only a folder that wasn't last moves back.
     if fi != state.folders.len() {
@@ -491,18 +653,11 @@ fn set_folder(
     let si = state
         .scene_index(scene_id)
         .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+    // A keyframe scene sits under its parent, so only in one of its parent's folders
+    // (ADR-0222); any other scene only in a folder of the scene list.
     if let Some(folder_id) = folder_id {
-        folder_index(state, folder_id)?;
-    }
-    // A keyframe scene sits under its parent, never in a folder (ADR-0024 §3).
-    if let Some(parent) = &state.scenes[si].variant_of {
-        return Err(invalid(
-            at,
-            "scene_id",
-            format!(
-                "scene `{scene_id}` is a keyframe scene of `{parent}` and sits under it, not in a folder"
-            ),
-        ));
+        let owner = state.scenes[si].variant_of.clone();
+        check_folder_owner(state, folder_id, owner.as_ref(), at, "folder_id")?;
     }
     let old = std::mem::replace(&mut state.scenes[si].folder, folder_id.cloned());
     Ok(vec![Edit::SceneSetFolder {
@@ -721,6 +876,7 @@ mod tests {
 
     fn folder(id: &str, parent: Option<&str>) -> Edit {
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new(id),
             name: format!("Folder {id}"),
             parent: parent.map(FolderId::new),
@@ -1182,6 +1338,7 @@ mod tests {
         let timeline = |labels: &[&str]| Edit::TimelineSet {
             scene_id: SceneId::new("a"),
             timeline: TimelineInfo {
+                folder: None,
                 lanes: Vec::new(),
                 starts: Vec::new(),
                 stops: Vec::new(),
