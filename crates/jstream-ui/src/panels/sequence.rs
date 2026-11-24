@@ -741,9 +741,6 @@ pub fn Sequence() -> impl IntoView {
         let Some((scene, mut t)) = open.get_untracked() else {
             return;
         };
-        let Some(s) = session.0.get_value() else {
-            return;
-        };
         let mut edits = Vec::new();
         let followed = studio
             .collection
@@ -778,11 +775,7 @@ pub fn Sequence() -> impl IntoView {
         {
             lane.points = switch_points(level >= 0.5, t.duration_ms);
         }
-        edits.push(Edit::TimelineSet {
-            scene_id: scene,
-            timeline: t,
-        });
-        studio.apply(&s, edits);
+        apply(scene, t, edits);
     };
 
     let none = move || open.with(Option::is_none);
@@ -792,8 +785,18 @@ pub fn Sequence() -> impl IntoView {
                 <Icon name="sequence" size=14 />
                 <select class="seq-select" aria-label="Sequence" on:change=pick>
                     {move || {
-                        let current = open.with(|o| o.as_ref().map(|(_, t)| t.timeline_id.clone()));
-                        let mut rows: Vec<_> = list()
+                        let shown = open.get().map(|(_, t)| t);
+                        let current = shown.as_ref().map(|t| t.timeline_id.clone());
+                        // The open one as the panel's edits leave it: a sequence just made
+                        // or renamed shows before the engine says so.
+                        let mut all = list();
+                        if let Some(t) = shown {
+                            match all.iter_mut().find(|l| l.timeline_id == t.timeline_id) {
+                                Some(l) => *l = t,
+                                None => all.push(t),
+                            }
+                        }
+                        let mut rows: Vec<_> = all
                             .into_iter()
                             .map(|t| {
                                 let id = t.timeline_id.to_string();
