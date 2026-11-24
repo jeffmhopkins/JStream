@@ -20,6 +20,7 @@ pub mod agents;
 pub mod app;
 pub mod browse;
 pub mod canvas;
+pub mod chrome;
 pub mod clap_plugins;
 pub mod clipboard;
 pub mod dialog;

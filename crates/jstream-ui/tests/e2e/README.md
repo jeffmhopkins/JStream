@@ -259,6 +259,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the left handle crops outside crop mode, and Clear crop gives the whole picture back;
   W % and H % read the size against the source's, set it, follow `source.size_changed`
   and go disabled without a size.
+- **The browser's menu and selection** (`chrome.spec.js`): a right-click on the header's
+  brand, readout and menu button, a dock tab, a panel heading and the canvas tools is
+  swallowed, while the Sources panel's search field keeps the browser's menu and opens no
+  panel menu; in Connection details the header swallows and a value doesn't. A drag from
+  a dock tab across the panels, and a double-click on a tab or a caption, select no text,
+  while a double-click in the search field selects its word. File, Edit and View hang
+  flush under the header.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off, Select all, and New group, which
   groups the selection into "Group 1") and on the margin, which Escape closes; the arrow keys move through a menu, skipping a disabled

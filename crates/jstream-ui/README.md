@@ -183,7 +183,8 @@ Contents ([Design](#design) explains the choices):
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
   registers reaches JStream as a hotkey even while the page has the focus, so the page
   doesn't see that key press.
-- **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
+- **Menus, dialogs and icons**: `chrome.rs` (the browser's own right-click menu and text
+  selection, kept to text fields and readable text), `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
@@ -619,6 +620,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does. While it lists any kinds, a Shader type under Generated writes a custom
   shader source first and opens its Properties with the shader editor (ADR-0135, under
   Filters below), and each custom shader source's kind is listed after it.
+- **The browser's own menu and selection** (`chrome.rs`, [CM-09](../../docs/UI-FEATURES.md#menus)).
+  A window listener swallows every right-click no menu answered, so the browser's
+  generic menu never opens over the app, and an element that keeps a right-click from
+  the menu behind it (a dialog, a panel's tool bar) swallows it with `chrome::swallow`.
+  Text keeps the browser's menu and its selection: `chrome::TEXT` lists text fields,
+  code, errors, the connection details and the agent's activity log, the style sheet
+  turns `user-select` off elsewhere, and `Menus::open` leaves a right-click in a text
+  field to the browser. A `selectstart` outside text is cancelled, and a press on the
+  chrome clears a stray selection, captured so a drag that stops its press still does.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
   and on a nested scene's item), any other single object's (Source in a window or full

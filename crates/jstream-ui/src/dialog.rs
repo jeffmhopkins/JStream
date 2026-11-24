@@ -455,7 +455,10 @@ pub fn Modal(
                     end_drag(&event, true);
                 }
                 on:pointercancel=move |event: ev::PointerEvent| end_drag(&event, false)
-                on:contextmenu=|event: ev::MouseEvent| event.stop_propagation()
+                on:contextmenu=|event: ev::MouseEvent| {
+                    event.stop_propagation();
+                    crate::chrome::swallow(&event);
+                }
             >
                 {children()}
             </div>

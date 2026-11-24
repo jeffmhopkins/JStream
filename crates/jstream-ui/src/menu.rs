@@ -227,6 +227,11 @@ impl Menus {
     /// Opens `entries` at the pointer of `event`, in place of any open menu, and keeps the
     /// browser's own menu closed.
     pub fn open(&self, event: &ev::MouseEvent, entries: Vec<Entry>) {
+        // A right-click in a text field keeps the browser's Cut, Copy and Paste, even
+        // where the panel around it has a menu (`chrome.rs`).
+        if event.type_() == "contextmenu" && crate::chrome::in_text(event.target()) {
+            return;
+        }
         event.prevent_default();
         event.stop_propagation();
         self.0.set(Some(Open {
