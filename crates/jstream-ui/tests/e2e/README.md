@@ -681,6 +681,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   `scrollWidth` stays within its `clientWidth` at the dialog's width and when a
   720-wide viewport clamps the dialog; the Nearest on top check sits in front of its
   text, and the Roll field keeps room for its number.
+- **Fly mode** (`fly.spec.js`): in a scene given a camera, F turns on camera mode and
+  fly mode and the pill reads "fly ×1.00"; W held sends live values and then one
+  `scene.set_camera` with the camera and its target moved together toward the canvas;
+  Space with D raises it and moves it right while E rolls it (D stays a fly key, not the
+  Depth tool); Shift lowers it and R levels the roll (not the Turn tool); a left drag
+  turns it where it stands; Shift+wheel sets "fly ×1.49" and the plain wheel then widens
+  its field of view from the same position; Esc leaves fly mode, then camera mode; and
+  one undo takes back the last commit.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the
