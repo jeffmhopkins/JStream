@@ -364,7 +364,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   two, and no sideways scroll in the Transform tab. A drag on X (#1734) sends
   `live.set` values of the dragged box, which the engine answers with `live.changed`,
   before the release, with `rev` unchanged; the release is one batch with
-  `ends_gesture`, and one Undo takes the whole drag back. The mock
+  `ends_gesture`, and one Undo takes the whole drag back. Dragged back to its start, the
+  newest `live.set` carries the start, and the release sends `live.cancel` and no commit
+  (#1740's review). A drag on Opacity sends `item.set_opacity` live values the same
+  way, before the release that commits them in one undoable batch (ADR-0213). The mock
   engine doesn't implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
   chain; with the Backdrop selected, its title, note, one video chain of its source
@@ -393,9 +396,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Add as one edit, the new filter opening in place, where a changed setting is one more
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filters window was closed,
-  each in the problem bar. A drag on Sharpen's amount (#1734) shows its value under the
-  pointer and sends no `filter.set_settings` until the release, which sends one, one
-  revision that one Undo takes back.
+  each in the problem bar. A drag on Sharpen's amount (#1734, #1739) shows its value
+  under the pointer and sends it as `filter.set_settings` values of a gesture's
+  `live.set`, which the engine answers with `live.changed`, before the release, with
+  `rev` unchanged; the release is one batch with `ends_gesture`, one revision that one
+  Undo takes back (ADR-0213).
 - **Scene filters** (`scene-filters.spec.js`): with no item selected the panel showing
   Main's empty video chain with the scene note; with Sharpen and Gain described, Add
   filter offering only Sharpen, with the scene's foot, as one edit on the scene, while
@@ -477,7 +482,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
   docked in the Right sidebar the strips start vertical, 64px wide, and the button
   flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
-  master strip's loudness and true-peak warning, announced only once over 0 dBTP.
+  master strip's loudness and true-peak warning, announced only once over 0 dBTP. A drag
+  on the Mic's send to the master, under Routing, sends `send.set` values of a gesture's
+  `live.set`, which the engine answers with `live.changed`, before the release, with
+  `rev` unchanged; the release is one batch with `ends_gesture`, and one Undo takes the
+  whole drag back (ADR-0213).
 - **Labels** (`labels.spec.js`): the label manager, opened from the Sources
   panel's filter, adding a label (its icon picker open on the tag), renaming it,
   choosing an icon and a colour, a second label taking the next swatch, and Done; a

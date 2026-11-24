@@ -44,16 +44,16 @@ use jstream_protocol::LabelId;
 use jstream_protocol::{
     Action, Batch, Binding, BlendMode, BusId, Call, CallResult, CameraControlInfo, Canvas,
     CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, Chord, ClientId, Crop, Edit,
-    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo,
-    GeometryError, GestureId, GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding,
-    INITIAL_PRESET, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition,
-    LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, MAX_VALUES, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SharedValue, SourceAudio, SourceId,
-    SourceInfo, SourceKind, SourceSize, TransitionPresetId, TransitionStarted, TransitionsInfo,
-    Trigger, VideoMix, VideoMixId, VideoMixInfo, Welcome, check_value_name, check_value_size,
-    is_live_adjustable, prefix_covers,
+    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, FilterId, FilterOwner,
+    Finite32, FontInfo, GeometryError, GestureId, GestureInfo, Hello, HistoryCall,
+    HistoryDirection, HotkeyBinding, INITIAL_PRESET, IdempotencyKey, ItemGeometry, ItemId,
+    ItemInfo, ItemTransform, ItemTransition, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES,
+    MAX_VALUES, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PixelSize,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
+    SharedValue, SourceAudio, SourceId, SourceInfo, SourceKind, SourceSize, TransitionPresetId,
+    TransitionStarted, TransitionsInfo, Trigger, VideoMix, VideoMixId, VideoMixInfo, Welcome,
+    check_value_name, check_value_size, is_live_adjustable, live_problem, prefix_covers,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -365,19 +365,47 @@ struct State {
     codec_downloads: Vec<jstream_protocol::CodecDownloadInfo>,
 }
 
-/// A parameter a live value overrides: an item's placement or its crop, as the item has
-/// it (`None`) or as a keyframe scene overrides it (#846), or one setting of a source
-/// (ADR-0091). Ordered as the engine orders them, placements first, so `live.changed`
-/// and `live.list` list values in the same order.
+/// A parameter a live value overrides: an item's placement, crop or opacity, as the item
+/// has it (`None`) or as a keyframe scene overrides it (#846), one setting of a source
+/// (ADR-0091) or of a filter, or a source's, a bus's or a send's gain (ADR-0213). Ordered
+/// as the engine orders them, placements first, so `live.changed` and `live.list` list
+/// values in the same order.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Param {
     Placement(Option<SceneId>, ItemId),
     Crop(Option<SceneId>, ItemId),
     Setting(SourceId, String),
+    FilterSetting(FilterOwner, FilterId, String),
+    Opacity(Option<SceneId>, ItemId),
+    SourceGain(SourceId),
+    BusGain(BusId),
+    SendGain(SourceId, BusId),
 }
 
-/// `value` as one value per parameter: a source's settings patch split into one setting
-/// each, any other value as it is.
+/// Whether what `param` sets is still in `collection`.
+fn param_exists(collection: &mut Collection, param: &Param) -> bool {
+    match param {
+        Param::Placement(keyframe, item_id)
+        | Param::Crop(keyframe, item_id)
+        | Param::Opacity(keyframe, item_id) => {
+            collection.items.contains_key(item_id)
+                && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
+        }
+        Param::Setting(source_id, _) | Param::SourceGain(source_id) => {
+            collection.sources.contains_key(source_id)
+        }
+        Param::FilterSetting(owner, filter_id, _) => {
+            collection.find_filter(owner, filter_id).is_ok()
+        }
+        Param::BusGain(bus_id) => collection.buses.contains_key(bus_id),
+        Param::SendGain(source_id, bus_id) => collection
+            .sends
+            .contains_key(&(bus_id.clone(), source_id.clone())),
+    }
+}
+
+/// `value` as one value per parameter: a source's or a filter's settings patch split
+/// into one setting each, any other value as it is.
 fn split_value(value: Edit) -> Vec<Edit> {
     match value {
         Edit::SourceSetSettings { source_id, patch } => patch
@@ -387,6 +415,22 @@ fn split_value(value: Edit) -> Vec<Edit> {
                 one.insert(id, v.clone());
                 Edit::SourceSetSettings {
                     source_id: source_id.clone(),
+                    patch: one,
+                }
+            })
+            .collect(),
+        Edit::FilterSetSettings {
+            owner,
+            filter_id,
+            patch,
+        } => patch
+            .iter()
+            .map(|(id, v)| {
+                let mut one = Settings::new();
+                one.insert(id, v.clone());
+                Edit::FilterSetSettings {
+                    owner: owner.clone(),
+                    filter_id: filter_id.clone(),
                     patch: one,
                 }
             })
@@ -404,10 +448,24 @@ fn param_of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Para
             Some(Param::Placement(keyframe, item_id.clone()))
         }
         Edit::ItemSetCrop { item_id, .. } => Some(Param::Crop(keyframe, item_id.clone())),
+        Edit::ItemSetOpacity { item_id, .. } => Some(Param::Opacity(keyframe, item_id.clone())),
         Edit::SourceSetSettings { source_id, patch } => patch
             .iter()
             .next()
             .map(|(id, _)| Param::Setting(source_id.clone(), id.to_owned())),
+        Edit::FilterSetSettings {
+            owner,
+            filter_id,
+            patch,
+        } => patch
+            .iter()
+            .next()
+            .map(|(id, _)| Param::FilterSetting(owner.clone(), filter_id.clone(), id.to_owned())),
+        Edit::SourceSetAudio { source_id, .. } => Some(Param::SourceGain(source_id.clone())),
+        Edit::BusSetFader { bus_id, .. } => Some(Param::BusGain(bus_id.clone())),
+        Edit::SendSet {
+            source_id, bus_id, ..
+        } => Some(Param::SendGain(source_id.clone(), bus_id.clone())),
         _ => None,
     }
 }
@@ -947,17 +1005,11 @@ impl State {
         cause: Option<HistoryDirection>,
     ) {
         self.sync_outputs();
-        let collection = &self.collection;
-        let exists = |param: &Param| match param {
-            Param::Placement(keyframe, item_id) | Param::Crop(keyframe, item_id) => {
-                collection.items.contains_key(item_id)
-                    && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
-            }
-            Param::Setting(source_id, _) => collection.sources.contains_key(source_id),
-        };
-        self.holders.retain(|param, _| exists(param));
+        let collection = &mut self.collection;
+        self.holders
+            .retain(|param, _| param_exists(collection, param));
         for values in self.gestures.values_mut() {
-            values.retain(|param, _| exists(param));
+            values.retain(|param, _| param_exists(collection, param));
         }
         self.emit(Event::StateChanged {
             rev,
@@ -1795,6 +1847,13 @@ impl State {
         }
         if let Some(at) = values.iter().position(|value| !is_live_adjustable(value)) {
             return Err(invalid(format!("values.{at}.type"), "not live-adjustable"));
+        }
+        if let Some((at, (field, reason))) = values
+            .iter()
+            .enumerate()
+            .find_map(|(at, value)| live_problem(value).map(|problem| (at, problem)))
+        {
+            return Err(invalid(format!("values.{at}.{field}"), reason));
         }
         let key = (client_id.clone(), gesture_id);
         let open = self
@@ -3357,7 +3416,8 @@ fn live_scene(value: &Edit) -> Option<&SceneId> {
     match value {
         Edit::ItemSetTransform { scene_id, .. }
         | Edit::ItemSetGeometry { scene_id, .. }
-        | Edit::ItemSetCrop { scene_id, .. } => scene_id.as_ref(),
+        | Edit::ItemSetCrop { scene_id, .. }
+        | Edit::ItemSetOpacity { scene_id, .. } => scene_id.as_ref(),
         _ => None,
     }
 }
@@ -5508,6 +5568,90 @@ mod tests {
         assert!(batch(&*control, Batch::single(delete)).is_ok());
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
+    }
+
+    /// ADR-0213, as the engine does it: a filter's settings, an item's opacity and the
+    /// gains are live values, one parameter each; a fader value that sets more than its
+    /// gain is refused; removing a filter or a send drops its values.
+    #[test]
+    fn filter_settings_opacity_and_gains_are_live_values() {
+        let engine = MockEngine::new().with_kinds(parity::kinds());
+        let control = connected(&engine);
+        let edits: Vec<Edit> = serde_json::from_value(serde_json::json!([
+            {"type": "source.create", "source_id": "mic", "name": "Mic",
+             "kind": {"type": "builtin", "kind": "mic"}},
+            {"type": "bus.create", "bus_id": "vod", "name": "VOD"},
+            {"type": "send.set", "source_id": "mic", "bus_id": "vod", "gain_db": 0.0},
+            {"type": "filter.add", "owner": {"type": "master"}, "chain": "audio",
+             "filter_id": "lim", "kind": "gain"},
+        ]))
+        .expect("edits");
+        let mut all = vec![create("main"), webcam(), add("main", "a", "webcam")];
+        all.extend(edits);
+        let rev = batch(
+            &*control,
+            Batch {
+                edits: all,
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: None,
+            },
+        )
+        .expect("mix");
+        let values: Vec<Edit> = serde_json::from_value(serde_json::json!([
+            {"type": "filter.set_settings", "owner": {"type": "master"}, "filter_id": "lim",
+             "patch": {"gain_db": -3.0}},
+            {"type": "item.set_opacity", "item_id": "a", "opacity": 0.5},
+            {"type": "source.set_audio", "source_id": "mic", "gain_db": -6.0},
+            {"type": "bus.set_fader", "bus_id": "master", "gain_db": -6.0},
+            {"type": "send.set", "source_id": "mic", "bus_id": "vod", "gain_db": -6.0},
+        ]))
+        .expect("values");
+        let live = |values: Vec<Edit>| {
+            action(
+                &*control,
+                Action::LiveSet {
+                    gesture_id: jstream_protocol::GestureId::new("drag"),
+                    values,
+                },
+            )
+        };
+        assert!(live(values).is_ok());
+        let held = || match query(&*control, Query::LiveList) {
+            Ok(QueryResult::LiveList { gestures }) => gestures[0].values.len(),
+            other => panic!("not live.list: {other:?}"),
+        };
+        assert_eq!(held(), 5, "each is a parameter of its own");
+        let muting: Edit = serde_json::from_value(serde_json::json!(
+            {"type": "source.set_audio", "source_id": "mic", "gain_db": -6.0, "muted": true}
+        ))
+        .expect("muting");
+        match live(vec![muting]) {
+            Err(error) => match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => {
+                    assert_eq!(field, "values.0.muted");
+                }
+                other => panic!("not invalid_argument: {other:?}"),
+            },
+            Ok(other) => panic!("applied: {other:?}"),
+        }
+        let removes: Vec<Edit> = serde_json::from_value(serde_json::json!([
+            {"type": "filter.remove", "owner": {"type": "master"}, "filter_id": "lim"},
+            {"type": "send.remove", "source_id": "mic", "bus_id": "vod"},
+        ]))
+        .expect("removes");
+        let after = batch(
+            &*control,
+            Batch {
+                edits: removes,
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: None,
+            },
+        )
+        .expect("removed");
+        assert_eq!(after.0, rev.0 + 1, "live values never moved the revision");
+        assert_eq!(held(), 3, "the opacity and the two faders are left");
     }
 
     /// ADR-0040 §3, as `jstream-graph` does it: deleting what a binding names removes the

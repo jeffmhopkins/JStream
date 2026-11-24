@@ -644,7 +644,8 @@ frame it last drew until teardown. The audio and outputs snapshots are not built
 
 **Live-value handover** (decided; built for the render thread: its generation, its reader
 slot, its parameter channel and the gesture release. The mixer's channel and generation
-are not, so audio faders have no live values yet): the engine learns that a
+are not, so a live fader or send is heard through the collection with its value applied
+instead, as a stored change is, [ADR-0213](adr/0213-number-drags-follow-live.md)): the engine learns that a
 real-time thread holds a committed snapshot through a **generation counter per
 subsystem**. Each time the control side publishes a subsystem's snapshot it bumps that
 subsystem's generation and stores it in the snapshot. Each real-time thread that reads
@@ -1007,8 +1008,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   placements and crops, since 0.67 a source's settings that its kind marks `live`,
   so a Properties dialog applies as you edit
   ([ADR-0091](adr/0091-source-settings-as-live-values.md)), and since 0.70 a 3D
-  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)); audio faders follow with
-  the mixer's parameter channel.
+  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)), and since 0.178 a filter's
+  `live` settings, an item's opacity, the source and bus faders and the sends, drawn and
+  heard through the collection with the values applied, so every number drag follows
+  live ([ADR-0213](adr/0213-number-drags-follow-live.md)).
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`

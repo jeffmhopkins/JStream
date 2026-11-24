@@ -212,4 +212,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
 | [ADR-0211](0211-a-filters-pixel-settings-count-in-its-inputs-extent.md) | A built-in filter's pixel settings count in its input's extent | accepted | agent |  |
+| [ADR-0213](0213-number-drags-follow-live.md) | Filter settings, opacity and gains are live values, so every number drag follows live | accepted | agent |  |
 <!-- @generated end adr-index -->

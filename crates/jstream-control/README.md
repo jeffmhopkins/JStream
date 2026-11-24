@@ -358,16 +358,18 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   step touches. So an undo that succeeds against the mock succeeds against the engine
   too, but not the other way round;
 - live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` with
-  the engine's checks in its order (1 to 256 values, each `item.set_transform`,
-  `item.set_geometry`, `item.set_crop` or `source.set_settings`, at most 16 open
-  gestures per client, then each value as a batch edit named `values.<n>`), each key of
-  a settings patch a parameter of its own
-  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md); describing no
+  the engine's checks in its order (1 to 256 values, each a setter
+  `is_live_adjustable` takes, a fader's carrying its gain alone (`live_problem`), at most
+  16 open gestures per client, then each value as a batch edit named `values.<n>`), each
+  key of a source's or a filter's settings patch a parameter of its own, and an item's
+  opacity, each fader and each send one each
+  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md),
+  [ADR-0213](../../docs/adr/0213-number-drags-follow-live.md); describing no
   kinds, it doesn't check their `live` flags), takeover of a parameter another gesture
   holds, `live.cancel` (a no-op for a gesture that isn't open), `live.list`, a batch's
   `ends_gesture` (`invalid_argument` unless the client has it open, checked after the
   idempotency key and before `expected_rev`, as the engine does), live values
-  dropped with their item or source, and a session's gestures expiring when its `MockControl` is
+  dropped with their item, source, filter, bus or send, and a session's gestures expiring when its `MockControl` is
   dropped. It emits `live.changed` with each `live.set`'s values and `live.ended` after
   the commit's `state.changed`. With no render thread and no clock, it doesn't coalesce
   `live.changed` (the engine sends at most as many) and lets go of a committed

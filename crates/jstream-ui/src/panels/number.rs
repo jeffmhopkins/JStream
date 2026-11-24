@@ -214,6 +214,15 @@ pub fn number_spec(ty: &ParamType) -> Option<NumberSpec> {
     }
 }
 
+/// The number a descriptor's field starts from when its setting is absent or `null`
+/// (#1740's review, N1): the parameter's default, else 0 kept to the field's range, so
+/// the field stays enabled and a drag has somewhere to start.
+pub fn number_or_default(value: Option<f64>, default: &serde_json::Value, spec: NumberSpec) -> f64 {
+    value
+        .or_else(|| default.as_f64())
+        .unwrap_or_else(|| 0_f64.clamp(spec.min, spec.max))
+}
+
 /// The step of 1, 2 or 5 times a power of ten nearest under `raw`.
 fn nice_step(raw: f64) -> f64 {
     let power = 10_f64.powf(raw.log10().floor());
@@ -591,6 +600,30 @@ pub fn AxisRow(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #1740's review, N1: a setting that is absent or `null` still gives the field a
+    /// number, so it isn't disabled: the default, else 0 kept to the range.
+    #[test]
+    fn an_absent_setting_starts_from_its_default_or_the_range() {
+        let spec = |min: f64, max: f64| NumberSpec {
+            step: 1.0,
+            decimals: 0,
+            min,
+            max,
+        };
+        let null = serde_json::Value::Null;
+        assert_eq!(
+            number_or_default(Some(7.0), &serde_json::json!(3), spec(0.0, 10.0)),
+            7.0
+        );
+        assert_eq!(
+            number_or_default(None, &serde_json::json!(3), spec(0.0, 10.0)),
+            3.0
+        );
+        assert_eq!(number_or_default(None, &null, spec(-5.0, 5.0)), 0.0);
+        assert_eq!(number_or_default(None, &null, spec(2.0, 9.0)), 2.0);
+        assert_eq!(number_or_default(None, &null, spec(-9.0, -2.0)), -2.0);
+    }
 
     #[test]
     fn typed_text_takes_a_unicode_minus_and_a_comma() {

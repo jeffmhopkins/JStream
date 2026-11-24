@@ -37,8 +37,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `LiveOutcome` (`committed`, `cancelled`, `expired`), `GestureInfo` (one open gesture
   in a `live.list` result), the limits `MAX_GESTURES_PER_CLIENT` (16) and
   `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
-  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `source.set_settings`,
-  `scene.set_camera`), so every
+  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `item.set_opacity`,
+  `source.set_settings`, `filter.set_settings`, `scene.set_camera`, `source.set_audio`,
+  `bus.set_fader`, `send.set`), and `live_problem`, which says which fields of a fader's
+  value it refuses (all but `gain_db`,
+  [ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)), so every
   implementation agrees.
 
 <a id="contents-commands"></a>
@@ -384,7 +387,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.177 because of `source.seek`, which plays a `media` file on
+`PROTOCOL_VERSION` is 0.178 because `live.set` takes a filter's `live` settings
+(`filter.set_settings`), an item's opacity (`item.set_opacity`) and the gains
+(`source.set_audio` and `bus.set_fader` carrying `gain_db` alone, and `send.set`) as live
+values, so a drag on any of them follows live and commits as one undo step
+([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)); 0.177 because of `source.seek`, which plays a `media` file on
 from a point into it and holds through the program showing it, and `SourceSize`'s and
 `source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
 the release queue sets); 0.176 because `profile.get`'s drawers report
@@ -2382,8 +2389,16 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)). Since 0.70
   `scene.set_camera` is one too, one parameter per scene, so an orbit drag moves a 3D
   scene's camera every frame and commits once
-  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)). Audio faders
-  follow as their real-time path exists. Values are checked as a batch's edits are, named
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)). Since 0.178
+  `filter.set_settings` is one too, again only for the parameters its kind marks `live`
+  (`values.<n>.patch.<param>` otherwise), each setting of each filter a parameter of its
+  own; so are `item.set_opacity` (one parameter per item, and per keyframe scene that
+  overrides it) and the gains, `source.set_audio`, `bus.set_fader` and `send.set`, one
+  parameter per fader and per send. A `source.set_audio` or `bus.set_fader` value must
+  carry `gain_db` and nothing else (`values.<n>.<field>` otherwise, `live_problem`).
+  The engine draws and hears all of these through the collection with the values applied,
+  as for a source's settings
+  ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)). Values are checked as a batch's edits are, named
   `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
   values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
   message is applied. A value whose `scene_id` names a keyframe scene (refused with
@@ -2408,7 +2423,8 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   counts toward the client's 16, until the client commits it, cancels it or
   disconnects, so its `ends_gesture` still works. A batch that changes a held parameter changes the
   collection, but the live value still shows until the gesture ends. A batch that
-  deletes an item drops its live values.
+  deletes an item drops its live values, and one that removes a source, filter, bus or
+  send drops the values addressed to it.
 - `live.list` returns every open gesture, ordered by client and gesture ID, with the
   values each holds now, for a client that connects during one. It carries no `rev`.
 

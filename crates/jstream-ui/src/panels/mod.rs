@@ -22,6 +22,7 @@ pub mod encoders;
 pub mod events;
 pub mod filter_presets;
 pub mod filters;
+pub mod gesture;
 pub mod inspector;
 pub mod keyframe_timing;
 pub mod labels;

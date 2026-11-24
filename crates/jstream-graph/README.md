@@ -125,9 +125,13 @@ goes up by exactly one, and the result (`Applied`) carries the **inverse batch**
 the batch **touched**. `Graph::with_values(edits)` is the other way in: a copy of the
 graph with each edit that applies applied, skipping any that fails, at the same `rev`,
 with no inverse, applied in place on one clone, which is made again without an edit
-that fails. The engine draws open gestures' source settings and driving value bindings
-through it ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md),
-[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+that fails. The engine draws open gestures' source and filter settings, opacities and
+gains, and driving value bindings, through it
+([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md),
+[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md),
+[ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)); `State::filter` finds the
+filter a live value names, as `filter.set_settings` finds it, so the engine can check its
+kind's `live` flags.
 `Graph::place_keyframe` records the keyframe each placed scene is switched to
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
 [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)) on the graph itself:

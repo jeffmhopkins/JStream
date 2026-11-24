@@ -1,5 +1,6 @@
 ---
 source: crates/jstream-protocol/src/fixtures.rs
+assertion_line: 4981
 ---
 {
   "$defs": {
@@ -19049,5 +19050,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.177"
+  "title": "JStream protocol 0.178"
 }

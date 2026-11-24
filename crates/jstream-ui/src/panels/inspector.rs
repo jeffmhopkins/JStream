@@ -15,6 +15,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
 use super::curve::CurveEditor;
+use super::gesture::EditDrag;
 use super::keyframe_timing::{self, KeyframeTimingFields};
 use super::motion::MotionSection;
 use super::number::{AxisRow, NumberField, Scrubbing};
@@ -1085,6 +1086,8 @@ impl FieldDrag {
 
     /// Follows a field's drag: each value through `edit_for` to output, and an end the
     /// release didn't send (an unchanged value, a lost pointer) cancels the gesture.
+    /// `edit_for` gives the stored value too, so a drag back to where it started shows
+    /// it rather than keeping the last other frame (#1740's review, N2).
     fn follow(self, scrubbing: Scrubbing, edit_for: impl Fn(f64) -> Option<Edit>) {
         match scrubbing {
             Scrubbing::Moved(v) => {
@@ -1163,13 +1166,13 @@ fn Placement(
             let size = source_size.get()?;
             percent(&geometry.get()?, size, across).map(f64::from)
         });
-        let edit_for = move |v: f64| {
+        let edit_for = move |v: f64, live: bool| {
             let (Some(g), Some(size)) = (geometry.get_untracked(), source_size.get_untracked())
             else {
                 return None;
             };
             let placed = with_percent(&g, size, across, to_f32(v), linked.get_untracked())
-                .filter(|p| *p != g)?;
+                .filter(|p| live || *p != g)?;
             let (item_id, scene) = ids.get_value();
             Some(Edit::ItemSetGeometry {
                 item_id,
@@ -1177,8 +1180,8 @@ fn Placement(
                 geometry: placed,
             })
         };
-        let commit = move |v: f64| edit_for(v).map(|edit| drag.send(edit)).is_some();
-        let live = move |scrubbing| drag.follow(scrubbing, edit_for);
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
         let (label, caption) = if across { ("W %", "W") } else { ("H %", "H") };
         view! {
             <NumberField label caption inline=true unit="%" value step=1.0 decimals=1 min=f64::from(MIN_PERCENT)
@@ -1189,10 +1192,10 @@ fn Placement(
     let field = move |param: Param| {
         let value =
             Signal::derive(move || geometry.get().map(|g| f64::from(param_value(&g, param))));
-        let edit_for = move |v: f64| {
+        let edit_for = move |v: f64, live: bool| {
             let g = geometry.get_untracked()?;
-            let placed =
-                with_param(&g, param, to_f32(v), linked.get_untracked()).filter(|p| *p != g)?;
+            let placed = with_param(&g, param, to_f32(v), linked.get_untracked())
+                .filter(|p| live || *p != g)?;
             let (item_id, scene) = ids.get_value();
             Some(Edit::ItemSetGeometry {
                 item_id,
@@ -1200,8 +1203,8 @@ fn Placement(
                 geometry: placed,
             })
         };
-        let commit = move |v: f64| edit_for(v).map(|edit| drag.send(edit)).is_some();
-        let live = move |scrubbing| drag.follow(scrubbing, edit_for);
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
         let (label, step, decimals, fixed, unit) = match param {
             Param::X => ("X", 1.0, 2, false, "px"),
             Param::Y => ("Y", 1.0, 2, false, "px"),
@@ -1250,9 +1253,9 @@ fn Placement(
     let depth_field = move |which: Depth3| {
         let value =
             Signal::derive(move || geometry.get().map(|g| f64::from(depth_value(&g, which))));
-        let edit_for = move |v: f64| {
+        let edit_for = move |v: f64, live: bool| {
             let g = geometry.get_untracked()?;
-            let placed = with_depth(&g, which, to_f32(v)).filter(|p| *p != g)?;
+            let placed = with_depth(&g, which, to_f32(v)).filter(|p| live || *p != g)?;
             let (item_id, scene) = ids.get_value();
             Some(Edit::ItemSetGeometry {
                 item_id,
@@ -1260,8 +1263,8 @@ fn Placement(
                 geometry: placed,
             })
         };
-        let commit = move |v: f64| edit_for(v).map(|edit| drag.send(edit)).is_some();
-        let live = move |scrubbing| drag.follow(scrubbing, edit_for);
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
         let (label, unit, step, decimals) = match which {
             Depth3::Tilt => ("Tilt (X)", "°", 0.5, 1),
             Depth3::Turn => ("Turn (Y)", "°", 0.5, 1),
@@ -1407,18 +1410,18 @@ fn Placement(
     let crop = Memo::new(move |_| current.with(|i| i.as_ref().map(|i| i.crop)));
     let crop_field = move |side: Side, label: &'static str, caption: &'static str| {
         let value = Signal::derive(move || crop.get().map(|c| f64::from(crop_side(&c, side))));
-        let edit_for = move |v: f64| {
+        let edit_for = move |v: f64, live: bool| {
             let c = crop.get_untracked()?;
             let next = with_side(&c, side, to_f32(v));
             let (item_id, scene) = ids.get_value();
-            (next != c).then_some(Edit::ItemSetCrop {
+            (live || next != c).then_some(Edit::ItemSetCrop {
                 item_id,
                 scene_id: Some(scene),
                 crop: next,
             })
         };
-        let commit = move |v: f64| edit_for(v).map(|edit| drag.send(edit)).is_some();
-        let live = move |scrubbing| drag.follow(scrubbing, edit_for);
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
         view! {
             <NumberField label caption unit="px" value step=1.0 decimals=0 min=0.0
                 max=f64::from(MAX_CROP) inline=true send=commit live=live />
@@ -1436,22 +1439,31 @@ fn Placement(
     let opacity = Signal::derive(move || {
         current.with(|i| i.as_ref().map(|i| f64::from(i.opacity.get()) * 100.0))
     });
-    let send_opacity = move |v: f64| {
+    // A drag on the opacity's field or slider follows live (ADR-0213): each frame's
+    // value goes out as a gesture's `live.set`, and the release commits it, one undo step.
+    let opacity_drag = EditDrag::new();
+    let opacity_edit = move |v: f64, live: bool| {
         let max = f64::from(jstream_protocol::MAX_OPACITY) * 100.0;
-        let Some(opacity) = Finite32::new(to_f32(v.clamp(0.0, max) / 100.0)) else {
-            return false;
-        };
-        if current.with_untracked(|i| i.as_ref().is_some_and(|i| i.opacity == opacity)) {
-            return false;
+        let opacity = Finite32::new(to_f32(v.clamp(0.0, max) / 100.0))?;
+        if !live && current.with_untracked(|i| i.as_ref().is_some_and(|i| i.opacity == opacity)) {
+            return None;
         }
         let (item_id, scene) = ids.get_value();
-        send(Edit::ItemSetOpacity {
+        Some(Edit::ItemSetOpacity {
             item_id,
             scene_id: Some(scene),
             opacity,
-        });
-        true
+        })
     };
+    let send_opacity = move |v: f64| match opacity_edit(v, false) {
+        Some(edit) => {
+            opacity_drag.send(vec![edit]);
+            true
+        }
+        None => false,
+    };
+    let follow_opacity =
+        move |scrubbing| opacity_drag.follow(scrubbing, move |v| opacity_edit(v, true));
     let send_blend = move |name: String| {
         let Some(mode) = BlendMode::ALL.into_iter().find(|m| blend_name(*m) == name) else {
             return;
@@ -1611,7 +1623,7 @@ fn Placement(
                     </select>
                 </label>
                 // A slider over 0 to 100 %, beside the field that also takes the boost
-                // above it; the slider sends once, on release.
+                // above it. Both follow a drag live and commit once, on release.
                 <div class="slider-field">
                     <span class="field-label">"Opacity"</span>
                     <div class="slider-number">
@@ -1623,15 +1635,25 @@ fn Placement(
                             aria-label="Opacity"
                             disabled=move || opacity.with(Option::is_none)
                             prop:value=move || opacity.get().map_or(100.0, |v| v.min(100.0)).to_string()
+                            on:input=move |event| {
+                                if let Ok(v) = event_target_value(&event).parse::<f64>()
+                                    && let Some(edit) = opacity_edit(v, true)
+                                {
+                                    opacity_drag.show(vec![edit]);
+                                }
+                            }
                             on:change=move |event| {
-                                if let Ok(v) = event_target_value(&event).parse::<f64>() {
-                                    send_opacity(v);
+                                let sent = event_target_value(&event)
+                                    .parse::<f64>()
+                                    .is_ok_and(send_opacity);
+                                if !sent {
+                                    opacity_drag.end();
                                 }
                             }
                         />
                         <NumberField named=Signal::stored("Opacity".to_owned()) unit="%"
                             value=opacity step=1.0 decimals=0 min=0.0 max=400.0
-                            send=send_opacity />
+                            send=send_opacity live=follow_opacity />
                     </div>
                 </div>
             </div>

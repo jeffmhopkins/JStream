@@ -771,7 +771,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   step with its events in order, values held until a render reader adopts the
   commit, a failed commit, cancel and expiry with their audit entries, validation and
   limits, takeover, a deleted item, coalesced `live.changed`, a source's live setting
-  drawn until committed or cancelled, and dropped with its source) and a live value drawn
+  drawn until committed or cancelled, and dropped with its source; a filter's live
+  setting, an opacity, a source's and the master's fader and a send drawn and heard until
+  committed or cancelled, one undo step, a non-live filter setting and a fader value
+  carrying more than its gain refused, and values dropped with their filter or send,
+  ADR-0213) and a live value drawn
   over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on whatever adapter opens (the software one in CI), frame sheets
@@ -1446,7 +1450,8 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
-  setter, room for a new gesture among the client's 16),
+  setter, a fader's carrying its gain alone (`live_problem`), room for a new gesture
+  among the client's 16),
   then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
@@ -1462,15 +1467,24 @@ the render parameter channel, never through the collection:
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)) are live values
   too, for the parameters the source's kind marks `live`; a patch naming any other is
   refused at `values.<n>.patch.<param>` (`check_live_settings`). Each key of each
-  source is a parameter of its own. They don't go on the channel: while any gesture
-  holds one, the engine keeps `shown`, the collection with those values applied
+  source is a parameter of its own. So are, since protocol 0.178
+  ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)), each `live` setting of
+  each filter (`filter.set_settings`, checked against the filter kind's descriptor the
+  same way, the filter found by `State::filter`), each item's opacity
+  (`item.set_opacity`, a keyframe scene's override a parameter of its own as for
+  placement), each source's and bus's fader (`source.set_audio`, `bus.set_fader`, the
+  gain alone) and each send (`send.set`). None of these go on the channel: while any
+  gesture holds one, the engine keeps `shown`, the collection with those values applied
   (`Graph::with_values`, which keeps `rev`), and uses it instead of the collection for
   the live sources, the audio mix and the render snapshot, rebuilding it (and
   publishing a snapshot) when the setting values change, when a gesture ends and after
-  every applied batch, undo and redo. No collection read shows it. A batch that
-  deletes a source drops the live settings addressed to it.
+  every applied batch, undo and redo. The mixer's audio sources and the bus routing
+  follow `shown` too (`redraw`, `route_audio`), so a live fader or send is heard as it
+  moves. No collection read shows it. A batch that deletes a source, filter, item, bus
+  or send drops the live values addressed to it (`Gestures::drop_missing`), and a
+  committed one is in the collection, so it doesn't wait on the releasing list.
 - **Value bindings** ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
-  add their setter edits to `shown` the same way, after the gestures' settings, so a
+  add their setter edits to `shown` the same way, after the gestures' values, so a
   moved control wins over a gesture on the same setting; through them `shown` also
   carries filter settings, faders and sends, which the mixer and the render snapshot
   follow as they follow a stored change. The `jstream-values` thread rebuilds it when
@@ -1512,9 +1526,9 @@ the render parameter channel, never through the collection:
   `live.set` never does.
 - **Deletes.** After every applied batch, undo and redo, live values on an item that is
   gone are dropped from every gesture and from the releasing list.
-- **Not yet:** audio faders and sends, which need the mixer's own parameter channel and
-  its adopted generation in the same handover, and the `live` parameters of filter and
-  effect kinds.
+- **Not yet:** a parameter channel for the values drawn through `shown`, so a drag on
+  one costs no copy of the collection and no replan per value, and a sample-accurate
+  ramp for a live fader or send (ADR-0213's consequences).
 
 <a id="program-scene"></a>
 ## Program scene

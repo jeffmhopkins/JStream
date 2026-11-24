@@ -2179,6 +2179,15 @@ impl Engine {
             .cloned()
     }
 
+    /// `read` of the collection as the engine draws and hears it, with open gestures'
+    /// drawn values applied (ADR-0091, ADR-0213).
+    #[cfg(test)]
+    pub(crate) fn drawn<R>(&self, read: impl FnOnce(&jstream_graph::State) -> R) -> R {
+        let state = lock(&self.shared.state);
+        let graph = state.shown.as_ref().unwrap_or(&state.graph);
+        read(graph.state())
+    }
+
     /// Sets how many undo steps each client keeps (100 by default). The oldest steps
     /// are dropped first, and 0 keeps none.
     #[must_use]
@@ -5298,13 +5307,10 @@ impl State {
         self.route_audio();
         self.publish_render();
         let state = self.graph.state();
-        if self.gestures.drop_missing(
-            |item_id, keyframe| {
-                state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
-            },
-            |source_id| state.source(source_id).is_some(),
-            |scene_id| state.scene(scene_id).is_some(),
-        ) {
+        if self
+            .gestures
+            .drop_missing(state, |id| is_keyframe(state, id))
+        {
             self.publish_live();
             if self.refresh_shown() {
                 self.redraw();
@@ -7109,16 +7115,24 @@ impl State {
             .clone()
             .apply(&values, None)
             .map_err(values_error)?;
-        let settings = values
-            .iter()
-            .any(|v| matches!(v, Edit::SourceSetSettings { .. }));
+        // A value the collection is drawn with (a setting, an opacity, a gain), rather
+        // than one the render parameter channel carries (ADR-0213).
+        let drawn = values.iter().any(|v| {
+            !matches!(
+                v,
+                Edit::ItemSetTransform { .. }
+                    | Edit::ItemSetGeometry { .. }
+                    | Edit::ItemSetCrop { .. }
+                    | Edit::SceneSetCamera { .. }
+            )
+        });
         // A value addressed to a keyframe scene is a parameter of that keyframe's: it
         // shows only where the keyframe draws the item (#846).
         let state = self.graph.state();
         self.gestures
             .set(client_id, gesture_id, values, |id| is_keyframe(state, id));
         self.publish_live();
-        if settings && self.refresh_shown() {
+        if drawn && self.refresh_shown() {
             self.redraw();
         }
         self.live_tick(Instant::now(), wake);
@@ -7201,12 +7215,13 @@ impl State {
         self.jtunnel_names = names;
     }
 
-    /// Rebuilds [`shown`](Self::shown) from the open gestures' source settings. Returns
+    /// Rebuilds [`shown`](Self::shown) from the open gestures' drawn values: source and
+    /// filter settings, opacities and gains (ADR-0091, ADR-0213). Returns
     /// whether what is drawn may have changed: it had or has settings applied. A placed
     /// keyframe does not build a copy: it lives on [`graph`](Self::graph), which a
     /// settings copy carries because it clones the graph (ADR-0118).
     fn refresh_shown(&mut self) -> bool {
-        let mut settings = self.gestures.settings();
+        let mut settings = self.gestures.drawn();
         // The value bindings' settings, after the gestures': a moved control wins
         // (ADR-0178).
         settings.extend(self.driver.edits().iter().cloned());
@@ -8098,19 +8113,32 @@ fn live_ticker(shared: &Weak<Shared>) {
     }
 }
 
-/// Refuses a `source.set_settings` value that names a setting its kind doesn't mark
-/// `live` (ADR-0091), as `values.<n>.patch.<param>`. A source or setting that doesn't
-/// exist is left to the collection's own check.
+/// Refuses a `source.set_settings` or `filter.set_settings` value that names a setting
+/// its kind doesn't mark `live` (ADR-0091, ADR-0213), as `values.<n>.patch.<param>`. A
+/// source, filter or setting that doesn't exist is left to the collection's own check.
 fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolError> {
     for (at, value) in values.iter().enumerate() {
-        let Edit::SourceSetSettings { source_id, patch } = value else {
-            continue;
-        };
-        let Some(source) = graph.state().source(source_id) else {
-            continue;
-        };
-        let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
-            continue;
+        let (kind, patch) = match value {
+            Edit::SourceSetSettings { source_id, patch } => {
+                let Some(source) = graph.state().source(source_id) else {
+                    continue;
+                };
+                let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
+                    continue;
+                };
+                (kind.as_str(), patch)
+            }
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            } => {
+                let Some(filter) = graph.state().filter(owner, filter_id) else {
+                    continue;
+                };
+                (filter.kind(), patch)
+            }
+            _ => continue,
         };
         let Some(descriptor) = graph.kind(kind) else {
             continue;

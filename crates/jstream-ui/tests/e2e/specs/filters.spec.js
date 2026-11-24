@@ -357,13 +357,17 @@ test('a setting the engine refuses after its row or dialog has closed shows in t
   await expect(page.locator('.problem-bar')).toContainText('Amount is too sharp');
 });
 
-// #1734: a filter's number is the shared click-drag field. A drag shows its value as it
-// goes and sends one `filter.set_settings` on release, so the whole drag is one undo
-// step: a filter's settings are no live value, and a batch per frame would be an undo
-// step per frame.
-test('dragging a filter setting sends it once on release, one undo step', async ({ page, daemon }) => {
+// #1734, #1739: a filter's number is the shared click-drag field, and a drag on a live
+// setting follows live (ADR-0213): its values reach the engine as a gesture's
+// `live.set` before the release, which commits the gesture in one batch with
+// `ends_gesture`, so one Undo takes the whole drag back.
+test('dragging a filter setting shows it live before the release, and undoes in one step', async ({ page, daemon }) => {
   const sent = [];
-  page.on('websocket', (ws) => ws.on('framesent', ({ payload }) => typeof payload === 'string' && sent.push(payload)));
+  const received = [];
+  page.on('websocket', (ws) => {
+    ws.on('framesent', ({ payload }) => typeof payload === 'string' && sent.push(payload));
+    ws.on('framereceived', ({ payload }) => typeof payload === 'string' && received.push(payload));
+  });
   await describeKinds(page, KINDS);
   await connect(page, daemon);
   await showPanel(page, 'Filters');
@@ -373,7 +377,7 @@ test('dragging a filter setting sends it once on release, one undo step', async 
   await expect(rows.nth(0)).toHaveClass(/\bopen\b/);
   const amount = rows.nth(0).locator('.filter-editor .number-field input');
   await expect(amount).toHaveValue('0.2');
-  const settings = () => sent.filter((f) => f.includes('"filter.set_settings"')).length;
+  const lives = () => sent.filter((f) => f.includes('"live.set"'));
   const before = await rev(page);
   const box = await amount.boundingBox();
   const y = box.y + box.height / 2;
@@ -382,11 +386,16 @@ test('dragging a filter setting sends it once on release, one undo step', async 
   // One step of 0.05 per 3 px: 30 px is 0.5 more.
   await page.mouse.move(box.x + 40, y, { steps: 6 });
   await expect(amount).toHaveValue('0.7');
-  expect(settings()).toBe(0);
+  // Before the release: live values of the setting went out and the engine took them.
+  await expect.poll(() => lives().length).toBeGreaterThan(0);
+  await expect.poll(() => received.some((f) => f.includes('"live.changed"'))).toBe(true);
+  expect(lives().at(-1)).toContain('"filter.set_settings"');
+  await expect.poll(() => lives().at(-1)).toMatch(/"amount":0\.7/);
+  expect(sent.some((f) => f.includes('"ends_gesture"'))).toBe(false);
   expect(await rev(page)).toBe(before);
   await page.mouse.up();
   await expect.poll(() => rev(page)).toBe(before + 1);
-  expect(settings()).toBe(1);
+  expect(sent.filter((f) => f.includes('"ends_gesture"'))).toHaveLength(1);
   await expect(rows.nth(0).locator('.filter-summary')).toHaveText('0.70');
 
   await page.locator('header.app-header .top-menu[data-menu="edit"] > .menu-button').click();

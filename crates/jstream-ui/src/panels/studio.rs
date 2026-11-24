@@ -21,7 +21,7 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::menu::Entry;
 use crate::panels::curve::CurveEditor;
-use crate::panels::number::{NumberField, number_spec};
+use crate::panels::number::{NumberField, number_or_default, number_spec};
 use crate::panels::outputs::{action, edit};
 use crate::session::Session;
 use futures_util::StreamExt;
@@ -1848,9 +1848,17 @@ fn ParamField(
                 return ().into_any();
             };
             let whole = matches!(ty, ParamType::Int { .. });
+            // An absent or `null` setting starts from its default (#1740's review, N1).
+            let default = param.with_value(|p| p.default.clone());
             let value = {
                 let current = current.clone();
-                Signal::derive(move || current().trim().parse::<f64>().ok())
+                Signal::derive(move || {
+                    Some(number_or_default(
+                        current().trim().parse::<f64>().ok(),
+                        &default,
+                        spec,
+                    ))
+                })
             };
             let set = Callback::new({
                 let set = set.clone();
