@@ -302,29 +302,37 @@ pub use backend::VideoToolboxCodecs;
 
 #[cfg(target_os = "macos")]
 mod backend {
+    use std::sync::Arc;
+
     use jstream_platform::{
-        AudioEncoder, AudioEncoderConfig, CodecInfo, Codecs, PlatformError, VideoDecoder,
-        VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
+        AudioEncoder, AudioEncoderConfig, CodecInfo, Codecs, GpuContext, PlatformError,
+        VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
     };
 
     use super::vt_decoder_list;
     use crate::audiotoolbox::{AtAacEncoder, aac_encoder_info};
+    use crate::gpu::SurfaceGpu;
     use crate::videotoolbox::{VtEncoder, list_encoders};
     use crate::vtdecoder::{VtDecoder, hardware_decode_supported};
 
     /// Codecs through VideoToolbox and AudioToolbox (ADR-0063 §6, §7). It lists and opens
-    /// VideoToolbox's H.264 and HEVC encoders, which take CPU frames for now, opens its
+    /// VideoToolbox's H.264 and HEVC encoders, which take CPU frames, or on a `MetalGpu`
+    /// context ([`Codecs::on_context`]) its IOSurface encode targets, opens its
     /// H.264 and HEVC decoders, which deliver CPU frames, and lists and opens
     /// AudioToolbox's AAC-LC encoder. VideoToolbox has no list of decoders, so the list
     /// has the H.264 and HEVC ones: a hardware one where `VTIsHardwareDecodeSupported`
     /// says there is one, and Apple's software one ([`vt_decoder_list`]).
     #[derive(Debug, Default)]
-    pub struct VideoToolboxCodecs;
+    pub struct VideoToolboxCodecs {
+        /// Whether this is the backend on a GPU context, whose video encoders take its
+        /// encode targets.
+        gpu: bool,
+    }
 
     impl VideoToolboxCodecs {
-        /// The backend.
+        /// The backend, on CPU frames.
         pub fn new() -> Self {
-            Self
+            Self::default()
         }
     }
 
@@ -340,7 +348,7 @@ mod backend {
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            Ok(Box::new(VtEncoder::open(config)?))
+            Ok(Box::new(VtEncoder::open(config, self.gpu)?))
         }
 
         fn audio_encoder(
@@ -355,6 +363,22 @@ mod backend {
             config: &VideoDecoderConfig,
         ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
             Ok(Box::new(VtDecoder::open(config)?))
+        }
+
+        /// This backend on `context`, which [`MetalGpu`](crate::MetalGpu) opened: its
+        /// video encoders take the context's encode targets (`VideoSurface::Gpu`, NV12
+        /// IOSurfaces) and hand their pixel buffers to VideoToolbox with no copy, once the
+        /// GPU has finished writing them, and drop each frame once VideoToolbox has
+        /// encoded it. Everything else is as on the CPU path.
+        ///
+        /// # Errors
+        /// [`PlatformError::InvalidState`] for a context another backend opened.
+        fn on_context(
+            &self,
+            context: &GpuContext,
+        ) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
+            SurfaceGpu::of(context, "VideoToolboxCodecs::on_context")?;
+            Ok(Some(Arc::new(Self { gpu: true })))
         }
     }
 }

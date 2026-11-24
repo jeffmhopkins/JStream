@@ -1349,7 +1349,10 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 4. **Convert** to NV12/P010 with two render passes that write straight into the Y and UV
    plane views of the shared NV12 texture (proven by S1). Writing R8 + RG8 targets in
    compute and copying them into NV12 through hal, or a D3D11 video processor, is the
-   fallback for an adapter that rejects planar render targets.
+   fallback for an adapter that rejects planar render targets. Where the backend has no
+   `NV12` textures at all (Metal), an encode target is a planar pair over one surface, an
+   `R8Unorm` Y texture and a half-size `Rg8Unorm` CbCr texture (`GpuFrame::planar`), and
+   the same passes write those.
 5. **Encode:** the NV12 texture is shared back to D3D11 for the Media Foundation encoders
    (fence-synchronized).
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
@@ -1364,10 +1367,12 @@ into wgpu through wgpu-hal, as in steps 1 and 2. They are complete when delivere
 read waits for nothing; the release is what is ordered. Each staged use signals the
 context's `MTLSharedEvent` after the submit that reads the frame, and a frame's last
 clone keeps its pixel buffer until the event reaches that value, so ScreenCaptureKit
-never writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so
-an encode target will be two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12
-IOSurface that VideoToolbox reads, as spike S6 does; until then encoding takes the
-CPU readback of step 6.
+never writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so an
+encode target is two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12 IOSurface, as
+spike S6 does, written by step 4's passes. Its staged write signals the same event; the
+VideoToolbox encoder waits on the CPU for that value (`waitUntilSignaledValue`), hands
+the IOSurface's pixel buffer itself to the session, and keeps the frame until the
+session's output callback for it, so render never rewrites a target being encoded.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement

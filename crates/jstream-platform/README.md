@@ -342,8 +342,10 @@ frames ([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 On macOS, `MetalGpu` opens the device on Metal, and ScreenCaptureKit capture
 (`ScreenCaptureKitCapture::on_context`) wraps each frame's own IOSurface as a texture,
 with no copy; its `FrameSync` signals the context's shared event after render's read,
-and the frame keeps its pixel buffer until the event gets there. It has no encode
-targets yet, so the encoders take CPU frames
+and the frame keeps its pixel buffer until the event gets there. Its encode targets are
+planar frames (`GpuFrame::planar`) over NV12 IOSurfaces, whose write signals the same
+event; the VideoToolbox encoder it reached through `Codecs::on_context` waits for that
+value on the CPU and encodes the pixel buffer itself
 ([jstream-platform-macos](../jstream-platform-macos/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
