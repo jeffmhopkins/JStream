@@ -1,6 +1,6 @@
 {
   "schema_version": 22,
-  "rev": 20,
+  "rev": 21,
   "canvas": {
     "width": 1280,
     "height": 720
@@ -400,6 +400,11 @@
           }
         }
       ],
+      "items": []
+    },
+    {
+      "id": "show",
+      "name": "Show",
       "items": []
     }
   ],
@@ -900,5 +905,5 @@
       "next_monitor": "still"
     }
   ],
-  "show_scene": "b"
+  "show_scene": "show"
 }

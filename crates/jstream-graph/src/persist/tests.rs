@@ -1016,7 +1016,18 @@ fn v22_graph() -> Graph {
         None,
     );
     assert!(applied.is_ok(), "{applied:?}");
-    graph.set_show_scene(Some(SceneId::new("b")));
+    // The show scene is a scene of its own: nothing may place or show one already in
+    // use (`Graph::set_show_scene`), so the fixture's is one nothing else draws.
+    let created = graph.apply(
+        &[Edit::SceneCreate {
+            scene_id: SceneId::new("show"),
+            name: "Show".into(),
+            role: None,
+        }],
+        None,
+    );
+    assert!(created.is_ok(), "{created:?}");
+    assert!(graph.set_show_scene(Some(SceneId::new("show"))));
     graph
 }
 
@@ -1029,11 +1040,11 @@ fn the_fixture_is_what_the_collection_saves() {
 fn the_v22_fixture_loads_exactly() {
     let expected = v22_graph();
     let loaded = load(V22);
-    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(20)));
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(21)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
     assert_eq!(
         loaded.as_ref().ok().and_then(|g| g.state().show_scene()),
-        Some(&SceneId::new("b"))
+        Some(&SceneId::new("show"))
     );
 }
 
