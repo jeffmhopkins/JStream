@@ -74,7 +74,11 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `connect()` opens a session, and `handles()` counts the handles and sessions that keep
   the engine alive; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `set_show_scene` marks (or clears) the internal show scene drawn
-  over program (*Snapshots*, The show scene); `output_stats` reads a running output's pipeline counters
+  over program (*Snapshots*, The show scene) and saves the collection file at once,
+  since the file keeps the marker though it is no revision (*Collection file*, #1748),
+  and whose items `State::set_show_scene_item_shown`
+  shows and hides for the show runner, fading over program on their own (*Calls*);
+  `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
   injected `StreamKeyStore`, never under the collection lock, and so does the removal
@@ -545,7 +549,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), the warm
   scenes beside the program (ADR-0117 §7, see [Program scene](#program-scene)), and the
   scene a show runs to next (`Studio::upcoming`, set through `State::set_upcoming`),
-  warm right after Preview.
+  warm right after Preview, and the show scene's items fading in or out over program on
+  their own, apart from the transition onto program (`Studio::fades`).
 - **Timelines** (`timelines.rs`,
   [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): the timelines playing,
   studio state beside the program scene, whose cues the live ticker fires on the
@@ -569,7 +574,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   `Visual::motion` is), and an end's camera is placed through its anchor
   (`camera_of`, ADR-0164); `check_via` checks a switch's path through keyframes
   (ADR-0166 decision 2), and `Run::orbit` is a `move` preset's `camera_path` of
-  `orbit` (decision 3).
+  `orbit` (decision 3). `ShowFade` is a show scene item's own appear or disappear,
+  sampled over its pose as an unpaired track is (`ShowFade::sample`).
 
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
@@ -820,7 +826,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   over the shot in `snapshot.rs`, the internal show scene drawn over program and over a
   fade, gone when its item is hidden, its items counted as drawn and redrawn as they move, scaled into an output of another size, left out of
   `scene.list` and `state.get`, and refused as program, preview, a `scene` source or a
-  mix's scene (`src/tests/show_scene.rs`), the shared parity fixture, a differential run against
+  mix's scene, an overlay fading out and in by its own effect while a program fade runs
+  under it, and the show runner's fade of a given length, cut at 0 and reversed partway
+  without a jump (`src/tests/show_scene.rs`), events naming the show scene reaching no
+  subscriber (`events.rs`), the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on whatever adapter opens (the software one in CI), frame sheets
   (a `scene.switch_and_watch` showing a fade as it plays, judged so either blending
@@ -1022,8 +1031,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   outputs, a `waveform` drawing another source saved and loaded with the source it
   draws made first, and loaded from a file from before `audio_source` existed
   (`a_source_drawing_a_source_round_trips`), refused files left
-  as they were, a failed save that the next change recovers, and concurrent sessions
-  leaving the latest collection and no temporary file), projects
+  as they were, a failed save that the next change recovers, concurrent sessions
+  leaving the latest collection and no temporary file, and the show scene marker saved
+  as it is set and loaded by a new engine), projects
   (`src/tests/projects.rs`, ADR-0121: open, new and save as with their keys, assets,
   undo and recent list, and ADR-0163's move of a default project, which takes its keys,
   assets and place in the recent list and keeps the old file renamed), `scene.switch` and the program
@@ -1110,7 +1120,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `duration_ms` in `source.sizes` and a `source.seek` that holds whether it comes just
   before or just after the switch that shows the file, also on a file held at its start
   on the upcoming scene, and is `not_found` for a missing source
-  (`a_seek_holds_through_the_switch_that_shows_the_file`). The upcoming scene stays warm
+  (`a_seek_holds_through_the_switch_that_shows_the_file`), and a show's jump into a
+  timed clip, and within it, seeking its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). The upcoming scene stays warm
   past a budget of 0 and the GPU limit until cleared or deleted
   (`src/tests/warm_scenes.rs`,
   `the_upcoming_scene_is_warm_past_the_budget_and_the_gpu_limit`). Effect packs over the
@@ -1369,7 +1380,15 @@ audit entry and errors.
   effect over it. A transition in flight is
   continued from what is on screen; a press program doesn't see (another keyframe's
   placement) leaves it as it is. A source the next plan reaches again restarts as on a
-  switch (`restart_on_show`).
+  switch (`restart_on_show`). An item of the internal show scene's own (`scene_id`
+  omitted) plays the same effect over program on its own instead
+  (`State::show_scene_shown`): its fade (`transition::ShowFade`, from the item's
+  `appear` or `disappear`, delay and easing and the default preset's duration, easing
+  and `unmatched`) goes on the studio beside program's transition, which keeps
+  running, so the two overlap (*Snapshots*, The show scene). The show runner shows and
+  hides overlays through `State::set_show_scene_item_shown`, as the engine (logged as
+  `engine`'s change for undo conflicts): with a `fade_ms`, a plain linear fade of that
+  length with no delay replaces the item's effect, and 0 cuts.
   `live.list` is a query answered from the gesture table, and `values.list` from the
   shared values.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
@@ -1630,7 +1649,8 @@ scene, each once,
 at most the warm budget in all. The Preview scene is warm even past the budget. Right
 after it comes the upcoming scene, the one a show runs to next (`Studio::upcoming`,
 named with `State::set_upcoming`, `not_found` for a scene the collection doesn't hold;
-`None` while no show runs, and until a show runner calls it only the tests do): unless
+`None` while no show runs; the running show names the scene of the program clip after
+the one under its play head, see [Shows](#shows)): unless
 it is on program or is the Preview scene, it is warm past the budget and the GPU limit
 too, so a media file on it is held at its first frame and the cut to it starts nothing.
 A budget of 0 keeps only those two. A deleted scene stops being upcoming, and is
@@ -1674,7 +1694,7 @@ zero duration, or a kind this engine can't run puts the scene on program for the
 frame. A `fade`, `move` or `stinger` puts it on program at once too, and keeps a `Running`
 transition beside it in the studio: where it starts from, the scene it goes to, its
 start on the media clock, and the resolved preset. `studio.changed` names the preset and
-the transition's length. While it runs, `snapshot::plan_with` plans the transition
+the transition's length. While it runs, `snapshot::plan_program` plans the transition
 instead of the program scene: `transition::plan` pairs the starting items with the
 program scene's (as the collection holds them now, so an edit mid-transition shows),
 and the shot carries one `Track` per item, which the render thread samples at each
@@ -1692,6 +1712,12 @@ though no plan has let it go yet (the clock held, [ADR-0172](../../docs/adr/0172
 `item.show` start from the program scene at rest, as after the plan that lets it go
 (#1598, #1632). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
+Beside it the studio keeps the show scene's items fading in or out on their own
+(`Studio::fades`, one `ShowFade` per item: its start, direction, effect and timing),
+which no switch touches. A new fade of an item replaces the one it ran; one reversed
+partway with no delay on either side starts as far along as the last had still to go
+(`ShowFade::after`), so it turns back without a jump. Each plan first lets go of the
+fades that ended, or whose item left the show scene (`Studio::end_fades`).
 
 A `stinger` pairs nothing: what is on screen shows until its `cut_ms` (at most the
 duration) and the new scene from then on, with no effect (`transition::cut_under`). Its
@@ -1851,7 +1877,8 @@ preset changed in one batch that one undo takes back.
   if the channel is still on that side. The values thread runs while any timeline has a
   trigger or a wait. `src/tests/sequences.rs` checks a lane gliding down from where its
   channel was, never rising and passing through several values, and holding its end,
-  driven by the sequence; a channel rising (from a value a tick saw) playing a timeline
+  driven by the sequence (on a fake media clock stepped 50 ms at a time, so a slow
+  runner still samples the glide's middle, #1749); a channel rising (from a value a tick saw) playing a timeline
   after its delay, listed in `waiting` meanwhile, falling
   stopping it, and a stop cancelling a delayed play; and a seek to 0 returning a lane to
   the value it started from.
@@ -1903,23 +1930,53 @@ preset, when the keyframe is of the scene on program (a placed keyframe,
 `scene.set_keyframe`, only changes how other scenes draw a scene, never program
 itself), else `scene.set_keyframe` on the program scene;
 `timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a
-`show.*` action in a cue is skipped, so a cue can't re-enter the runner). Overlay
-clips and media seeks are not run yet. `show.continue` is ignored while a scene
+`show.*` action in a cue is skipped, so a cue can't re-enter the runner). A clip whose
+scene draws a `media` file is timed: a jump into it, or within it, seeks every such file
+the scene's family draws to that spot (`source.seek`'s `LiveSources::seek`, as of the
+effect's time), and so does an overlay put up partway through its clip (ADR-0210
+decision 9). After each tick the scene of the program clip after the one under the play
+head is the upcoming scene (`State::set_upcoming`, see *Program scene*), so its file is
+held at its first frame and the cut to it starts nothing; it clears when the show
+stops. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
 it. A show that starts on the scene already on program restarts every `timer` source
 that scene draws (`source.restart`), as the cut to it would have.
-`studio.get`'s `show` reports it, and `show.changed` says what it did.
+`studio.get`'s `show` reports it, and `show.changed` says what it did. `show.play` with
+`rehearse` runs the show on preview instead (ADR-0210 decision 13, `rehearse` in the
+report): its program clips, and keyframe markers of the scene on preview, go to preview
+as `studio.set_preview` would, its pauses, jumps, loops and end report as usual, and
+nothing else runs, so program, the overlays, the sequences, the cues, the channels and
+the mixer are left alone; it names no upcoming scene, restarts no timer, and a hand
+switch of program doesn't take it off script.
+
+An overlay clip, and `overlay.show`, `overlay.hide` and `overlay.toggle` with or without
+a show running, put a scene over program through the internal show scene
+([Program scene](#program-scene)): the first time a scene is an overlay, the engine
+makes the show scene if the collection has none ("Show overlays"), a `scene` source of
+the overlay scene unless one exists ("Overlay: <name>"), and a hidden item of it in the
+show scene, as one engine change that is no client's undo step, and saves the
+collection. Showing or hiding it then goes through `State::set_show_scene_item_shown`,
+so it fades over program on its own, apart from any scene switch: a clip's
+`fade_in_ms` or `fade_out_ms` is a plain fade of that length, and 0 uses the item's own
+show or hide transition. `studio.get`'s `overlays` lists the scenes shown over program.
+A batch can't delete the show scene (`not_found`, as for a scene it can't see). The
+overlay scene sources are still listed with the collection's sources, and an overlay's
+place among the others follows the order the items were made, not later track order.
 `src/tests/shows.rs` checks playing through, pausing before a pausing bookmark's
 point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
 going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
 off script, stopping, deleting, refused calls, a sequence clip's cue firing within the
-`clock.step` that starts it, a jump waking the live ticker in real time, and
-`show.pause` holding show time until `show.continue` or `show.play` plays on, and
-keyframe markers moving program to a keyframe scene and back, and an edit of the
-running show cutting program to the clip now under the play head.
-`src/tests/timelines.rs` checks that a timeline played while the ticker waits for a
-later cue fires on time.
+`clock.step` that starts it, a jump waking the live ticker in real time,
+`show.pause` holding show time until `show.continue` or `show.play` plays on,
+keyframe markers moving program to a keyframe scene and back, an edit of the running
+show cutting program to the clip now under the play head, an overlay clip up for its
+span and taken down when an edit removes it, the overlay actions with no show, the
+show scene refusing a delete and being heard, the next program clip named upcoming, and
+a rehearsal on preview leaving program, its cues and off script alone.
+`src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
+seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
+timeline played while the ticker waits for a later cue fires on time.
 
 <a id="privacy"></a>
 ## No privacy screen
@@ -1990,7 +2047,7 @@ nested ones included, is composited at that size; the PNG is that canvas scaled 
 1280. Each item is drawn in its stored placement form
 ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)): a geometry by the
 shared formula, a legacy transform evaluated against the frame's size.
-Hidden items are skipped. A source with no stored frame is skipped, not drawn as a
+Hidden items are skipped (but a show scene item still fading out, *The show scene*). A source with no stored frame is skipped, not drawn as a
 placeholder. Each item is drawn at its `opacity`, multiplied into its premultiplied
 colour in linear light, so a nested scene's layer fades as one image; during a
 transition each track's sampled opacity runs between its items' own. Each item is
@@ -2063,7 +2120,16 @@ same depth is drawn once), and its background is never drawn. Its items count as
 items like any pass's (`Shot::drawn_passes`): their `shown` clock, their motion's redraws,
 and the sizes their sources are decoded and captured at. A show scene with no item shown is not planned at all, so a frame without
 overlays is drawn exactly as before, and one with overlays costs one more canvas-sized
-composite. Its nesting counts from it, as a program scene's does.
+composite. Its nesting counts from it, as a program scene's does. An item of it fading
+on its own (`snapshot::plan_program` takes the studio's fades) carries its `ShowFade`
+on its layer (`Layer::fading`), and one going is still planned until its fade ends;
+the plan wakes at each fade's end. The render thread samples the fade over the pose
+the layer has at rest (its live values, motion and groups applied, `faded`): a box
+appears or disappears as a transition's unpaired item does (`Track::Appear` or
+`Track::Disappear`, so `scale` and `slide` move it), and a legacy or model placement
+only fades. Program's own transition never sees these fades, so an overlay's fade and a
+program cut or fade run at once. A show scene drawn through a scene chain draws its
+chain's output, which no item fade reaches.
 
 **Sky backdrops.** A 3D scene whose first environment light has `backdrop` on
 ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)) has its sky drawn
@@ -3132,7 +3198,7 @@ moved, is a new input. It doesn't count as an audio source for the defaults: a
 collection whose only sound is a video still records the microphone and desktop
 audio.
 
-`snapshot::plan_with` asks what each source an item it reaches places shows: the
+`snapshot::plan_program` (the engine's plan of the program mix) asks what each source an item it reaches places shows: the
 stored frame if `set_source_frame` gave one, else, for a live `display` or `window`
 source, what the pipeline captures for it (`Source::capture`), else the live source's
 frame at the current time, counted from its time zero: when it was built, or the time
@@ -3629,7 +3695,12 @@ session receives every event emitted after it opened, in the engine's order;
 `state.changed` events therefore arrive in `rev` order with no gap. Subscribers are
 woken after the engine's lock is released. A stream ends, after what it buffered, when
 its session is dropped or when the engine goes away (its last handle and session);
-an ended stream stays ended.
+an ended stream stays ended. Clients never see the internal show scene, so an event that
+names it (`scene.keyframe_changed`, `timeline.changed`) or one of its timelines
+(`timeline.cue_fired`) reaches no subscriber: `Subscribers::follow` keeps the show scene
+and its timelines as each change and each plan leaves them, and `emit` drops such an
+event. A change to its items is a change of the collection like any other, so its
+`state.changed` is sent (the revision moved).
 
 <a id="drop-counts"></a>
 ## Drop counts (`stats.tick`)
@@ -3800,7 +3871,9 @@ brings the mixer in line with the collection under the collection lock:
   [Keyframe tracks](#keyframe-tracks)) and nested scene sources whose audio is on, into
   scenes whose `include_audio` option is on
   ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)). The roots are the
-  program scene (weight 1, whatever its own `include_audio`) and every nested scene
+  program scene (weight 1, whatever its own `include_audio`), the internal show scene
+  (weight 1), whose overlays are drawn over program and so are heard as program is
+  (ADR-0210 decision 12), and every nested scene
   source whose audio is on, whose scene's `include_audio` is on, and that follows
   `always` (weight 1 each). The mixer applies it after the input's fader and
   meter, scaling every send, and ramps to it over one block, so a cut never clicks
@@ -4775,7 +4848,9 @@ the call returns, so the client whose call it was knows the file holds its `rev`
 takes the collection file's mutex, then the collection lock only long enough to
 serialize the graph, and writes with only the file's mutex held: saves happen one at a
 time, never under the collection lock, and one whose `rev` the file already has (or
-passed, because a later change saved first) writes nothing. The write is atomic: a
+passed, because a later change saved first) writes nothing. The show scene marker
+(ADR-0210) is saved in the file but is no revision, so `Engine::set_show_scene` saves at
+once, whatever `rev` the file holds (`Shared::save_marker`, #1748). The write is atomic: a
 temporary `.<name>.<pid>.tmp` beside the file, flushed to disk, renamed over it, and on
 Unix the directory flushed too. The temporary file is user-only (mode `0600` on Unix, a
 protected DACL for SYSTEM and the user on Windows, which the rename keeps), so a file

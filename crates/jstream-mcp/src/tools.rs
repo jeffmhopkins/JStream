@@ -5,8 +5,13 @@
 //! history call (`history.undo`, `history.redo`) in `jstream_protocol::json_schema()` is
 //! named `noun.verb`, and the `noun` tool takes it as its `op` argument. So a command added to the protocol shows up here with no code
 //! change. Three fixed tools sit beside the groups: `batch` (several edits, atomically),
-//! `describe_api` (the whole protocol schema) and `events` (the engine's events, read
-//! with a cursor).
+//! `describe_api` (the whole protocol schema, or one definition or op of it) and `events`
+//! (the engine's events, read with a cursor).
+//!
+//! The command unions `Edit` and `Action` refer to each other, so a tool that refers to
+//! either would carry every protocol definition. In the tools they are [`SHARED_UNIONS`]:
+//! a short stub naming their variants stands in for each, and `describe_api` gives any
+//! one in full (#1718).
 //!
 //! Every tool carries MCP tool annotations derived from its ops' classes, so a client can
 //! ask the user before a tool that can't be undone or that reaches outside JStream, and
@@ -85,8 +90,9 @@ struct Tool {
 pub(crate) enum Invocation {
     /// A protocol call, for [`Control::call`](jstream_control::Control::call).
     Call(Call),
-    /// The protocol schema, which needs no engine.
-    Describe,
+    /// The protocol schema, or with `name` one definition or op of it, which needs no
+    /// engine.
+    Describe { name: Option<String> },
     /// The buffered events after the cursor `after` (0 for all).
     Events { after: u64 },
 }
@@ -97,7 +103,19 @@ pub(crate) struct Tools {
     tools: Vec<Tool>,
     /// Which group tool owns each op name, for pointing a misrouted op to the right tool.
     owners: BTreeMap<String, String>,
+    /// The protocol's definitions, whole.
+    defs: Map<String, Value>,
+    /// The definitions as the tools carry them: [`SHARED_UNIONS`] are stubs.
+    stubbed: Map<String, Value>,
 }
+
+/// The protocol definitions no tool carries whole: the command unions, which refer to
+/// each other (an `Action` can carry edits, and some edits carry an action), so either
+/// pulls in nearly every definition. Copied into each tool that refers to them, they
+/// made `tools/list` about 2 MB (#1718). A tool carries a stub instead that names their
+/// variants, a group tool's own ops stay whole, and `describe_api` returns any of them in
+/// full.
+pub(crate) const SHARED_UNIONS: [&str; 2] = ["Action", "Edit"];
 
 /// The group tools whose ops reach outside JStream: `output.start` publishes to a
 /// streaming server, a `browser` source (made or changed by a `source` edit) loads
@@ -201,10 +219,12 @@ impl Tools {
     pub(crate) fn generate() -> Tools {
         let schema = json_schema();
         let empty = Map::new();
-        let defs = schema
+        let full = schema
             .get("$defs")
             .and_then(Value::as_object)
             .unwrap_or(&empty);
+        let stubbed = stub_unions(full);
+        let defs = &stubbed;
 
         let mut groups: BTreeMap<String, Vec<(Op, Value)>> = BTreeMap::new();
         for (def, class) in [
@@ -213,7 +233,7 @@ impl Tools {
             ("Query", OpClass::Query),
             ("HistoryOp", OpClass::History),
         ] {
-            for variant in variants(defs, def) {
+            for variant in variants(full, def) {
                 let Some(name) = variant
                     .pointer("/properties/type/const")
                     .and_then(Value::as_str)
@@ -244,7 +264,55 @@ impl Tools {
             tools.push(group_tool(defs, noun, ops));
         }
         tools.sort_by(|a, b| a.name.cmp(&b.name));
-        Tools { tools, owners }
+        Tools {
+            tools,
+            owners,
+            defs: full.clone(),
+            stubbed,
+        }
+    }
+
+    /// What `describe_api` returns: the whole protocol schema, or with `name` the
+    /// definition or op it names, standing alone, with any other [`SHARED_UNIONS`] as
+    /// stubs. `name` was checked by [`Tools::decode`].
+    pub(crate) fn describe(&self, name: Option<&str>) -> Value {
+        let Some(name) = name else {
+            return json_schema();
+        };
+        if self.defs.contains_key(name) {
+            let mut defs = self.stubbed.clone();
+            if let Some(def) = self.defs.get(name) {
+                defs.insert(name.to_owned(), def.clone());
+            }
+            return with_defs(json!({"$ref": format!("#/$defs/{name}")}), &defs);
+        }
+        match self.op_schema(name) {
+            Some(op) => with_defs(op.clone(), &self.stubbed),
+            None => json!({}),
+        }
+    }
+
+    /// The variant schema of the op `name` (`scene.create`), whether or not a tool
+    /// carries it.
+    fn op_schema(&self, name: &str) -> Option<&Value> {
+        ["Edit", "Action", "Query", "HistoryOp"]
+            .into_iter()
+            .flat_map(|def| variants(&self.defs, def))
+            .find(|v| v.pointer("/properties/type/const").and_then(Value::as_str) == Some(name))
+    }
+
+    fn decode_describe(&self, arguments: Value) -> Result<Invocation, ProtocolError> {
+        let args: DescribeArgs = from_value(arguments, "arguments")?;
+        if let Some(name) = &args.name
+            && !self.defs.contains_key(name)
+            && self.op_schema(name).is_none()
+        {
+            return Err(malformed(format!(
+                "`{name}` is neither a definition of the protocol schema (such as \
+                 `Action`) nor an op (such as `scene.create`)"
+            )));
+        }
+        Ok(Invocation::Describe { name: args.name })
     }
 
     /// The MCP `Tool` objects, for `tools/list`.
@@ -272,10 +340,7 @@ impl Tools {
         Some(
             match &tool.kind {
                 ToolKind::Batch => decode_batch(arguments).and_then(refuse_output_only_edits),
-                ToolKind::Describe => match arguments.as_object() {
-                    Some(args) if args.is_empty() => Ok(Invocation::Describe),
-                    _ => Err(malformed("`describe_api` takes no arguments")),
-                },
+                ToolKind::Describe => self.decode_describe(arguments),
                 ToolKind::Events => from_value::<EventsArgs>(arguments, "arguments")
                     .map(|args| Invocation::Events { after: args.after }),
                 ToolKind::Group(ops) => self.decode_op(&tool.name, ops, arguments),
@@ -370,6 +435,14 @@ struct BatchArgs {
     ends_gesture: Option<GestureId>,
 }
 
+/// The `describe_api` tool's arguments.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DescribeArgs {
+    #[serde(default)]
+    name: Option<String>,
+}
+
 /// The `events` tool's arguments.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -461,6 +534,39 @@ fn variants<'a>(defs: &'a Map<String, Value>, def: &str) -> impl Iterator<Item =
         .flatten()
 }
 
+/// `defs` with each of [`SHARED_UNIONS`] replaced by a stub: an object tagged by `type`,
+/// whose `type` must be one of the union's variant names, and which says where its
+/// full schema is. The server still checks the whole shape when the call comes in.
+fn stub_unions(defs: &Map<String, Value>) -> Map<String, Value> {
+    let mut stubbed = defs.clone();
+    for union in SHARED_UNIONS {
+        let names: Vec<&str> = variants(defs, union)
+            .filter_map(|v| v.pointer("/properties/type/const").and_then(Value::as_str))
+            .collect();
+        let Some(example) = names.first() else {
+            continue;
+        };
+        let noun = example.split_once('.').map_or(*example, |(noun, _)| noun);
+        let description = format!(
+            "One protocol `{union}`, tagged by `type`. Only the tag is listed here, so the \
+             tool list stays small: an `{union}` of a noun is the `op` of that noun's tool \
+             (`{example}` is the `{noun}` tool's), so its fields are in that tool's schema. \
+             Call `describe_api` with `name` set to the op (`{example}`) or to `{union}` \
+             for its full schema. The whole shape is checked when the call arrives."
+        );
+        stubbed.insert(
+            union.to_owned(),
+            json!({
+                "description": description,
+                "type": "object",
+                "properties": {"type": {"type": "string", "enum": names}},
+                "required": ["type"],
+            }),
+        );
+    }
+    stubbed
+}
+
 /// A property schema of the protocol's `Batch` (`expected_rev`, `idempotency_key`).
 fn batch_property(defs: &Map<String, Value>, name: &str) -> Value {
     defs.get("Batch")
@@ -490,7 +596,9 @@ fn batch_tool(defs: &Map<String, Value>, groups: &BTreeMap<String, Vec<(Op, Valu
         "Applies one or more edits atomically, as one undo step: either all of them apply \
          or none does, and the state `rev` goes up by exactly one. The edits are those the \
          {} tools take as `op`, except `output.delete` and `output.set_target`, which can \
-         remove a stream key and go through the `output` tool. Actions and queries can't \
+         remove a stream key and go through the `output` tool, so each edit's fields are \
+         in the schema of the tool its noun names (`edits` lists only the `type` tags; \
+         `describe_api` with `name` gives one in full). Actions and queries can't \
          be batched. Pass `expected_rev` \
          to apply only if nobody changed the state since you read it, and \
          `idempotency_key` to make a retry safe, and `ends_gesture` to commit a gesture \
@@ -514,16 +622,32 @@ fn batch_tool(defs: &Map<String, Value>, groups: &BTreeMap<String, Vec<(Op, Valu
 }
 
 fn describe_tool() -> Tool {
-    let description = "Returns the full JSON Schema of the JStream control protocol: every \
-                       command, query, result, event and error code. Use it for details \
-                       the other tools' schemas leave out.";
+    let description = "Returns the JSON Schema of the JStream control protocol. With no \
+                       arguments, the whole of it: every command, query, result, event \
+                       and error code (large). With `name`, only that definition (such as \
+                       `Action` or `Edit`) or op (such as `scene.create`), with what it \
+                       refers to. Use it for details the other tools' schemas leave out: \
+                       where a tool takes an action or an edit inside its op (a hotkey's \
+                       action, a cue's, a batch's edits), its schema lists only the `type` \
+                       tags.";
     Tool {
         name: DESCRIBE_TOOL.into(),
         kind: ToolKind::Describe,
         definition: definition(
             DESCRIBE_TOOL,
             description,
-            json!({"type": "object", "additionalProperties": false}),
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "description": "A definition of the protocol schema (`Action`, \
+                                        `Edit`, `Query`, `SceneId`, ...) or an op \
+                                        (`scene.create`). Omit for the whole schema.",
+                        "type": "string",
+                    }
+                },
+                "additionalProperties": false,
+            }),
             annotations(Effect::ReadOnly, false),
         ),
     }
@@ -1010,7 +1134,16 @@ mod tests {
         })
         .ending_gesture(GestureId::new("drag"));
         assert_eq!(commit, Ok(Invocation::Call(Call::Batch(expected))));
-        assert_eq!(decode("describe_api", json!({})), Ok(Invocation::Describe));
+        assert_eq!(
+            decode("describe_api", json!({})),
+            Ok(Invocation::Describe { name: None })
+        );
+        assert_eq!(
+            decode("describe_api", json!({"name": "hotkey.set"})),
+            Ok(Invocation::Describe {
+                name: Some("hotkey.set".into())
+            })
+        );
         assert_eq!(
             decode("events", json!({})),
             Ok(Invocation::Events { after: 0 })
@@ -1066,7 +1199,9 @@ mod tests {
         ));
         assert!(r.starts_with("arguments:"), "{r}");
         let r = reason(decode("describe_api", json!({"verbose": true})));
-        assert!(r.contains("no arguments"), "{r}");
+        assert!(r.contains("unknown field `verbose`"), "{r}");
+        let r = reason(decode("describe_api", json!({"name": "scene.explode"})));
+        assert!(r.contains("neither a definition"), "{r}");
         let r = reason(decode("events", json!({"after": -1})));
         assert!(r.starts_with("arguments:"), "{r}");
         let r = reason(decode("events", json!({"since": 3})));
@@ -1082,6 +1217,54 @@ mod tests {
                 .decode("scene_create", json!({}))
                 .is_none()
         );
+    }
+
+    /// #1718: no tool copies the command unions whole, which made `tools/list` about
+    /// 2 MB. Each carries a stub that names every variant instead.
+    #[test]
+    fn tools_carry_the_command_unions_as_stubs() {
+        let tools = Tools::generate();
+        for tool in tools.definitions() {
+            let defs = &tool["inputSchema"]["$defs"];
+            for union in super::SHARED_UNIONS {
+                let Some(stub) = defs.get(union) else {
+                    continue;
+                };
+                assert!(stub.get("oneOf").is_none(), "{}: `{union}`", tool["name"]);
+                let names = stub["properties"]["type"]["enum"]
+                    .as_array()
+                    .expect("an enum of tags");
+                let all = super::variants(&tools.defs, union).count();
+                assert_eq!(names.len(), all, "{}: `{union}`", tool["name"]);
+            }
+        }
+        // A budget, so a new definition copied into many tools shows up here.
+        let size = serde_json::to_string(&tools.definitions())
+            .expect("serializes")
+            .len();
+        assert!(size < 700_000, "tools/list is {size} bytes");
+    }
+
+    #[test]
+    fn describe_api_gives_one_definition_or_op_in_full() {
+        let tools = Tools::generate();
+        let standalone = |schema: &Value| {
+            let mut refs = Vec::new();
+            super::refs(schema, &mut refs);
+            for name in refs {
+                assert!(schema["$defs"].get(&name).is_some(), "`{name}` is missing");
+            }
+        };
+        let action = tools.describe(Some("Action"));
+        standalone(&action);
+        assert_eq!(action["$ref"], "#/$defs/Action");
+        assert_eq!(action["$defs"]["Action"], tools.defs["Action"]);
+        // The other union stays a stub.
+        assert!(action["$defs"]["Edit"].get("oneOf").is_none());
+        let op = tools.describe(Some("hotkey.set"));
+        standalone(&op);
+        assert_eq!(op["properties"]["type"]["const"], "hotkey.set");
+        assert_eq!(tools.describe(None), jstream_protocol::json_schema());
     }
 
     #[test]
