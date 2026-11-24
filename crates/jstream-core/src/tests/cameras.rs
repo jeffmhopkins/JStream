@@ -266,6 +266,94 @@ fn autofocus_measures_the_item_at_the_centre() {
     assert_eq!(shot.centre_distance(&SceneId::new("b"), framing, at), None);
 }
 
+/// ADR-0218: autofocus meets a model at the surface it draws, not at its item's flat box:
+/// a cube 300 px deep is met at its front face, 150 px before its item's plane, from in
+/// front and from behind; and from inside it, where only the backs of its faces are
+/// seen, it isn't met.
+#[test]
+fn autofocus_meets_a_model_at_its_surface() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut setup = scenes();
+    setup.push(Edit::SourceCreate {
+        source_id: SourceId::new("cube"),
+        name: "Cube".into(),
+        kind: SourceKind::Builtin {
+            kind: "model".into(),
+        },
+        settings: jstream_protocol::Settings(
+            [("shape".to_owned(), serde_json::json!("cube"))]
+                .into_iter()
+                .collect(),
+        ),
+        duplicated_from: None,
+    });
+    setup.push(Edit::ItemAdd {
+        scene_id: SceneId::new("a"),
+        item_id: ItemId::new("cube"),
+        source_id: SourceId::new("cube"),
+        transform: None,
+        geometry: Some(
+            ItemGeometry::try_new(
+                Vec2::new(960.0, 540.0).expect("finite"),
+                Size::try_new(400.0, 300.0).expect("size"),
+            )
+            .expect("geometry"),
+        ),
+        opacity: None,
+        blend: None,
+    });
+    batch(&control, edits(setup)).expect("scenes");
+    block_on(control.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: None,
+            via: Vec::new(),
+        },
+    }))
+    .expect("on program");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let snapshot = hub.load();
+    let shot = snapshot.shot();
+    let family = SceneId::new("a");
+    let at = jstream_media::MediaTime::new(0, jstream_media::Timebase::MICROS);
+    let distance = f64::from(framing.target_distance());
+    // The first measure starts the cube's hierarchy building on a thread of its own;
+    // until it is built, the cube isn't met and the screen behind it is.
+    let start = std::time::Instant::now();
+    // The cube fits the item's 300 px height, so its front face is 150 px nearer.
+    let met = loop {
+        let met = shot.centre_distance(&family, framing, at);
+        if let Some(met) = met.filter(|met| *met < distance - 1.0) {
+            break met;
+        }
+        assert!(
+            met.is_some_and(|met| (met - distance).abs() < 0.5),
+            "the screen, until the cube is built: {met:?}"
+        );
+        assert!(start.elapsed().as_secs() < 30, "the cube is at the centre");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    assert!((met - (distance - 150.0)).abs() < 0.5, "{met}");
+    let behind = SceneCamera {
+        position: jstream_protocol::Vec3::new(960.0, 540.0, -1000.0).expect("finite"),
+        target: jstream_protocol::Vec3::new(960.0, 540.0, 0.0).expect("finite"),
+        ..framing
+    };
+    let met = shot
+        .centre_distance(&family, behind, at)
+        .expect("the cube's back is at the centre");
+    assert!((met - 850.0).abs() < 0.5, "{met}");
+    let inside = SceneCamera {
+        position: jstream_protocol::Vec3::new(960.0, 540.0, 0.0).expect("finite"),
+        target: jstream_protocol::Vec3::new(960.0, 540.0, -100.0).expect("finite"),
+        ..framing
+    };
+    assert_eq!(shot.centre_distance(&family, inside, at), None);
+}
+
 /// ADR-0120: a Follow pointer filter on a capture in a 2D scene supplies the scene's
 /// camera and moves it every frame; turned off, the scene is still and 2D again.
 #[test]

@@ -67,6 +67,14 @@ Contents:
   places one vertex as the GPU does. `Model::rigged` builds a model with its rig, its
   bounds those of its rest pose, and refuses a weighted vertex naming a slot it hasn't
   (`ModelError::Joint`), so a model without a rig weighs nothing.
+- **Ray picking** (`model::pick`, [ADR-0218](../../docs/adr/0218-autofocus-meets-a-model-at-its-surface.md)):
+  `Model::ray_hit` is where a ray in the model's own space first meets the surface it
+  draws: blended triangles are seen through, masked ones count as opaque, and a
+  single-sided triangle counts only from its front (swapped for a mirroring placement).
+  An unposed model is searched through a bounding volume hierarchy over its rest pose,
+  shared by its clones and built on a thread of its own after the first ask (until then
+  `ray_hit` meets nothing; `prepare_picking` builds it at once); a posed one is skinned
+  by its palette and searched triangle by triangle. Autofocus measures a model by it.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
   shared payload). `Codec` covers the [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)
   baseline, H.264 and AAC, plus HEVC and AV1, the video codecs enhanced RTMP carries
