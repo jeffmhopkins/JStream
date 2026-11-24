@@ -42,6 +42,9 @@ struct State {
     busy: bool,
     /// Whether a `live.set` succeeded, so the engine holds the gesture.
     opened: bool,
+    /// Whether the engine refused a `live.set`: the rest of the drag sends no more, so
+    /// the refusal is reported once, and the release's batch still goes out.
+    refused: bool,
 }
 
 /// One drag's calls.
@@ -55,7 +58,7 @@ struct Pump {
 impl Pump {
     fn show(&self, values: Vec<Edit>) {
         let mut state = self.state.borrow_mut();
-        if state.end.is_some() {
+        if state.end.is_some() || state.refused {
             return;
         }
         state.latest = Some(values);
@@ -116,7 +119,13 @@ impl Pump {
                 };
                 match open.control.call(Call::Action { action }).await {
                     Ok(_) => self.state.borrow_mut().opened = true,
-                    Err(error) => self.studio.report(&error),
+                    Err(error) => {
+                        let mut state = self.state.borrow_mut();
+                        state.refused = true;
+                        state.latest = None;
+                        drop(state);
+                        self.studio.report(&error);
+                    }
                 }
                 continue;
             }
@@ -228,6 +237,7 @@ impl EditDrag {
                     end: None,
                     busy: false,
                     opened: false,
+                    refused: false,
                 })),
                 session: self.session,
                 studio: self.studio,

@@ -837,7 +837,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:469e300ae477e5ef", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:1d884d46c349aae3", by = "agent:issues-thread", note = "Edited Live values bullet: since 0.178 filter live settings, opacity, faders and sends (ADR-0213)" }
+stamp = { hash = "b3:20b28da964af425e", by = "agent:issues-thread", note = "Live values bullet renumbered to since 0.180; the content is unchanged and still matches live.rs and mock.rs" }
 
 ["ARCH#protocol"."dep:crates/jstream-protocol/README.md#compatibility"]
 stamp = { hash = "b3:c499997af40d7f9e", by = "agent:channels", note = "Added the 0.169 channel edits, actions and channel.values, and the channel motion kind, note control and amount on modifiers." }
@@ -864,7 +864,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "edited the capture.targets entry to add devices with formats at 0.90" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:f2ff0b623ac1eb58", by = "agent:issues-thread", note = "Edited Live values bullet: since 0.178 filter live settings, opacity, faders and sends (ADR-0213)" }
+stamp = { hash = "b3:c7cd31fbacbfe70c", by = "agent:issues-thread", note = "Live values bullet renumbered to since 0.180; the content is unchanged and still matches live.rs and mock.rs" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "output.set_audio_buses (protocol 0.59): one bus per track, one track so far, blocks its bus's delete, delete.plan moves the output to master, refused while it runs; checked against command.rs, output.rs, version.rs, fixtures and plugin.rs, the graph and mock (mock.rs, mock/audio.rs, control README), and the snapshots" }
@@ -888,10 +888,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:6042c2a56b8b7c54", by = "agent:issues-thread", note = "Edited Live values bullet: since 0.178 filter live settings, opacity, faders and sends (ADR-0213)" }
+stamp = { hash = "b3:943b8174ac306084", by = "agent:issues-thread", note = "Live values bullet renumbered to since 0.180; the content is unchanged and still matches live.rs and mock.rs" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e3844bfe8616ab93", by = "agent:issues-thread", note = "Edited Live values bullet: since 0.178 filter live settings, opacity, faders and sends (ADR-0213)" }
+stamp = { hash = "b3:90d286351461eb8d", by = "agent:issues-thread", note = "Live values bullet renumbered to since 0.180; the content is unchanged and still matches live.rs and mock.rs" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -987,7 +987,7 @@ stamp = { hash = "b3:53a91a0fd2352131", by = "agent:claude", note = "kind.rs's n
 stamp = { hash = "b3:bb5541f3de02625a", by = "agent:issues-thread", note = "Edited Live values bullet: since 0.178 filter live settings, opacity, faders and sends (ADR-0213)" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/live.rs"]
-stamp = { hash = "b3:c7ca77811fc3fea3", by = "agent:issues-thread", note = "Edited Live values bullet: since 0.178 filter live settings, opacity, faders and sends (ADR-0213)" }
+stamp = { hash = "b3:4b22a5aa82408fd2", by = "agent:issues-thread", note = "Live values bullet renumbered to since 0.180; the content is unchanged and still matches live.rs and mock.rs" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/mix.rs"]
 stamp = { hash = "b3:3708666a19e3f518", by = "agent:grok", note = "Re-read the canvas sentence. canvas.set_frame_rate sets the base rate to 30 or 60 at protocol 0.89, beside canvas.set_size." }
@@ -1044,7 +1044,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Proto
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:6e7a4c411f9bd6c0", by = "agent:issues-thread", note = "Edited Live values bullet: since 0.178 filter live settings, opacity, faders and sends (ADR-0213)" }
+stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:issues-thread", note = "Live values bullet renumbered to since 0.180; the content is unchanged and still matches live.rs and mock.rs" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1677,7 +1677,7 @@ stamp = { hash = "b3:cb2e88cc7f3f5138", by = "agent:mac-browser", note = "The RE
 stamp = { hash = "b3:6b139f7a258f08e0", by = "agent:claude-perf-suite", note = "The bench stays a protocol client; its design now names every call it uses (adding quality.probe and kind.list); scenario sources are made by its batch and cleaned up." }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:46a2fdb1637fc4b4", by = "agent:issues-thread", note = "Re-read against jstream-control design's live-values bullet (more setters, gain-only faders); the CLI's design names no live setters, still holds" }
+stamp = { hash = "b3:4cfc99a7ae839135", by = "agent:issues-thread", note = "Control design adds the missing-send refusal to the mock's live checks; the CLI names no live setters, holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
@@ -1755,10 +1755,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Edited the capture targets row: each device's camera controls are listed after its formats (name, value, range, step, default, auto or manual). Checked against run.rs and capture_targets_prints_each_target." }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:46a2fdb1637fc4b4", by = "agent:issues-thread", note = "Edited live-values bullet: setters is_live_adjustable takes, gain-only faders via live_problem, per-key filter params, drop with filter/bus/send; matches mock.rs" }
+stamp = { hash = "b3:4cfc99a7ae839135", by = "agent:issues-thread", note = "Edited: the live.set checks now list a send.set naming a send that exists (values.<n>.bus_id), matching mock.rs" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:1d884d46c349aae3", by = "agent:issues-thread", note = "Edited live-values bullet: setters is_live_adjustable takes, gain-only faders via live_problem, per-key filter params, drop with filter/bus/send; matches mock.rs" }
+stamp = { hash = "b3:20b28da964af425e", by = "agent:issues-thread", note = "Edited: the live.set checks now list a send.set naming a send that exists (values.<n>.bus_id), matching mock.rs" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1779,7 +1779,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "edited the capture.targets bullet to name the mock webcam and its two formats" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:f2ff0b623ac1eb58", by = "agent:issues-thread", note = "Edited live-values bullet: setters is_live_adjustable takes, gain-only faders via live_problem, per-key filter params, drop with filter/bus/send; matches mock.rs" }
+stamp = { hash = "b3:c7cd31fbacbfe70c", by = "agent:issues-thread", note = "Edited: the live.set checks now list a send.set naming a send that exists (values.<n>.bus_id), matching mock.rs" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "Added the output-bus bullet to the mock's checks: output.set_audio_buses's errors and bus.delete's output blocker, matching mock.rs and mock/audio.rs; ARCH#protocol's new output.set_audio_buses paragraph agrees" }
@@ -1818,7 +1818,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:232b54ab752265a3", by = "agent:claude", note = "the mock's capture.targets gains MOCK_DEVICE with two formats; the purpose still holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:f2ff0b623ac1eb58", by = "agent:issues-thread", note = "Re-read: mock's live values now cover filter settings, opacity and gains (ADR-0213); purpose's description of the mock still holds" }
+stamp = { hash = "b3:c7cd31fbacbfe70c", by = "agent:issues-thread", note = "B1 fix: a live send.set to a missing send is refused at values.<n>.bus_id in the mock too; purpose still describes the mock correctly" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "The mock now handles output.set_audio_buses (ghost output, not one bus, a virtual camera, ghost bus), lists audio_buses in output.list and blocks bus.delete for an output carrying the bus with the graph's reason; the purpose still holds" }
@@ -1881,7 +1881,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, history.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on 0013-command-model.md, RULES.md#R-API-004, README.md#batches, matching what it relies on" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3f31d87a3a4aafde", by = "agent:issues-thread", note = "live.set/live.cancel still described via Live values; no call added or reordered" }
+stamp = { hash = "b3:32d2cf448e3742f0", by = "agent:issues-thread", note = "live.set still described under Live values; the new refusal is documented there" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:3396a70c4ea3f458", by = "agent:lane-d", note = "collection.* dispatch through collection_call before the generic path; the call flow, saving after batches and audit described here still hold. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
@@ -1905,7 +1905,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:128b8747967ace26", by = "agent:release-alpha8", note = "added stop_jtunnel beside start_jtunnel and jtunnel_stats; checked engine.rs" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3f31d87a3a4aafde", by = "agent:issues-thread", note = "gesture.rs gains FilterSetting/Opacity/SourceGain/BusGain/SendGain params, drawn() and drop_missing(state); the gesture-table description still holds" }
+stamp = { hash = "b3:32d2cf448e3742f0", by = "agent:issues-thread", note = "B1 fix: a live send.set to a missing send is refused at values.<n>.bus_id (check_live_settings in engine.rs); gesture-table description holds" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2028,7 +2028,7 @@ stamp = { hash = "b3:d1aca46da610447c", by = "agent:claude", note = "B1: a bindi
 stamp = { hash = "b3:6cd45e61e61a2c66", by = "agent:claude", note = "Re-read: the Data-driven motion bullet now describes painting bindings and Bindings::tint, and Driven source settings names set_color and set_emissive and effects, matching reactive.rs, sourced.rs and driven.rs." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3f31d87a3a4aafde", by = "agent:issues-thread", note = "engine.rs change only touches live_set/refresh_shown drawn values; value bindings over open gestures' values still described correctly" }
+stamp = { hash = "b3:32d2cf448e3742f0", by = "agent:issues-thread", note = "engine.rs change is the live send check only; motion section holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/follow.rs"]
 stamp = { hash = "b3:67a9c13712b51b9d", by = "agent:channels", note = "Added channels.rs to covers and a Channels bullet (driver, cells, values thread, scene reset, note control, amount); value bindings bullet notes amount." }
@@ -2202,7 +2202,7 @@ stamp = { hash = "b3:5448eb34c345dcb8", by = "agent:channels", note = "Re-read: 
 stamp = { hash = "b3:d26638e1feae419f", by = "agent:issues-thread", note = "Re-read: added the groups3d case of a Move after an ended Fade; the new keyframes tests fall under the existing keyframes wording" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/live_values.rs"]
-stamp = { hash = "b3:935e67b4c817d94f", by = "agent:issues-thread", note = "Added live_values.rs tests for filter settings, opacity and gains, refusals and drop-on-remove to the list" }
+stamp = { hash = "b3:3b84096a29d82784", by = "agent:issues-thread", note = "Added a_live_send_to_a_missing_send_is_refused to live_values.rs; the section's description of live_values tests still covers it" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/packs.rs"]
 stamp = { hash = "b3:99a37eeb176bb544", by = "agent:claude-settings", note = "Added undoing_a_delete_from_before_the_renames_is_an_undo_conflict (#1418) to the packs.rs list beside the renames tests. | merge: Merged main with #1414 (shader sources load before their pack and follow its renames; upgrade_filters became upgrade_kinds, covering sources). engine.rs keeps #1414's shader-source sync and this PR's version-only revision (info line only when settings moved); re-read, the section holds. | kept from the merged side: Added a_shader_source_loads_before_its_pack_and_follows_its_renames (#1412) to the packs tests and checked it against the test. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Added the two packs.rs tests for #1353 (live reload moving a filter through renames with undo_conflict after, and a loaded filter upgraded once its pack loads) and checked them against the code." }
@@ -2271,7 +2271,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:aaad4fc91ed634cc", by = "agent:plugin-uninstall", note = "re-read and edited: the plugin bullet now names plugin.uninstall with no engine lock held, not_found without wasm-plugins, and the differential script sending it | merge: #1575 added Engine::handles (counts handles and sessions keeping the engine alive) and pipeline-thread stop logging; nothing about plugins, and plugin.uninstall still holds no engine handle (its threads hold it weakly) | kept from the merged side: Added that Engine::handles counts the handles and sessions to the Engine and sessions part; the rest of the design is unchanged by this diff." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:46a2fdb1637fc4b4", by = "agent:issues-thread", note = "engine.rs: live_set redraws for every drawn value through refresh_shown; design's snapshot/shown-graph description still holds" }
+stamp = { hash = "b3:4cfc99a7ae839135", by = "agent:issues-thread", note = "engine.rs: only the live send check changed; design holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#calls"]
 stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
@@ -2280,13 +2280,13 @@ stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:1d884d46c349aae3", by = "agent:issues-thread", note = "engine.rs: live_set redraws for every drawn value through refresh_shown; design's snapshot/shown-graph description still holds" }
+stamp = { hash = "b3:20b28da964af425e", by = "agent:issues-thread", note = "engine.rs: only the live send check changed; design holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3f31d87a3a4aafde", by = "agent:issues-thread", note = "engine.rs: live_set redraws for every drawn value through refresh_shown; design's snapshot/shown-graph description still holds" }
+stamp = { hash = "b3:32d2cf448e3742f0", by = "agent:issues-thread", note = "engine.rs: only the live send check changed; design holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
 stamp = { hash = "b3:44b5b114d27ed218", by = "agent:claude", note = "ADR-0197: lib.rs only gains the private resolution module; engine and sessions are untouched and the section still holds." }
@@ -2340,10 +2340,10 @@ stamp = { hash = "b3:12d8170f5e81ad5f", by = "agent:cursor", note = "Re-read aga
 stamp = { hash = "b3:5448eb34c345dcb8", by = "agent:channels", note = "Re-read: its test only gained empty lanes/starts/stops in a TimelineInfo literal; behaviour unchanged." }
 
 ["CRATE-jstream-core#live-values"."body"]
-stamp = { hash = "b3:39f303b66d834973", by = "agent:issues-thread", note = "Edited: filter live settings, opacity and gains drawn through with_values and heard via redraw/route_audio, live_problem gain-only check, drop on delete (ADR-0213)" }
+stamp = { hash = "b3:c64a340c600385ab", by = "agent:issues-thread", note = "Edited: live.set refuses a send.set to a send that doesn't exist (values.<n>.bus_id), since set_send would add it; protocol 0.180" }
 
 ["CRATE-jstream-core#live-values"."dep:crates/jstream-protocol/README.md#live-values"]
-stamp = { hash = "b3:d2c6649837b23b6c", by = "agent:issues-thread", note = "Edited: filter live settings, opacity and gains drawn through with_values and heard via redraw/route_audio, live_problem gain-only check, drop on delete (ADR-0213)" }
+stamp = { hash = "b3:34409a6634ebcfd2", by = "agent:issues-thread", note = "Edited: live.set refuses a send.set to a send that doesn't exist (values.<n>.bus_id), since set_send would add it; protocol 0.180" }
 
 ["CRATE-jstream-core#live-values"."file:crates/jstream-core/src/gesture.rs"]
 stamp = { hash = "b3:d7cfd4c7dc40542e", by = "agent:issues-thread", note = "Edited: filter live settings, opacity and gains drawn through with_values and heard via redraw/route_audio, live_problem gain-only check, drop on delete (ADR-0213)" }
@@ -2352,7 +2352,7 @@ stamp = { hash = "b3:d7cfd4c7dc40542e", by = "agent:issues-thread", note = "Edit
 stamp = { hash = "b3:fcec80c6a7edbd49", by = "agent:release-alpha9", note = "Added that the values tick plays waited and triggered timelines and moves lanes under the collection lock. | merge: engine.rs's State now holds #1636's jtunnel_names (ADR-0181) beside #1638/#1640's channels, channels_program and sequences; the merge kept both field sets; #1636's names leaf mutex (Receiver::set_names under the collection lock, and the receiver's thread) sits beside #1640's channel and timeline locks with no new order between them | kept from the merged side: the per-sender names leaf mutex (ADR-0181): set_names under the collection lock, the receiver thread alone; start_jtunnel takes the collection lock again after setting the slot | kept from the merged side: The text covers #1628's start_jtunnel/stop_jtunnel emits, #1620's Shared::hearing leaf and gpu-stack's priming order, and now also CC PR 3 value bindings' two leaf-lock uses under the collection lock: midi.last_controls reading MidiInputs, and jstream-values looking up a binding's MIDI input or live data watch." }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3f31d87a3a4aafde", by = "agent:issues-thread", note = "Drawn live values are applied under the collection lock in live_set as source settings were; parameter channel still lock-free for placements; holds" }
+stamp = { hash = "b3:32d2cf448e3742f0", by = "agent:issues-thread", note = "Live send check runs under the same collection lock as the other live.set checks; holds" }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2361,7 +2361,7 @@ stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:027e29bed3a16896", by = "agent:channels", note = "The values thread now also starts for channels; updated the warn sentence." }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3f31d87a3a4aafde", by = "agent:issues-thread", note = "No new log events from the live-value change; logging section holds" }
+stamp = { hash = "b3:32d2cf448e3742f0", by = "agent:issues-thread", note = "No new log events; holds" }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2415,7 +2415,7 @@ stamp = { hash = "b3:62d8d7d707f625e6", by = "agent:release-alpha11", note = "Ed
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
 
 ["CRATE-jstream-core#privacy"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3f31d87a3a4aafde", by = "agent:issues-thread", note = "engine.rs change is live values only; no privacy screen statement affected" }
+stamp = { hash = "b3:32d2cf448e3742f0", by = "agent:issues-thread", note = "engine.rs change is the live send check only; holds" }
 
 ["CRATE-jstream-core#program-scene"."body"]
 stamp = { hash = "b3:4675ed7e33c3fc1d", by = "agent:st6-docs", note = "Re-read the warm scenes paragraph against studio.rs's warm() order and set_upcoming: rewrote the upcoming-scene sentence (after Preview, not when on program or Preview, past budget and GPU limit, not_found for a missing scene, None while no show runs, only tests call it so far) and corrected 'a budget of 0 keeps only it' to keep both; a deleted upcoming scene is cleared as reconcile does." }
@@ -4626,16 +4626,16 @@ stamp = { hash = "b3:c499997af40d7f9e", by = "agent:channels", note = "Added 0.1
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:6042c2a56b8b7c54", by = "agent:issues-thread", note = "Snapshots updated for 0.178 only (version string); additive minor change, compatibility policy holds" }
+stamp = { hash = "b3:943b8174ac306084", by = "agent:issues-thread", note = "Snapshots changed only in the version string (0.180); additive minor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e3844bfe8616ab93", by = "agent:issues-thread", note = "Snapshots updated for 0.178 only (version string); additive minor change, compatibility policy holds" }
+stamp = { hash = "b3:90d286351461eb8d", by = "agent:issues-thread", note = "Snapshots changed only in the version string (0.180); additive minor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:6e7a4c411f9bd6c0", by = "agent:issues-thread", note = "Snapshots updated for 0.178 only (version string); additive minor change, compatibility policy holds" }
+stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:issues-thread", note = "Snapshots changed only in the version string (0.180); additive minor" }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
 stamp = { hash = "b3:676067bd06525692", by = "agent:channels", note = "Added channel.values to the query list and the channel actions to the actions list." }
@@ -4695,7 +4695,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:6e7a4c411f9bd6c0", by = "agent:issues-thread", note = "version.rs bump to 0.178 only; error codes and id types unchanged, holds" }
+stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:issues-thread", note = "version.rs bump to 0.180 only; error codes unchanged" }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:626ba3cd643e0e61", by = "agent:claude", note = "Added solid_outline (hull of the eight projected corners, None if one is behind the viewer), outline_contains and SolidBounds::of_size to the solid.rs entry; checked against solid.rs." }
@@ -4776,7 +4776,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:bb5541f3de02625a", by = "agent:issues-thread", note = "lib.rs re-exports live_problem, version 0.178; design's crate layout and rules hold" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:6e7a4c411f9bd6c0", by = "agent:issues-thread", note = "lib.rs re-exports live_problem, version 0.178; design's crate layout and rules hold" }
+stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:issues-thread", note = "version 0.180 only; design holds" }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4854,10 +4854,10 @@ stamp = { hash = "b3:53a91a0fd2352131", by = "agent:claude", note = "the looks b
 stamp = { hash = "b3:12085313843efe02", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to kind.rs, settings.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#live-values"."body"]
-stamp = { hash = "b3:d2c6649837b23b6c", by = "agent:issues-thread", note = "Edited: since 0.178 the five setters are live values, faders gain-only via live_problem, values dropped on source/filter/bus/send delete; matches live.rs" }
+stamp = { hash = "b3:34409a6634ebcfd2", by = "agent:issues-thread", note = "Edited: since 0.180, and a live send.set must name an existing send (values.<n>.bus_id)" }
 
 ["CRATE-jstream-protocol#live-values"."file:crates/jstream-protocol/src/live.rs"]
-stamp = { hash = "b3:c7ca77811fc3fea3", by = "agent:issues-thread", note = "Edited: since 0.178 the five setters are live values, faders gain-only via live_problem, values dropped on source/filter/bus/send delete; matches live.rs" }
+stamp = { hash = "b3:4b22a5aa82408fd2", by = "agent:issues-thread", note = "Edited: since 0.180, and a live send.set must name an existing send (values.<n>.bus_id)" }
 
 ["CRATE-jstream-protocol#media-clock"."body"]
 stamp = { hash = "b3:4762fe740a80f740", by = "agent:cockpit-demo", note = "edited: a step that passes a cue has fired it on return, an overflowing step is invalid_argument, and output.start fails while held or still ahead of real time, saying how far" }
@@ -5010,7 +5010,7 @@ stamp = { hash = "b3:53a91a0fd2352131", by = "agent:claude", note = "kind.rs add
 stamp = { hash = "b3:bb5541f3de02625a", by = "agent:issues-thread", note = "Edited Live values bullet: the new live setters (filter.set_settings, item.set_opacity, source.set_audio, bus.set_fader, send.set) and live_problem" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/live.rs"]
-stamp = { hash = "b3:c7ca77811fc3fea3", by = "agent:issues-thread", note = "Edited Live values bullet: the new live setters (filter.set_settings, item.set_opacity, source.set_audio, bus.set_fader, send.set) and live_problem" }
+stamp = { hash = "b3:4b22a5aa82408fd2", by = "agent:issues-thread", note = "Version now 0.180 (0.178 and 0.179 are claimed by open PRs); live.rs doc comment updated; purpose holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/mix.rs"]
 stamp = { hash = "b3:3708666a19e3f518", by = "agent:grok", note = "Re-read the overview. It points at the version section, which is now 0.89 for canvas.set_frame_rate." }
@@ -5067,7 +5067,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Addit
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:6e7a4c411f9bd6c0", by = "agent:issues-thread", note = "Edited Live values bullet: the new live setters (filter.set_settings, item.set_opacity, source.set_audio, bus.set_fader, send.set) and live_problem" }
+stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:issues-thread", note = "Version now 0.180 (0.178 and 0.179 are claimed by open PRs); live.rs doc comment updated; purpose holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -5121,13 +5121,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:58d55875954f92f3", by = "agent:issues-thread", note = "Bumped to 0.178 for live filter settings, opacity and gains (ADR-0213); version.rs minor 178; older entries unchanged" }
+stamp = { hash = "b3:c235c004ca517faf", by = "agent:issues-thread", note = "Renumbered this PR's entry to 0.180 because 0.178 and 0.179 are claimed by open PRs; older entries unchanged" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:6e7a4c411f9bd6c0", by = "agent:issues-thread", note = "Bumped to 0.178 for live filter settings, opacity and gains (ADR-0213); version.rs minor 178; older entries unchanged" }
+stamp = { hash = "b3:295e6bd43e0e31e8", by = "agent:issues-thread", note = "Renumbered this PR's entry to 0.180 because 0.178 and 0.179 are claimed by open PRs; older entries unchanged" }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -6369,10 +6369,10 @@ stamp = { hash = "b3:707bdcd17bc89e64", by = "agent:claude", note = "tests.rs ga
 stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed | merge: the wave's #1366 (Allow devices on my network turns on the network listener) merged in cleanly; this section's text is untouched by the renumber | kept from the merged side: open question 1 says the desktop app turns the listener on with Allow devices on my network; merged with #1364's N1 restamp | merge: the wave brought #1364's squash, which this branch already had; this branch's desktop network switch text is unchanged | kept from the merged side: The host's side now says pairing.start carries network (0.101), absent without a listener; open question 1 now says the panel and jstream pair show addresses and fingerprint, only the desktop setting remains; matches admitted.rs, lib.rs and the new network test | kept from the merged side: listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:46a2fdb1637fc4b4", by = "agent:issues-thread", note = "Re-read against control design and ARCH protocol changes (more live setters); server design's live.changed coalescing and gesture expiry still hold" }
+stamp = { hash = "b3:4cfc99a7ae839135", by = "agent:issues-thread", note = "Control design and ARCH protocol changes are the live send refusal and version number; server design holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:1d884d46c349aae3", by = "agent:issues-thread", note = "Re-read against control design and ARCH protocol changes (more live setters); server design's live.changed coalescing and gesture expiry still hold" }
+stamp = { hash = "b3:20b28da964af425e", by = "agent:issues-thread", note = "Control design and ARCH protocol changes are the live send refusal and version number; server design holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the server's Host, Origin and token checks are unchanged" }
@@ -6819,10 +6819,10 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:25296f07e3043162", by = "agent:issues-thread", note = "Edited: EditDrag gesture pump for filter, opacity, fader and send drags, N1 default fallback, release-only list; matches gesture.rs/properties.rs/mixer.rs | kept from the merged side: Re-read against #1734: rewrote the Number fields bullet for the live drag (one value per animation frame, Ended and Cancelled, live.set gesture in the Inspector, draft in dialogs), number_spec and the list of inputs now using NumberField, and added the Inspector line that a box, 3D or crop drag shows live and is one undo step." }
+stamp = { hash = "b3:dcd9d90bf9ed13a4", by = "agent:issues-thread", note = "Edited EditDrag paragraph: after a refused live.set the drag sends no more, so the refusal shows once | kept from the merged side: Re-read against #1734: rewrote the Number fields bullet for the live drag (one value per animation frame, Ended and Cancelled, live.set gesture in the Inspector, draft in dialogs), number_spec and the list of inputs now using NumberField, and added the Inspector line that a box, 3D or crop drag shows live and is one undo step." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:46a2fdb1637fc4b4", by = "agent:issues-thread", note = "Edited: EditDrag gesture pump for filter, opacity, fader and send drags, N1 default fallback, release-only list; matches gesture.rs/properties.rs/mixer.rs" }
+stamp = { hash = "b3:4cfc99a7ae839135", by = "agent:issues-thread", note = "Edited EditDrag paragraph: after a refused live.set the drag sends no more, so the refusal shows once" }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -6957,7 +6957,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Updated t
 stamp = { hash = "b3:c7deb943099cb4a0", by = "agent:issues-thread", note = "Edited: EditDrag gesture pump for filter, opacity, fader and send drags, N1 default fallback, release-only list; matches gesture.rs/properties.rs/mixer.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/gesture.rs"]
-stamp = { hash = "b3:9d5b8ab2a1840c6d", by = "agent:issues-thread", note = "Edited: EditDrag gesture pump for filter, opacity, fader and send drags, N1 default fallback, release-only list; matches gesture.rs/properties.rs/mixer.rs" }
+stamp = { hash = "b3:37432ca6939a64aa", by = "agent:issues-thread", note = "Edited EditDrag paragraph: after a refused live.set the drag sends no more, so the refusal shows once" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:ac025699ed09b588", by = "agent:issues-thread", note = "Edited: EditDrag gesture pump for filter, opacity, fader and send drags, N1 default fallback, release-only list; matches gesture.rs/properties.rs/mixer.rs | kept from the merged side: Re-read against #1734: rewrote the Number fields bullet for the live drag (one value per animation frame, Ended and Cancelled, live.set gesture in the Inspector, draft in dialogs), number_spec and the list of inputs now using NumberField, and added the Inspector line that a box, 3D or crop drag shows live and is one undo step." }
@@ -7206,7 +7206,7 @@ stamp = { hash = "b3:bfd4be7f3c095278", by = "agent:hologram", note = "Re-read: 
 stamp = { hash = "b3:c7deb943099cb4a0", by = "agent:issues-thread", note = "New panels/gesture.rs EditDrag; purpose's panel list still accurate" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/gesture.rs"]
-stamp = { hash = "b3:9d5b8ab2a1840c6d", by = "agent:issues-thread", note = "New panels/gesture.rs EditDrag; purpose's panel list still accurate" }
+stamp = { hash = "b3:37432ca6939a64aa", by = "agent:issues-thread", note = "gesture.rs stops sending live values after the first refusal; purpose holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:ac025699ed09b588", by = "agent:issues-thread", note = "New panels/gesture.rs EditDrag; purpose's panel list still accurate | kept from the merged side: Re-read against #1734: the contents list still names every touched module (number, inspector, properties, encoders, looks, mixer, scene and source properties, studio, video settings); the change adds no module and no new dependency on the engine." }
@@ -8229,7 +8229,7 @@ stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:2d09ebc9fa2a93a0", by = "agent:release-alpha9", note = "Re-read against ARCH persistence (schema 21 with its refusing migration); the rule holds. | merge: #1645 (screen-space reflections, 1f65ffa) merged: its dependencies ARCH#protocol and #persistence hold (protocol 0.172, schema 21) | kept from the merged side: Screen-space steps now default to 16 (Low) instead of 32 (RenderFeatures::DEFAULT and ALL, the serde default, the render filter's DEFAULT_STEPS), per the streaming PC re-measure where only Low held 30 fps; ARCH persistence's default changed; additive, so R-API-001 holds." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:1d884d46c349aae3", by = "agent:issues-thread", note = "0.178 is an additive minor bump per R-API-001; holds" }
+stamp = { hash = "b3:20b28da964af425e", by = "agent:issues-thread", note = "0.180 is an additive minor bump; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:9b1de3f0c0d6da7f", by = "agent:dxc-packaging", note = "R-DEP-001 now names the DXC DLLs as a shipped binary under Microsoft's terms beside the CEF exception (ADR-0175); the other rules are unchanged" }

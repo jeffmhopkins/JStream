@@ -827,3 +827,28 @@ fn removing_a_filter_or_send_drops_its_live_values() {
     .expect("remove");
     assert_eq!(live_list(&control)[0].values, [opacity(0.5)]);
 }
+
+/// ADR-0213 decision 1: a live `send.set` changes an existing send's gain, and never
+/// adds one, which would route the source into a new bus with no undo step.
+#[test]
+fn a_live_send_to_a_missing_send_is_refused() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    mix(&control);
+    batch(
+        &control,
+        edits(vec![value(
+            serde_json::json!({"type": "bus.create", "bus_id": "stream", "name": "Stream"}),
+        )]),
+    )
+    .expect("bus.create");
+    let stream = || jstream_protocol::BusId::new("stream");
+    let mic = jstream_protocol::SourceId::new("mic");
+    let new_send = value(serde_json::json!({"type": "send.set", "source_id": "mic",
+        "bus_id": "stream", "gain_db": -6.0}));
+    let error = live_set(&control, "drag", vec![opacity(0.5), new_send])
+        .expect_err("a live value adds no send");
+    assert_eq!(invalid_field(&error), "values.1.bus_id");
+    assert!(engine.drawn(|state| state.send(&mic, &stream()).is_none()));
+    assert!(live_list(&control).is_empty());
+}

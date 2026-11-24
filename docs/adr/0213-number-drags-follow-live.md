@@ -42,14 +42,17 @@ about 30 times a second, and 60 while a value moves (ADR-0190).
 
 <a id="decision"></a>
 ## Decision
-1. **More setters are live-adjustable** in `live.set` (protocol 0.178):
+1. **More setters are live-adjustable** in `live.set` (protocol 0.180):
    `filter.set_settings`, for the parameters the filter kind's descriptor marks `live`,
    with any other parameter refused at `values.<n>.patch.<param>` as for a source's
    settings; `item.set_opacity`; and the gains: `source.set_audio`, `bus.set_fader` and
    `send.set`. A `source.set_audio` or `bus.set_fader` value sets only the gain: it must
    carry `gain_db` and nothing else, so turning a source's audio on or off, when it is
    heard, and muting stay edits sent in a batch. Otherwise `values.<n>.<field>` is
-   `invalid_argument` (`jstream_protocol::live_problem`).
+   `invalid_argument` (`jstream_protocol::live_problem`). A `send.set` value changes
+   the gain of a send that exists: one to a send the collection doesn't have is refused
+   at `values.<n>.bus_id`, since it would route the source into another bus while it is
+   heard, with no revision and no undo step. Adding a send stays an edit.
 2. **One parameter each.** Each setting of each filter (by owner and filter ID), each
    item's opacity (an item's own, or a keyframe scene's override of it, as for placement),
    each source's fader, each bus's fader and each send are parameters of their own in the

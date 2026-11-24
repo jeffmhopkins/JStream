@@ -731,7 +731,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the Inspector's opacity and the mixer's gain fields, faders and sends hand theirs to
   an `EditDrag` (`panels/gesture.rs`, ADR-0213, #1739): it opens a gesture with the
   first value, sends each one as the gesture's `live.set`, one call in flight and the
-  newest values next, commits the release's edit in one batch with `ends_gesture`, and
+  newest values next (after a refused `live.set` it sends no more for that drag, so the
+  refusal shows once), commits the release's edit in one batch with `ends_gesture`, and
   cancels the gesture when the drag is lost or released where it started; a filter
   parameter its kind doesn't mark `live` is sent on release only. A field whose setting
   is absent or `null` starts from its default, else 0 kept to its range

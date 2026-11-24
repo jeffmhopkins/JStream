@@ -1864,6 +1864,17 @@ impl State {
         if !self.gestures.contains_key(&key) && open >= MAX_GESTURES_PER_CLIENT {
             return Err(invalid("gesture_id".into(), "16 gestures are open"));
         }
+        // A live value changes a send's gain; it never adds a send (ADR-0213).
+        if let Some(at) = values.iter().position(|value| {
+            matches!(value, Edit::SendSet { source_id, bus_id, .. }
+                if !self.collection.sends.contains_key(&(bus_id.clone(), source_id.clone())))
+        }) {
+            return Err(invalid(
+                format!("values.{at}.bus_id"),
+                "names no send from this source to this bus; a live value only changes an \
+                 existing send's gain, so add the send in a batch",
+            ));
+        }
         let running = self.running();
         let mut check = self.collection.clone();
         for (at, value) in values.iter().enumerate() {
@@ -5652,6 +5663,21 @@ mod tests {
         .expect("removed");
         assert_eq!(after.0, rev.0 + 1, "live values never moved the revision");
         assert_eq!(held(), 3, "the opacity and the two faders are left");
+        // A live value adds no send (ADR-0213 decision 1).
+        let new_send: Edit = serde_json::from_value(serde_json::json!(
+            {"type": "send.set", "source_id": "mic", "bus_id": "vod", "gain_db": -6.0}
+        ))
+        .expect("send");
+        match live(vec![new_send]) {
+            Err(error) => match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => {
+                    assert_eq!(field, "values.0.bus_id");
+                }
+                other => panic!("not invalid_argument: {other:?}"),
+            },
+            Ok(other) => panic!("applied: {other:?}"),
+        }
+        assert_eq!(held(), 3, "the refused value changed nothing");
     }
 
     /// ADR-0040 §3, as `jstream-graph` does it: deleting what a binding names removes the

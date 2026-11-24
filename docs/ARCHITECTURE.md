@@ -1008,7 +1008,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   placements and crops, since 0.67 a source's settings that its kind marks `live`,
   so a Properties dialog applies as you edit
   ([ADR-0091](adr/0091-source-settings-as-live-values.md)), and since 0.70 a 3D
-  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)), and since 0.178 a filter's
+  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)), and since 0.180 a filter's
   `live` settings, an item's opacity, the source and bus faders and the sends, drawn and
   heard through the collection with the values applied, so every number drag follows
   live ([ADR-0213](adr/0213-number-drags-follow-live.md)).

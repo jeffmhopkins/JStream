@@ -8113,9 +8113,15 @@ fn live_ticker(shared: &Weak<Shared>) {
     }
 }
 
+/// Why a live `send.set` to a send that doesn't exist is refused.
+const NO_SEND: &str = "names no send from this source to this bus; a live value only \
+                       changes an existing send's gain, so add the send in a batch";
+
 /// Refuses a `source.set_settings` or `filter.set_settings` value that names a setting
-/// its kind doesn't mark `live` (ADR-0091, ADR-0213), as `values.<n>.patch.<param>`. A
-/// source, filter or setting that doesn't exist is left to the collection's own check.
+/// its kind doesn't mark `live` (ADR-0091, ADR-0213), as `values.<n>.patch.<param>`, and
+/// a `send.set` to a send that doesn't exist, as `values.<n>.bus_id`, since a live value
+/// would otherwise route the source into a new bus with no undo step. A source, filter
+/// or setting that doesn't exist is left to the collection's own check.
 fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolError> {
     for (at, value) in values.iter().enumerate() {
         let (kind, patch) = match value {
@@ -8137,6 +8143,18 @@ fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolErr
                     continue;
                 };
                 (filter.kind(), patch)
+            }
+            Edit::SendSet {
+                source_id, bus_id, ..
+            } => {
+                // A live value changes a send's gain; it never adds a send (ADR-0213).
+                if graph.state().send(source_id, bus_id).is_none() {
+                    return Err(ProtocolError::invalid_argument(
+                        format!("values.{at}.bus_id"),
+                        NO_SEND,
+                    ));
+                }
+                continue;
             }
             _ => continue,
         };

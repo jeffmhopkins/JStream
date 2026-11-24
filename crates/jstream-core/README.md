@@ -1451,7 +1451,8 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
   setter, a fader's carrying its gain alone (`live_problem`), room for a new gesture
-  among the client's 16),
+  among the client's 16), refuses a `send.set` to a send that doesn't exist
+  (`values.<n>.bus_id`: a live value never adds a send, ADR-0213),
   then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
@@ -1467,7 +1468,7 @@ the render parameter channel, never through the collection:
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)) are live values
   too, for the parameters the source's kind marks `live`; a patch naming any other is
   refused at `values.<n>.patch.<param>` (`check_live_settings`). Each key of each
-  source is a parameter of its own. So are, since protocol 0.178
+  source is a parameter of its own. So are, since protocol 0.180
   ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)), each `live` setting of
   each filter (`filter.set_settings`, checked against the filter kind's descriptor the
   same way, the filter found by `State::filter`), each item's opacity

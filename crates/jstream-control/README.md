@@ -360,7 +360,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` with
   the engine's checks in its order (1 to 256 values, each a setter
   `is_live_adjustable` takes, a fader's carrying its gain alone (`live_problem`), at most
-  16 open gestures per client, then each value as a batch edit named `values.<n>`), each
+  16 open gestures per client, a `send.set` naming a send that exists
+  (`values.<n>.bus_id`), then each value as a batch edit named `values.<n>`), each
   key of a source's or a filter's settings patch a parameter of its own, and an item's
   opacity, each fader and each send one each
   ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md),

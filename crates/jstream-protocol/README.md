@@ -387,7 +387,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.178 because `live.set` takes a filter's `live` settings
+`PROTOCOL_VERSION` is 0.180 because `live.set` takes a filter's `live` settings
 (`filter.set_settings`), an item's opacity (`item.set_opacity`) and the gains
 (`source.set_audio` and `bus.set_fader` carrying `gain_db` alone, and `send.set`) as live
 values, so a drag on any of them follows live and commits as one undo step
@@ -2389,13 +2389,15 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)). Since 0.70
   `scene.set_camera` is one too, one parameter per scene, so an orbit drag moves a 3D
   scene's camera every frame and commits once
-  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)). Since 0.178
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)). Since 0.180
   `filter.set_settings` is one too, again only for the parameters its kind marks `live`
   (`values.<n>.patch.<param>` otherwise), each setting of each filter a parameter of its
   own; so are `item.set_opacity` (one parameter per item, and per keyframe scene that
   overrides it) and the gains, `source.set_audio`, `bus.set_fader` and `send.set`, one
   parameter per fader and per send. A `source.set_audio` or `bus.set_fader` value must
-  carry `gain_db` and nothing else (`values.<n>.<field>` otherwise, `live_problem`).
+  carry `gain_db` and nothing else (`values.<n>.<field>` otherwise, `live_problem`),
+  and a `send.set` value must name a send that exists (`values.<n>.bus_id` otherwise:
+  a live value never adds a send).
   The engine draws and hears all of these through the collection with the values applied,
   as for a source's settings
   ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)). Values are checked as a batch's edits are, named
