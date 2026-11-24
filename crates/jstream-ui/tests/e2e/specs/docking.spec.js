@@ -145,3 +145,49 @@ test('the Layout menu switches to Live and resets to Editing', async ({ page, da
   await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   await expect(page.locator('header.app-header')).toContainText('Layout: Editing');
 });
+
+/** Drags tab `name` until zone `label` shows, drops it there, and returns the zone. */
+async function dropInto(page, name, label, text) {
+  const box = await tab(page, name).boundingBox();
+  await page.mouse.move(box.x + 5, box.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 40, { steps: 4 });
+  const target = zone(page, label);
+  if (text) await expect(target).toContainText(text);
+  const at = await centre(target);
+  await page.mouse.move(at.x, at.y, { steps: 8 });
+  await page.mouse.up();
+  return target;
+}
+
+test('a drop past an outer edge adds a full-width row or a full-height column, which goes once empty', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const firstRow = zone(page, 'Bottom dock');
+  // Past the bottom's row: a second full-width row under it, with its own splitter.
+  const secondRow = await dropInto(page, 'Transitions', 'Bottom dock 2', 'Drop here: another full-width row, bottom');
+  await expect(secondRow.getByRole('tab')).toHaveText(['Transitions']);
+  await expect(page.getByRole('separator', { name: 'Resize bottom dock 2' })).toBeVisible();
+  const [a, b] = [await firstRow.boundingBox(), await secondRow.boundingBox()];
+  expect(b.y).toBeGreaterThanOrEqual(a.y + a.height);
+  expect(Math.abs(b.width - a.width)).toBeLessThanOrEqual(1);
+  // And a third past that.
+  const thirdRow = await dropInto(page, 'Outputs', 'Bottom dock 3');
+  await expect(thirdRow.getByRole('tab')).toHaveText(['Outputs']);
+
+  // The sides stack full-height columns the same way, outwards.
+  const firstColumn = await dropInto(page, 'Arrange', 'Outer left column', 'Drop here: outer left');
+  const secondColumn = await dropInto(page, 'Filters', 'Outer left column 2', 'Drop here: another column, outer left');
+  const [c, d] = [await firstColumn.boundingBox(), await secondColumn.boundingBox()];
+  expect(d.x + d.width).toBeLessThanOrEqual(c.x + 1);
+  expect(Math.abs(d.height - c.height)).toBeLessThanOrEqual(1);
+
+  // Kept across a reload.
+  await connect(page, daemon);
+  await expect(zone(page, 'Bottom dock 3').getByRole('tab')).toHaveText(['Outputs']);
+  await expect(zone(page, 'Outer left column 2').getByRole('tab')).toHaveText(['Filters']);
+
+  // Moving the second row's panel out removes that row, and the third moves in.
+  await drag(page, tab(page, 'Transitions'), await centre(tab(page, 'Audio mixer')));
+  await expect(zone(page, 'Bottom dock 2').getByRole('tab')).toHaveText(['Outputs']);
+  await expect(zone(page, 'Bottom dock 3')).toHaveCount(0);
+});

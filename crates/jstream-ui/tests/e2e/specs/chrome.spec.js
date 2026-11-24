@@ -47,6 +47,14 @@ test('a right-click on the chrome never reaches the browser, and a text field ke
   const dialog = page.getByRole('dialog', { name: 'Connection details' });
   expect(await swallowed(dialog.locator('.modal-header'))).toBe(true);
   expect(await swallowed(dialog.locator('dl.connection dd').first())).toBe(false);
+  await page.keyboard.press('Escape');
+
+  // About's version and links keep the browser's menu (Copy, Copy link).
+  await page.locator('header.app-header .top-menu[data-menu="help"] > .menu-button').click();
+  await page.getByRole('menuitem', { name: /About/ }).click();
+  const about = page.getByRole('dialog', { name: 'About JStream' });
+  expect(await swallowed(about.locator('dl.about-facts dd').first())).toBe(false);
+  expect(await swallowed(about.locator('a[href]').first())).toBe(false);
 });
 
 test('a drag across panels or a double-click selects no text, but a text field still does', async ({ page, daemon }) => {
