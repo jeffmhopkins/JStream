@@ -237,7 +237,10 @@ The property grid, as OBS's Properties lay a source's settings out:
   edge names the armed source. An Inspector number that takes mappings has no button:
   its mappings' offset is a 10 px `--accent` tag on a `--selected` pill over the
   field's top right corner, its border turns `--accent`, and a right-click on the number
-  opens its menu.
+  opens its menu. A mapping is an Offset or an Override, chosen on a segmented control
+  beside the chosen source. A bypassed mapping stays where it is, dimmed and struck
+  through, in its row and on the control button; the row's Bypass is a small pill,
+  outlined in `--warn` while it is on.
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for
