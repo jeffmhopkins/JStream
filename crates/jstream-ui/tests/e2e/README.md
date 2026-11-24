@@ -518,7 +518,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   of `timing` and blanks the field again.
 - **Studio mode** (`studio.spec.js`): turning studio mode on puts the canvas, the
   studio controls and the program monitor side by side, labelled "Preview · Main" and
-  "Program · Main", and turning it off takes the controls and the monitor away;
+  "Program · Main", and turning it off takes the controls and the monitor away; with
+  a 1080 × 1920 canvas they stay side by side in a 1600 × 1000 window and stack,
+  preview over the controls over program at the same width, in a 1080 × 1900 one;
   Transition and Cut are off while preview is the program scene; a scene clicked onto
   preview goes to program with Transition, and the old program scene comes back on
   preview, where the canvas shows it; with Swap off, Cut takes the preview scene and it
