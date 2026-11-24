@@ -118,12 +118,12 @@ Every roadmap item, by milestone.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 11 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█████████░` 86% | 38 | 1 | 5 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 84% | 38 | 2 | 5 |
 
-151 of 158 items are merged; 24 of those still wait on a run on Windows hardware.
+151 of 159 items are merged; 24 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 31 items, by next step: 🔨 build 8, 🧪 Windows run 22, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 32 items, by next step: 🔨 build 8, 🌊 its wave lands 1, 🧪 Windows run 22, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -160,6 +160,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) | M3 | 🧪 Windows run | Merged; the Windows run's page API step (#1147) checks a granted bus with real audio | #1263 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | M3 | 🧪 Windows run | Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1104, #1176 |
 | RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🧪 Windows run | Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
+| SHW1 | Shows: a saved run order of scenes, with overlays, keyframes, sequences, audio, bookmarks and loops, run from the Show panel, keys, MIDI or an agent (ADR-0210) | M3 | 🌊 its wave lands | on the alpha.13 train (#1745): the protocol and ADR-0210 (#1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance | #1716, #1750, #1757, #1763 |
 
 </details>
 
@@ -326,7 +327,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 38 of 44 merged</summary>
+<summary><b>M3</b> Depth and reach: 38 of 45 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -374,6 +375,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | CH1 | File filters such as Apply LUT on the program and output chains | ✅ merged | #1134 |
 | LB1 | A local web browser source's first load passes on Linux | ✅ merged | #1094 |
 | RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | 🧪 merged, Windows run pending: Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
+| SHW1 | Shows: a saved run order of scenes, with overlays, keyframes, sequences, audio, bookmarks and loops, run from the Show panel, keys, MIDI or an agent (ADR-0210) | 🔍 in review: on the alpha.13 train (#1745): the protocol and ADR-0210 (#1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance | #1716, #1750, #1757, #1763 |
 
 </details>
 <!-- @generated end progress -->

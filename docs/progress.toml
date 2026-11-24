@@ -1678,3 +1678,12 @@ release = "alpha.4"
 gate = true
 prs = [1179]
 note = "Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build"
+
+[[item]]
+id = "SHW1"
+milestone = "M3"
+title = "Shows: a saved run order of scenes, with overlays, keyframes, sequences, audio, bookmarks and loops, run from the Show panel, keys, MIDI or an agent (ADR-0210)"
+status = "review"
+prs = [1716, 1750, 1757, 1763]
+note = "on the alpha.13 train (#1745): the protocol and ADR-0210 (#1716), the Show panel (#1750), the engine's show runner (#1757), audio clips that bring a source up with fades (#1763), and the show actions in the Keys & MIDI picker with the agent guidance"
+needs = ["wave"]

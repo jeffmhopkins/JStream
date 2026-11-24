@@ -160,9 +160,7 @@ pub fn describe(action: &Action, c: &Collection) -> String {
         c.shows
             .iter()
             .find(|s| &s.show_id == show_id)
-            .and_then(|s| s.bookmarks.iter().find(|b| b.bookmark_id == id))
-            .map(|b| b.name.clone())
-            .filter(|n| !n.is_empty())
+            .and_then(|s| bookmark_name(s, id))
             .unwrap_or_else(|| id.to_owned())
     };
     match action {
@@ -273,6 +271,21 @@ pub fn show_name(c: &Collection, id: &ShowId) -> String {
         .map(|s| s.name.clone())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| id.to_string())
+}
+
+/// A bookmark of `show` in words: its name, or for an unnamed one "Bookmark N", N its
+/// place from 1 in show order, the number `show.go_to_number` counts.
+fn bookmark_name(show: &jstream_control::protocol::ShowInfo, id: &str) -> Option<String> {
+    let b = show.bookmarks.iter().find(|b| b.bookmark_id == id)?;
+    if !b.name.is_empty() {
+        return Some(b.name.clone());
+    }
+    let place = show
+        .bookmarks
+        .iter()
+        .filter(|o| (o.at_ms, &o.bookmark_id) < (b.at_ms, &b.bookmark_id))
+        .count();
+    Some(format!("Bookmark {}", place + 1))
 }
 
 /// What separates a show's ID from a bookmark's in a [`Needs::Bookmark`] target.
@@ -724,11 +737,8 @@ pub fn targets(c: &Collection, needs: Needs) -> Vec<(String, String)> {
             .iter()
             .flat_map(|show| {
                 show.bookmarks.iter().map(move |b| {
-                    let name = if b.name.is_empty() {
-                        b.bookmark_id.clone()
-                    } else {
-                        b.name.clone()
-                    };
+                    let name = bookmark_name(show, &b.bookmark_id)
+                        .unwrap_or_else(|| b.bookmark_id.clone());
                     (
                         format!("{}{BOOKMARK_SEPARATOR}{}", show.show_id, b.bookmark_id),
                         format!("{} › {name}", show_name(c, &show.show_id)),
@@ -989,7 +999,7 @@ mod tests {
                 .iter()
                 .map(|(_, label)| label.as_str())
                 .collect::<Vec<_>>(),
-            ["Evening › Intro", "Evening › b2"]
+            ["Evening › Intro", "Evening › Bookmark 2"]
         );
         let go_to = Pick::ShowGoTo.actions(&c, &targets[1].0, 0.0);
         assert_eq!(
@@ -999,7 +1009,7 @@ mod tests {
                 bookmark_id: "b2".into(),
             }]
         );
-        assert_eq!(describe(&go_to[0], &c), "Go to b2 in Evening");
+        assert_eq!(describe(&go_to[0], &c), "Go to Bookmark 2 in Evening");
         assert!(Pick::ShowGoTo.actions(&c, "evening", 0.0).is_empty());
         // Bookmark 1 to 8, by order.
         assert_eq!(targets_len(&c, Needs::BookmarkNumber), 8);
