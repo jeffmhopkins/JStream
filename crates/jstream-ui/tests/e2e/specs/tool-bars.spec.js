@@ -48,8 +48,11 @@ test('the Scenes bar adds a scene, moves it, and opens the selected scene\'s pro
   await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Outro');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+  // Scene filters opens the same dialog on its Filters segment.
   await scenes.getByRole('button', { name: 'Scene filters' }).click();
-  await expect(page.locator('.filters-panel .filters-title')).toHaveText('Outro');
+  await expect(dialog.getByRole('tab', { name: /^Filters/ })).toHaveAttribute('aria-selected', 'true');
+  await dialog.getByRole('tab', { name: 'Settings' }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Outro');
 });
 
 test('the Sources bar adds, restacks, opens and removes the selected source', async ({ page, daemon }) => {
@@ -88,8 +91,11 @@ test('the Sources bar adds, restacks, opens and removes the selected source', as
   const props = page.getByRole('dialog', { name: 'Properties' });
   await expect(props.locator('.modal-title')).toHaveText('Backdrop');
   await props.getByRole('button', { name: 'Cancel' }).click();
+  // Filters opens the same dialog on its Filters segment.
   await sources.getByRole('button', { name: 'Filters' }).click();
-  await expect(page.locator('.filters-panel .filters-title')).toHaveText('Backdrop');
+  await expect(props.locator('.modal-title')).toHaveText('Backdrop');
+  await expect(props.getByRole('tab', { name: /^Filters/ })).toHaveAttribute('aria-selected', 'true');
+  await props.getByRole('button', { name: 'Cancel' }).click();
 
   // Remove from scene takes the selected placement out, leaving the other.
   await sources.getByRole('button', { name: 'Remove from scene' }).click();

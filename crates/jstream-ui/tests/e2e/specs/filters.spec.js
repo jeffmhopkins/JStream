@@ -71,14 +71,14 @@ test('the panel lists the chains, and rows turn filters on, reorder and remove t
   await expect(sourceChains(page).locator('.filter-chain-count')).toHaveText('1 filter');
 });
 
-test('Edit filters… selects the item and shows the Filters panel', async ({ page, daemon }) => {
+test('Edit filters… selects the item and opens its Properties on Filters', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await showPanel(page, 'Arrange');
-  await expect(page.getByRole('tabpanel', { name: 'Filters' })).toBeHidden();
   await page.locator('.sources-panel li.row').first().click({ button: 'right' });
   await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: 'Edit filters…' }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Filters' })).toBeVisible();
-  await expect(panel(page).locator('.filters-title')).toHaveText('Backdrop');
+  const props = page.getByRole('dialog', { name: 'Properties' });
+  await expect(props.locator('.modal-title')).toHaveText('Backdrop');
+  await expect(props.getByRole('tab', { name: /^Filters/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(props.locator('.filter-name')).toHaveText(['Sharpen', 'Blur']);
   await expect(page.locator('.sources-panel li.row').first()).toHaveClass(/\bselected\b/);
 });
 

@@ -601,6 +601,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). A nested scene's row has a caret that shows
   its items under it, nested ones too; a click on one of them selects it in its own
   scene, which the list then shows, since the engine draws a nested scene as one item.
+  There a button before the caption, or Backspace on a row, goes back up (`holder`: the
+  scene the panel came down from, kept on `step_trail`'s trail, or the first that nests
+  it), selecting the nesting row.
   A scene that one of the object's filters uses (a scene mask, or another kind's scene
   setting, on its source's chain or its own effects) is a child row under it with a role
   badge (OB-05); under a plain object they start open, under a nested scene they open
@@ -640,8 +643,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `menu::asks_for_menu` reads the Menu key and Shift+F10. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
-  Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
-  chain in the Filters panel; Pop out opens the scene in a projector window, Show in
+  Delete scene work, as do a folder's own menu's, and Edit filters… opens Scene
+  properties on its Filters segment (`SceneDialog::open_filters`), both first in the menu; Pop out opens the scene in a projector window, Show in
   multiview toggles the scene's flag (`scene.set_meta`), Keep warm toggles its
   `keep_warm` option (`scene.set_options` with its other options kept, disabled on a
   keyframe scene, [ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)), Copy and Paste scene do what
@@ -1371,8 +1374,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
   `fresh_id`; the new filter opens in place, or in the Filters window when it has more
   than three settings or isn't described yet. Added from the open window, any filter
-  is selected there instead (`landed`). Edit filters… in the item menus selects the item and shows the
-  panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
+  is selected there instead (`landed`). Edit filters… in the item menus selects the item and opens its
+  Properties on Filters (`PropertiesDialog::open_filters`), or the panel for a source
+  the dialog doesn't show. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   A filter whose kind `kind.list` marks quarantined (ADR-0087: an effect-pack kind a GPU
   device loss was blamed on, bypassed) shows a "quarantined" badge and a Re-enable
   button that sends `effect.enable` (`Studio::enable_effect`); its badge goes once
@@ -1437,12 +1441,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   encoder sessions in use now, or for the virtual camera, which opens no encoder
   session, a GPU pass only, from its next start if it runs. A scene's chain (owner `scene`, ADR-0065) shows while no
   item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
-  none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
-  filters… pick it as an FX button does (`show_filters`). It is a video chain, and the
+  none of its own; the canvas margin's Edit scene filters… picks it as an FX button does
+  (`show_filters`), and a scene row's Edit filters… opens Scene properties on Filters. It is a video chain, and the
   Add filter dialog's Uses the scene picker on it offers only the scenes whose picture
   doesn't hold the scene by nesting or as a keyframe; the engine refuses other cycles.
-  Selecting another item or scene, or an item's Edit filters…, goes back to the
-  selection's chains. Under the selected item's source's chains, the panel shows the
+  Selecting another item or scene goes back to the selection's chains. Under the selected item's source's chains, the panel shows the
   item's own effects (owner `item`, ADR-0065), a video chain for an item whose source has
   a picture, with the same rows and dialogs; `Collection::chains` reads them from
   `ItemInfo.effects`, and their Uses the scene picker leaves out the scenes whose

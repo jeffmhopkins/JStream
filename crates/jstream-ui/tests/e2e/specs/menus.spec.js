@@ -175,13 +175,13 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   await connect(page, daemon);
   await placeBackdropAgain(page);
   await rows(page).first().click({ button: 'right' });
-  // Grouped as OBS's is: open it, its state, the clipboard, its arrangement (the layer
-  // order in one Order submenu), other views, then removal. Add source and New group
-  // are in the menus of an empty spot instead.
+  // Properties and Edit filters lead; then, grouped as OBS's is: rename, its state, the
+  // clipboard, its arrangement (the layer order in one Order submenu), other views, then
+  // removal. Add source and New group are in the menus of an empty spot instead.
   expect(await labels(page)).toEqual([
-    'Rename',
     'Properties…',
     'Edit filters…',
+    'Rename',
     'Visible',
     'Lock',
     'Labels',
@@ -316,6 +316,30 @@ test('a nested scene has its own menu, which opens it', async ({ page, daemon })
   expect(await labels(page)).toContain('Open nested scene');
   await menu(page).getByRole('menuitem', { name: 'Open nested scene' }).click();
   await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' })).toHaveClass(/selected/);
+
+  // Sources shows the way back out, beside its caption: to Main, the nesting row selected.
+  const back = page.locator('.sources-panel').getByRole('button', { name: 'Back to “Main”' });
+  await expect(page.locator('.sources-panel .tree-head')).toHaveText('Main›In “Intro”, top to bottom');
+  await back.click();
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Main' })).toHaveClass(/selected/);
+  await expect(rows(page).first()).toHaveClass(/\bselected\b/);
+  await expect(back).toHaveCount(0);
+});
+
+test('a source\'s menu starts with Properties and Edit filters, which opens Properties on Filters', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await rows(page).first().click({ button: 'right' });
+  expect((await labels(page)).slice(0, 2)).toEqual(['Properties…', 'Edit filters…']);
+  await menu(page).getByRole('menuitem', { name: 'Edit filters…' }).click();
+  const props = page.getByRole('dialog', { name: 'Properties' });
+  await expect(props.getByRole('tab', { name: /^Filters/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(props.getByRole('tabpanel', { name: 'Filters' })).toBeVisible();
+  await props.getByRole('button', { name: 'Cancel' }).click();
+
+  // Properties… opens it on Settings, as before.
+  await rows(page).first().click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
+  await expect(props.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('the Scenes panel menus add and rename scenes', async ({ page, daemon }) => {

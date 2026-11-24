@@ -113,7 +113,8 @@ The header's menus and the right-click menus are one family:
 - Menus hold commands. Information belongs in dialogs and status UI: the File menu's
   connection details are a dialog of their own, and the open project's name is the
   menu's head.
-- A long menu is in groups, as OBS's source menu is: open it (Properties, filters);
+- A long menu is in groups, as OBS's source menu is: open it (Properties, then Edit
+  filters, which opens Properties on its Filters segment, first in the menu);
   its state (Visible, Lock, Labels); the clipboard (Copy, Paste, Duplicate); its
   arrangement (an Order submenu for the layer order, Transform, Blending, Crop);
   other views (Pop out, Screenshot); then removal. A command that adds something new
