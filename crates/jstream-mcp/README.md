@@ -38,7 +38,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output`, `ptz` and `source`;
   `batch`, which carries their edits, is open-world too; `REVERSIBLE_ACTIONS` names the
   actions that don't make a tool destructive), and the decoding of tool arguments into
-  protocol calls, which refuses an output edit with a `youtube` target, and in `batch` the
+  protocol calls, which refuses an output edit with a `youtube` target, a people-only or
+  deprecated op nested anywhere in the arguments, and in `batch` the
   `OUTPUT_ONLY_EDITS` that can remove a stream key.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
   a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
@@ -96,7 +97,11 @@ or a status line.
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
-target stays open to agents), and the `events` feed drops `youtube.*` and `plugin.*` events. `describe_api` still returns the whole schema, YouTube and plugins included.
+target stays open to agents), and the `events` feed drops `youtube.*` and `plugin.*` events.
+Nor can an agent put one of these ops, or a deprecated one, where a person would run it
+later: a hotkey's or binding's `action`, a timeline's or show's cue, or an edit in
+`batch`. Any object in a tool's arguments whose `type` names such an op is refused with
+`invalid_argument` at its path, before anything is sent (#1758). `describe_api` still returns the whole schema, YouTube and plugins included.
 
 | Tool | Takes | Becomes |
 |---|---|---|

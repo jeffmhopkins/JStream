@@ -97,6 +97,9 @@ pub(crate) struct Tools {
     tools: Vec<Tool>,
     /// Which group tool owns each op name, for pointing a misrouted op to the right tool.
     owners: BTreeMap<String, String>,
+    /// The protocol's [`PEOPLE_ONLY`] and [`DEPRECATED`] ops, which no tool carries and
+    /// which [`refuse_nested_ops`] refuses inside another op too (#1758).
+    withheld: BTreeSet<String>,
 }
 
 /// The group tools whose ops reach outside JStream: `output.start` publishes to a
@@ -207,6 +210,7 @@ impl Tools {
             .unwrap_or(&empty);
 
         let mut groups: BTreeMap<String, Vec<(Op, Value)>> = BTreeMap::new();
+        let mut withheld = BTreeSet::new();
         for (def, class) in [
             ("Edit", OpClass::Edit),
             ("Action", OpClass::Action),
@@ -222,6 +226,7 @@ impl Tools {
                 };
                 let noun = name.split_once('.').map_or(name, |(noun, _)| noun);
                 if PEOPLE_ONLY.contains(&noun) || DEPRECATED.contains(&noun) {
+                    withheld.insert(name.to_owned());
                     continue;
                 }
                 let op = Op {
@@ -244,7 +249,11 @@ impl Tools {
             tools.push(group_tool(defs, noun, ops));
         }
         tools.sort_by(|a, b| a.name.cmp(&b.name));
-        Tools { tools, owners }
+        Tools {
+            tools,
+            owners,
+            withheld,
+        }
     }
 
     /// The MCP `Tool` objects, for `tools/list`.
@@ -269,6 +278,8 @@ impl Tools {
         arguments: Value,
     ) -> Option<Result<Invocation, ProtocolError>> {
         let tool = self.tools.iter().find(|t| t.name == name)?;
+        let nested =
+            matches!(tool.kind, ToolKind::Batch | ToolKind::Group(_)).then(|| arguments.clone());
         Some(
             match &tool.kind {
                 ToolKind::Batch => decode_batch(arguments).and_then(refuse_output_only_edits),
@@ -280,7 +291,13 @@ impl Tools {
                     .map(|args| Invocation::Events { after: args.after }),
                 ToolKind::Group(ops) => self.decode_op(&tool.name, ops, arguments),
             }
-            .and_then(refuse_youtube_targets),
+            .and_then(refuse_youtube_targets)
+            .and_then(|invocation| match &nested {
+                Some(arguments) => {
+                    refuse_nested_ops(&self.withheld, arguments, "", 0).map(|()| invocation)
+                }
+                None => Ok(invocation),
+            }),
         )
     }
 
@@ -440,6 +457,59 @@ fn refuse_youtube_targets(invocation: Invocation) -> Result<Invocation, Protocol
         }
     }
     Ok(invocation)
+}
+
+/// Refuses a [`PEOPLE_ONLY`] or [`DEPRECATED`] op anywhere in a tool's arguments: no
+/// tool carries one as its `op`, and an agent can't put one where a person would later
+/// run it either, as a hotkey's or binding's action or a timeline's or show's cue (#1758).
+/// Any object whose `type` tag names such an op is refused, so an op nested a new way is
+/// covered when it lands. `depth` is the nesting below the arguments: a group tool's own
+/// `op` is never withheld, since decoding already refused it as an unknown op.
+fn refuse_nested_ops(
+    withheld: &BTreeSet<String>,
+    value: &Value,
+    path: &str,
+    depth: usize,
+) -> Result<(), ProtocolError> {
+    let join = |key: &str| {
+        if path.is_empty() {
+            key.to_owned()
+        } else {
+            format!("{path}.{key}")
+        }
+    };
+    match value {
+        Value::Object(object) => {
+            if depth > 0
+                && let Some(Value::String(tag)) = object.get("type")
+                && withheld.contains(tag)
+            {
+                let noun = tag.split_once('.').map_or(tag.as_str(), |(noun, _)| noun);
+                let why = if DEPRECATED.contains(&noun) {
+                    "is deprecated"
+                } else {
+                    "is for people only, through JStream's UI"
+                };
+                return Err(ProtocolError::invalid_argument(
+                    path,
+                    format!(
+                        "`{tag}` {why}, so an agent can't run it or put it in a hotkey, a \
+                         binding or a cue for later"
+                    ),
+                ));
+            }
+            for (key, inner) in object {
+                refuse_nested_ops(withheld, inner, &join(key), depth + 1)?;
+            }
+        }
+        Value::Array(items) => {
+            for (i, inner) in items.iter().enumerate() {
+                refuse_nested_ops(withheld, inner, &join(&i.to_string()), depth + 1)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn from_value<T: DeserializeOwned>(value: Value, what: &str) -> Result<T, ProtocolError> {
@@ -1073,6 +1143,51 @@ mod tests {
         assert!(r.contains("unknown field `since`"), "{r}");
         let r = reason(decode("scene", json!("scene.list")));
         assert!(r.starts_with("arguments:"), "{r}");
+    }
+
+    /// #1758: an op no tool carries can't be put where a person runs it later either.
+    #[test]
+    fn withheld_ops_are_refused_inside_other_ops() {
+        let hotkey = |action: Value| {
+            decode(
+                "hotkey",
+                json!({"op": {"type": "hotkey.set", "chord": "F1", "action": action}}),
+            )
+        };
+        let refused =
+            |result: Result<Invocation, ProtocolError>, field: &str, why: &str| match result {
+                Err(ProtocolError::InvalidArgument {
+                    field: f, reason, ..
+                }) => {
+                    assert_eq!(f, field, "{reason}");
+                    assert!(reason.contains(why), "{reason}");
+                }
+                other => panic!("not refused: {other:?}"),
+            };
+        refused(
+            hotkey(json!({"type": "youtube.sign_out"})),
+            "op.action",
+            "for people only",
+        );
+        refused(
+            hotkey(json!({"type": "privacy.set", "on": true})),
+            "op.action",
+            "deprecated",
+        );
+        refused(
+            decode(
+                "batch",
+                json!({"edits": [
+                    {"type": "scene.create", "scene_id": "s", "name": "Main"},
+                    {"type": "hotkey.set", "chord": "F2",
+                     "action": {"type": "youtube.sign_out"}},
+                ]}),
+            ),
+            "edits.1.action",
+            "for people only",
+        );
+        // An action an agent may run is still fine there.
+        assert!(hotkey(json!({"type": "scene.switch", "scene_id": "s"})).is_ok());
     }
 
     #[test]
