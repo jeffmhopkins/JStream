@@ -254,7 +254,8 @@ pub struct ViewProfile {
 /// An output's frames are its program feed's, from the video encoder to the muxer or
 /// publish target; a preview stream's go from its encoder to the client's socket. An
 /// encoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and
-/// `encode_ms` repeat; what each sends and loses after it is its own.
+/// `encode_ms` repeat; what each sends and loses after it is its own. So does one
+/// that preview streams of the same picture share.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct StreamProfile {
     /// Which stream.
