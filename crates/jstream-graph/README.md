@@ -545,7 +545,7 @@ that does not want to change the graph it has.
   read them; the collection file saves them in `shows` (schema version 22) and loads them
   after the channels, before the replayed bindings. The file's `show_scene` marks the
   engine's internal show scene (`State::show_scene`, set by `Graph::set_show_scene`), and
-  is dropped on load when it names no scene.
+  is dropped on load when it names no scene, or one `set_show_scene` refuses (one something shows).
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its

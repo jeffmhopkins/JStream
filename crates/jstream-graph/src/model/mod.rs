@@ -226,10 +226,6 @@ pub struct State {
     pub(crate) channels: BTreeMap<String, jstream_protocol::ChannelInfo>,
     /// The shows (ADR-0210), by ID.
     pub(crate) shows: BTreeMap<jstream_protocol::ShowId, jstream_protocol::ShowInfo>,
-    /// The internal show scene (ADR-0210 decision 12): an ordinary scene in `scenes`
-    /// that the engine made to draw overlays over program. Saved in the file, set only
-    /// by the engine through [`Graph::set_show_scene`](crate::Graph::set_show_scene).
-    pub(crate) show_scene: Option<SceneId>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -270,7 +266,6 @@ impl Default for State {
             value_bindings: BTreeMap::new(),
             channels: BTreeMap::new(),
             shows: BTreeMap::new(),
-            show_scene: None,
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),

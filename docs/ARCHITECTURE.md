@@ -1792,7 +1792,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
   `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
   `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
-  a marker naming a scene the file doesn't hold is dropped on load. `jstream-core`
+  a marker naming a scene the file doesn't hold, or one something shows, is dropped on load. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to
