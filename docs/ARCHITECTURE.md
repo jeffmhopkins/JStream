@@ -1382,7 +1382,8 @@ Spike S6 has run once, on a CI virtual Mac (Apple M1 with Metal's paravirtual GP
 before they were written (82 to 437 stale exports and 7 or 8 garbled frames per 20 s). With
 the `completion` wait, the `event` design built here, or `event-strict`, there were none,
 and no sync timeouts. Every output decoded. `event` kept the render tick's own work at a
-p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms. A paravirtual GPU's
+p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms; at load 1024 `event`
+dropped 36 to 57 frames per 20 s to a full ring instead. A paravirtual GPU's
 timings say nothing about real Apple Silicon. There is no Mac hardware to run on, so CI's
 macOS runners are the test bed. Three things they can't show stay untested: those
 timings, whether holding webcam buffers starves AVFoundation's pool, and whether
