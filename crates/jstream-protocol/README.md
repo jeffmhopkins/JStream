@@ -86,7 +86,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.uninstall`,
-  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
+  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.pause`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
@@ -3284,7 +3284,7 @@ is a saved run order of scenes in show time, in milliseconds. `show.set` stores 
   naming a scene, source, sequence, keyframe or preset the collection lacks is kept and
   does nothing. `ShowInfo::problem` is the shape check every implementation shares.
 
-Running a show is studio state: the `show.*` actions (`show.play`, `show.stop`,
+Running a show is studio state: the `show.*` actions (`show.play`, `show.stop`, `show.pause`,
 `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`,
 `show.seek`, `show.arm`), all bindable and checked by `Action::show_problem`, drive it,
 `studio.get`'s `show` reports it and `show.changed` says what it did. `show.delete` takes

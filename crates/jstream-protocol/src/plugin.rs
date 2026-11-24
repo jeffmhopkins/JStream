@@ -292,6 +292,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("show.delete", N),
     ("show.play", N),
     ("show.stop", N),
+    ("show.pause", N),
     ("show.continue", N),
     ("show.back", N),
     ("show.skip", N),

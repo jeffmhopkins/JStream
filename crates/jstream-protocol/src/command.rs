@@ -2160,7 +2160,8 @@ pub enum Action {
     #[serde(rename = "clock.release")]
     ClockRelease,
     /// Runs a show (ADR-0210, since 0.177) from its start, or from one of its bookmarks,
-    /// as a jump there would land. One show runs at a time: playing another stops the one
+    /// as a jump there would land. Of the show that runs, paused by `show.pause`, with no
+    /// `bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one
     /// running, which emits `show.changed` (`stopped`). Running is studio state like the
     /// program scene: it changes no `rev`, is never undone or saved, `studio.get` reports
     /// it in `show`, and it emits `show.changed` (`started`). Fails with `not_found`
@@ -2184,8 +2185,16 @@ pub enum Action {
     /// succeeds and emits nothing.
     #[serde(rename = "show.stop")]
     ShowStop,
+    /// Pauses the running show where it is (ADR-0210 decision 5, since 0.177): its play
+    /// head holds, and program keeps what is on it, as at a pausing bookmark.
+    /// `show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on
+    /// from there. `studio.get` reports it `paused` with no `bookmark_id`. Emits
+    /// `show.changed` (`paused`). With no show running, or one already paused or off
+    /// script, it succeeds and does nothing.
+    #[serde(rename = "show.pause")]
+    ShowPause,
     /// Continues the running show (ADR-0210 decision 5, since 0.177). Waiting at a
-    /// pausing bookmark, it plays on; with a spot armed (`show.arm`), it jumps there;
+    /// pausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;
     /// off script, it goes on to the next clip; in a loop, it leaves as the loop's
     /// `leave` says; playing, it jumps to the next pausing bookmark, applying state as any
     /// jump does. Ignored while a transition plays, so a double press can't skip a
@@ -2606,6 +2615,7 @@ impl Action {
             Action::ClockRelease => "clock.release",
             Action::ShowPlay { .. } => "show.play",
             Action::ShowStop => "show.stop",
+            Action::ShowPause => "show.pause",
             Action::ShowContinue => "show.continue",
             Action::ShowBack => "show.back",
             Action::ShowSkip => "show.skip",
@@ -2753,6 +2763,7 @@ impl Action {
             | Action::ClockStep { .. }
             | Action::ClockRelease
             | Action::ShowStop
+            | Action::ShowPause
             | Action::ShowContinue
             | Action::ShowBack
             | Action::ShowSkip
@@ -2910,6 +2921,7 @@ impl Action {
             // every press on a value out of range.
             Action::ShowPlay { .. }
             | Action::ShowStop
+            | Action::ShowPause
             | Action::ShowContinue
             | Action::ShowBack
             | Action::ShowSkip
@@ -2953,6 +2965,7 @@ impl Action {
             | Action::ClockRelease
             | Action::ShowPlay { .. }
             | Action::ShowStop
+            | Action::ShowPause
             | Action::ShowContinue
             | Action::ShowBack
             | Action::ShowSkip
