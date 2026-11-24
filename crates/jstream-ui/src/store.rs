@@ -997,9 +997,11 @@ impl Studio {
             ..
         }) = query(session, Query::StudioGet).await
         {
+            // The running show's play head is heard now, whatever else is newer.
+            let heard = now_ms();
+            self.show.set(show.map(|s| (*s, heard)));
             if self.timeline_seq.get_value() == timelines_asked {
                 let at = now_ms();
-            self.show.set(show.map(|s| (*s, at)));
                 self.playing.set(
                     timelines
                         .into_iter()
