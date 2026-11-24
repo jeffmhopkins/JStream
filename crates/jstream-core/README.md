@@ -2260,7 +2260,13 @@ width scales `sky_picture_deg`, `picture_scale`, and its turn and tilt from the 
 which `part_direction` places), and the state keeps the arrival shown
 and where it is pinned (`Arrival`): none while the deep sky is gone at warp
 (`deep_shown`), and another, at random, picked once as it starts to show again with the
-warp still or dropping (`a_backdrop_arrives_at_another_picture_after_each_warp`);
+warp still, dropping or lower than the step before
+([ADR-0224](../../docs/adr/0224-an-arrival-picture-fades-with-the-warp-it-follows.md),
+so a warp that follows a channel down fades it in too;
+`a_backdrop_arrives_at_another_picture_after_each_warp`,
+`a_warp_followed_down_picks_its_arrival_as_the_sky_shows`); a warp aimed ahead keeps it
+where it is seen, turned into the sky it lays out (`Arrival::relaid`), so it fades as the
+warp builds;
 `draw_sky_of` passes its pictures to the backdrop, the upload loop takes the average
 colour of the shown arrival's last picture once per version (`note_picture_mean`, kept in
 `Chains::picture_means` for the shown ones only), and `light_scene` and a probe's capture
