@@ -524,7 +524,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Transition and Cut are off while preview is the program scene; a scene clicked onto
   preview goes to program with Transition, and the old program scene comes back on
   preview, where the canvas shows it; with Swap off, Cut takes the preview scene and it
-  stays on preview; the Transitions panel's foot says whether studio mode is on and it has no
+  stays on preview; with studio mode off the canvas follows every program change: another
+  client's click and a hotkey (F1, bound by the other client) each show the new program
+  scene; in studio mode another client's switch moves the program label but leaves the
+  canvas on preview, and turning studio mode off then shows the program scene (#1733);
+  the Transitions panel's foot says whether studio mode is on and it has no
   preset switch picker; the preset picker lists "Cut · Default", whose editor has
   Type Cut, no duration, and counts its overrides, and whose ⋯ menu has Set as default
   checked and Delete… off; choosing Fade in Type sends its `transition.update`, Rename

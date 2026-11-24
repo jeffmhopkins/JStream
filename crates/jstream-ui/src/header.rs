@@ -1028,7 +1028,7 @@ pub fn Header(
                 }
                 on:click=move |_| {
                     let on = !studio.studio_mode.get_untracked();
-                    studio.studio_mode.set(on);
+                    studio.set_studio_mode(on);
                     keep_studio_mode(on);
                     // The canvas becomes the preview side: the scene it shows goes on
                     // preview, so the two match from the start.

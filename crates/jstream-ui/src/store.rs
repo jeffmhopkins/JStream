@@ -530,19 +530,22 @@ pub fn optimistic_program(action: &Action) -> Option<SceneId> {
     }
 }
 
-/// The scene the canvas moves to when the preview scene goes from `before` to `after`
-/// while it shows `shown`: in studio mode the canvas is the preview side, so a new
-/// preview scene (a swap after a transition, another client's pick) is shown and
-/// selected. `None` when studio mode is off, the preview didn't change, or the canvas
-/// already shows it.
-pub fn followed_preview(
+/// The scene the canvas moves to when program goes from `program.0` to `program.1` and
+/// preview from `preview.0` to `preview.1`, while it shows `shown`. In studio mode the
+/// canvas is the preview side, so a new preview scene (a swap after a transition,
+/// another client's pick) is shown and selected. Outside it the canvas is the only
+/// stage and stands for program, so a new program scene is shown, whatever moved it: a
+/// click, a hotkey, a trigger, a sequence or another client. `None` when the side the canvas
+/// follows didn't change, or the canvas already shows it.
+pub fn followed_scene(
     studio_mode: bool,
-    before: Option<&SceneId>,
-    after: Option<&SceneId>,
+    program: (Option<&SceneId>, Option<&SceneId>),
+    preview: (Option<&SceneId>, Option<&SceneId>),
     shown: Option<&SceneId>,
 ) -> Option<SceneId> {
+    let (before, after) = if studio_mode { preview } else { program };
     let after = after?;
-    (studio_mode && before != Some(after) && shown != Some(after)).then(|| after.clone())
+    (before != Some(after) && shown != Some(after)).then(|| after.clone())
 }
 
 /// What a click on `scene_id` in the scene list sends: in studio mode a
@@ -947,21 +950,44 @@ impl Studio {
         self.take_program_and_preview(program, preview);
     }
 
-    /// Keeps the program and preview scenes the engine reported. In studio mode the
-    /// canvas follows a new preview scene ([`followed_preview`]).
+    /// Keeps the program and preview scenes the engine reported. The canvas follows a
+    /// new preview scene in studio mode, and a new program scene outside it
+    /// ([`followed_scene`]).
     fn take_program_and_preview(&self, program: Option<SceneId>, preview: Option<SceneId>) {
-        let before = self.preview.get_untracked();
-        self.program.set(program);
+        let before = (self.program.get_untracked(), self.preview.get_untracked());
+        self.program.set(program.clone());
         self.preview.set(preview.clone());
         self.reconcile();
+        self.follow(
+            (before.0.as_ref(), program.as_ref()),
+            (before.1.as_ref(), preview.as_ref()),
+        );
+    }
+
+    /// Shows on the canvas the scene [`followed_scene`] names for these changes of
+    /// program and preview, if it names one.
+    fn follow(
+        &self,
+        program: (Option<&SceneId>, Option<&SceneId>),
+        preview: (Option<&SceneId>, Option<&SceneId>),
+    ) {
         let shown = self.selection.with_untracked(|s| s.scene.clone());
-        if let Some(next) = followed_preview(
+        if let Some(next) = followed_scene(
             self.studio_mode.get_untracked(),
-            before.as_ref(),
-            preview.as_ref(),
+            program,
+            preview,
             shown.as_ref(),
         ) {
             self.select_scene(next);
+        }
+    }
+
+    /// Turns studio mode on or off. Turned off, the canvas stands for program again, so
+    /// it shows the program scene.
+    pub fn set_studio_mode(&self, on: bool) {
+        self.studio_mode.set(on);
+        if !on && let Some(program) = self.program.get_untracked() {
+            self.follow((None, Some(&program)), (None, None));
         }
     }
 
@@ -1289,7 +1315,13 @@ impl Studio {
         {
             // Newer than any `studio.get` in flight, which `take_studio` then drops.
             self.studio_seq.update_value(|seq| *seq += 1);
-            self.program.set(Some(scene_id));
+            let before = self.program.get_untracked();
+            self.program.set(Some(scene_id.clone()));
+            let preview = self.preview.get_untracked();
+            self.follow(
+                (before.as_ref(), Some(&scene_id)),
+                (preview.as_ref(), preview.as_ref()),
+            );
         }
     }
 
@@ -1399,7 +1431,7 @@ fn unexpected(what: &str) -> ControlError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Collection, Selection, Studio, apply, followed_preview, fresh_id, list_kinds,
+        Collection, Selection, Studio, apply, followed_scene, fresh_id, list_kinds,
         optimistic_program, plan_summary, query, reset_edits, scene_click, sizes_of,
     };
     use crate::session::Session;
@@ -2073,25 +2105,69 @@ mod tests {
     }
 
     /// In studio mode the canvas is the preview side: a new preview scene (the old
-    /// program, swapped back after a transition) is shown there. Outside it, or when
-    /// the preview didn't move or is shown already, the canvas stays.
+    /// program, swapped back after a transition) is shown there, and a switch leaves it.
+    /// When the preview didn't move or is shown already, the canvas stays.
     #[test]
     fn in_studio_mode_the_canvas_follows_a_new_preview_scene() {
         let (a, b) = (SceneId::new("a"), SceneId::new("b"));
+        let same = (Some(&b), Some(&b));
         assert_eq!(
-            followed_preview(true, Some(&b), Some(&a), Some(&b)),
+            followed_scene(true, (Some(&a), Some(&b)), (Some(&b), Some(&a)), Some(&b)),
             Some(a.clone()),
             "a swap after a transition"
         );
-        assert_eq!(followed_preview(false, Some(&b), Some(&a), Some(&b)), None);
         assert_eq!(
-            followed_preview(true, Some(&a), Some(&a), Some(&b)),
+            followed_scene(true, (Some(&a), Some(&b)), same, Some(&a)),
+            None,
+            "a switch keeps the preview side on preview"
+        );
+        assert_eq!(
+            followed_scene(true, same, (Some(&a), Some(&a)), Some(&b)),
             None,
             "the preview didn't move: the scene the canvas shows was picked since"
         );
-        assert_eq!(followed_preview(true, Some(&b), Some(&a), Some(&a)), None);
-        assert_eq!(followed_preview(true, Some(&b), None, Some(&b)), None);
-        assert_eq!(followed_preview(true, None, Some(&a), None), Some(a));
+        assert_eq!(
+            followed_scene(true, same, (Some(&b), Some(&a)), Some(&a)),
+            None
+        );
+        assert_eq!(followed_scene(true, same, (Some(&b), None), Some(&b)), None);
+        assert_eq!(followed_scene(true, same, (None, Some(&a)), None), Some(a));
+    }
+
+    /// Outside studio mode the canvas stands for program: every new program scene is
+    /// shown there, whatever switched it (#1733), and a new preview scene isn't.
+    #[test]
+    fn outside_studio_mode_the_canvas_follows_every_new_program_scene() {
+        let (a, b) = (SceneId::new("a"), SceneId::new("b"));
+        let still = (Some(&a), Some(&a));
+        assert_eq!(
+            followed_scene(false, (Some(&a), Some(&b)), still, Some(&a)),
+            Some(b.clone()),
+            "a hotkey, a trigger or another client switched"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&a), Some(&b)), still, None),
+            Some(b.clone())
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&a), Some(&b)), still, Some(&b)),
+            None,
+            "a click shows its scene already"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&b), Some(&b)), still, Some(&a)),
+            None,
+            "program didn't move: a nested scene opened since stays"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&b), Some(&b)), (Some(&b), Some(&a)), Some(&b)),
+            None,
+            "another client's preview is not this canvas's"
+        );
+        assert_eq!(
+            followed_scene(false, (Some(&a), None), still, Some(&a)),
+            None
+        );
     }
 
     /// A `studio.get` answer that a `studio.changed` overtook is stale, and dropped;
