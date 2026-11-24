@@ -109,6 +109,18 @@ test('a show is built on the timeline, one undo step per gesture', async ({ page
   await expect(show.locator('.show-prog span')).toHaveText(['0:30', '0:30']);
   const afterDrops = sets();
 
+  // Stopped, "Next:" names what Play brings in from the play head, and a click on it
+  // skips the play head ahead there.
+  const next = show.locator('.show-next');
+  await expect(next).toHaveText('Next: scene Intro');
+  const rulerBox = await show.locator('.show-ruler').boundingBox();
+  const introBox = await show.locator('.show-prog').first().boundingBox();
+  await page.mouse.click(introBox.x + introBox.width / 2, rulerBox.y + rulerBox.height / 2);
+  await expect(next).toHaveText('Next: scene Main');
+  await next.click();
+  await expect(show.locator('.show-head em')).toHaveText('0:30 · Play starts here');
+  expect(sets()).toBe(afterDrops);
+
   // The Bookmark tool (B): a click in Intro's middle adds a pausing bookmark there.
   await show.locator('.show-prog').first().click();
   await expect(show.locator('.show-prog').first()).toHaveClass(/show-sel/);

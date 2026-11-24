@@ -562,7 +562,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   menu's sixteen panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Show** (`show.spec.js`, the Show panel alone in a tall bottom dock): a new show from
   the empty panel, named in place; Intro and Main dragged from the Scenes panel onto V1,
-  with the drop slot showing during the drag and a pausing bookmark at each end; a
+  with the drop slot showing during the drag and a pausing bookmark at each end; "Next:"
+  naming what Play brings in from the play head, a click skipping the head there; a
   bookmark (B), a loop drawn on the ruler (L) and a trim of Main's right end, each one
   `show.set`, and Edit › Undo taking them back one at a time; the cut badge's transition
   menu; an audio track and a source's audio from its menu's Add source audio at m:ss, with default fades, removed with Delete; a video

@@ -492,20 +492,35 @@ pub fn EditView() -> impl IntoView {
     let next = move || {
         let head = panel.run.with(|r| r.at_ms);
         let at_too = !running.get() || paused();
-        let from = if running.get() { head } else { 0 };
-        let names = show.with(|s| {
+        // Stopped, what Play brings in from where it will start.
+        let from = if running.get() {
+            head
+        } else {
+            panel.cursor.get().unwrap_or(0)
+        };
+        let (at, names) = show.with(|s| {
             s.as_ref()
-                .map(|s| geom::next_up(s, from, at_too))
+                .map(|s| {
+                    (
+                        geom::next_at(s, from, at_too),
+                        geom::next_up(s, from, at_too),
+                    )
+                })
                 .unwrap_or_default()
         });
-        (!names.is_empty()).then(|| {
-            let last = names.len() - 1;
-            let names = names
-                .into_iter()
-                .enumerate()
-                .map(|(n, name)| view! { <b>{name}</b>{(n < last).then_some(", ")} })
-                .collect_view();
-            view! { <span class="show-next">"Next: "{names}</span> }
+        let at = at.filter(|_| !names.is_empty())?;
+        let last = names.len() - 1;
+        let names = names
+            .into_iter()
+            .enumerate()
+            .map(|(n, name)| view! { <b>{name}</b>{(n < last).then_some(", ")} })
+            .collect_view();
+        Some(view! {
+            <button type="button" class="show-next"
+                title=format!("Skip ahead to {}: the play head jumps there", clock(at))
+                on:click=move |_| panel.move_head(at)>
+                "Next: "{names}
+            </button>
         })
     };
     let state = move || {
