@@ -2093,7 +2093,7 @@ changes.
   `requestAnimationFrame` loop: each frame `fly::step` moves camera and target together
   along the view's forward and right axes and the scene's up, and rolls it by
   `ROLL_DEG_PER_S` (R, outside the held keys, levels it through `fly::level`), at `fly::base_speed` (the
-  scene's `fly::extent`, models first, crossed in `CROSS_SECONDS`) times Shift+wheel's scale
+  scene's `fly::extent`: the box around its items' `corners_in_scene`, a model's pushed out by its depth along its normal, models first; crossed in `CROSS_SECONDS`) times Shift+wheel's scale
   (`fly::rescale`; the plain wheel zooms), each frame no longer than `MAX_STEP_S`. A left press locks the pointer
   on the canvas area, and pointer moves (`movementX`, `movementY`) turn the camera through
   `fly::look`; unlocked, a left drag does. Both go through the canvas's `turn_camera`,

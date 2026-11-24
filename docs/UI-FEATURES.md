@@ -730,8 +730,9 @@ not remove them; they move into the prototype's look.
   `roll_deg` kept within ±180°). R, or the Level button, puts the roll back to 0. A left
   click locks the pointer and the mouse then turns the camera where it stands; where the
   page may not lock it, a left drag turns it. The speed is the scene's own: the size of
-  what it holds (its 3D models when it has any, else every visible item) crossed in
-  about four seconds, so a small room is as easy to move in as a wide set, and
+  what it holds (the box around its items' corners as placed, counting only its 3D
+  models, with their depth, when it has any, else every visible item) crossed in about
+  five seconds, so a small room is as easy to move in as a wide set, and
   Shift+wheel scales it from 1/16 to 16 times, shown in the camera's pill (a Shift that
   turned the wheel sinks nothing until it is let go). The wheel itself zooms, as in
   camera mode. The camera's target moves with it, so its distance to the target (and

@@ -6864,7 +6864,7 @@ stamp = { hash = "b3:67cb3de4e6103ee0", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#canvas"."body"]
-stamp = { hash = "b3:f902d9b7540446b9", by = "agent:look-around-thread", note = "Fly mode bullet re-read against fly.rs and mod.rs: keys by code, Shift as Sink put back on Shift+wheel, roll and R level, rAF loop, extent-based speed, Shift+wheel scale with the plain wheel zooming, pointer-lock look, one Wheeling commit" }
+stamp = { hash = "b3:b6ad00aa4fb1fc88", by = "agent:look-around-thread", note = "Fly bullet now names fly::extent as the box around corners_in_scene with a model's depth along its normal, CROSS_SECONDS 5; checked against fly.rs" }
 
 ["CRATE-jstream-ui#canvas"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -6879,7 +6879,7 @@ stamp = { hash = "b3:85e9ab93ca6e5827", by = "agent:issues-thread", note = "Merg
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the 3D scenes and crop paragraphs: crop.rs changed only a test SceneInfo initialiser. The canvas still outlines and drags a group's item as one box; outlining a 3D group by its children (ADR-0164 §6) is a follow-up, so nothing here is wrong." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/fly.rs"]
-stamp = { hash = "b3:c1c71c00e6369edc", by = "agent:look-around-thread", note = "Fly mode bullet re-read against fly.rs and mod.rs: keys by code, Shift as Sink, roll and R level, rAF loop, extent-based speed, Shift+wheel scale with the plain wheel zooming, pointer-lock look, one Wheeling commit" }
+stamp = { hash = "b3:e1584c2fdd6f49fe", by = "agent:look-around-thread", note = "Fly bullet now names fly::extent as the box around corners_in_scene with a model's depth along its normal, CROSS_SECONDS 5; checked against fly.rs" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/group.rs"]
 stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = "Whole PR against wave/m1-3: rewrote the intro (group.rs added; model.rs lays out), 'Selecting and dragging' (Shift-click add/remove, marquee from canvas or margin, Ctrl+A, double click shows the Inspector, pointer followed over .canvas-view via client coordinates; the canvas tools stop pointerdown and dblclick so neither reaches the canvas), arrow nudges of every selected box, added 'Several selected' (group.rs: dashed box 4px out, knob at 42px, readout 12px below via group_readout_text, scale from the far side keeping aspect unless Ctrl, down to MIN_GROUP_SIZE 20, a corner by the larger change, rotate about the bounds centre with 45-degree Ctrl steps, group move snapping its bounds via snap_bounds unless rotated) and 'Crop' (not built: needs source.sizes). Undoable edits: model::set_geometry is one batch with an item.set_geometry per item; Awaiting counts in-flight commits; mod.rs's show() replaces only a gesture's own items so a nudge in flight stays drawn; a failed commit now drops its own geometries unless a later gesture replaced them (N5), as the new sentence says. transform.rs only made with_box pub(crate); snap.rs gained Bounds::around/meets and snap_bounds. The wave merge (studio mode, #304) touched none of these files." }
@@ -6891,7 +6891,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:16c741edf8a81039", by = "agent:claude-audit-gaps", note = "Re-read against canvas/mod.rs: camera mode's toolbar now ends with LiveAim (drive, Home, readout); added that to the 3D tools paragraph, the rest unchanged" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:9428a14c5761fd8f", by = "agent:look-around-thread", note = "Fly mode bullet re-read against fly.rs and mod.rs: keys by code, Shift as Sink, roll and R level, rAF loop, extent-based speed, Shift+wheel scale with the plain wheel zooming, pointer-lock look, one Wheeling commit" }
+stamp = { hash = "b3:4d6d4e43c0d7b8cb", by = "agent:look-around-thread", note = "Fly bullet now names fly::extent as the box around corners_in_scene with a model's depth along its normal, CROSS_SECONDS 5; checked against fly.rs" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Rewrote the outline paragraph: a hidden item draws nothing and isn't hit, marqueed or snapped to unless selected (Layout::seen_boxes/seen_shapes), and only a selected hidden item is dashed (#1732)" }
@@ -6945,7 +6945,7 @@ stamp = { hash = "b3:85e9ab93ca6e5827", by = "agent:issues-thread", note = "Merg
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/fly.rs"]
-stamp = { hash = "b3:c1c71c00e6369edc", by = "agent:look-around-thread", note = "Design's session, state and connect choices are untouched by fly mode's canvas input handling" }
+stamp = { hash = "b3:e1584c2fdd6f49fe", by = "agent:look-around-thread", note = "Design's session and state choices are untouched by the fly extent and readout changes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/group.rs"]
 stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = "Whole PR against wave/m1-3: the Selection bullet is rewritten for store.rs's Selection.also (primary item plus others, with_items/toggled, reconcile promoting the next item) and sources.rs highlighting every selected row with Shift-click toggling. Canvas files (mod.rs with multi-select, marquee, group gestures, the tools' dblclick stop, per-item preview and dropping a failed commit's geometries; group.rs; model.rs; snap.rs; transform.rs) are described in #canvas, and nothing here names them beyond the Selection bullet. style.css from this PR: only .stage-overlay overflow: visible. Merge of wave/m1-3 (#304): the body adds the Studio mode bullet and six panels with Transitions in the Workspace bullet, and style.css adds the .studio, .preset and .inline-label rules, all through classes, so the Styles/CSP bullet (no inline style, font-src self) still holds." }
@@ -6957,7 +6957,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:16c741edf8a81039", by = "agent:claude-audit-gaps", note = "Re-read against the A10/A11-A14/A16/A17/A19 changes: added the Sequence panel's loop range, AddLaneSearch, switch lanes and Play a sequence submenu, the stinger scene list, Reload page/Play from start and the live aim; the rest still matches the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:9428a14c5761fd8f", by = "agent:look-around-thread", note = "Design's session, state and connect choices are untouched by fly mode's canvas input handling" }
+stamp = { hash = "b3:4d6d4e43c0d7b8cb", by = "agent:look-around-thread", note = "Design's session and state choices are untouched by the fly extent and readout changes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "Re-read the canvas and model parts of the design section; nothing there names hidden-item outlines or hit rules, which the canvas section covers; still holds" }
@@ -7290,7 +7290,7 @@ stamp = { hash = "b3:85e9ab93ca6e5827", by = "agent:issues-thread", note = "Merg
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/fly.rs"]
-stamp = { hash = "b3:c1c71c00e6369edc", by = "agent:look-around-thread", note = "Purpose stays a crate-level summary; fly mode (canvas/fly.rs and its mod.rs wiring) belongs to the Canvas section, nothing here changed" }
+stamp = { hash = "b3:e1584c2fdd6f49fe", by = "agent:look-around-thread", note = "Crate summary unchanged; fly.rs extent now uses corners_in_scene, still within the Canvas section" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/group.rs"]
 stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude-ui-features", note = "Contents still holds for the whole PR: the Store bullet names the Selection (store.rs's new also list is below this level); the Canvas bullet's 'draws the selected scene's item boxes ... edits their geometry with the pointer and the keyboard' covers mod.rs's multi-select, marquee and group gestures, group.rs, the tools' dblclick stop, the per-item preview and a failed commit dropping its geometries; sources.rs's Shift-click is within Scenes and sources in Design; model.rs, snap.rs and transform.rs changes are internal to the canvas. The wave merge added the studio.rs line in Panels, which is wave's own text." }
@@ -7302,7 +7302,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:16c741edf8a81039", by = "agent:claude-audit-gaps", note = "Re-read Contents against the new lane_offers.rs and canvas/live_aim.rs modules and the item menu, inspector, scenes, sequence, properties and studio changes; the summary still holds (no new top-level area)" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:9428a14c5761fd8f", by = "agent:look-around-thread", note = "Purpose stays a crate-level summary; fly mode (canvas/fly.rs and its mod.rs wiring) belongs to the Canvas section, nothing here changed" }
+stamp = { hash = "b3:4d6d4e43c0d7b8cb", by = "agent:look-around-thread", note = "Crate summary unchanged; fly.rs extent now uses corners_in_scene, still within the Canvas section" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "canvas/mod.rs and model.rs only change which items the canvas draws and hits (hidden ones only while selected, #1732); the crate's purpose is unchanged" }
@@ -9102,7 +9102,7 @@ stamp = { hash = "b3:31fe6407a8c0eebb", by = "agent:claude", note = "VC-02 now l
 stamp = { hash = "b3:1056351700d7c693", by = "agent:claude", note = "Re-read VC-01, VC-02 and SQ-01 to SQ-04 against sequence.rs and events.rs: SQ-01's sticky bar, ⋯ menu, instant Play/Stop and drafts; SQ-02 now says a click or right-click opens a point's menu and describes switch lanes as bars (add in a gap, drag a bar or an end, 0.1 s apart, bar menu without curves); SQ-03's trigger editor; SQ-04's chip right-click and grab offset. | kept from the merged side: SQ-01 (Settings and Switches groups, loop range), SQ-02 (typed time and value, switch lanes) and SQ-03 (scene and keyframe menus) updated against sequence.rs and lane_offers.rs; not built lists trimmed | merge: #1704 (37b3e72) adds the UI scale (ui_scale.rs, root zoom, viewport units divided by --ui-scale, pointer and rect conversion in menus, dock, number drags, canvas and the sequence point menu) and C20-C22 restyles; re-read beside this PR's sequence, menu, inspector and live-aim changes, which take positions as ratios of their own rects or reuse the converted point-menu code; holds | kept from the merged side: VC-01: keyboard opening and keys, Add to sequence on an existing lane only opens, dropped arrow-key use from not built. SQ-02: point focus, menu keys and Delete, unchanged edits send nothing. SQ-04: editable rule, (missing) objects, matching by time and action, chip keys. | kept from the merged side: Re-read with sequence.rs and events.rs opening their menus and editors in CSS pixels, by pointer or from the keyboard: the channels and sequences rows still hold." }
 
 ["UI-FEATURES#beyond"."body"]
-stamp = { hash = "b3:193df36d6fac51ba", by = "agent:look-around-thread", note = "The fly paragraph in Beyond the prototype matches the shipped keys, speed and commit behaviour" }
+stamp = { hash = "b3:d2b0c871275a4c90", by = "agent:look-around-thread", note = "Fly speed wording now matches the corner-based extent and five-second crossing" }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/agents.rs"]
 stamp = { hash = "b3:ca366d88e9bbe2fc", by = "agent:ui-design", note = "agents.rs: only its doc comment and the toggle's <label for> changed; the Agents bullet's Ask before connecting holds." }
@@ -9132,7 +9132,7 @@ stamp = { hash = "b3:85e9ab93ca6e5827", by = "agent:issues-thread", note = "Merg
 stamp = { hash = "b3:0d5a4398d75a02a3", by = "agent:3d-groups", note = "Re-read this section's rows for the covered file: its only change is camera_anchor: None in test SceneInfo initialisers (protocol 0.125), so no feature it describes changed." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/fly.rs"]
-stamp = { hash = "b3:c1c71c00e6369edc", by = "agent:look-around-thread", note = "Fly paragraph and CV-11 re-read against fly.rs constants (ROLL_DEG_PER_S 45, CROSS_SECONDS 4, SPEED_RANGE 1/16..16) and mod.rs (Level button, Shift+wheel, Enter, Esc order)" }
+stamp = { hash = "b3:e1584c2fdd6f49fe", by = "agent:look-around-thread", note = "Fly paragraph now says the speed is the box around the items' placed corners, models with depth, crossed in about five seconds, matching fly.rs; the pill shows only the fly scale" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/group.rs"]
 stamp = { hash = "b3:a729afb2ccc6feea", by = "agent:claude", note = "this branch set CV-03 to 🟡: the program scene's live picture is under the boxes while it is the selected scene (U4p, #302), another scene shows a placeholder, other scenes need previews for any target (D36); group.rs and mod.rs carry the wave's multi-select and main's preview, and the other CV rows hold" }
@@ -9144,7 +9144,7 @@ stamp = { hash = "b3:4dc627b43e732dac", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:16c741edf8a81039", by = "agent:claude-audit-gaps", note = "CV-11 now lists the live aim buttons, Home and readout after Save view, checked against canvas/live_aim.rs and mod.rs" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:9428a14c5761fd8f", by = "agent:look-around-thread", note = "Fly paragraph and CV-11 re-read against fly.rs constants (ROLL_DEG_PER_S 45, CROSS_SECONDS 4, SPEED_RANGE 1/16..16) and mod.rs (Level button, Shift+wheel, Enter, Esc order)" }
+stamp = { hash = "b3:4d6d4e43c0d7b8cb", by = "agent:look-around-thread", note = "Fly paragraph now says the speed is the box around the items' placed corners, models with depth, crossed in about five seconds, matching fly.rs; the pill shows only the fly scale" }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:2c38d9cb353a248f", by = "agent:issues-thread", note = "CV-04 now says a hidden item draws nothing and takes no click, marquee or snap until selected, then shows a dashed outline (#1732); matches boxes/hit/marquee/snap in canvas/mod.rs" }
@@ -9255,7 +9255,7 @@ stamp = { hash = "b3:740c0f7c0eccd347", by = "agent:issues-thread", note = "Edit
 stamp = { hash = "b3:e85147f39ea4d7de", by = "agent:look-around-thread", note = "KB-01 lists F, W A S D, Space and Shift, Q E roll, R level, Enter save, Esc leaving fly before camera mode, matching on_key" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:9428a14c5761fd8f", by = "agent:look-around-thread", note = "KB-01 lists F, W A S D, Space and Shift, Q E roll, R level, Enter save, Esc leaving fly before camera mode, matching on_key" }
+stamp = { hash = "b3:4d6d4e43c0d7b8cb", by = "agent:look-around-thread", note = "KB-01's fly keys are unchanged by this commit; re-read against on_key" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }

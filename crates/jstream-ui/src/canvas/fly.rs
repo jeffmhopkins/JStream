@@ -1,7 +1,7 @@
 //! Fly mode, a 3D scene's look-around mode inside camera mode: W A S D move the camera
 //! as a game's fly camera does, Q and E roll it left and right, Space raises it and
 //! Shift (or Z) lowers it, as in a game's creative flight, R levels it, and the mouse turns it where it stands. Its speed comes from the size of what the scene holds, so a small room and
-//! a wide set both take a few seconds to cross.
+//! a wide set both take about five seconds to cross.
 //!
 //! This module is the arithmetic: which key moves which way, how fast, and where a step
 //! of held keys puts the camera. The canvas (`mod.rs`) holds the keys, runs the frames
@@ -11,7 +11,7 @@
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md
 
 use crate::canvas::camera::{self, Shape};
-use jstream_control::protocol::{Canvas, ItemGeometry, SceneCamera, Vec3};
+use jstream_control::protocol::{Canvas, ItemGeometry, SceneCamera, SolidBounds, Vec3};
 
 /// A way the held keys move the camera, or Shift's faster flight.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,7 +89,7 @@ impl Keys {
 /// Degrees a second Q and E roll the camera about its line of sight.
 pub const ROLL_DEG_PER_S: f32 = 45.0;
 /// Seconds the camera takes to fly across the scene's extent at the speed it starts at.
-pub const CROSS_SECONDS: f32 = 4.0;
+pub const CROSS_SECONDS: f32 = 5.0;
 /// The slowest a scene's own speed is, in scene pixels a second, so a scene of one tiny
 /// item still moves.
 pub const MIN_SPEED: f32 = 40.0;
@@ -107,43 +107,84 @@ pub const LOOK_DEG_PER_PX: f32 = camera::ORBIT_DEG_PER_PX * 0.5;
 pub const MAX_STEP_S: f32 = 0.1;
 
 /// The size of what a 3D scene holds, in scene pixels: the diagonal of the box around its
-/// items, each taken as the ball its box would sweep turning about its centre at its
-/// depth. When the scene shows 3D models only they count, so a backdrop or a sky far
-/// behind a room doesn't set the room's pace. `None` when nothing is placed.
+/// items' corners as the scene places them (a card's four, a model's card pushed out by
+/// its depth both ways along the card's normal). When the scene shows 3D models only they
+/// count, so a backdrop or a sky far behind a room doesn't set the room's pace. `None`
+/// when nothing is placed.
 pub fn extent<'a>(items: impl Iterator<Item = (&'a ItemGeometry, &'a Shape)>) -> Option<f32> {
     let mut all = Bounds::default();
     let mut models = Bounds::default();
     for (geometry, shape) in items {
-        let centre = [
-            geometry.center.x.get(),
-            geometry.center.y.get(),
-            geometry.depth_px.get(),
-        ];
-        let radius = geometry.size.width.get().hypot(geometry.size.height.get()) * 0.5;
-        all.add(centre, radius);
-        if matches!(shape, Shape::Model(_)) {
-            models.add(centre, radius);
+        let corners = geometry.corners_in_scene();
+        let depth = match shape {
+            Shape::Model(bounds) => model_depth(geometry, *bounds),
+            _ => 0.0,
+        };
+        let normal = normal(&corners).map(|v| v * depth * 0.5);
+        for corner in corners {
+            for side in [-1.0, 1.0] {
+                let at = [0, 1, 2].map(|i| (corner[i] + normal[i] * side) as f32);
+                all.add(at);
+                if matches!(shape, Shape::Model(_)) {
+                    models.add(at);
+                }
+            }
         }
     }
     models.diagonal().or_else(|| all.diagonal())
 }
 
-/// The box around balls added to it.
+/// How deep a model placed in `geometry`'s box is, in scene pixels: its `bounds`' depth
+/// at the scale their width takes to fill the box, or their height where they have no
+/// width.
+fn model_depth(geometry: &ItemGeometry, bounds: SolidBounds) -> f64 {
+    let size = [0, 1, 2].map(|i| f64::from(bounds.max[i]) - f64::from(bounds.min[i]));
+    let scale = if size[0] > 0.0 {
+        f64::from(geometry.size.width.get()) / size[0]
+    } else if size[1] > 0.0 {
+        f64::from(geometry.size.height.get()) / size[1]
+    } else {
+        0.0
+    };
+    let depth = size[2] * scale;
+    if depth.is_finite() {
+        depth.max(0.0)
+    } else {
+        0.0
+    }
+}
+
+/// The unit normal of a card from its four corners in order, or zero when it has none.
+fn normal(corners: &[[f64; 3]; 4]) -> [f64; 3] {
+    let a = [0, 1, 2].map(|i| corners[1][i] - corners[0][i]);
+    let b = [0, 1, 2].map(|i| corners[3][i] - corners[0][i]);
+    let n = [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ];
+    let length = n.iter().map(|v| v * v).sum::<f64>().sqrt();
+    if length > 0.0 && length.is_finite() {
+        n.map(|v| v / length)
+    } else {
+        [0.0; 3]
+    }
+}
+
+/// The box around the points added to it.
 #[derive(Default)]
 struct Bounds(Option<([f32; 3], [f32; 3])>);
 
 impl Bounds {
-    fn add(&mut self, centre: [f32; 3], radius: f32) {
-        if !centre.iter().all(|v| v.is_finite()) || !radius.is_finite() {
+    fn add(&mut self, at: [f32; 3]) {
+        if !at.iter().all(|v| v.is_finite()) {
             return;
         }
-        let low = centre.map(|v| v - radius);
-        let high = centre.map(|v| v + radius);
         self.0 = Some(match self.0 {
-            None => (low, high),
+            None => (at, at),
             Some((min, max)) => (
-                [0, 1, 2].map(|i| min[i].min(low[i])),
-                [0, 1, 2].map(|i| max[i].max(high[i])),
+                [0, 1, 2].map(|i| min[i].min(at[i])),
+                [0, 1, 2].map(|i| max[i].max(at[i])),
             ),
         });
     }
@@ -434,20 +475,37 @@ mod tests {
             base_speed(extent(items.iter().map(|(g, s)| (g, s))), CANVAS)
         };
         assert!(speed(&room) < speed(&set));
-        // A 300 × 200 box at one depth spans its ball: a diagonal of √3 × its own.
-        let diagonal = 300.0_f32.hypot(200.0) * 3.0_f32.sqrt();
+        // A flat 300 × 200 card spans its own diagonal.
+        let diagonal = 300.0_f32.hypot(200.0);
         assert!((speed(&room) - diagonal / CROSS_SECONDS).abs() < 1e-2);
     }
 
     #[test]
-    fn models_set_the_pace_over_a_backdrop() {
-        let model = Shape::Model(SolidBounds::of_size(100.0, 100.0, 100.0));
+    fn a_turned_card_counts_by_where_its_corners_are() {
+        let mut floor = item(960.0, 540.0, 0.0, 1600.0, 1600.0);
+        floor.tilt_deg = jstream_control::protocol::Finite32::new(90.0).expect("finite");
+        let wall = item(960.0, 140.0, -800.0, 1600.0, 800.0);
+        let room = [(floor, Shape::Box), (wall, Shape::Box)];
+        let size = extent(room.iter().map(|(g, s)| (g, s))).expect("placed");
+        // 1600 wide, 800 + the floor's line high, 1600 deep.
+        let expected = (1600.0_f32 * 1600.0 + 800.0 * 800.0 + 1600.0 * 1600.0).sqrt();
+        assert!(
+            (size - expected).abs() / expected < 0.02,
+            "{size} vs {expected}"
+        );
+    }
+
+    #[test]
+    fn models_set_the_pace_over_a_backdrop_and_count_their_depth() {
+        let model = Shape::Model(SolidBounds::of_size(100.0, 100.0, 50.0));
         let items = [
             (item(960.0, 540.0, 5000.0, 40_000.0, 20_000.0), Shape::Box),
             (item(960.0, 540.0, 0.0, 400.0, 300.0), model),
         ];
         let size = extent(items.iter().map(|(g, s)| (g, s))).expect("placed");
-        assert!((size - 500.0 * 3.0_f32.sqrt()).abs() < 1e-2, "{size}");
+        // 400 × 300, and 200 deep: half its width, as its bounds are.
+        let expected = (400.0_f32 * 400.0 + 300.0 * 300.0 + 200.0 * 200.0).sqrt();
+        assert!((size - expected).abs() < 1e-2, "{size}");
     }
 
     #[test]

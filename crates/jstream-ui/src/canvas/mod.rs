@@ -2232,11 +2232,7 @@ pub fn Canvas() -> impl IntoView {
         }) {
             let (width, height) = canvas_size();
             let text = if flying.get() {
-                format!(
-                    "{}  · fly ×{:.2} · W A S D, Space up, Shift down, Q E roll, R level, Shift+wheel speed, click to look, Enter saves the view",
-                    camera::readout(camera),
-                    fly_scale.get()
-                )
+                format!("{}  · fly ×{:.2}", camera::readout(camera), fly_scale.get())
             } else if camera_mode.get() {
                 format!("{}  · camera mode", camera::readout(camera))
             } else {
