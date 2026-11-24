@@ -2593,7 +2593,7 @@ longer with its outset than 8192 pixels on a side is scaled down uniformly, leav
 for its side and the pad each rounded up (`fit_scale`), and its layer is given the box's
 size in canvas pixels as its extent, so its effects' pixel settings count in canvas
 pixels as the pad does and reach as far across the canvas as on a smaller item
-([ADR-0211](../../docs/adr/0211-a-filters-pixel-settings-count-in-its-inputs-extent.md), #1720,
+([ADR-0219](../../docs/adr/0219-a-big-items-effects-layer-is-placed-at-its-boxs-size.md), #1720,
 `golden_a_big_items_shadow_reaches_as_far_as_a_small_items`). A pad grows the extent of
 what its filter draws by as many extent pixels as its texels stand for
 (`chain::placed_after`). The item is

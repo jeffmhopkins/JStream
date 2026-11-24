@@ -1215,7 +1215,8 @@ scaled nor named as counting in something else. So `Pass::reach` counts in texel
 the scaled settings; `video_filter_outset` in extent pixels, as the settings do; and the
 pad (`set_pad`) in texels, which only an item's effects layer has. Core places that layer
 at its box's size, and one scaled down to fit the largest layer side at the box's canvas
-size, so its texels per extent pixel are the scale core works the pad out at (#1720).
+size, so its texels per extent pixel are the scale core works the pad out at
+([ADR-0219](../../docs/adr/0219-a-big-items-effects-layer-is-placed-at-its-boxs-size.md), #1720).
 
 **The harness.**
 

@@ -1894,7 +1894,7 @@ fn see(
 }
 
 /// The extent of a filter's output, from `grown`, its input's extent `placed` grown as
-/// its texels are: the pad counts in texels (ADR-0211), so over an input with fewer
+/// its texels are: the pad counts in texels (ADR-0219), so over an input with fewer
 /// texels than its extent (an item's layer scaled down to fit, #1720) it grows the
 /// extent by as many of its own pixels as it stands for, keeping the texels per extent
 /// pixel the filters after it scale by. A filter that sizes its output otherwise keeps
@@ -7071,7 +7071,7 @@ mod tests {
     }
 
     /// An item wider than the largest layer side is drawn into a layer scaled down to
-    /// fit, placed at the box's size in canvas pixels (ADR-0211, #1720): its drop
+    /// fit, placed at the box's size in canvas pixels (ADR-0219, #1720): its drop
     /// shadow falls as far across the canvas as a small item's, and isn't cut by the
     /// pad. Before, the layer was placed at its own size, so the shadow's 8 px counted
     /// in layer pixels and fell 16 canvas px away; and the box and pad, each rounded up,

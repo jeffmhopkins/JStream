@@ -497,7 +497,7 @@ const MAX_LAYER_SIDE: u32 = 8192;
 /// Layer pixels per canvas pixel for a box whose longest side with its outset on both
 /// sides is `padded`: 1, or less to fit [`MAX_LAYER_SIDE`]. With an outset, the box's
 /// side and the pad are each rounded up, which can add up to 3 pixels, so it leaves
-/// 2 pixels of room: the padded layer never passes the largest side (#1720).
+/// 2 pixels of room: the padded layer never passes the largest side (ADR-0219 decision 3).
 fn fit_scale(padded: f32, outset: f32) -> f32 {
     let room = if outset > 0.0 { 2.0 } else { 0.0 };
     ((MAX_LAYER_SIDE as f32 - room) / padded).min(1.0)
@@ -616,7 +616,7 @@ impl Boxed {
     /// ([`jstream_render::Image::set_extent`]): its pixels at [`Self::scale`] 1, and the
     /// box's size in canvas pixels for a layer scaled down to fit [`MAX_LAYER_SIDE`], so
     /// that layer's effects count their pixel settings in canvas pixels, as the pad does
-    /// (ADR-0211, #1720). A model's is its layer's, which stands for the canvas however
+    /// (ADR-0219, #1720). A model's is its layer's, which stands for the canvas however
     /// many pixels it is drawn with (ADR-0197).
     fn extent(&self) -> Option<FrameSize> {
         if self.model || self.scale >= 1.0 {
@@ -7324,7 +7324,7 @@ fn draw_box(
         cache.layer(compositor, &unlit, width, height)?;
     }
     // Placed at its box's size in canvas pixels, whatever its texels, so its effects'
-    // pixel settings count as the pad does (ADR-0211, #1720). Set each frame: a layer
+    // pixel settings count as the pad does (ADR-0219, #1720). Set each frame: a layer
     // reused at the same size keeps the extent it was last given.
     if let Some(extent) = boxed.boxed.extent() {
         cache.set_extent(&key, extent);
