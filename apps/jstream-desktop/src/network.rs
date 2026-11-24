@@ -5,17 +5,20 @@
 //!   Only the person changes it, from the app's own window: the page calls
 //!   `set_network` through `allowNetwork` on `__JSTREAM_DESKTOP__` (`bootstrap.rs`), a
 //!   Tauri command that no engine client (an agent, a plugin or a paired device) can
-//!   reach. A missing or unreadable file means off. It takes effect when the app next
-//!   starts.
+//!   reach. A missing or unreadable file means off. It applies at once: the command
+//!   opens or closes the network listener on the running host (ADR-0234), and answers
+//!   why it couldn't open, if it couldn't (most likely another program, such as a daemon
+//!   with `--lan`, has the port). Closing it ends the sessions of the devices connected
+//!   through it; they stay paired.
 //! - **Announcing.** `{"announce": false}` beside it stops the host announcing the
 //!   network listener on mDNS as `_jstream._tcp.local` (ADR-0233): "Let devices find
 //!   JStream on my network", on unless turned off. The page saves it through
-//!   `setAnnounce` and the `set_network_announce` command; it too applies at the next
-//!   start. Each save keeps the file's other key.
+//!   `setAnnounce` and the `set_network_announce` command; it too applies at once.
+//!   Each save keeps the file's other key.
 //! - **On**, the host opens the network listener on every interface on
 //!   [`NETWORK_PORT`], the daemon's default, with the certificate beside the token file
 //!   (`jstream_server::identity`, made the first time, never renewed silently), and
-//!   pairs devices, keeping them beside it too, as the daemon does.
+//!   pairs devices while it is open, keeping them beside it too, as the daemon does.
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -154,48 +157,114 @@ pub fn config(token_file: &Path, announce: bool) -> anyhow::Result<jstream_serve
     })
 }
 
-/// `set_network`: saves the setting from the app's own window. Answers whether it was
-/// saved.
+/// `set_network`: saves the setting from the app's own window and applies it at once.
+/// Answers `null`, or why it wasn't saved or the listener couldn't open.
 #[cfg(webview)]
 #[tauri::command]
-pub(crate) fn set_network(setting: tauri::State<'_, Setting>, allow: bool) -> bool {
-    match set_allowed(&setting.0, allow) {
-        Ok(()) => {
-            tracing::info!(
-                allow,
-                "network setting saved; it applies when the app restarts"
-            );
-            true
-        }
-        Err(error) => {
-            tracing::warn!(%error, "could not save the network setting");
-            false
-        }
-    }
+pub(crate) async fn set_network(
+    setting: tauri::State<'_, Setting>,
+    allow: bool,
+) -> Result<Option<String>, ()> {
+    Ok(setting.allow(allow).await)
 }
 
 /// `set_network_announce`: saves "Let devices find JStream on my network" from the
-/// app's own window (ADR-0233). Answers whether it was saved.
+/// app's own window (ADR-0233) and applies it at once. Answers whether it was saved.
 #[cfg(webview)]
 #[tauri::command]
-pub(crate) fn set_network_announce(setting: tauri::State<'_, Setting>, announce: bool) -> bool {
-    match set_announced(&setting.0, announce) {
-        Ok(()) => {
-            tracing::info!(
-                announce,
-                "network announcement setting saved; it applies when the app restarts"
-            );
-            true
-        }
-        Err(error) => {
-            tracing::warn!(%error, "could not save the network announcement setting");
-            false
-        }
-    }
+pub(crate) async fn set_network_announce(
+    setting: tauri::State<'_, Setting>,
+    announce: bool,
+) -> Result<bool, ()> {
+    Ok(setting.announce(announce).await)
 }
 
-/// The setting's file, the state `set_network` and `set_network_announce` write.
-pub struct Setting(pub PathBuf);
+/// The setting's file, the state `set_network` and `set_network_announce` write, and
+/// the running host's listener they switch.
+pub struct Setting {
+    /// The setting's file.
+    pub file: PathBuf,
+    /// The running host's network listener, when the engine started.
+    pub live: Option<Live>,
+}
+
+/// A running host's network listener, as the setting switches it.
+pub struct Live {
+    /// The host's switch for it (`Host::network_switch`).
+    pub switch: jstream_server::NetworkSwitch,
+    /// The host's runtime, where the listener runs.
+    pub runtime: tokio::runtime::Handle,
+    /// The token file the certificate is kept beside (`config`).
+    pub token_file: PathBuf,
+}
+
+impl Setting {
+    /// Saves "Allow devices on my network" as `allow`, then opens or closes the
+    /// listener. Answers `None`, or why it wasn't saved or couldn't open.
+    pub async fn allow(&self, allow: bool) -> Option<String> {
+        if let Err(error) = set_allowed(&self.file, allow) {
+            tracing::warn!(%error, "could not save the network setting");
+            return Some(format!("could not save the setting: {error}"));
+        }
+        tracing::info!(allow, "network setting saved");
+        let live = self.live.as_ref()?;
+        let switch = live.switch.clone();
+        if !allow {
+            let _ = live
+                .runtime
+                .spawn(async move { switch.close().await })
+                .await;
+            return None;
+        }
+        let config = match config(&live.token_file, announced(&self.file)) {
+            Ok(config) => config,
+            Err(error) => {
+                tracing::error!(error = format!("{error:#}"), "network access stays off");
+                return Some(format!("{error:#}"));
+            }
+        };
+        let opened = live
+            .runtime
+            .spawn(async move { switch.open(config).await })
+            .await;
+        match opened {
+            Ok(Ok(info)) => {
+                tracing::info!(
+                    urls = %info.urls.join(", "),
+                    fingerprint = %info.fingerprint,
+                    "devices on the network may pair (Allow devices on my network)"
+                );
+                None
+            }
+            Ok(Err(error)) => {
+                tracing::error!(%error, "could not open the network listener");
+                Some(format!(
+                    "{error}. Another program, such as JStream's daemon, may be using port \
+                     {NETWORK_PORT}."
+                ))
+            }
+            Err(error) => Some(format!("could not open the network listener: {error}")),
+        }
+    }
+
+    /// Saves "Let devices find JStream on my network" as `announce`, then starts or
+    /// stops announcing the open listener. Answers whether it was saved.
+    pub async fn announce(&self, announce: bool) -> bool {
+        if let Err(error) = set_announced(&self.file, announce) {
+            tracing::warn!(%error, "could not save the network announcement setting");
+            return false;
+        }
+        tracing::info!(announce, "network announcement setting saved");
+        if let Some(live) = &self.live {
+            let switch = live.switch.clone();
+            let _ = live
+                .runtime
+                .spawn(async move { switch.set_announce(announce).await })
+                .await;
+        }
+        true
+    }
+}
 
 #[cfg(test)]
 mod tests {

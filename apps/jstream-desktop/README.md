@@ -36,14 +36,17 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   wired as the daemon's is, plus the virtual camera on Windows and Linux) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
   on, the window on a token of its own, and a new agent held until the person answers;
-  and with `Network` the TLS network listener and pairing); `vcam_status`, whether the
+  and with `Network` the paired devices' file, and the TLS network listener opened at
+  start when the setting is on); `vcam_status`, whether the
   camera is registered and current.
 - **Network access** (`network.rs`): "Allow devices on my network"
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), the setting in the
   data folder's `network.json`, the network listener's configuration, and `set_network`,
-  the command that saves it; and "Let devices find JStream on my network"
+  the command that saves it and opens or closes the listener at once
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)); and "Let devices
+  find JStream on my network"
   ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)) in the same
-  file, saved by `set_network_announce`.
+  file, saved and applied by `set_network_announce`.
 - **JTunnel** (`jtunnel.rs`): "Receive from JTunnel senders"
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
   its accepted senders and the one live sender in the data folder's `jtunnel.json`,
@@ -292,8 +295,8 @@ folder, and its log `logs\cef.log`.
   token. A port in use stops the start with a page that says to pass `--port`. Pairing
   stays off unless network access is on.
 - **Devices on the network.** Settings › Devices › "Allow devices on my network" (off
-  until turned on) saves `network.json` in the data folder; it applies at the next
-  start. On, the app also listens on every interface on port 4456 (the daemon's
+  until turned on) saves `network.json` in the data folder and applies at once
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)). On, the app also listens on every interface on port 4456 (the daemon's
   `--lan` port), TLS only, admitting paired devices only
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), announces itself on
   mDNS unless "Let devices find JStream on my network", just under it, is off
@@ -302,11 +305,12 @@ folder, and its log `logs\cef.log`.
   certificate's fingerprint to compare. The certificate (`token.tls`, made the
   first time) and the paired devices (`token.devices`) are kept beside the `token` file, the daemon's
   files, so the two share them. When the port is in use (a daemon with `--lan`), the
-  app starts without network access, the log says why, and Settings › Devices says
-  devices can't connect. Windows may ask to let JStream through its firewall the first
+  listener doesn't open, the log says why, and Settings › Devices says devices can't
+  connect. Windows may ask to let JStream through its firewall the first
   time, and on a network marked Public it blocks other devices. Turning the setting off
-  applies at the next start and keeps the paired devices, which work again if it is
-  turned back on: revoke them on the same page to end their access for good.
+  closes the listener at once, ending the devices' sessions, and keeps the paired
+  devices, which work again when it is turned back on: revoke them on the same page to
+  end their access for good.
 - **JTunnel senders.** Settings › Devices › "Receive from JTunnel senders" (off until
   turned on) and its list of accepted senders, each a tunnel name and the address and
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
@@ -439,22 +443,27 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   command `set_network`, granted to the main window by the `network` capability and to
   nothing else. It is not a UI setting (`ui_settings.set`), because any engine client
   (an agent with `--mcp`, a paired device) can write those, and widening who can reach the
-  engine is the person's choice. It is read once at start, so a change applies at the
-  next start. `{"announce": false}` in the same file turns off announcing the listener
+  engine is the person's choice. It is read at start, and the command applies a change
+  at once: it saves it, then opens or closes the listener through the host's
+  `NetworkSwitch` (`network::Setting`), answering why the listener couldn't open, if it
+  couldn't ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)).
+  `{"announce": false}` in the same file turns off announcing the listener
   on mDNS ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)):
   on unless that, saved the same way by `setAnnounce` and the command
   `set_network_announce`, which the same capability grants. Each save keeps the other
-  key. On, `Host::start` gets a `Network`: `ServerConfig::network` on
-  `0.0.0.0:4456`, announced unless turned off, with the certificate from `jstream_server::identity` (made the first
-  time, kept when its names are out of date, with a warning in the log, never renewed
-  silently), `device_file` beside the token file, and pairing on, so the loopback
-  listener (which the window uses) opens codes and `pairing.start` names the network
-  listener's addresses and fingerprint (protocol 0.97). A certificate that can't be
-  used is logged and the app starts without network access. Any other failed start with
-  the listener (most likely its port in use) is logged and retried without it; a cause
-  that isn't the listener's fails the retry too, with its own error. The page is told
-  whether the listener opened (`networkOpen`), so Settings › Devices says when the
-  setting is on but devices can't connect.
+  key. `Host::start` always gets a `Network` with `device_file` beside the token file,
+  and pairing off; the server pairs while the network listener is open, so the loopback
+  listener (which the window uses) then opens codes and `pairing.start` names the
+  network listener's addresses and fingerprint (protocol 0.97). With the setting on, the
+  `Network` also carries the listener to open at start: `0.0.0.0:4456`, announced
+  unless turned off, with the certificate from `jstream_server::identity` (made the
+  first time, kept when its names are out of date, with a warning in the log, never
+  renewed silently). The host opens it through the server's `NetworkSwitch` after
+  binding, and keeps the switch, which `network::Setting` uses to switch it later. A
+  certificate that can't be used, or a listener that can't open (most likely its port
+  in use), is logged and the app runs without network access. The page is told whether
+  the listener opened (`networkOpen`), so Settings › Devices says when the setting is on
+  but devices can't connect, and `allowNetwork` answers the same when switched on.
 - **JTunnel** (`jtunnel.rs`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
   "address": "192.168.1.5:9000", "state": true, "midi": false}], "live": "Bitwig"}` in the data folder's `jtunnel.json`

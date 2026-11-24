@@ -13,10 +13,12 @@
 //! had the focus, because the app lacked macOS's Accessibility permission.
 //! `network` is whether "Allow devices on my network" was on when the app started,
 //! `networkOpen` whether the network listener then opened, and `allowNetwork(allow)`
-//! asks the `set_network` command to save it (`network.rs`), resolving to whether it was
-//! saved (false when the command fails too); it applies at the next start.
-//! `announce` and `setAnnounce(on)` are "Let devices find JStream on my network" the
-//! same way, through the `set_network_announce` command (ADR-0233).
+//! asks the `set_network` command to save it and open or close the listener at once
+//! (`network.rs`, ADR-0234), resolving to `null` when it did, or the reason it didn't
+//! (it wasn't saved, or the listener couldn't open).
+//! `announce` and `setAnnounce(on)` are "Let devices find JStream on my network",
+//! through the `set_network_announce` command (ADR-0233), which applies it at once too
+//! and resolves to whether it was saved (false when the command fails too).
 //! `jtunnel` is "Receive from JTunnel senders" as the app read it at start (`{on,
 //! accepted: [{name, address, state}], live}`, `jtunnel.rs`), and `setJtunnel(setting)` asks the
 //! `set_jtunnel` command to save one, resolving to `null` when it was saved or the
@@ -170,9 +172,10 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
          }},\
          allowNetwork: function (allow) {{\
          var internals = window.__TAURI_INTERNALS__;\
-         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(false);\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(\"the app can't save settings here\");\
          return internals.invoke(\"set_network\", {{ allow: allow === true }})\
-         .then(function (saved) {{ return saved === true; }}, function () {{ return false; }});\
+         .then(function (problem) {{ return problem === null ? null : String(problem); }},\
+         function (error) {{ return String(error); }});\
          }},\
          setAnnounce: function (on) {{\
          var internals = window.__TAURI_INTERNALS__;\

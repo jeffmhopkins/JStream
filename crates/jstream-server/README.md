@@ -98,6 +98,9 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Announcement** (`announce.rs`, `tls` feature): the mDNS responder that announces the
   network listener as `_jstream._tcp.local` while `NetworkConfig::announce` is set
   ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
+- **Network switch** (`switch.rs`, `tls` feature, and `network_state.rs`): opens and
+  closes the network listener while the server runs, and the state the handlers read
+  for it ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)).
 - **Certificate** (`identity.rs`, `tls` feature): the network listener's key and
   self-signed certificate, made on the host and kept in one user-only file beside the
   token file (`identity_file`), its SHA-256 fingerprint, and the machine's names and
@@ -301,8 +304,10 @@ its own from a short code instead of the control token.
   server answers none of the three calls: they reach the session, which answers
   `unsupported`, so a host's UI hides its pairing panel. No code is ever drawn,
   `GET /pair` is 404, and the gate accepts no device token or cookie, not even one
-  already in the device file, since nothing could list or revoke it. `jstream-desktop`
-  turns it off.
+  already in the device file, since nothing could list or revoke it. While the network
+  listener is open, the server pairs whatever this says
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)). `jstream-desktop`
+  turns it off, so it pairs exactly while its network listener is open.
 - **The exchange.** `POST /api/v1/pair` (`PAIR_PATH`) with
   `{"code": "...", "name": "..."}`, and `"browser": true` from the pairing page, is
   answered without a token; it still passes the `Host` and `Origin` checks. The name is
@@ -421,6 +426,21 @@ reach the server. With the `tls` feature, `ServerConfig::network` (a `NetworkCon
 an address and an `Identity`) opens a second listener beside the host's own, which is
 unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
 
+- **Opened and closed while it runs**
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md), `switch.rs`,
+  `network_state.rs`). `Server::network_switch` gives a `NetworkSwitch`: `open` binds a
+  listener with a `NetworkConfig` (closing one already open), `close` closes it, and
+  `set_announce` starts or stops its announcement. `ServerConfig::network` opens one at
+  `bind` through the same switch; one opened before serving starts serving with it. The
+  gate's network side and what `pairing.start` says about it are read per request from
+  the shared `NetworkState`, so they follow the switch. Closing clears that state
+  first, so a request still arriving fails its `Host` check, then stops accepting
+  (graceful), says goodbye on mDNS, and ends every WebSocket session admitted through
+  it with 1001, as at shutdown: each holds the listener's own stop signal. The
+  server's shutdown closes it the same way, and lets go of the router it served with,
+  so the shutdown's wait for sessions isn't held up.
+  `tests::network::the_network_listener_opens_and_closes_while_the_server_runs` checks
+  this.
 - **TLS only.** rustls with the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)),
   TLS 1.3 and 1.2 with rustls' default cipher suites for each, no client certificates,
   ALPN `http/1.1` (#1129 N2). A plain HTTP request gets no HTTP answer. The handshake
@@ -441,7 +461,7 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   when present, must be `https://` and that host; the configured extra origins are the
   host listener's only. The control token, and the host UI's own token (`ui_token`), are
   refused there however they are presented, with a `401` that asks for a paired device's token (`Refusal::NetworkControlToken`).
-  A device token, or a browser's device cookie, gets in while pairing is on. The
+  A device token, or a browser's device cookie, gets in while the listener is open. The
   pairing exchange and `GET /pair` are served there, sharing the code's five
   attempts with the host's listener.
 - **Limits** (#1129 N1). It has its own pool of open TCP connections, as many as
@@ -450,7 +470,8 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   WebSocket connection and MCP session limits are shared, since only a paired device
   reaches them.
 - **The host's side.** `Server::network_addr`, `network_urls` (one per name the
-  certificate carries) and `network_fingerprint` give what the host shows the person:
+  certificate carries) and `network_fingerprint`, and `NetworkSwitch::info` and what
+  `open` answers (`NetworkInfo`), give what the host shows the person:
   the addresses and the SHA-256 fingerprint, as `AB:CD:…`, the way a browser's
   certificate viewer writes it. `pairing.start`'s answer carries the same two as
   `network` (protocol 0.97), so the host UI and the CLI show them beside the code;
@@ -460,7 +481,7 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   interface on port 4456 unless told otherwise (#1129 N3), and says so in its help.
 - **Announcing it** (`announce.rs`,
   [ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)). With
-  `NetworkConfig::announce`, `serve_with_shutdown` also runs a small mDNS responder: one
+  `NetworkConfig::announce` (or `NetworkSwitch::set_announce`), the served listener also runs a small mDNS responder: one
   DNS-SD instance, `<host name>._jstream._tcp.local`, as a PTR, an SRV with the
   listener's port and the host's `.local` name, and a TXT `v=1`, nothing more (no
   address records: a device uses the address the answer came from). It shares UDP 5353

@@ -1690,14 +1690,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   network" ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md) decision 1),
   shown only when the global has `network` and `allowNetwork`. It saves through
   `allowNetwork`, the app's own command, not `ui_settings.set`, so no engine client can
-  turn it on; a failed save puts the box back and says so, and while the box differs
-  from the setting the app started with it says to restart JStream. When the setting
-  was on but the listener didn't open (`networkOpen` false: its port taken), it says
-  devices can't connect. Its note says Windows may ask about its firewall. Under it,
+  turn it on. The app applies it at once
+  ([ADR-0234](../../docs/adr/0234-network-access-applies-at-once.md)) and answers why
+  not when it can't: turned on, the box stays on and says devices can't connect, and
+  why (its port taken); a failed save of off puts the box back and says so. When the
+  setting was on at start but the listener didn't open (`networkOpen` false), it says
+  devices can't connect too. Its note says Windows may ask about its firewall. Under it,
   "Let devices find JStream on my network"
   ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)), shown only
   when the global has `announce` and `setAnnounce`, saves the same way through
-  `setAnnounce`, with the same restart note; its note says finding JStream lets nothing
+  `setAnnounce`, applied at once too; its note says finding JStream lets nothing
   in. Below them,
   "Receive from JTunnel senders" ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3), shown only when the global has `jtunnel` and `setJtunnel`: the

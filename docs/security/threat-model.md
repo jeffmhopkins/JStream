@@ -136,7 +136,9 @@ a stolen token, local denial of service.
   `ServerConfig::network`); it is off by default. The desktop app keeps that switch in
   its data folder and saves it only through its own window's command, never through
   the control API, so no agent, plugin or paired device can turn it on. Turning it off
-  applies at the app's next start and doesn't revoke the paired devices, which are
+  closes the listener at once and ends the sessions admitted on it
+  ([ADR-0234](../adr/0234-network-access-applies-at-once.md)), and doesn't revoke the
+  paired devices, which are
   admitted again if it is turned back on; revoking them ends their access:
   - **TLS only**, with rustls on the ring provider: TLS 1.3 and 1.2 with rustls' default
     suites for them, ALPN `http/1.1`, no client certificates. Plain HTTP gets no answer.

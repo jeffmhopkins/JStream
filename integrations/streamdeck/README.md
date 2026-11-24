@@ -29,7 +29,7 @@ Stream Deck and JStream can run on different computers on the same network.
    Deck app asks to install it, and a **JStream** group appears in its action list. The
    file is built by `npm run pack` (see [Build](#build)).
 2. **Let devices in.** On the JStream computer, turn on **Allow devices on my network** in
-   **Settings › Devices**, then restart JStream. The network listener uses port 4456
+   **Settings › Devices**. It applies at once. The network listener uses port 4456
    unless that was changed. The daemon's flag is `--lan`
    ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)). The first time, the
    operating system may ask whether JStream may accept connections.

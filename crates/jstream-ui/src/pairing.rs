@@ -16,10 +16,9 @@
 //!   stored by the page (R-SEC-001).
 //! - **Allow devices on my network** (ADR-0104), in the desktop app only: a switch above
 //!   the panel that asks the app to save the setting (`host::allow_network`, the app's own
-//!   command, which no engine client reaches). It applies when the app next starts, and
-//!   says so while the saved choice differs from the one the app started with. When the
-//!   setting is on but the listener didn't open (its port taken), it says devices can't
-//!   connect.
+//!   command, which no engine client reaches). It applies at once: the app opens or
+//!   closes its network listener (ADR-0234). When the listener didn't open (its port
+//!   taken), at start or when switched on, it says devices can't connect, and why.
 //! - **The network listener** (ADR-0130). When the server also listens on the local
 //!   network, `pairing.start` names its addresses and its certificate's fingerprint, and
 //!   the panel shows both, with when to continue past the browser's certificate warning:
@@ -338,7 +337,11 @@ fn network_view(network: NetworkAccess) -> impl IntoView {
     }
 }
 
-/// "Allow devices on my network", in the desktop app only (ADR-0104 decision 1).
+/// What "Allow devices on my network" says when the listener didn't open.
+const NOT_OPEN: &str = "Port 4456 could not be opened (another program, such as the JStream daemon, may use it), so devices can't connect.";
+
+/// "Allow devices on my network", in the desktop app only (ADR-0104 decision 1, as
+/// ADR-0234 amends it: it applies at once).
 #[component]
 pub fn NetworkAccessSetting() -> impl IntoView {
     let Some(started) = crate::host::desktop_network() else {
@@ -346,15 +349,24 @@ pub fn NetworkAccessSetting() -> impl IntoView {
     };
     let open = crate::host::desktop_network_open();
     let on = RwSignal::new(started);
-    let problem = RwSignal::new(None::<&'static str>);
+    let problem = RwSignal::new((started && !open).then(|| NOT_OPEN.to_owned()));
     let save = move |allow: bool| {
         on.set(allow);
+        problem.set(None);
         spawn_local(async move {
-            if crate::host::allow_network(allow).await {
-                problem.try_set(None);
-            } else {
-                on.try_set(!allow);
-                problem.try_set(Some("The setting could not be saved."));
+            match crate::host::allow_network(allow).await {
+                None => {
+                    problem.try_set(None);
+                }
+                // Switched on, it was most likely saved and couldn't open: it stays
+                // on, as saved, and says why devices can't connect.
+                Some(why) if allow => {
+                    problem.try_set(Some(format!("{NOT_OPEN} {why}")));
+                }
+                Some(why) => {
+                    on.try_set(true);
+                    problem.try_set(Some(why));
+                }
             }
         });
     };
@@ -371,12 +383,6 @@ pub fn NetworkAccessSetting() -> impl IntoView {
                 <span class="settings-check-note">
                     "When on, a phone, tablet or other computer on this network can pair with a code and control JStream, over HTTPS on port 4456. Only paired devices get in. Windows may ask to allow JStream through its firewall, and on a network marked Public it blocks other devices. Off until you turn it on."
                 </span>
-                {(started && !open).then(|| view! {
-                    <span class="problem" role="alert">"Port 4456 could not be opened (another program, such as the JStream daemon, may use it), so devices can't connect. The log says why."</span>
-                })}
-                {move || (on.get() != started).then(|| view! {
-                    <span class="settings-check-note" role="status">"Restart JStream to apply this."</span>
-                })}
                 {move || problem.get().map(|problem| view! { <span class="problem" role="alert">{problem}</span> })}
             </span>
         </label>
@@ -419,9 +425,6 @@ fn AnnounceSetting() -> impl IntoView {
                 <span class="settings-check-note">
                     "While devices are allowed, JStream announces itself on this network (mDNS), so a device such as a Stream Deck finds it without typing its address. Finding it lets nothing in: a device still needs a pairing code. On unless you turn it off."
                 </span>
-                {move || (on.get() != started).then(|| view! {
-                    <span class="settings-check-note" role="status">"Restart JStream to apply this."</span>
-                })}
                 {move || problem.get().map(|problem| view! { <span class="problem" role="alert">{problem}</span> })}
             </span>
         </label>

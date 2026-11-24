@@ -40,10 +40,13 @@ mod listener;
 mod mcp;
 #[cfg(feature = "tls")]
 mod network;
+mod network_state;
 mod pair;
 mod pair_page;
 mod preview;
 mod session;
+#[cfg(feature = "tls")]
+mod switch;
 #[cfg(test)]
 mod tests;
 pub mod token_file;
@@ -59,6 +62,8 @@ pub use mcp::MCP_PATH;
 pub use network::NetworkConfig;
 pub use pair::PAIR_PATH;
 pub use pair_page::PAIR_PAGE_PATH;
+#[cfg(feature = "tls")]
+pub use switch::{NetworkInfo, NetworkSwitch};
 pub use ui_settings::UiSettingsView;
 
 use admitted::Admitted;
@@ -102,24 +107,13 @@ const FRAME_LIMIT: usize = 16 << 20;
 pub struct Server {
     listener: TcpListener,
     local_addr: SocketAddr,
-    /// The network listener (ADR-0104), when configured.
+    /// Opens and closes the network listener (ADR-0104, ADR-0234).
     #[cfg(feature = "tls")]
-    network: Option<Network>,
+    switch: NetworkSwitch,
     max_tcp_connections: usize,
     header_read_timeout: Duration,
     app: Arc<App>,
     shutdown: watch::Sender<bool>,
-}
-
-/// The bound network listener.
-#[cfg(feature = "tls")]
-struct Network {
-    listener: TcpListener,
-    local_addr: SocketAddr,
-    acceptor: tokio_rustls::TlsAcceptor,
-    identity: Arc<identity::Identity>,
-    /// Whether to announce it on mDNS (ADR-0233).
-    announce: bool,
 }
 
 /// What every connection handler shares.
@@ -150,9 +144,9 @@ struct App {
     tls: bool,
     /// Whether the server pairs devices at all (`ServerConfig::pairing`).
     pairing: bool,
-    /// Where a device on the network reaches the network listener, while it is on:
-    /// `pairing.start` answers with it (0.97).
-    network_access: Option<jstream_protocol::NetworkAccess>,
+    /// The network listener's state: open or not, and where a device reaches it, which
+    /// `pairing.start` answers with (0.97).
+    network: Arc<network_state::NetworkState>,
     /// The UI settings it keeps for its clients (ADR-0084).
     ui_settings: Arc<UiSettings>,
     /// The agent approvals (ADR-0131).
@@ -174,8 +168,8 @@ impl App {
             admitted::Served {
                 devices: Arc::clone(&self.devices),
                 pairing_offered: self.pairing_offered,
-                serves_devices: self.pairing,
-                network: self.network_access.clone(),
+                pairing: self.pairing,
+                network: Arc::clone(&self.network),
                 ui_settings: Arc::clone(&self.ui_settings),
                 approvals: Arc::clone(&self.approvals),
             },
@@ -220,42 +214,14 @@ impl Server {
         let listener = TcpListener::bind(config.bind).await.map_err(bind_error)?;
         let local_addr = listener.local_addr().map_err(bind_error)?;
         let gate = Gate::new(&config, local_addr, Arc::clone(&devices));
+        let network = gate.network_state();
         #[cfg(feature = "tls")]
-        let (network, gate) = match &config.network {
-            None => (None, gate),
-            Some(network) => {
-                let acceptor = network::acceptor(&network.identity)?;
-                let bind_error = |source| ServerError::Bind {
-                    addr: network.bind,
-                    source,
-                };
-                let listener = TcpListener::bind(network.bind).await.map_err(bind_error)?;
-                let local_addr = listener.local_addr().map_err(bind_error)?;
-                let gate = gate.with_network(local_addr.port(), network.identity.names());
-                tracing::info!(
-                    addr = %local_addr,
-                    fingerprint = network.identity.fingerprint(),
-                    "network listener on (TLS, device tokens only)"
-                );
-                let network = Network {
-                    listener,
-                    local_addr,
-                    acceptor,
-                    identity: Arc::clone(&network.identity),
-                    announce: network.announce,
-                };
-                (Some(network), gate)
-            }
-        };
+        let switch = NetworkSwitch::new(Arc::clone(&network));
         #[cfg(feature = "tls")]
-        let network_access = network
-            .as_ref()
-            .map(|network| jstream_protocol::NetworkAccess {
-                urls: network_urls(&network.identity, network.local_addr.port()),
-                fingerprint: network.identity.fingerprint().to_owned(),
-            });
-        #[cfg(not(feature = "tls"))]
-        let network_access = None;
+        if let Some(config) = config.network.clone() {
+            // Bound now, so a taken port fails the bind; served once serving starts.
+            switch.open(config).await?;
+        }
         let (shutdown, stopping) = watch::channel(false);
         let mcp = config.mcp.then(|| Mcp::new(&config));
         let app = Arc::new(App {
@@ -277,7 +243,7 @@ impl Server {
             pairing_offered: local_addr.ip().is_loopback() || config.tls,
             tls: config.tls,
             pairing: config.pairing,
-            network_access,
+            network,
             ui_settings,
             approvals,
         });
@@ -285,7 +251,7 @@ impl Server {
             listener,
             local_addr,
             #[cfg(feature = "tls")]
-            network,
+            switch,
             max_tcp_connections: config.max_tcp_connections,
             header_read_timeout: config.header_read_timeout,
             app,
@@ -336,7 +302,14 @@ impl Server {
     /// The network listener's address (ADR-0104), when it is on.
     #[cfg(feature = "tls")]
     pub fn network_addr(&self) -> Option<SocketAddr> {
-        self.network.as_ref().map(|network| network.local_addr)
+        self.switch.info().map(|info| info.addr)
+    }
+
+    /// The switch that opens and closes the network listener while the server runs
+    /// (ADR-0234), for the host to keep.
+    #[cfg(feature = "tls")]
+    pub fn network_switch(&self) -> NetworkSwitch {
+        self.switch.clone()
     }
 
     /// The network listener's URLs, one per name or address its certificate carries,
@@ -344,19 +317,14 @@ impl Server {
     /// checks the certificate's fingerprint and pairs (`GET /pair` for a browser).
     #[cfg(feature = "tls")]
     pub fn network_urls(&self) -> Vec<String> {
-        match &self.network {
-            Some(network) => network_urls(&network.identity, network.local_addr.port()),
-            None => Vec::new(),
-        }
+        self.switch.info().map(|info| info.urls).unwrap_or_default()
     }
 
     /// The network listener's certificate fingerprint (SHA-256, `AB:CD:…`), when it is
     /// on: what the host shows beside the pairing code and the address (ADR-0104 §5).
     #[cfg(feature = "tls")]
-    pub fn network_fingerprint(&self) -> Option<&str> {
-        self.network
-            .as_ref()
-            .map(|network| network.identity.fingerprint())
+    pub fn network_fingerprint(&self) -> Option<String> {
+        self.switch.info().map(|info| info.fingerprint)
     }
 
     /// Serves until the listener fails.
@@ -376,7 +344,7 @@ impl Server {
         let Server {
             listener,
             #[cfg(feature = "tls")]
-            network,
+            switch,
             max_tcp_connections,
             header_read_timeout,
             app,
@@ -411,39 +379,22 @@ impl Server {
         let listener = Limited::new(listener, max_tcp_connections, header_read_timeout);
         let host = axum::serve(listener, service).with_graceful_shutdown(signal);
         #[cfg(feature = "tls")]
-        if let Some(network) = network {
-            // Its own pool of open connections, the size of the host listener's, so the
-            // network can't use up the host's (#1129 N1).
-            let listener = network::TlsLimited::new(
-                Limited::new(network.listener, max_tcp_connections, header_read_timeout),
-                network.acceptor,
-            );
-            if network.announce {
-                // The certificate's first name is the host name, unless the OS gave none.
-                let host = network
-                    .identity
-                    .names()
-                    .iter()
-                    .find(|name| name.parse::<std::net::IpAddr>().is_err())
-                    .map_or("", String::as_str);
-                let what = announce::Announcement::new(host, network.local_addr.port());
-                tokio::spawn(announce::run(what, shutdown.subscribe()));
-            }
-            let service = router.into_make_service_with_connect_info::<Accepted>();
-            let mut stopping = shutdown.subscribe();
-            let stop = async move {
-                let _ = stopping.wait_for(|stop| *stop).await;
-            };
-            let remote = axum::serve(listener, service).with_graceful_shutdown(stop);
-            tokio::try_join!(async { host.await.map_err(ServerError::Serve) }, async {
-                remote.await.map_err(ServerError::Serve)
-            },)?;
-            return finish(shutdown).await;
-        }
+        switch
+            .begin(switch::Serving {
+                router: router.clone(),
+                max_tcp_connections,
+                header_read_timeout,
+                shutdown: shutdown.subscribe(),
+            })
+            .await;
         // The sessions' shutdown receivers must all be gone for `finish` to return, and
         // this one is in the router's state.
         drop(router);
-        host.await.map_err(ServerError::Serve)?;
+        let served = host.await.map_err(ServerError::Serve);
+        // The network listener stops too, and its copy of the router goes.
+        #[cfg(feature = "tls")]
+        switch.end().await;
+        served?;
         finish(shutdown).await
     }
 }
@@ -521,7 +472,16 @@ async fn upgrade(
         }
         app.open(credential, AgentTransport::Websocket)
     });
-    let shutdown = app.shutdown.clone();
+    // A session admitted on the network listener closes when that listener does, and
+    // also holds the server's receiver, so the shutdown waits for its close too.
+    let held = app.shutdown.clone();
+    let shutdown = if accepted.network {
+        app.network
+            .stopping()
+            .unwrap_or_else(|| app.shutdown.clone())
+    } else {
+        app.shutdown.clone()
+    };
     let liveness = app.liveness;
     // A browser client offers `jstream` beside the token's subprotocol and fails the
     // connection unless one is selected; the token's is never echoed.
@@ -533,6 +493,7 @@ async fn upgrade(
             async move {
                 session::run(socket, control, shutdown, revoked, hello_by, liveness).await;
                 drop(slot);
+                drop(held);
             }
             .instrument(span)
         });
@@ -565,7 +526,7 @@ fn rejects_foreign_origin() {
 /// The network listener's URLs on `port`, one per name or address `identity`'s
 /// certificate carries; an IPv6 address in brackets.
 #[cfg(feature = "tls")]
-fn network_urls(identity: &identity::Identity, port: u16) -> Vec<String> {
+pub(crate) fn network_urls(identity: &identity::Identity, port: u16) -> Vec<String> {
     identity
         .names()
         .iter()

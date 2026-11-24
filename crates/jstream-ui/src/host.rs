@@ -8,8 +8,9 @@
 //! whether its virtual camera can be used, the default project's folder `collection`
 //! asset paths are relative to, whether "Allow devices on my network" was on at start and its listener
 //! opened, `browse`, which
-//! opens a native file dialog, and `allowNetwork`, which saves that setting; `announce`
-//! and `setAnnounce` are "Let devices find JStream on my network" (ADR-0233); `jtunnel` and
+//! opens a native file dialog, and `allowNetwork`, which saves that setting and opens or
+//! closes the listener at once (ADR-0234); `announce` and `setAnnounce` are "Let
+//! devices find JStream on my network" (ADR-0233), which applies at once too; `jtunnel` and
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
 //! `setJtunnel` and `setPtz` save them; `ptzCameras` is the machine's PTZ camera list
 //! (ADR-0209 decision 1), which `setPtzCameras` saves and the app applies at once.
@@ -183,7 +184,8 @@ pub fn desktop_wheel_focus_only() -> bool {
 }
 
 /// Whether the desktop app's network listener opened at start: `false` when the
-/// setting was on but its port was taken, and when the setting was off.
+/// setting was on but its port was taken, and when the setting was off. The page
+/// follows later switches itself, from what `allowNetwork` answers.
 pub fn desktop_network_open() -> bool {
     global()
         .and_then(|global| Reflect::get(&global, &JsValue::from_str("networkOpen")).ok())
@@ -559,7 +561,7 @@ pub async fn set_ptz_cameras(setting: &PtzCameraSetting) -> Option<String> {
 }
 
 /// Asks the desktop app to save "Let devices find JStream on my network" (ADR-0233),
-/// which applies when it next starts. Resolves to whether it was saved.
+/// which it applies at once. Resolves to whether it was saved.
 pub async fn set_announce(announce: bool) -> bool {
     #[cfg(target_arch = "wasm32")]
     {
@@ -572,22 +574,22 @@ pub async fn set_announce(announce: bool) -> bool {
     }
 }
 
-/// Asks the desktop app to save "Allow devices on my network", which applies when it
-/// next starts. Resolves to whether it was saved.
-pub async fn allow_network(allow: bool) -> bool {
+/// Asks the desktop app to save "Allow devices on my network" and open or close its
+/// network listener at once (ADR-0234). Resolves to `None` when it did, or why not: it
+/// wasn't saved, or the listener couldn't open (another program has its port).
+pub async fn allow_network(allow: bool) -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        switch_js("allowNetwork", allow).await
+        save_setting_js("allowNetwork", if allow { "true" } else { "false" }).await
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = allow;
-        false
+        Some("only the JStream app can save this".to_owned())
     }
 }
 
-/// Calls the desktop global's `name` (`allowNetwork` or `setAnnounce`) with `on` and
-/// awaits its promise.
+/// Calls the desktop global's `setAnnounce` with `on` and awaits its promise.
 #[cfg(target_arch = "wasm32")]
 async fn switch_js(name: &str, on: bool) -> bool {
     use leptos::wasm_bindgen::JsCast;

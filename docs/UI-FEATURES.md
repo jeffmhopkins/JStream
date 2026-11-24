@@ -652,8 +652,8 @@ not remove them; they move into the prototype's look.
   certificate's fingerprint beside the code
   ([ADR-0130](adr/0130-browsers-keep-no-certificate-pin-v2.md)). In the desktop app the
   page starts with "Allow devices on my network"
-  ([ADR-0104](adr/0104-network-listener-over-tls.md)), saved by the app and applied at
-  its next start, with "Let devices find JStream on my network" under it, on until
+  ([ADR-0104](adr/0104-network-listener-over-tls.md)), saved and applied at once by the app
+  ([ADR-0234](adr/0234-network-access-applies-at-once.md)), with "Let devices find JStream on my network" under it, on until
   unticked, which announces the network listener on mDNS so a device such as a Stream
   Deck finds it ([ADR-0233](adr/0233-announce-the-network-listener-on-mdns.md)), then "Receive from JTunnel senders" and the accepted senders
   ([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md), `jtunnel.rs`), each with "Use

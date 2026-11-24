@@ -91,6 +91,17 @@ impl ServerCertVerifier for Pin {
 
 /// A server with the network listener on `127.0.0.1:0`, and its identity.
 fn start_network(configure: impl FnOnce(&mut ServerConfig)) -> (Harness, Arc<Identity>) {
+    let (network, identity) = network_config();
+    let harness = start_with(&MockEngine::new(), move |config| {
+        config.network = Some(network);
+        configure(config);
+    });
+    (harness, identity)
+}
+
+/// A network listener's configuration on a free loopback port, with a fresh certificate
+/// for [`NAME`] and the loopback address.
+fn network_config() -> (NetworkConfig, Arc<Identity>) {
     let dir = std::env::temp_dir().join(format!(
         "jstream-network-{}-{:?}",
         std::process::id(),
@@ -106,16 +117,12 @@ fn start_network(configure: impl FnOnce(&mut ServerConfig)) -> (Harness, Arc<Ide
         identity: Arc::clone(&identity),
         announce: false,
     };
-    let harness = start_with(&MockEngine::new(), move |config| {
-        config.network = Some(network);
-        configure(config);
-    });
-    (harness, identity)
+    (network, identity)
 }
 
 impl Harness {
     fn network_addr(&self) -> SocketAddr {
-        self.network.expect("the network listener is on")
+        self.switch.info().expect("the network listener is on").addr
     }
 
     /// One HTTP/1.1 request to the network listener over TLS, pinning `pin`, with `Host`
@@ -135,19 +142,7 @@ impl Harness {
             all.push(("Host", &host));
         }
         all.extend_from_slice(headers);
-        let verifier = Arc::new(Pin {
-            expected: pin.to_owned(),
-            offered: Mutex::new(None),
-        });
-        let config = rustls::ClientConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .expect("versions")
-        .dangerous()
-        .with_custom_certificate_verifier(verifier)
-        .with_no_client_auth();
-        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+        let connector = pinned(pin);
         self.run(async {
             let tcp = tokio::net::TcpStream::connect(addr)
                 .await
@@ -160,6 +155,79 @@ impl Harness {
             Ok(http_to(&mut tls, method, path, &all, body).await)
         })
     }
+
+    /// A WebSocket session on the network listener over TLS, pinning `pin`, with
+    /// `authorization`; the upgrade's status when it is refused.
+    fn tls_session(&self, pin: &str, authorization: &str) -> Result<TlsSocket, u16> {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        use tokio_tungstenite::tungstenite::http::HeaderValue;
+        let addr = self.network_addr();
+        let connector = pinned(pin);
+        let mut request = format!("wss://{addr}{}", crate::WS_PATH)
+            .into_client_request()
+            .expect("request");
+        let headers = request.headers_mut();
+        headers.insert(
+            "Authorization",
+            HeaderValue::from_str(authorization).expect("header"),
+        );
+        headers.insert(
+            "Sec-WebSocket-Protocol",
+            HeaderValue::from_static("jstream"),
+        );
+        self.run(async {
+            let tcp = tokio::net::TcpStream::connect(addr).await.expect("connect");
+            let name = ServerName::try_from(NAME.to_owned()).expect("name");
+            let tls = connector.connect(name, tcp).await.expect("tls");
+            match tokio_tungstenite::client_async(request, tls).await {
+                Ok((socket, _)) => Ok(socket),
+                Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+                    Err(response.status().as_u16())
+                }
+                Err(error) => panic!("upgrade: {error}"),
+            }
+        })
+    }
+
+    /// Pairs a device over the network listener and answers its `Authorization`.
+    fn pair_over_network(&self, pin: &str) -> String {
+        let control = ok(self.connect());
+        ok(self.run(control.hello(hello())));
+        let code = self.start_pairing(&control);
+        let body = serde_json::json!({"code": code, "name": "Stream deck"}).to_string();
+        let origin = format!("https://{}", self.network_addr());
+        let reply = self
+            .tls_request(
+                pin,
+                "POST",
+                crate::PAIR_PATH,
+                &[("Content-Type", "application/json"), ("Origin", &origin)],
+                &body,
+            )
+            .expect("tls");
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        format!("Bearer {}", reply.json()["token"].as_str().expect("token"))
+    }
+}
+
+type TlsSocket =
+    tokio_tungstenite::WebSocketStream<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>;
+
+/// A TLS connector that pins `pin`, as a native client does.
+fn pinned(pin: &str) -> tokio_rustls::TlsConnector {
+    let verifier = Arc::new(Pin {
+        expected: pin.to_owned(),
+        offered: Mutex::new(None),
+    });
+    let config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("versions")
+    .dangerous()
+    .with_custom_certificate_verifier(verifier)
+    .with_no_client_auth();
+    tokio_rustls::TlsConnector::from(Arc::new(config))
 }
 
 fn upgrade_headers(authorization: &str) -> Vec<(&str, &str)> {
@@ -360,4 +428,77 @@ fn pairing_start_names_the_network_listener_and_its_fingerprint() {
     let control = ok(harness.connect());
     ok(harness.run(control.hello(hello())));
     assert_eq!(harness.start_pairing_with_network(&control).1, None);
+}
+
+/// ADR-0234: the host opens and closes the network listener while the server runs. Closed,
+/// nothing connects there and the host pairs no device (pairing off, as the desktop app
+/// sets it); opened, a device pairs and connects; closed again, its session ends and it
+/// can't connect; reopened, the same device is admitted again.
+#[test]
+fn the_network_listener_opens_and_closes_while_the_server_runs() {
+    let harness = start_with(&MockEngine::new(), |config| config.pairing = false);
+    let switch = harness.switch.clone();
+    assert_eq!(switch.info(), None);
+    let control = ok(harness.connect());
+    ok(harness.run(control.hello(hello())));
+    let refused = harness.run(control.call(jstream_control::protocol::Call::Action {
+        action: jstream_control::protocol::Action::PairingStart,
+    }));
+    assert!(
+        refused.is_err(),
+        "paired with the listener closed: {refused:?}"
+    );
+
+    let (network, identity) = network_config();
+    let pin = identity.fingerprint();
+    let info = harness
+        .run(switch.open(network.clone()))
+        .expect("the listener opens");
+    assert_eq!(info.addr, harness.network_addr());
+    assert_eq!(info.fingerprint, pin);
+    let device = harness.pair_over_network(pin);
+    let mut session = harness.tls_session(pin, &device).expect("admitted");
+
+    // Closed: the session ends, and nothing connects there.
+    let addr = harness.network_addr();
+    harness.run(switch.close());
+    assert_eq!(switch.info(), None);
+    let ended = harness.run(async {
+        use futures_util::StreamExt;
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                match session.next().await {
+                    None | Some(Err(_)) => return None,
+                    Some(Ok(tokio_tungstenite::tungstenite::Message::Close(frame))) => {
+                        return frame.map(|frame| u16::from(frame.code));
+                    }
+                    Some(Ok(_)) => {}
+                }
+            }
+        })
+        .await
+    });
+    assert_eq!(
+        ended,
+        Ok(Some(1001)),
+        "the session didn't close as at shutdown"
+    );
+    assert!(
+        harness.run(tokio::net::TcpStream::connect(addr)).is_err(),
+        "the closed listener still accepts"
+    );
+    let refused = harness.run(control.call(jstream_control::protocol::Call::Action {
+        action: jstream_control::protocol::Action::PairingStart,
+    }));
+    assert!(
+        refused.is_err(),
+        "paired with the listener closed: {refused:?}"
+    );
+
+    // Reopened: the paired device is admitted again, and the host pairs again.
+    harness
+        .run(switch.open(network))
+        .expect("the listener reopens");
+    assert!(harness.tls_session(pin, &device).is_ok());
+    let _ = harness.pair_over_network(pin);
 }

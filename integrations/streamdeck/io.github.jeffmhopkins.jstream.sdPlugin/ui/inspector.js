@@ -347,7 +347,9 @@ $("find").onclick = () => {
 	toPlugin({ type: "discover" });
 };
 $("probe").onclick = probe;
-$("host").onkeydown = (e) => e.key === "Enter" && probe();
+$("host").onkeydown = (e) => {
+	if (e.key === "Enter") probe();
+};
 $("pair").onclick = () => {
 	if (!offered) return;
 	const code = $("code").value.trim();
@@ -359,6 +361,8 @@ $("pair").onclick = () => {
 	say("");
 	toPlugin({ type: "pair", host: offered.host, port: offered.port, fingerprint: offered.fingerprint, code, name: $("device-name").value });
 };
-$("code").onkeydown = (e) => e.key === "Enter" && $("pair").click();
+$("code").onkeydown = (e) => {
+	if (e.key === "Enter") $("pair").click();
+};
 $("retry").onclick = () => toPlugin({ type: "retry" });
 $("forget").onclick = () => toPlugin({ type: "forget" });

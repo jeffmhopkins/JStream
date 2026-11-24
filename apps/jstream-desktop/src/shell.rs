@@ -258,7 +258,15 @@ pub fn run(
     let start = start_url()?;
     let mut builder = tauri::Builder::default().manage(crate::folders::Saved::default());
     if let Some(file) = network_file {
-        builder = builder.manage(crate::network::Setting(file));
+        let live = host.as_ref().map(|host| {
+            let (switch, runtime) = host.network_switch();
+            crate::network::Live {
+                switch,
+                runtime,
+                token_file: file.parent().unwrap_or(&file).join(crate::host::TOKEN_FILE),
+            }
+        });
+        builder = builder.manage(crate::network::Setting { file, live });
     }
     if let Some(path) = jtunnel_file {
         let engine = host.as_ref().map(Host::engine).unwrap_or_default();

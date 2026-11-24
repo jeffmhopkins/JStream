@@ -69,15 +69,38 @@ pub struct Agents {
     pub token_file: PathBuf,
 }
 
-/// "Allow devices on my network" (ADR-0104): the network listener, and the file that
-/// keeps the devices paired through it.
+/// "Allow devices on my network" (ADR-0104, ADR-0234): the file that keeps the devices
+/// paired through the network listener, and the listener to open at start when the
+/// setting is on. The app opens and closes it later through [`Host::network_switch`].
 #[derive(Clone)]
 pub struct Network {
-    /// Where the network listener binds and its certificate (`network::config`).
-    pub config: jstream_server::NetworkConfig,
     /// The paired devices' file (`jstream_server::token_file::device_file`), beside the
     /// token file as the daemon keeps it.
     pub device_file: PathBuf,
+    /// Where the network listener binds and its certificate (`network::config`), when
+    /// it opens at start.
+    pub open: Option<jstream_server::NetworkConfig>,
+}
+
+/// Opens the network listener with `config` on `runtime`, logging where it listens, or
+/// why it couldn't open (most likely a daemon with `--lan` has its port); the host runs
+/// without it then.
+fn open_network(
+    runtime: &Runtime,
+    switch: &jstream_server::NetworkSwitch,
+    config: jstream_server::NetworkConfig,
+) {
+    match runtime.block_on(switch.open(config)) {
+        Ok(info) => tracing::info!(
+            urls = %info.urls.join(", "),
+            fingerprint = %info.fingerprint,
+            "devices on the network may pair (Allow devices on my network)"
+        ),
+        Err(error) => tracing::error!(
+            %error,
+            "could not open the network listener; starting without network access"
+        ),
+    }
 }
 
 /// The running engine and its server.
@@ -89,7 +112,8 @@ pub struct Host {
     token: String,
     mcp_url: Option<String>,
     /// The network listener's addresses and certificate fingerprint, with [`Network`].
-    network: Option<(Vec<String>, String)>,
+    /// Opens and closes the network listener while the host runs (ADR-0234).
+    switch: jstream_server::NetworkSwitch,
     /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows, macOS, X11 and Wayland.
     hotkeys: Option<JoinHandle<()>>,
     /// Whether that listener hears wheel chords while another app has the focus.
@@ -105,8 +129,10 @@ impl Host {
     /// settings in `ui_settings` (ADR-0084; in memory without one). Without `agents` it
     /// listens on a port the OS picks with a new token kept in memory, and serves no
     /// MCP. With them it listens on their port, takes the token from their token file
-    /// (`jstream_server::token_file`), and serves MCP. With `network` it also opens the
-    /// network listener and pairs devices; without it, it pairs none.
+    /// (`jstream_server::token_file`), and serves MCP. With `network` it keeps devices
+    /// paired over the network listener, and opens that listener now if asked; a
+    /// listener that can't open is logged, and the host starts without it. It pairs
+    /// devices only while that listener is open.
     ///
     /// # Errors
     /// When the runtime can't start, the OS has no randomness for the token, the token
@@ -157,15 +183,13 @@ impl Host {
             }
         };
         config.extra_origins = vec![origin.to_owned()];
-        // The window needs no pairing, so without network access the host pairs no device
-        // (ADR-0047), with or without agents. With it, devices on the network pair over
-        // the TLS listener, and the window's pairing panel opens their codes.
-        match network {
-            Some(network) => {
-                config.network = Some(network.config.clone());
-                config.device_file = Some(network.device_file.clone());
-            }
-            None => config.pairing = false,
+        // The window needs no pairing, so while the network listener is closed the host
+        // pairs no device (ADR-0047), with or without agents. While it is open, devices on
+        // the network pair over it, and the window's pairing panel opens their codes
+        // (ADR-0234: the server pairs while it is open).
+        config.pairing = false;
+        if let Some(network) = network {
+            config.device_file = Some(network.device_file.clone());
         }
         // The UI settings are still kept, so the window shows the workspace the daemon's
         // browsers do.
@@ -186,15 +210,10 @@ impl Host {
             })?;
         let ws_url = server.ws_url();
         let mcp_url = server.mcp_url();
-        let network = server.network_fingerprint().map(|fingerprint| {
-            let urls = server.network_urls();
-            tracing::info!(
-                urls = %urls.join(", "),
-                %fingerprint,
-                "devices on the network may pair (Allow devices on my network)"
-            );
-            (urls, fingerprint.to_owned())
-        });
+        let switch = server.network_switch();
+        if let Some(open) = network.and_then(|network| network.open.clone()) {
+            open_network(&runtime, &switch, open);
+        }
         #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
         let hotkeys = global_hotkeys(&runtime, &listening, server.ui_settings());
         #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
@@ -223,19 +242,23 @@ impl Host {
             ws_url,
             token,
             mcp_url,
-            network,
+            switch,
             hotkeys,
             global_wheel,
             engine: Some(held),
         })
     }
 
-    /// The network listener's addresses and its certificate's SHA-256 fingerprint, with
-    /// [`Network`].
-    pub fn network(&self) -> Option<(&[String], &str)> {
-        self.network
-            .as_ref()
-            .map(|(urls, fingerprint)| (urls.as_slice(), fingerprint.as_str()))
+    /// The network listener's addresses and its certificate's SHA-256 fingerprint,
+    /// while it is open.
+    pub fn network(&self) -> Option<jstream_server::NetworkInfo> {
+        self.switch.info()
+    }
+
+    /// The switch for the network listener, and the runtime it switches on, for "Allow
+    /// devices on my network" to apply while the app runs (ADR-0234).
+    pub fn network_switch(&self) -> (jstream_server::NetworkSwitch, tokio::runtime::Handle) {
+        (self.switch.clone(), self.runtime.handle().clone())
     }
 
     /// A weak handle on the engine, for a setting the app applies while it runs (the
@@ -1530,8 +1553,8 @@ mod tests {
         // A port the OS picks, so the test doesn't need 4456 free.
         config.bind = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
         let network = Network {
-            config,
             device_file: jstream_server::token_file::device_file(&token_file),
+            open: Some(config.clone()),
         };
         let open = |secrets: &Secrets| {
             engine(
@@ -1570,8 +1593,8 @@ mod tests {
         let secrets = Secrets::new();
         let host = Host::start(open(&secrets), ORIGIN, &secrets, None, None, Some(&network))
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
-        let (urls, fingerprint) = host.network().unwrap_or_else(|| panic!("listening"));
-        let (urls, fingerprint) = (urls.to_vec(), fingerprint.to_owned());
+        let info = host.network().unwrap_or_else(|| panic!("listening"));
+        let (urls, fingerprint) = (info.urls.clone(), info.fingerprint.clone());
         assert!(!urls.is_empty() && urls.iter().all(|url| url.starts_with("https://")));
         let started = pairing_start(&host).unwrap_or_else(|e| panic!("pairing: {e}"));
         let CallResult::Action {
@@ -1582,6 +1605,19 @@ mod tests {
         };
         let network = network.unwrap_or_else(|| panic!("no network in the answer"));
         assert_eq!((network.urls, network.fingerprint), (urls, fingerprint));
+
+        // Switched off while it runs, it pairs none; switched on again, it pairs.
+        let (switch, runtime) = host.network_switch();
+        runtime.block_on(switch.close());
+        assert!(host.network().is_none());
+        assert!(
+            pairing_start(&host).is_err(),
+            "pairs with the listener closed"
+        );
+        runtime
+            .block_on(switch.open(config))
+            .unwrap_or_else(|e| panic!("reopen: {e}"));
+        assert!(pairing_start(&host).is_ok(), "pairs once it is open again");
         host.stop();
 
         let plain = Host::start(

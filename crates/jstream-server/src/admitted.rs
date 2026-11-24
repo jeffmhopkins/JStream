@@ -34,12 +34,13 @@
 use crate::approvals::{Approvals, Ticket};
 use crate::devices::{CODE_LIFETIME, Devices, Now};
 use crate::gate::Credential;
+use crate::network_state::NetworkState;
 use crate::ui_settings::{Refused, SetError, UiSettings};
 use futures_util::StreamExt;
 use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
     Action, ActionResult, AgentTransport, Call, CallResult, EntityKind, Event, Hello,
-    NetworkAccess, ProtocolError, Query, QueryResult, RequestId, Response, SecretString, Welcome,
+    ProtocolError, Query, QueryResult, RequestId, Response, SecretString, Welcome,
 };
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -52,12 +53,14 @@ pub(crate) struct Admitted {
     /// Whether pairing is offered: the server listens on a loopback address or on a TLS
     /// listener.
     pairing_offered: bool,
-    /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
-    /// Off, they reach `inner` like any other call.
-    serves_devices: bool,
-    /// Where a device on the network reaches the server, while its network listener is
-    /// on: `pairing.start` answers with it (ADR-0104, 0.97).
-    network: Option<NetworkAccess>,
+    /// `ServerConfig::pairing`: whether the server answers the pairing and device calls
+    /// even while its network listener is closed. Off and closed, they reach `inner`
+    /// like any other call.
+    pairing: bool,
+    /// The network listener's state, read per call: while it is open the server pairs
+    /// devices, and `pairing.start` answers with where a device on the network reaches
+    /// it (ADR-0104, 0.97).
+    network: Arc<NetworkState>,
     /// The UI settings the server keeps.
     ui_settings: Arc<UiSettings>,
     /// Whether `hello` succeeded, which the calls answered here need too, and which
@@ -81,11 +84,10 @@ pub(crate) struct Served {
     /// Whether pairing is offered: the server listens on a loopback address or on a TLS
     /// listener.
     pub(crate) pairing_offered: bool,
-    /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
-    pub(crate) serves_devices: bool,
-    /// Where a device on the network reaches the server, while its network listener is
-    /// on.
-    pub(crate) network: Option<NetworkAccess>,
+    /// `ServerConfig::pairing`.
+    pub(crate) pairing: bool,
+    /// The network listener's state.
+    pub(crate) network: Arc<NetworkState>,
     /// The UI settings the server keeps.
     pub(crate) ui_settings: Arc<UiSettings>,
     /// The agent approvals (ADR-0131).
@@ -102,7 +104,7 @@ impl Admitted {
         let Served {
             devices,
             pairing_offered,
-            serves_devices,
+            pairing,
             network,
             ui_settings,
             approvals,
@@ -112,7 +114,7 @@ impl Admitted {
             credential,
             devices,
             pairing_offered,
-            serves_devices,
+            pairing,
             network,
             ui_settings,
             greeted: Arc::new(AtomicBool::new(false)),
@@ -244,7 +246,7 @@ impl Admitted {
             result: Some(ActionResult::PairingStart {
                 code: SecretString::new(code),
                 expires_in_secs: u32::try_from(CODE_LIFETIME.as_secs()).unwrap_or(u32::MAX),
-                network: self.network.clone(),
+                network: self.network.access(),
             }),
         })
     }
@@ -309,7 +311,8 @@ impl Control for Admitted {
     }
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
-        let served_here = (self.serves_devices && about_devices(&call))
+        let serves_devices = self.pairing || self.network.is_open();
+        let served_here = (serves_devices && about_devices(&call))
             || about_ui_settings(&call)
             || (self.approvals.enabled() && about_agents(&call));
         if !served_here {
@@ -458,8 +461,8 @@ mod tests {
                 super::Served {
                     devices,
                     pairing_offered,
-                    serves_devices,
-                    network: None,
+                    pairing: serves_devices,
+                    network: Arc::default(),
                     ui_settings,
                     approvals,
                 },

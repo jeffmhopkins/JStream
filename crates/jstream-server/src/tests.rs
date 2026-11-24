@@ -51,9 +51,9 @@ struct Harness {
     tls: bool,
     /// The serving task: done once `serve_with_shutdown` has returned.
     serving: Option<tokio::task::JoinHandle<Result<(), crate::ServerError>>>,
-    /// The network listener's address, when it is on (ADR-0104).
+    /// The switch for the network listener (ADR-0104, ADR-0234).
     #[cfg(feature = "tls")]
-    network: Option<std::net::SocketAddr>,
+    switch: crate::NetworkSwitch,
 }
 
 fn start(engine: &MockEngine) -> Harness {
@@ -166,7 +166,7 @@ fn serve_on(
     let url = server.ws_url().replacen("wss://", "ws://", 1);
     let authority = server.local_addr().to_string();
     #[cfg(feature = "tls")]
-    let network = server.network_addr();
+    let switch = server.network_switch();
     let (stop, stopped) = oneshot::channel::<()>();
     let serving = runtime.spawn(server.serve_with_shutdown(async move {
         // A dropped sender also stops the server.
@@ -184,7 +184,7 @@ fn serve_on(
         tls,
         serving: Some(serving),
         #[cfg(feature = "tls")]
-        network,
+        switch,
     }
 }
 

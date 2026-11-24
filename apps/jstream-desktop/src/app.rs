@@ -161,33 +161,14 @@ pub fn start(
         });
         let ui_settings = Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE));
         let network = network_access(data);
-        match Host::start(
-            Arc::clone(&engine),
+        Host::start(
+            engine,
             ui::ORIGIN,
             secrets,
-            ui_settings.clone(),
+            ui_settings,
             agents.as_ref(),
-            network.as_ref(),
-        ) {
-            Err(error) if network.is_some() => {
-                // Most likely the network listener's port is in use (a daemon with
-                // `--lan`): the app still starts, for this machine only. Any other cause
-                // fails the retry the same way, with its own error.
-                tracing::error!(
-                    error = format!("{error:#}"),
-                    "could not start with network access; trying again without it"
-                );
-                Host::start(
-                    engine,
-                    ui::ORIGIN,
-                    secrets,
-                    ui_settings,
-                    agents.as_ref(),
-                    None,
-                )
-            }
-            started => started,
-        }
+            Some(&network),
+        )
         .map(|host| (host, ptz_controllers))
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
@@ -255,28 +236,28 @@ fn wheel_focus_only() -> bool {
     }
 }
 
-/// "Allow devices on my network", when the person turned it on: the network listener's
-/// configuration, and the paired devices' file, both beside the data folder's token
-/// file as the daemon keeps them. A certificate that can't be used is logged, and the
-/// app starts without network access.
-fn network_access(data: &Path) -> Option<host::Network> {
+/// "Allow devices on my network": the paired devices' file beside the data folder's
+/// token file, as the daemon keeps it, and, when the person turned it on, the network
+/// listener's configuration to open at start. A certificate that can't be used is
+/// logged, and the app starts without network access.
+fn network_access(data: &Path) -> host::Network {
     let file = network::setting_file(data);
-    if !network::allowed(&file) {
-        return None;
-    }
     let token_file = data.join(host::TOKEN_FILE);
-    match network::config(&token_file, network::announced(&file)) {
-        Ok(config) => Some(host::Network {
-            config,
-            device_file: jstream_server::token_file::device_file(&token_file),
-        }),
-        Err(error) => {
-            tracing::error!(
-                error = format!("{error:#}"),
-                "starting without network access"
-            );
-            None
-        }
+    let open = if network::allowed(&file) {
+        network::config(&token_file, network::announced(&file))
+            .map_err(|error| {
+                tracing::error!(
+                    error = format!("{error:#}"),
+                    "starting without network access"
+                );
+            })
+            .ok()
+    } else {
+        None
+    };
+    host::Network {
+        device_file: jstream_server::token_file::device_file(&token_file),
+        open,
     }
 }
 

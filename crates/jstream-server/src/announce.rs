@@ -25,7 +25,6 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::time::Duration;
-use tokio::sync::watch;
 
 /// The DNS-SD service the network listener is announced as.
 pub const SERVICE: &str = "_jstream._tcp.local";
@@ -294,9 +293,9 @@ fn open() -> std::io::Result<tokio::net::UdpSocket> {
     tokio::net::UdpSocket::from_std(socket.into())
 }
 
-/// Announces `what` until `stopping` turns true, then says goodbye. Logs and returns if
+/// Announces `what` until `stopping` completes, then says goodbye. Logs and returns if
 /// the socket can't be opened: the listener works without it, by its address.
-pub(crate) async fn run(what: Announcement, mut stopping: watch::Receiver<bool>) {
+pub(crate) async fn run(what: Announcement, stopping: impl Future<Output = ()> + Send) {
     let socket = match open() {
         Ok(socket) => socket,
         Err(error) => {
@@ -307,6 +306,7 @@ pub(crate) async fn run(what: Announcement, mut stopping: watch::Receiver<bool>)
     let group = SocketAddr::from(SocketAddrV4::new(GROUP, PORT));
     let hello = what.response(0, TTL_SECS);
     tracing::info!(instance = %what.instance, port = what.port, "announcing the network listener on mDNS as {SERVICE}");
+    let mut stopping = std::pin::pin!(stopping);
     let mut buf = vec![0u8; MAX_DATAGRAM];
     let mut sent = 0u32;
     let mut next = tokio::time::Instant::now();
@@ -314,8 +314,7 @@ pub(crate) async fn run(what: Announcement, mut stopping: watch::Receiver<bool>)
     let mut answered: Option<tokio::time::Instant> = None;
     loop {
         tokio::select! {
-            // The `Ref` it answers isn't `Send`, so it is dropped inside.
-            () = async { let _ = stopping.wait_for(|stop| *stop).await; } => break,
+            () = &mut stopping => break,
             () = tokio::time::sleep_until(next) => {
                 if let Err(error) = socket.send_to(&hello, group).await {
                     tracing::debug!(%error, "mDNS announcement not sent");

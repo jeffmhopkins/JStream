@@ -237,4 +237,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0231](0231-prs-into-any-branch-but-main-run-the-light-ci.md) | PRs into any branch but main run the light CI | accepted | agent |  |
 | [ADR-0232](0232-integrations-outside-the-workspace.md) | Integrations for other apps live in integrations/, outside the Cargo workspace | accepted | agent |  |
 | [ADR-0233](0233-announce-the-network-listener-on-mdns.md) | Announce the network listener on mDNS, behind its own setting | accepted | maintainer |  |
+| [ADR-0234](0234-network-access-applies-at-once.md) | Network access applies at once | accepted | agent |  |
 <!-- @generated end adr-index -->
