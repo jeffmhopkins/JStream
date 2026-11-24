@@ -2,14 +2,14 @@
 id = "ADR-0233"
 title = "Announce the network listener on mDNS, behind its own setting"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0233: Announce the network listener on mDNS, behind its own setting
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

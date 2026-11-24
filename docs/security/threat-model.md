@@ -168,7 +168,7 @@ a stolen token, local denial of service.
     picks one address. On Windows and macOS, the first start can raise the OS firewall's
     prompt.
   - **Announced** unless turned off: while it is open, the host announces it on mDNS
-    (proposed, [ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md); see
+    ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md); see
     [Pairing](#pairing)). The daemon's `--lan-quiet`, or the desktop app's "Let devices
     find JStream on my network" unticked, keeps it quiet.
   The desktop app serves only its window, on an OS-picked port with a token kept in
@@ -295,7 +295,7 @@ on the network can void each open code with five wrong guesses, so pairing can b
 denied while they keep at it, never won; ADR-0044's five are kept rather than giving the
 network its own allowance.
 
-**Proposed** ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md)): while
+**Accepted** ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md)): while
 the network listener is open, the host announces it on mDNS as `_jstream._tcp.local`
 (the host name, the port and `v=1`; no fingerprint, version or project), unless the
 desktop app's "Let devices find JStream on my network" is off or the daemon runs with
