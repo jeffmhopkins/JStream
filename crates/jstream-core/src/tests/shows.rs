@@ -884,3 +884,35 @@ fn a_jump_fades_a_cut_off_audio_clip_down() {
         "down once the fade is done"
     );
 }
+
+/// At a loop's last clip the wrap runs back to the clip at the loop's start, so that
+/// clip is the upcoming scene, not the one after the loop.
+#[test]
+fn at_a_loops_last_clip_its_first_clip_is_upcoming() {
+    let (engine, control) = engine_with_show();
+    let mut show = ShowInfo::new("s");
+    show.program = vec![
+        clip("ca", "a", 1000),
+        clip("cb", "b", 1000),
+        clip("cc", "c", 1000),
+    ];
+    show.loops = vec![jstream_protocol::ShowLoop {
+        loop_id: "l".into(),
+        name: String::new(),
+        start_ms: 0,
+        end_ms: 2000,
+        preset_id: None,
+        leave: jstream_protocol::LoopLeave::default(),
+    }];
+    apply(&control, vec![Edit::ShowSet { show }]);
+    act(&control, play()).expect("play");
+    step(&control, 100);
+    assert_eq!(engine.upcoming().as_deref(), Some("b"));
+    step(&control, 1000);
+    assert_eq!(program(&control).as_deref(), Some("b"));
+    assert_eq!(
+        engine.upcoming().as_deref(),
+        Some("a"),
+        "the loop runs back to a"
+    );
+}

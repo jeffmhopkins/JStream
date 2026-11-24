@@ -504,10 +504,21 @@ impl State {
                 return None;
             }
             let at = run.runner.position_ms(now);
-            let current = (0..plan.program.len())
-                .find(|&i| at < plan.program_start(i + 1))
-                .unwrap_or(plan.program.len());
-            plan.program.get(current + 1).map(|clip| clip.scene.clone())
+            let clip_at = |t: u32| {
+                (0..plan.program.len())
+                    .find(|&i| t < plan.program_start(i + 1))
+                    .unwrap_or(plan.program.len())
+            };
+            let current = clip_at(at);
+            // At a loop's last clip, the wrap runs to the clip at the loop's start.
+            let wraps = run.runner.looping().and_then(|(region, _)| {
+                let region = plan.loops.get(region)?;
+                let ends_in_clip = region.to_ms <= plan.program_start(current + 1);
+                (!run.runner.leaving() && ends_in_clip).then(|| clip_at(region.from_ms))
+            });
+            plan.program
+                .get(wraps.unwrap_or(current + 1))
+                .map(|clip| clip.scene.clone())
         });
         let next = next.filter(|scene| self.graph.state().scene(scene).is_some());
         if self.studio.upcoming() != next.as_ref() {
@@ -887,7 +898,8 @@ impl State {
 
     /// Applies `edits` to the show scene and its items as one batch of the engine's own
     /// (`engine` in the history, never an undo step), marking `show_scene` as the show
-    /// scene if they made it. Returns whether they applied.
+    /// scene if they made it. Returns whether they applied and the show scene is
+    /// marked; edits that applied are logged and announced even when marking fails.
     pub(super) fn apply_show_scene_edits(
         &mut self,
         show_scene: SceneId,
@@ -903,9 +915,8 @@ impl State {
             }
         };
         let made_scene = self.graph.state().show_scene().is_none();
-        if made_scene && !self.graph.set_show_scene(Some(show_scene)) {
-            return false;
-        }
+        // The edits applied either way, so they are logged and announced either way.
+        let marked = !made_scene || self.graph.set_show_scene(Some(show_scene));
         self.history.record_engine(applied.rev, applied.touched);
         let engine = ClientId::new(crate::history::ENGINE_CLIENT);
         self.changed(
@@ -917,7 +928,7 @@ impl State {
             wake,
         );
         self.save_pending = true;
-        true
+        marked
     }
 
     /// The scenes up as overlays now, bottom first, as `studio.get` reports them.
