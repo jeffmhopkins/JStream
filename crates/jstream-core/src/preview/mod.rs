@@ -1379,10 +1379,17 @@ impl StreamClock {
     }
 }
 
-/// `pts_us`, or the last time sent through `last` if that is later, recorded as the
-/// last.
+/// `pts_us`, or just after the last time sent through `last` if that is as late,
+/// recorded as the last: a stream's times always go forward, so a decoder never gets
+/// two pictures at one time, as it would when a stream changes sender with media time
+/// running ahead of its age (#1775 train review).
 fn not_back(last: &AtomicI64, pts_us: i64) -> i64 {
-    last.fetch_max(pts_us, Ordering::AcqRel).max(pts_us)
+    let after = |before: i64| pts_us.max(before.saturating_add(1));
+    match last.fetch_update(Ordering::AcqRel, Ordering::Acquire, |before| {
+        Some(after(before))
+    }) {
+        Ok(before) | Err(before) => after(before),
+    }
 }
 
 /// The sender thread of a [`Staged`] stream: sends each packet as it comes, timed by
@@ -2417,7 +2424,7 @@ mod clock_tests {
             "timed by how long the stream is open: {start}"
         );
         assert_eq!(first.at(41_000), start + 40_000, "then by media time");
-        assert_eq!(first.at(21_000), start + 40_000, "never back");
+        assert_eq!(first.at(21_000), start + 40_001, "never back, nor the same");
         // A later stage's sender, its media time starting anew, goes on from there.
         std::thread::sleep(Duration::from_millis(5));
         let mut next = StreamClock::new(opened, Arc::clone(&last));
@@ -2440,10 +2447,14 @@ mod clock_tests {
         assert_eq!(ahead, start + 10_000_000);
         // The next stage's sender opens now, its first picture timed by the stream's age.
         let mut next = StreamClock::new(opened, Arc::clone(&last));
-        assert_eq!(next.at(0), ahead, "not back to the stream's age");
+        assert_eq!(
+            next.at(0),
+            ahead + 1,
+            "not back to the stream's age, nor the same"
+        );
         // Nor does the hub, timing by the stream's age too.
-        assert_eq!(not_back(&last, 1_000), ahead);
-        assert_eq!(not_back(&last, ahead + 1), ahead + 1);
+        assert_eq!(not_back(&last, 1_000), ahead + 2);
+        assert_eq!(not_back(&last, ahead + 10), ahead + 10);
     }
 }
 
