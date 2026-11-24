@@ -408,3 +408,45 @@ fn a_show_jump_wakes_the_live_ticker() {
         "the cut due 1 s after Continue came after {elapsed:?}"
     );
 }
+
+#[test]
+fn pause_holds_the_play_head_until_continue_or_play() {
+    let (_engine, control) = engine_with_show();
+    let mut events = control.events();
+    act(&control, play()).expect("play");
+    step(&control, 400);
+    drain(&mut events);
+    act(&control, Action::ShowPause).expect("pause");
+    let show = running(&control);
+    assert_eq!(show.state, ShowState::Paused);
+    assert_eq!(show.bookmark_id, None);
+    assert_eq!(show.at_ms, 400);
+    assert!(
+        drain(&mut events).iter().any(|e| matches!(
+            e,
+            Event::ShowChanged {
+                change: ShowChange::Paused,
+                ..
+            }
+        )),
+        "show.changed paused"
+    );
+    // The clock runs on; the show doesn't, past the pausing bookmark at 1000 or not.
+    step(&control, 2000);
+    assert_eq!(running(&control).at_ms, 400);
+    assert_eq!(program(&control).as_deref(), Some("a"));
+    // Pausing a paused show does nothing.
+    act(&control, Action::ShowPause).expect("pause again");
+    act(&control, Action::ShowContinue).expect("continue");
+    let show = running(&control);
+    assert_eq!(show.state, ShowState::Playing);
+    assert_eq!(show.at_ms, 400);
+    step(&control, 100);
+    assert_eq!(running(&control).at_ms, 500);
+    // show.play of the held show plays on rather than starting again.
+    act(&control, Action::ShowPause).expect("pause");
+    act(&control, play()).expect("play on");
+    let show = running(&control);
+    assert_eq!(show.state, ShowState::Playing);
+    assert_eq!(show.at_ms, 500);
+}

@@ -187,6 +187,10 @@ impl State {
                 self.show_stop(ShowChange::Stopped, wake);
                 Ok(())
             }
+            Action::ShowPause => {
+                self.show_step(wake, |runner, plan, now| runner.pause(plan, now));
+                Ok(())
+            }
             Action::ShowContinue => {
                 if !self.in_transition() {
                     self.show_step(wake, |runner, plan, now| runner.continue_(plan, now));

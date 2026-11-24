@@ -481,9 +481,9 @@ impl<T: Ord + Clone> Runner<T> {
 
     /// Pause by hand: show time holds where the play head is, between points or at one,
     /// and the sequences it started stop ([`Effect::SequenceStop`]); program, overlays and
-    /// state values stay. Continue (or a jump) plays on from there: the sequences play
-    /// again from where they were and a timed program clip seeks back to the held point
-    /// (a [`Landing::PlayOn`] put-up), so what pausing held is what it plays on from.
+    /// state values stay, and program runs on (its media is not held). Continue (or a
+    /// jump) plays on from there: the sequences play again from where they were, as a
+    /// [`Landing::PlayOn`] put-up without seeking the program clip.
     /// Nothing unless it is playing.
     pub fn pause<K: ShowKeys<Timeline = T>>(
         &mut self,
@@ -696,9 +696,10 @@ impl<T: Ord + Clone> Runner<T> {
             effect: Effect::Resumed { at_ms },
         });
         if std::mem::take(&mut self.held) {
-            // What the pause held plays on from where it was.
+            // What the pause held plays on from where it was; program ran on through
+            // the pause, so it isn't sought back.
             let target = spanning(plan, at_ms, Edge::At);
-            self.put_up(plan, &target, Mode::Jump { seek: true }, None, at_ns, out);
+            self.put_up(plan, &target, Mode::Jump { seek: false }, None, at_ns, out);
         }
     }
 

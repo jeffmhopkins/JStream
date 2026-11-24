@@ -1856,7 +1856,7 @@ fn a_loop_wrap_plays_again_a_sequence_clip_that_ends_at_the_loops_end() {
 }
 
 #[test]
-fn pause_holds_show_time_and_its_sequences_and_continue_plays_on_from_there() {
+fn pause_holds_show_time_and_its_sequences_and_continue_plays_on_from_there_with_no_program_seek() {
     let mut p = plan(vec![clip("A", 100)]);
     p.program[0].timed = true;
     p.sequences.push(seq(1, 10, 50));
@@ -1890,11 +1890,6 @@ fn pause_holds_show_time_and_its_sequences_and_continue_plays_on_from_there() {
         resumed,
         vec![
             Effect::Resumed { at_ms: 25 },
-            Effect::Seek {
-                clip: 0,
-                scene: "A",
-                offset_ms: 25
-            },
             Effect::SequencePlay {
                 clip: 0,
                 timeline: 1,

@@ -54,8 +54,8 @@
 //! [`Runner::pause`] holds show time where the play head is, at a point or between two,
 //! and stops the sequences the show started. Continue, or [`Runner::unpause`], plays on
 //! from there: the state at the held point is put up as a play-on landing would put it
-//! up, so the sequences play again from where they were and a timed program clip seeks
-//! back to the held point.
+//! up, so the sequences play again from where they were. Program runs on through a
+//! pause, so its clip is not sought back.
 //!
 //! **Jump equals play:** after landing at `t`, what the show owns (program clip and its
 //! media position, keyframe, overlays, sequences and their positions, state-event values)

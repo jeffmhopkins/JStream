@@ -1338,10 +1338,11 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   and may call back into the engine, while its install or enable waits (see *WASM
   plugins*).
 - A call, query or action this engine does not implement answers `internal`, as the
-  mock does: so far the `show.*` run actions and `overlay.*`
-  ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)), until the show
-  runner lands, and `studio.get` omits `show` and `overlays`. `show.set` and
-  `show.delete` are edits, applied by the graph like any other.
+  mock does: so far `overlay.*`
+  ([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)), until overlay
+  tracks land, and `studio.get`'s `overlays` stays empty. The `show.*` run actions are
+  the show runner's ([Shows](#shows)); the mock still answers them `internal`.
+  `show.set` and `show.delete` are edits, applied by the graph like any other.
 
 The engine's answers are the mock's for the differential script: `tests.rs` runs one
 script of calls against both and compares results, error codes and fields, and events.
@@ -1788,8 +1789,10 @@ sequence clip's cues fire on time. A show call ends by ticking the show and the
 timelines and waking the ticker (`show_settle`), so after a jump it plans from the
 landing, not the point it was waiting for. `show.play` at a bookmark lands as a jump
 there would, with its arrive transition; `show.play` with no bookmark of the show the
-runner holds by hand (`Runner::pause`, which no call reaches until `show.pause`
-lands) plays it on from where it holds instead of from the start. Each
+runner holds by hand (`show.pause`, `Runner::pause`) plays it on from where it holds
+instead of from the start. `show.pause` holds a playing show's play head where it is,
+stops the sequences it started and keeps program as it is; `show.continue` plays on
+from there too. Program, its media included, runs on through the pause (ADR-0210). Each
 `Effect` runs as of its own time (`cue_at`) as the call a key or pad would make:
 `scene.switch` with the clip's preset, `scene.set_keyframe` on the program scene,
 `timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a
@@ -1802,7 +1805,8 @@ it. `studio.get`'s `show` reports it, and `show.changed` says what it did.
 point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
 going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
 off script, stopping, deleting, refused calls, a sequence clip's cue firing within the
-`clock.step` that starts it, and a jump waking the live ticker in real time.
+`clock.step` that starts it, a jump waking the live ticker in real time, and
+`show.pause` holding show time until `show.continue` or `show.play` plays on.
 `src/tests/timelines.rs` checks that a timeline played while the ticker waits for a
 later cue fires on time.
 

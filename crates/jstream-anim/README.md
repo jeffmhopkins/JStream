@@ -123,7 +123,7 @@ Contents:
   jump to a bookmark would land, with its arrive transition. `pause` holds show time
   where the play head is by hand (`held`) and stops the sequences it started;
   Continue, or `unpause`, plays on from there, playing them again from where they
-  were and seeking a timed program clip back to the held point. Every move puts up state by
+  were; program runs on through it and is not sought back. Every move puts up state by
   diffing the target `Spanning` against what it last put up (`Applied`), so a jump
   lands the state playing there would leave and re-applies only state events whose
   value it changed itself; one-shots are never replayed. It returns `Step`s: each
