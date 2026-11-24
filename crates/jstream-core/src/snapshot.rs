@@ -9776,12 +9776,12 @@ fn model_distance(shown: &ShownModel, geometry: ItemGeometry, view: &CameraView)
         [0, 1, 2].map(|r| inverse[r][0] * v[0] + inverse[r][1] * v[1] + inverse[r][2] * v[2])
     };
     // The map takes the model-space direction back to the unit `forward`, so the hit's
-    // parameter is its distance along the viewing axis in scene pixels.
-    let mirrored = determinant(columns) < 0.0;
+    // parameter is its distance along the viewing axis in scene pixels; as for a box
+    // (`follow::ray_meets`), a surface must be more than 1 px ahead to be met. Which side
+    // of a face is its front is decided in the model's own space, so a placement that
+    // mirrors the model (a flip) changes nothing: it still draws its outward faces.
     let palette = shown.pose.as_deref();
-    model
-        .ray_hit(into(from), into(forward), palette, mirrored)
-        .filter(|t| *t > 1.0)
+    model.ray_hit(into(from), into(forward), palette, 1.0)
 }
 
 /// The determinant of the matrix whose columns are `c`.

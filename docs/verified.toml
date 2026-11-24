@@ -2145,7 +2145,7 @@ stamp = { hash = "b3:007a4485cc30e462", by = "agent:claude", note = "Re-read and
 stamp = { hash = "b3:63718a8c34101c1f", by = "agent:release-alpha13", note = "#1556 (streaming PC patch, applied as one train commit): Re-read: the only live.rs change counts a browser page's new GPU frame as a paint in look_timed; no other sources-thread behaviour changed." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:f02d65c48a2a4b0e", by = "agent:claude", note = "snapshot.rs's centre_distance meets a model at its surface through model_distance and Shot::shown_model; the section lists snapshot.rs's roles and names no autofocus measure, so it holds" }
+stamp = { hash = "b3:1d955b63715a1384", by = "agent:claude", note = "round 2: model_distance passes a 1 px minimum into ray_hit and no longer reads the placement's mirroring; the section lists snapshot.rs's roles and names no autofocus measure, so it holds" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot/groups.rs"]
 stamp = { hash = "b3:21fd4f392d245f9c", by = "agent:issues-thread", note = "3D group paragraph edited: a group shares a scene's space once (a second item draws it flat), nesting counted in groups, a legacy-transform child boxed by groups::legacy_box, and a transition's ends kept in group space (TrackGroups) and placed each frame by sample_track/groups::resolved_track with the group's live values and motion; matches place_items, visuals_into, layer_pose and fill_tracks" }
@@ -2184,7 +2184,7 @@ stamp = { hash = "b3:1dcbe24c87fbdbcc", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:b240b3ee178cd690", by = "agent:plugin-uninstall", note = "re-read: tests.rs's differential script now also sends plugin.uninstall for an uninstalled plugin, and tests/automation.rs gains two uninstall tests; the section's description of the differential run and parity still holds" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/cameras.rs"]
-stamp = { hash = "b3:3e60f8233dc9bfef", by = "agent:claude", note = "cameras.rs gains autofocus_meets_a_model_at_its_surface, which waits for the cube's hierarchy; the section already lists src/tests/cameras.rs" }
+stamp = { hash = "b3:b5567dcb085db5b8", by = "agent:claude", note = "round 2: autofocus_meets_a_model_at_its_surface adds a flipped-cube case; cameras.rs is listed" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/channels.rs"]
 stamp = { hash = "b3:4a73549d7b58962a", by = "agent:claude", note = "Re-read: test files only gained the mode field on literals (ADR-0203); the test map holds" }
@@ -2568,7 +2568,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:f02d65c48a2a4b0e", by = "agent:claude", note = "autofocus meets a model at its surface (ADR-0218), its hierarchy built off the render thread; the section doesn't describe autofocus's measure, so it holds" }
+stamp = { hash = "b3:1d955b63715a1384", by = "agent:claude", note = "round 2: autofocus's model measure no longer swaps faces for a flip and takes the 1 px minimum per triangle; the section doesn't describe autofocus's measure, so it holds" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot/probes.rs"]
 stamp = { hash = "b3:91eb9c92b1aec749", by = "agent:claude", note = "Re-read: chain.rs test literal and source_value's own-value argument (ADR-0203) change nothing the snapshot section says | kept from the merged side: probe capture now pushes arrival_light after scene_lights, which the section's arrival sentence now names" }
@@ -3417,7 +3417,7 @@ stamp = { hash = "b3:07e4da6ed67479c5", by = "agent:claude", note = "Tools bulle
 stamp = { hash = "b3:3ea225a60ffa4407", by = "agent:claude", note = "Tools bullet: refusal of people-only or deprecated ops nested in a tool's arguments (#1758) on top of the train's #1718 text | kept from the merged side: Tools bullet names SHARED_UNIONS stubs and Tools::describe answering describe_api whole or by name (#1718); rest unchanged | kept from the merged side: tools.rs adds source.seek to REVERSIBLE_ACTIONS and design.rs a line on it; the contents list still names both files' roles" }
 
 ["CRATE-jstream-media#purpose"."body"]
-stamp = { hash = "b3:36bb6ffa794618db", by = "agent:claude", note = "the Ray picking bullet now says the hierarchy builds on a thread of its own after the first ask, ray_hit meets nothing until then, and prepare_picking builds it at once; matches pick.rs" }
+stamp = { hash = "b3:4f4db08bbd234fc7", by = "agent:claude", note = "round 2: the Ray picking bullet now says the front is the outward side in model space (a flip doesn't change it), names the minimum distance, the rest-palette BVH path for rigged models and the allocation-free traversal; matches pick.rs" }
 
 ["CRATE-jstream-media#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-media"]
 stamp = { hash = "b3:18137b74917731cc" }
@@ -3444,7 +3444,7 @@ stamp = { hash = "b3:e9781e5c790d4f08", by = "agent:frame-probe", note = "Re-rea
 stamp = { hash = "b3:2dfff67839a1cf0c", by = "agent:claude", note = "added the Ray picking bullet for model::pick (Model::ray_hit, its BVH and what counts as surface); re-read the 3D models and Rigs bullets, which still hold" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model/pick.rs"]
-stamp = { hash = "b3:546fc2807c522c15", by = "agent:claude", note = "the Ray picking bullet now says the hierarchy builds on a thread of its own after the first ask, ray_hit meets nothing until then, and prepare_picking builds it at once; matches pick.rs" }
+stamp = { hash = "b3:3cd7c119359d5436", by = "agent:claude", note = "round 2: the Ray picking bullet now says the front is the outward side in model space (a flip doesn't change it), names the minimum distance, the rest-palette BVH path for rigged models and the allocation-free traversal; matches pick.rs" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model/rig.rs"]
 stamp = { hash = "b3:95d3023cd53608a8", by = "agent:claude", note = "Added the joints and weights on a vertex (88 bytes) and the Rigs bullet: Rig::new's checks and caps, pose and rest in the scene's axes, rig::skin, Model::rigged and ModelError::Joint, matching model.rs and rig.rs" }
@@ -3486,7 +3486,7 @@ stamp = { hash = "b3:c69287ef170e0374", by = "agent:r9bzj2", note = "Re-read aft
 stamp = { hash = "b3:58e5f293bd798f39", by = "agent:f6b", note = "Edited for fmp4's VideoConfig (avc1/avcC, hvc1/hvcC complete arrays, av01/av1C), the ftyp brands, the per-codec first-keyframe rule, HevcDecoderConfig::to_bytes_complete, and removed HEVC/AV1 in MP4 from Not yet. Re-verified after merging the alpha.13 train (up to d3d82ca), whose stamps were kept; the train's encoder-session text sits beside this change." }
 
 ["CRATE-jstream-mux#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:36bb6ffa794618db", by = "agent:claude", note = "jstream-media's purpose changed only in its model ray-picking bullet; mux uses its Packet and codec types, unchanged" }
+stamp = { hash = "b3:4f4db08bbd234fc7", by = "agent:claude", note = "jstream-media's purpose changed only in its model ray-picking bullet; mux uses its Packet and codec types, unchanged" }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mux"]
 stamp = { hash = "b3:cc699c75167f9edd" }
@@ -3615,7 +3615,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:b3969afcf6885902", by = "agent:capture-cost", note = "Edited: Capture says the render thread can hand a frame back with CaptureStream::recycle, which drops it by default (capture.rs); the yuv helpers write each byte once and copy_planar_into fills a spare frame's buffers (yuv.rs); FakeVideoDevices counts recycled frames (fake.rs). Re-read after jstream-media's Video bullet gained into_planes and Plane::into_data." }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:36bb6ffa794618db", by = "agent:claude", note = "jstream-media's purpose changed only in its model ray-picking bullet; platform uses its frame, pixel and time types, unchanged" }
+stamp = { hash = "b3:4f4db08bbd234fc7", by = "agent:claude", note = "jstream-media's purpose changed only in its model ray-picking bullet; platform uses its frame, pixel and time types, unchanged" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
 stamp = { hash = "b3:ee2cb26ac3f01c54", by = "agent:vcam-242", note = "depends_on, the VcamSink 'registering is the app's job' and paths.rs citations and lib.rs's doc now cite ADR-0066, which keeps registration in the app and the data-folder rule; crate-map dep changed only by the same swap" }

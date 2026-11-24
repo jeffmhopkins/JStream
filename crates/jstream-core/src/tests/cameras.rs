@@ -352,6 +352,28 @@ fn autofocus_meets_a_model_at_its_surface() {
         ..framing
     };
     assert_eq!(shot.centre_distance(&family, inside, at), None);
+    // Flipped, the cube draws its outward faces still, and is met at its front face.
+    let mut flipped = ItemGeometry::try_new(
+        Vec2::new(960.0, 540.0).expect("finite"),
+        Size::try_new(400.0, 300.0).expect("size"),
+    )
+    .expect("geometry");
+    flipped.flip_h = true;
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetGeometry {
+            scene_id: None,
+            item_id: ItemId::new("cube"),
+            geometry: flipped,
+        }),
+    )
+    .expect("flipped");
+    let snapshot = hub.load();
+    let met = snapshot
+        .shot()
+        .centre_distance(&family, framing, at)
+        .expect("the flipped cube is at the centre");
+    assert!((met - (distance - 150.0)).abs() < 0.5, "flipped: {met}");
 }
 
 /// ADR-0120: a Follow pointer filter on a capture in a 2D scene supplies the scene's

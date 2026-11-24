@@ -23,7 +23,14 @@ const LEAF: usize = 4;
 pub(super) struct Bvh {
     nodes: Vec<Node>,
     triangles: Vec<Triangle>,
+    /// The rig's rest palette the triangles are posed by (empty without a rig): a model
+    /// posed by exactly it is searched through the hierarchy too.
+    rest: Vec<Mat4>,
 }
+
+/// The deepest a traversal goes: a median split halves every run, so a model of
+/// [`super::MAX_TRIANGLES`] is about 20 levels deep.
+const MAX_DEPTH: usize = 64;
 
 /// A node: its box, and either its first child (the second follows it) or its run of
 /// triangles.
@@ -66,31 +73,36 @@ impl PartialEq for Picker {
 impl Model {
     /// How far along the ray from `origin` in direction `dir` (both in the model's own
     /// space) the ray first meets the surface the model draws, in units of `dir`: the
-    /// nearest `t > 0` with `origin + t·dir` on a triangle that is drawn opaque and faces
-    /// the ray (or is double-sided). `None` when the ray meets none.
+    /// nearest `t > min_t` with `origin + t·dir` on a triangle that is drawn opaque and
+    /// faces the ray (or is double-sided). `None` when the ray meets none.
+    ///
+    /// A face's front is its outward side in the model's own space, the side its winding
+    /// points out of, and a placement that mirrors the model doesn't change which side
+    /// that is: the renderer draws a mirrored model's outward faces too.
     ///
     /// `palette` poses a rigged model (its rig's slots, as [`rig::skin`] reads them);
-    /// `None` keeps the rest pose. `mirrored` says the model is placed through a map that
-    /// mirrors it, which swaps which side of a triangle is its front.
-    ///
-    /// An unposed model's hierarchy is built on a thread of its own the first time it is
-    /// asked (tens of milliseconds for a few hundred thousand triangles), so the caller,
-    /// a render thread, never waits on it: until it is built, this is `None`, as for a
-    /// ray that meets nothing. [`Self::prepare_picking`] builds it at once.
+    /// `None`, or the rig's rest palette, keeps the rest pose, which is searched through
+    /// a hierarchy built on a thread of its own the first time it is asked (tens of
+    /// milliseconds for a few hundred thousand triangles), so the caller, a render
+    /// thread, never waits on it: until it is built, this is `None`, as for a ray that
+    /// meets nothing. [`Self::prepare_picking`] builds it at once. Any other pose (a clip
+    /// playing) is skinned and searched triangle by triangle, which costs time in
+    /// proportion to the model's triangles.
     pub fn ray_hit(
         self: &Arc<Self>,
         origin: [f64; 3],
         dir: [f64; 3],
         palette: Option<&[Mat4]>,
-        mirrored: bool,
+        min_t: f64,
     ) -> Option<f64> {
-        let ray = Ray::new(origin, dir, mirrored);
-        if let Some(palette) = palette.filter(|_| self.rig.is_some()) {
-            return self.posed_hit(&ray, palette);
-        }
+        let ray = Ray::new(origin, dir, min_t);
+        let palette = palette.filter(|_| self.rig.is_some());
         let built = &self.picker.0;
         if let Some(bvh) = built.bvh.get() {
-            return bvh.hit(self, &ray);
+            return match palette {
+                Some(palette) if palette != bvh.rest.as_slice() => self.posed_hit(&ray, palette),
+                _ => bvh.hit(self, &ray),
+            };
         }
         if !built.started.swap(true, Ordering::AcqRel) {
             let model = Arc::clone(self);
@@ -145,16 +157,17 @@ struct Ray {
     origin: [f64; 3],
     dir: [f64; 3],
     inverse: [f64; 3],
-    mirrored: bool,
+    /// The nearest a hit may be.
+    min_t: f64,
 }
 
 impl Ray {
-    fn new(origin: [f64; 3], dir: [f64; 3], mirrored: bool) -> Self {
+    fn new(origin: [f64; 3], dir: [f64; 3], min_t: f64) -> Self {
         Self {
             origin,
             dir,
             inverse: dir.map(|d| 1.0 / d),
-            mirrored,
+            min_t,
         }
     }
 
@@ -171,13 +184,9 @@ impl Ray {
         let e1 = sub(b, a);
         let e2 = sub(c, a);
         // The front is the side `e1 × e2` points out of; the ray sees it when it runs
-        // against that normal (with it, once mirrored).
-        let facing = dot(cross(e1, e2), self.dir);
-        let front = if self.mirrored {
-            facing > 0.0
-        } else {
-            facing < 0.0
-        };
+        // against that normal. Both are in the model's own space, so a mirroring
+        // placement changes neither.
+        let front = dot(cross(e1, e2), self.dir) < 0.0;
         if !front && !double_sided {
             return None;
         }
@@ -198,7 +207,7 @@ impl Ray {
             return None;
         }
         let t = dot(e2, q) * inv;
-        (t.is_finite() && t > 0.0).then_some(t)
+        (t.is_finite() && t > self.min_t).then_some(t)
     }
 
     /// Where the ray enters the box `min`..`max` (slab test), if it does before
@@ -246,6 +255,7 @@ impl Bvh {
         let mut bvh = Self {
             nodes: Vec::with_capacity(2 * triangles.len() / LEAF + 1),
             triangles,
+            rest,
         };
         let count = bvh.triangles.len();
         bvh.nodes.push(Node {
@@ -308,8 +318,12 @@ impl Bvh {
     /// [`Model::ray_hit`] through the hierarchy, `model` giving the materials now.
     fn hit(&self, model: &Model, ray: &Ray) -> Option<f64> {
         let mut nearest = f64::INFINITY;
-        let mut stack = vec![0usize];
-        while let Some(index) = stack.pop() {
+        // A fixed stack: the render thread allocates nothing per ray.
+        let mut stack = [0usize; MAX_DEPTH];
+        let mut depth = 1;
+        while depth > 0 {
+            depth -= 1;
+            let index = stack[depth];
             let node = self.nodes[index];
             if ray.enters(node.min, node.max, nearest).is_none() {
                 continue;
@@ -322,10 +336,17 @@ impl Bvh {
                     ray.enters(n.min, n.max, f64::INFINITY)
                         .unwrap_or(f64::INFINITY)
                 };
-                if near(first) <= near(first + 1) {
-                    stack.extend([first + 1, first]);
+                let order = if near(first) <= near(first + 1) {
+                    [first + 1, first]
                 } else {
-                    stack.extend([first, first + 1]);
+                    [first, first + 1]
+                };
+                // Never deeper than the build's halving allows; a deeper node would be
+                // skipped rather than overflow.
+                if depth + 2 <= MAX_DEPTH {
+                    stack[depth] = order[0];
+                    stack[depth + 1] = order[1];
+                    depth += 2;
                 }
                 continue;
             }
@@ -406,28 +427,87 @@ mod tests {
             vec![square(0.0, 0), square(-2.0, 0)],
             vec![material(AlphaMode::Opaque, false)],
         );
-        assert_eq!(m.ray_hit([0.2, 0.3, 5.0], DOWN_Z, None, false), Some(5.0));
+        assert_eq!(m.ray_hit([0.2, 0.3, 5.0], DOWN_Z, None, 0.0), Some(5.0));
         // Past the first square, the second is met.
-        assert_eq!(m.ray_hit([0.2, 0.3, -1.0], DOWN_Z, None, false), Some(1.0));
+        assert_eq!(m.ray_hit([0.2, 0.3, -1.0], DOWN_Z, None, 0.0), Some(1.0));
         // Beside both, none.
-        assert_eq!(m.ray_hit([3.0, 0.0, 5.0], DOWN_Z, None, false), None);
+        assert_eq!(m.ray_hit([3.0, 0.0, 5.0], DOWN_Z, None, 0.0), None);
     }
 
     #[test]
-    fn a_back_face_counts_only_when_double_sided_and_mirroring_swaps_the_front() {
+    fn a_back_face_counts_only_when_double_sided() {
         let single = model(
             vec![square(0.0, 0)],
             vec![material(AlphaMode::Opaque, false)],
         );
         let up = [0.0, 0.0, 1.0];
-        assert_eq!(single.ray_hit([0.0, 0.0, -5.0], up, None, false), None);
-        assert_eq!(single.ray_hit([0.0, 0.0, -5.0], up, None, true), Some(5.0));
-        assert_eq!(single.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, true), None);
+        assert_eq!(single.ray_hit([0.0, 0.0, -5.0], up, None, 0.0), None);
+        assert_eq!(
+            single.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, 0.0),
+            Some(5.0)
+        );
         let double = model(
             vec![square(0.0, 0)],
             vec![material(AlphaMode::Opaque, true)],
         );
-        assert_eq!(double.ray_hit([0.0, 0.0, -5.0], up, None, false), Some(5.0));
+        assert_eq!(double.ray_hit([0.0, 0.0, -5.0], up, None, 0.0), Some(5.0));
+    }
+
+    /// A rigged model posed by its rest palette is searched through the hierarchy; any
+    /// other pose is skinned: a square moved 3 back by its one joint is met there.
+    #[test]
+    fn a_rigged_model_at_rest_uses_the_hierarchy_and_a_pose_is_skinned() {
+        use crate::model::rig::{Rest, Rig, RigNode, Slot};
+        const IDENTITY: [f64; 16] = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let rig = Rig::new(
+            vec![RigNode {
+                parent: None,
+                rest: Rest::Matrix(IDENTITY),
+            }],
+            vec![Slot {
+                node: 0,
+                inverse_bind: IDENTITY,
+            }],
+            vec![],
+        )
+        .expect("rig");
+        let rest = rig.rest();
+        let mut p = square(0.0, 0);
+        for v in &mut p.vertices {
+            v.weights = [1.0, 0.0, 0.0, 0.0];
+        }
+        let m = Model::rigged(
+            vec![p],
+            vec![material(AlphaMode::Opaque, false)],
+            Vec::new(),
+            Some(Arc::new(rig)),
+        )
+        .expect("model");
+        m.prepare_picking();
+        let m = Arc::new(m);
+        assert_eq!(
+            m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, Some(&rest), 0.0),
+            Some(5.0)
+        );
+        // The joint moved 3 toward -z: column-major, the translation is in 12..15.
+        let mut moved = rest[0];
+        moved[14] -= 3.0;
+        assert_eq!(
+            m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, Some(&[moved]), 0.0),
+            Some(8.0)
+        );
+    }
+
+    /// A surface nearer than `min_t` is passed over, and the next one met.
+    #[test]
+    fn a_hit_nearer_than_the_minimum_passes_to_the_next() {
+        let m = model(
+            vec![square(0.0, 0), square(-2.0, 0)],
+            vec![material(AlphaMode::Opaque, false)],
+        );
+        assert_eq!(m.ray_hit([0.0, 0.0, 0.5], DOWN_Z, None, 1.0), Some(2.5));
     }
 
     #[test]
@@ -439,7 +519,7 @@ mod tests {
                 material(AlphaMode::Opaque, false),
             ],
         );
-        assert_eq!(m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, false), Some(7.0));
+        assert_eq!(m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, 0.0), Some(7.0));
         // A clone with its materials changed shares the hierarchy, and reads the
         // materials it has now.
         let masked = Arc::new(m.with_materials(|mat| {
@@ -449,7 +529,7 @@ mod tests {
         }));
         assert!(masked.picking_ready());
         assert_eq!(
-            masked.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, false),
+            masked.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, 0.0),
             Some(5.0)
         );
     }
@@ -466,13 +546,13 @@ mod tests {
             )
             .expect("model"),
         );
-        let _ = m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, false);
+        let _ = m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, 0.0);
         let start = std::time::Instant::now();
         while !m.picking_ready() {
             assert!(start.elapsed().as_secs() < 10, "the hierarchy was built");
             std::thread::yield_now();
         }
-        assert_eq!(m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, false), Some(5.0));
+        assert_eq!(m.ray_hit([0.0, 0.0, 5.0], DOWN_Z, None, 0.0), Some(5.0));
     }
 
     /// The hierarchy finds what a search of every triangle finds, over a field of many
@@ -493,7 +573,7 @@ mod tests {
         }
         let m = model(primitives, vec![material(AlphaMode::Opaque, false)]);
         let all = |origin: [f64; 3], dir: [f64; 3]| {
-            let ray = Ray::new(origin, dir, false);
+            let ray = Ray::new(origin, dir, 0.0);
             let mut nearest: Option<f64> = None;
             for p in m.primitives() {
                 for t in p.indices.chunks_exact(3) {
@@ -515,7 +595,7 @@ mod tests {
             ];
             let origin = [x, y, 20.0];
             assert_eq!(
-                m.ray_hit(origin, dir, None, false),
+                m.ray_hit(origin, dir, None, 0.0),
                 all(origin, dir),
                 "ray {k}"
             );
