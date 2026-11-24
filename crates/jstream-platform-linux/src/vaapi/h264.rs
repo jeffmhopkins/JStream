@@ -693,6 +693,15 @@ impl BitWriter {
         self.ue(mapped);
     }
 
+    /// Bits written so far.
+    pub(crate) fn position(&self) -> u32 {
+        let bytes = u32::try_from(self.bytes.len()).unwrap_or(u32::MAX / 8);
+        match self.used {
+            0 => bytes * 8,
+            used => (bytes - 1) * 8 + used,
+        }
+    }
+
     /// `rbsp_trailing_bits()`: a one, then zeros to the byte boundary.
     pub(crate) fn trailing(&mut self) {
         self.bits(1, 1);
