@@ -14,6 +14,8 @@
 pub mod drop;
 pub mod edit;
 pub mod edits;
+pub mod inspect_edits;
+pub mod inspector;
 pub mod model;
 pub mod run;
 pub mod time;

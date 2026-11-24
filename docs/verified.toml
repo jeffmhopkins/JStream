@@ -8862,10 +8862,10 @@ stamp = { hash = "b3:3932f0d470907ec5", by = "agent:ui-design", note = "#1590 B1
 stamp = { hash = "b3:a3153320adf31220", by = "agent:claude", note = "Edited HD-11: the Video draft follows the collection while untouched, so a change from elsewhere shows and is never offered for saving; checked against video_settings.rs and settings.rs." }
 
 ["UI-FEATURES#inspector"."body"]
-stamp = { hash = "b3:3f0a4004877ab302", by = "agent:claude", note = "learn button paragraph now describes the control menu (learn, make or follow a channel, remove) and the bound button's label" }
+stamp = { hash = "b3:3caf8da9038c20ca", by = "agent:show-inspector", note = "Added IN-12 for the Show page (panels/show/inspector.rs) and checked IN-01..IN-11 still hold: the item and scene pages are unchanged; the Inspector now shows the Show page first while ShowPanel.selected names something in the open show" }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/inspector.rs"]
-stamp = { hash = "b3:07c779d3c72ccfd4", by = "agent:ui-design", note = "IN-01 kind falls back to its ID with a capital; IN-02 Position and size with the 88 px label column; IN-04 the 20 px chain between W and H; IN-06 crop two by two; IN-07 the opacity slider; IN-11 the segmented control. Checked against inspector.rs, number.rs and style.css." }
+stamp = { hash = "b3:b3626699584baca3", by = "agent:show-inspector", note = "Added IN-12 for the Show page (panels/show/inspector.rs) and checked IN-01..IN-11 still hold: the item and scene pages are unchanged; the Inspector now shows the Show page first while ShowPanel.selected names something in the open show" }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:59bc8709707cffee", by = "agent:claude", note = "properties.rs passes the setting's label and value to the control button; the Inspector rows still hold, the menu is described under Channels and sequences." }
