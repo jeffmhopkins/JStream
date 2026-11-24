@@ -561,11 +561,11 @@ pub fn EditView() -> impl IntoView {
                 })>
                 {move || if running.get() && !paused() { "❚❚ Pause" } else { "▶ Play" }}
             </button>
-            <button type="button" class="show-continue"
+            <button type="button" class="primary show-continue"
                 disabled=move || !running.get() || matches!(phase(), RunPhase::Transition)
                 title="Play on from a pause, or on to the next pausing bookmark"
                 on:click=continue_>"Continue ▸"</button>
-            {move || panel.continue_key.get().map(|k| view! { <kbd class="show-keycap">{k}</kbd> })}
+            {move || panel.continue_key.get().map(|k| view! { <kbd class="show-key">{k}</kbd> })}
             {next}
             <span class="show-bar-gap"></span>
             <button type="button" class="show-btn" class:on=locked

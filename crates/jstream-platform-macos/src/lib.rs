@@ -16,7 +16,8 @@
 //! `split_access_unit` and its frames put in presentation order by `Reorder`, and
 //! local media files through AVFoundation's asset reader (`AvMediaDecoders`), the GPU
 //! interop on Metal (`MetalGpu`), whose device capture and webcams deliver IOSurface
-//! frames to with no copy, a stand-in with no device (`NoGpuInterop`), the process's CPU
+//! frames to and whose IOSurface encode targets VideoToolbox encodes, both with no copy,
+//! a stand-in with no device (`NoGpuInterop`), the process's CPU
 //! time (`MacosProcessCpu`) and its threads' (`MacosThreadCpu`), and for the desktop app
 //! its global hotkeys (`GlobalHotkeys`: Carbon hotkeys, and a Quartz event tap for wheel
 //! chords behind the Accessibility permission) and its Browse dialogs (`pick_path`,

@@ -16,9 +16,9 @@
 //!   `--openh264-download`, which CI runs) or names a copy of the pinned library
 //!   (`--openh264 <library>`). Otherwise it is `x264.rs`'s stand-in, `ffmpeg`'s libx264
 //!   in a child process.
-//! - **macOS**: the backends the daemon builds there: no GPU interop yet, so the engine
-//!   composites on a Metal device of its own and reads the program back, VideoToolbox's
-//!   H.264 encoder and AudioToolbox's AAC-LC encoder.
+//! - **macOS**: the backends the daemon builds there: the Metal GPU interop, whose device
+//!   the engine composites on and whose encode targets VideoToolbox's H.264 encoder reads,
+//!   and AudioToolbox's AAC-LC encoder.
 //!
 //! The tests are `#[ignore]`d: they need `ffmpeg`, `ffprobe` and a GPU adapter, which
 //! R-TEST-004 keeps out of `cargo test`. Run them with `cargo xtask e2e-stream`, or
@@ -251,7 +251,7 @@ impl Fakes {
 
     /// The fakes, with the codecs and GPU interop the daemon builds on macOS
     /// (`serve.rs`): VideoToolbox and AudioToolbox, and the Metal interop, whose device
-    /// the engine composites on; it reads the program back for the encoders.
+    /// the engine composites on and whose encode targets the encoders read.
     #[cfg(target_os = "macos")]
     fn backends(&self, _dir: &Path) -> (Backends, &'static str) {
         use jstream_platform_macos::{MetalGpu, VideoToolboxCodecs};

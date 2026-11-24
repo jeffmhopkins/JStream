@@ -130,8 +130,8 @@ It runs on Linux and macOS. On Linux the compositor runs on a software Vulkan ad
 (lavapipe) and the AAC encoder is JStream's own. On macOS the harness takes the codecs
 and GPU interop the daemon builds there (`serve.rs`): VideoToolbox's H.264 encoder,
 AudioToolbox's AAC-LC encoder, and the Metal GPU interop (`MetalGpu`), whose device the
-engine composites on; it reads the program back for the encoders, which don't take GPU
-frames on macOS yet. CI runs it on
+engine composites on and whose encode targets the VideoToolbox encoder reads with no
+copy, as the daemon does. CI runs it on
 Linux in `e2e-stream` and on macOS in `e2e-stream-macos`
 ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). On macOS the two tests that hold the
 stream to a live pace (the stream on an encoder profile, and 60 fps) run in a step of
@@ -512,7 +512,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
     `VideoToolboxCodecs` and `AvMediaDecoders`;
   - `MetalGpu`, the engine's device on Metal, which ScreenCaptureKit and the webcams
-    deliver GPU frames to; the encoders still take the program read back to the CPU;
+    deliver GPU frames to and whose encode targets VideoToolbox encodes with no copy;
   - no virtual camera, no CLAP scan and no YouTube sign-in;
   - `MacosKeychain` as its stream key store, behind `jstream_crash::Redacting` with
     the daemon's `Secrets` through `live_redacting` as on Windows, and the same

@@ -1351,7 +1351,11 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 4. **Convert** to NV12/P010 with two render passes that write straight into the Y and UV
    plane views of the shared NV12 texture (proven by S1). Writing R8 + RG8 targets in
    compute and copying them into NV12 through hal, or a D3D11 video processor, is the
-   fallback for an adapter that rejects planar render targets.
+   fallback for an adapter that rejects planar render targets. A backend with no NV12
+   texture format (wgpu's Metal backend) gets its encode target as a pair of textures
+   over the planes of one surface instead, an `R8Unorm` Y and a half-size `Rg8Unorm`
+   CbCr (`GpuFrame::planar`, as spike S6 wraps an IOSurface's), written by the same
+   two passes.
 5. **Encode:** the NV12 texture is shared back to D3D11 for the hardware encoders
    (fence-synchronized): the GPU vendor's own NVENC or AMF where it is turned on and opens,
    else the Media Foundation MFT ([ADR-0217](adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)).
@@ -1367,10 +1371,22 @@ into wgpu through wgpu-hal, as in steps 1 and 2. They are complete when delivere
 read waits for nothing; the release is what is ordered. Each staged use signals the
 context's `MTLSharedEvent` after the submit that reads the frame, and a frame's last
 clone keeps its pixel buffer until the event reaches that value, so neither producer
-writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so
-an encode target will be two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12
-IOSurface that VideoToolbox reads, as spike S6 does; until then encoding takes the
-CPU readback of step 6.
+writes a surface the GPU still reads. wgpu has no `NV12` textures on Metal, so an
+encode target is two plane textures (`R8Unorm`, `Rg8Unorm`) over one NV12 IOSurface, as
+spike S6 does, written by step 4's passes. Its staged write signals the same event; the
+VideoToolbox encoder waits on the CPU for that value (`waitUntilSignaledValue`), hands
+the IOSurface's pixel buffer itself to the session, and keeps the frame until the
+session's output callback for it, so render never rewrites a target being encoded.
+Spike S6 has run once, on a CI virtual Mac (Apple M1 with Metal's paravirtual GPU,
+1080p60, hardware H.264, loads 64, 256 and 1024). With no sync, every run read targets
+before they were written (82 to 437 stale exports and 7 or 8 garbled frames per 20 s). With
+the `completion` wait, the `event` design built here, or `event-strict`, there were none,
+and no sync timeouts. Every output decoded. `event` kept the render tick's own work at a
+p50 of about 0.5 ms, where `completion` blocked it for 8 to 55 ms. A paravirtual GPU's
+timings say nothing about real Apple Silicon. There is no Mac hardware to run on, so CI's
+macOS runners are the test bed. Three things they can't show stay untested: those
+timings, whether holding webcam buffers starves AVFoundation's pool, and whether
+VideoToolbox still reads a target the ring rewrites (its own retain isn't counted).
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement

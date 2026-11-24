@@ -808,6 +808,11 @@ impl Drop for SckStream {
         let _ = unsafe { stream.removeStreamOutput_type_error(sink, SCStreamOutputType::Screen) };
         // Wait for any callback already queued, so none runs after `output` is released.
         self.queue.exec_sync(|| {});
+        // Frames of this stream that render has finished with go back now, not at the
+        // context's next frame.
+        if let Some(gpu) = &self.output.ivars().gpu {
+            gpu.collect();
+        }
     }
 }
 

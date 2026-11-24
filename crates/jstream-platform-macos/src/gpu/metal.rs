@@ -9,22 +9,33 @@
 //!   one `MTLSharedEvent`, the context's **release event**. The `AdapterId` carries the
 //!   Metal device's IORegistry ID, the same in every process, and the PCI vendor ID wgpu
 //!   reports.
-//! - **`encode_target`** is `Unsupported` for now: wgpu has no `NV12` textures on Metal,
-//!   so an encode target needs two plane textures over one IOSurface, which the GPU frame
-//!   types don't carry yet. The engine encodes from CPU frames until then.
+//! - **`encode_target`** allocates an NV12 (`420v`, video range) pixel buffer backed by an
+//!   IOSurface, and wraps its two planes as the render targets of a planar `GpuFrame`
+//!   (`GpuFrame::planar`): the Y plane as `R8Unorm` and the CbCr plane as `Rg8Unorm`, half
+//!   the size, because wgpu has no `NV12` textures on Metal. VideoToolbox takes the pixel
+//!   buffer itself, with no copy ([`EncodeInput`]).
 //!
 //! **GPU frames from pixel buffers** ([`SurfaceGpu`], for capture): a BGRA pixel buffer
 //! that is backed by an IOSurface is wrapped as a Metal texture over that IOSurface, with
 //! no copy, and adopted into the context's wgpu device through wgpu-hal
 //! (`texture_from_raw`, then `create_texture_from_hal`).
 //!
-//! **Synchronisation.** The frames ScreenCaptureKit hands over are complete when they
+//! **Synchronisation.** One rule for every frame: each [`FrameSync::stage`] stages a
+//! signal of the context's release event, to the context's next value, after the submit
+//! that uses the frame (wgpu-hal's `add_signal_event`), and the hold remembers the last
+//! such value.
+//!
+//! *Encode targets:* render writes a target and stages it; the encoder waits on the CPU
+//! for the event to reach that value (`waitUntilSignaledValue:timeoutMS:`) before it hands
+//! the pixel buffer to VideoToolbox, and keeps the frame until VideoToolbox's output
+//! callback for it has run, so render never writes a target VideoToolbox still reads
+//! (the engine only writes a target its ring holds alone).
+//!
+//! *Imported frames:* the frames ScreenCaptureKit hands over are complete when they
 //! arrive, so a read needs no wait. What needs ordering is the release: the pixel buffer
 //! goes back to its producer's pool when its last reference drops, and the producer then
-//! writes it again, so it must not drop while a submitted read is still running. Each
-//! [`FrameSync::stage`] stages a signal of the release event, to the context's next value,
-//! after the submit that reads the frame (wgpu-hal's `add_signal_event`, encoded after the
-//! submit's own completion signal). When the last clone of the frame drops, its hold keeps
+//! writes it again, so it must not drop while a submitted read is still running. When the
+//! last clone of the frame drops, its hold keeps
 //! the pixel buffer until the event reaches the value of its last staged use; a frame that
 //! was never staged lets go at once. The release event has one signaller, the context's
 //! queue, so its values only increase. The held buffers are let go on the next stage, or
@@ -42,15 +53,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Waker};
 
-use jstream_platform::media::{FrameSize, VideoFrameInfo};
+use jstream_platform::media::{ColorInfo, FrameSize, MediaTime, PixelFormat, VideoFrameInfo};
 use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop, PlatformError};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
-use objc2_core_foundation::{CFRetained, Type};
+use objc2_core_foundation::{CFBoolean, CFDictionary, CFRetained, CFString, CFType, Type};
 use objc2_core_video::{
-    CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetIOSurface,
-    CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
+    CVPixelBuffer, CVPixelBufferCreate, CVPixelBufferGetHeight, CVPixelBufferGetIOSurface,
+    CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth, kCVPixelBufferIOSurfacePropertiesKey,
+    kCVPixelBufferMetalCompatibilityKey, kCVReturnSuccess,
 };
+use objc2_io_surface::IOSurfaceRef;
 use objc2_metal::{
     MTLDevice, MTLPixelFormat, MTLSharedEvent, MTLTextureDescriptor, MTLTextureType,
     MTLTextureUsage,
@@ -58,7 +71,8 @@ use objc2_metal::{
 use wgpu::hal::api::Metal;
 
 use super::retire::Retired;
-use crate::fourcc::{CV_BGRA, fourcc_str};
+use crate::fourcc::{CV_420V, CV_BGRA, fourcc_str, os_status};
+use crate::timebase;
 
 type SharedEvent = Retained<ProtocolObject<dyn MTLSharedEvent>>;
 
@@ -78,7 +92,7 @@ impl MetalGpu {
 
 /// A pixel buffer a frame's hold keeps alive, only to release it later.
 struct PixelBuffer {
-    _buffer: CFRetained<CVPixelBuffer>,
+    buffer: CFRetained<CVPixelBuffer>,
 }
 
 // SAFETY: a CVPixelBuffer is reference counted thread-safely and has no thread affinity.
@@ -131,6 +145,148 @@ impl Shared {
         retired.release(done);
         retired.retire(value, done, buffer);
     }
+}
+
+impl Shared {
+    /// Wraps plane `plane` of `surface`, `size` in pixels, as a texture of `format` on
+    /// this context's device, with no copy. The plane's layout must match `format` (the
+    /// caller made or checked the pixel buffer so).
+    fn wrap(
+        &self,
+        surface: &IOSurfaceRef,
+        plane: usize,
+        format: wgpu::TextureFormat,
+        (width, height): (u32, u32),
+        usage: wgpu::TextureUsages,
+        label: &str,
+    ) -> Result<wgpu::Texture, PlatformError> {
+        let mtl_format = match format {
+            wgpu::TextureFormat::Bgra8Unorm => MTLPixelFormat::BGRA8Unorm,
+            wgpu::TextureFormat::Bgra8UnormSrgb => MTLPixelFormat::BGRA8Unorm_sRGB,
+            wgpu::TextureFormat::R8Unorm => MTLPixelFormat::R8Unorm,
+            wgpu::TextureFormat::Rg8Unorm => MTLPixelFormat::RG8Unorm,
+            other => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("an IOSurface plane as {other:?}"),
+                });
+            }
+        };
+        let mut mtl_usage = MTLTextureUsage::empty();
+        if usage.contains(wgpu::TextureUsages::TEXTURE_BINDING) {
+            mtl_usage |= MTLTextureUsage::ShaderRead;
+        }
+        if usage.contains(wgpu::TextureUsages::RENDER_ATTACHMENT) {
+            mtl_usage |= MTLTextureUsage::RenderTarget;
+        }
+        // SAFETY: a class constructor with a valid format and a non-zero size (the
+        // callers' sizes come from `FrameSize`s, which are never empty).
+        let desc = unsafe {
+            MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
+                mtl_format,
+                width as usize,
+                height as usize,
+                false,
+            )
+        };
+        desc.setUsage(mtl_usage);
+        let raw = self
+            .mtl
+            .newTextureWithDescriptor_iosurface_plane(&desc, surface, plane)
+            .ok_or_else(|| {
+                os(
+                    "MTLDevice newTextureWithDescriptor:iosurface:plane:",
+                    format!(
+                        "it refused plane {plane} of an IOSurface as {width}x{height} {format:?}"
+                    ),
+                )
+            })?;
+        let extent = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        // SAFETY: `raw` is a live 2D texture with one mip and one layer, of exactly
+        // `format` and this size, made on this wgpu device's own MTLDevice.
+        let hal = unsafe {
+            wgpu::hal::metal::Device::texture_from_raw(
+                raw,
+                format,
+                MTLTextureType::Type2D,
+                1,
+                1,
+                wgpu::hal::CopyExtent {
+                    width,
+                    height,
+                    depth: 1,
+                },
+                None,
+            )
+        };
+        // SAFETY: the hal texture belongs to this device and matches the descriptor
+        // below. Metal has no layouts, so the initial state only seeds wgpu's tracker;
+        // `from_hal` textures count as initialised, so wgpu never clears them: an imported
+        // frame holds a whole picture, and render writes a whole encode target before
+        // anything reads it.
+        Ok(unsafe {
+            self.device.create_texture_from_hal::<Metal>(
+                hal,
+                &wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: extent,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage,
+                    view_formats: &[],
+                },
+                wgpu::TextureUses::RESOURCE,
+            )
+        })
+    }
+}
+
+/// A `width` x `height` pixel buffer of Core Video pixel format `format`, backed by an
+/// IOSurface that Metal can wrap.
+pub(crate) fn surface_pixel_buffer(
+    width: u32,
+    height: u32,
+    format: u32,
+) -> Result<CFRetained<CVPixelBuffer>, PlatformError> {
+    // SAFETY: Core Video constants, set when the framework loads and never written.
+    let (iosurface, metal) = unsafe {
+        (
+            kCVPixelBufferIOSurfacePropertiesKey,
+            kCVPixelBufferMetalCompatibilityKey,
+        )
+    };
+    let empty = CFDictionary::<CFString, CFType>::empty();
+    let keys: [&CFString; 2] = [iosurface, metal];
+    let values: [&CFType; 2] = [&empty, CFBoolean::new(true)];
+    let attributes = CFDictionary::<CFString, CFType>::from_slices(&keys, &values);
+    let mut raw: *mut CVPixelBuffer = ptr::null_mut();
+    // SAFETY: the attributes map documented keys to a dictionary and a boolean, and `raw`
+    // is a valid out pointer for the +1 buffer.
+    let status = unsafe {
+        CVPixelBufferCreate(
+            None,
+            width as usize,
+            height as usize,
+            format,
+            Some(attributes.as_ref()),
+            ptr::NonNull::from(&mut raw),
+        )
+    };
+    if status != kCVReturnSuccess {
+        return Err(os_status(
+            "CVPixelBufferCreate",
+            status,
+            &format!("allocating a {width}x{height} IOSurface pixel buffer"),
+        ));
+    }
+    let raw = ptr::NonNull::new(raw).ok_or_else(|| os("CVPixelBufferCreate", "no buffer"))?;
+    // SAFETY: a Create function returned it, so this takes over its +1 reference.
+    Ok(unsafe { CFRetained::from_raw(raw) })
 }
 
 impl fmt::Debug for Shared {
@@ -243,16 +399,53 @@ impl GpuInterop for MetalGpu {
         context: &GpuContext,
         size: FrameSize,
     ) -> Result<GpuFrame, PlatformError> {
-        context
+        let shared = context
             .platform::<Arc<Shared>>()
             .ok_or(foreign("encode_target"))?;
-        Err(PlatformError::Unsupported {
-            what: format!(
-                "an NV12 encode target of {}x{} on Metal (wgpu has no NV12 textures there)",
-                size.width(),
-                size.height()
-            ),
-        })
+        let (w, h) = (size.width(), size.height());
+        if w % 2 != 0 || h % 2 != 0 {
+            return Err(PlatformError::Unsupported {
+                what: format!("an NV12 encode target at an odd size, {w}x{h}"),
+            });
+        }
+        let buffer = surface_pixel_buffer(w, h, CV_420V)?;
+        let surface =
+            CVPixelBufferGetIOSurface(Some(&buffer)).ok_or_else(|| PlatformError::Os {
+                call: "CVPixelBufferGetIOSurface",
+                code: None,
+                message: "an encode target's pixel buffer has no IOSurface".into(),
+            })?;
+        let usage = wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC;
+        let y = shared.wrap(
+            &surface,
+            0,
+            wgpu::TextureFormat::R8Unorm,
+            (w, h),
+            usage,
+            "jstream encode target (Y, IOSurface)",
+        )?;
+        let uv = shared.wrap(
+            &surface,
+            1,
+            wgpu::TextureFormat::Rg8Unorm,
+            (w / 2, h / 2),
+            usage,
+            "jstream encode target (CbCr, IOSurface)",
+        )?;
+        let info = VideoFrameInfo {
+            size,
+            format: PixelFormat::Nv12,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(timebase()),
+        };
+        Ok(GpuFrame::planar(
+            y,
+            uv,
+            info,
+            Arc::new(SurfaceSync::new(&buffer, shared)),
+        ))
     }
 }
 
@@ -273,6 +466,13 @@ impl SurfaceGpu {
         Ok(Self {
             shared: Arc::clone(shared),
         })
+    }
+
+    /// Lets go of the pixel buffers whose frames dropped and whose last staged read the
+    /// GPU has finished. Wrapping a frame and staging one do this too; a stream calls it
+    /// when it stops, so its last frames don't wait for the context's next one.
+    pub(crate) fn collect(&self) {
+        self.shared.collect();
     }
 
     /// `buffer`, a BGRA pixel buffer backed by an IOSurface, as a frame in a texture of
@@ -310,101 +510,89 @@ impl SurfaceGpu {
                 what: "a GPU frame whose pixel buffer isn't the frame's size".into(),
             });
         }
-        let mtl_format = match format {
-            wgpu::TextureFormat::Bgra8Unorm => MTLPixelFormat::BGRA8Unorm,
-            wgpu::TextureFormat::Bgra8UnormSrgb => MTLPixelFormat::BGRA8Unorm_sRGB,
-            other => {
-                return Err(PlatformError::Unsupported {
-                    what: format!("a BGRA GPU frame as {other:?}"),
-                });
-            }
-        };
+        if !matches!(
+            format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        ) {
+            return Err(PlatformError::Unsupported {
+                what: format!("a BGRA GPU frame as {format:?}"),
+            });
+        }
         let surface =
             CVPixelBufferGetIOSurface(Some(buffer)).ok_or_else(|| PlatformError::Unsupported {
                 what: "a GPU frame from a pixel buffer with no IOSurface".into(),
             })?;
-        // SAFETY: a class constructor with a valid format and a non-zero size (a
-        // `FrameSize` is never empty).
-        let desc = unsafe {
-            MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
-                mtl_format,
-                width as usize,
-                height as usize,
-                false,
-            )
-        };
-        desc.setUsage(MTLTextureUsage::ShaderRead);
-        // Plane 0 of a BGRA IOSurface is the whole `width` x `height` image, four bytes a
-        // pixel, which is the descriptor's layout, so Metal wraps it without a copy.
-        let raw = shared
-            .mtl
-            .newTextureWithDescriptor_iosurface_plane(&desc, &surface, 0)
-            .ok_or_else(|| {
-                os(
-                    "MTLDevice newTextureWithDescriptor:iosurface:plane:",
-                    format!("it refused a {width}x{height} BGRA IOSurface"),
-                )
-            })?;
-        let extent = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-        // SAFETY: `raw` is a live 2D texture with one mip and one layer, of exactly
-        // `format` and this size, made on this wgpu device's own MTLDevice.
-        let hal = unsafe {
-            wgpu::hal::metal::Device::texture_from_raw(
-                raw,
-                format,
-                MTLTextureType::Type2D,
-                1,
-                1,
-                wgpu::hal::CopyExtent {
-                    width,
-                    height,
-                    depth: 1,
-                },
-                None,
-            )
-        };
-        // SAFETY: the hal texture belongs to this device and matches the descriptor
-        // below. Metal has no layouts, so the initial state only seeds wgpu's tracker;
-        // the texture holds a whole frame, so wgpu never clears it (`from_hal` textures
-        // count as initialised).
-        let texture = unsafe {
-            shared.device.create_texture_from_hal::<Metal>(
-                hal,
-                &wgpu::TextureDescriptor {
-                    label: Some("jstream frame (BGRA, IOSurface)"),
-                    size: extent,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                },
-                wgpu::TextureUses::RESOURCE,
-            )
-        };
-        let sync = SurfaceSync {
-            buffer: Mutex::new(Some(PixelBuffer {
-                _buffer: buffer.retain(),
-            })),
-            shared: Arc::clone(shared),
-            released: AtomicU64::new(0),
-        };
-        Ok(GpuFrame::new(texture, info, Arc::new(sync)))
+        let texture = shared.wrap(
+            &surface,
+            0,
+            format,
+            (width, height),
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            "jstream frame (BGRA, IOSurface)",
+        )?;
+        Ok(GpuFrame::new(
+            texture,
+            info,
+            Arc::new(SurfaceSync::new(buffer, shared)),
+        ))
     }
 }
 
 /// The hold on one wrapped pixel buffer (module docs, synchronisation).
-struct SurfaceSync {
+pub(crate) struct SurfaceSync {
     /// Taken only by `Drop`.
     buffer: Mutex<Option<PixelBuffer>>,
+    /// The same buffer, for the encoder to hand to VideoToolbox. Released with the hold.
+    input: PixelBuffer,
     shared: Arc<Shared>,
     /// The release event's value after the GPU's last staged use, or 0 if none.
     released: AtomicU64,
+}
+
+impl SurfaceSync {
+    fn new(buffer: &CVPixelBuffer, shared: &Arc<Shared>) -> Self {
+        Self {
+            buffer: Mutex::new(Some(PixelBuffer {
+                buffer: buffer.retain(),
+            })),
+            input: PixelBuffer {
+                buffer: buffer.retain(),
+            },
+            shared: Arc::clone(shared),
+            released: AtomicU64::new(0),
+        }
+    }
+}
+
+/// An encode target, as the VideoToolbox encoder reads it (module docs, encode targets).
+pub(crate) struct EncodeInput<'a> {
+    sync: &'a SurfaceSync,
+}
+
+impl<'a> EncodeInput<'a> {
+    /// The encode target behind `frame`, if `frame` is one this interop allocated.
+    pub(crate) fn of(frame: &'a GpuFrame) -> Option<Self> {
+        let sync = frame.sync().platform()?.downcast_ref::<SurfaceSync>()?;
+        Some(Self { sync })
+    }
+
+    /// The pixel buffer VideoToolbox reads.
+    pub(crate) fn pixel_buffer(&self) -> &CVPixelBuffer {
+        &self.sync.input.buffer
+    }
+
+    /// Waits up to `timeout_ms` for the GPU to finish render's last staged write. `true`
+    /// once it has (or when the target was never staged).
+    pub(crate) fn wait_written(&self, timeout_ms: u64) -> bool {
+        let value = self.sync.released.load(Ordering::Acquire);
+        value == 0
+            || self.sync.shared.event.signaledValue() >= value
+            || self
+                .sync
+                .shared
+                .event
+                .waitUntilSignaledValue_timeoutMS(value, timeout_ms)
+    }
 }
 
 impl fmt::Debug for SurfaceSync {
@@ -649,8 +837,25 @@ mod tests {
             Err(PlatformError::InvalidState { .. })
         ));
         assert!(matches!(
-            MetalGpu::new().encode_target(&context, FrameSize::new(64, 64).expect("a size")),
+            MetalGpu::new().encode_target(&context, FrameSize::new(63, 64).expect("a size")),
             Err(PlatformError::Unsupported { .. })
         ));
+        let target = MetalGpu::new()
+            .encode_target(&context, FrameSize::new(64, 32).expect("a size"))
+            .expect("an encode target");
+        let (y, uv) = target.planes().expect("a planar target");
+        assert_eq!(
+            (y.format(), y.width(), y.height()),
+            (wgpu::TextureFormat::R8Unorm, 64, 32)
+        );
+        assert_eq!(
+            (uv.format(), uv.width(), uv.height()),
+            (wgpu::TextureFormat::Rg8Unorm, 32, 16)
+        );
+        assert!(super::EncodeInput::of(&target).is_some());
+        assert!(
+            super::EncodeInput::of(&frame).is_some(),
+            "any frame of ours has a buffer"
+        );
     }
 }
