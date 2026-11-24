@@ -2838,7 +2838,6 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
    at the end of V1, the tip that follows a drag, the name fields, and a locked show. */
 .show-edit:focus { outline: none; }
 /* The Run view's big Continue shares the class; in the Edit bar it is a bar button. */
-.show-edit-bar .show-continue { display: inline-block; width: auto; height: 34px; padding: 0 18px; border-radius: 6px; font-size: 14px; font-weight: 700; }
 .show-note { flex: none; text-align: right; font-size: 12px; color: var(--dim); padding: 2px 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .show-picker-menu { width: 30px; padding: 0; }
 .show-name { width: 14em; padding: 0 8px; border: 1px solid var(--accent); border-radius: 5px; background: var(--app); color: var(--text); }
