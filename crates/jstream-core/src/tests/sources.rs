@@ -2563,3 +2563,77 @@ fn a_warm_scenes_still_is_published_as_the_frame_the_program_draws() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// A show's jump into a timed program clip (one whose scene draws a `media` file) seeks
+/// the file to that spot, and a jump within the clip seeks it again (ADR-0210 decision
+/// 9); the next clip's file is held at its first frame until the cut.
+#[test]
+fn a_show_jump_into_a_timed_clip_seeks_its_file() {
+    let dir = temp_dir("show-media-seek");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(false)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    let mut show = jstream_protocol::ShowInfo::new("s");
+    show.program = ["a", "b"]
+        .into_iter()
+        .map(|scene| jstream_protocol::ProgramClip {
+            clip_id: format!("c{scene}"),
+            scene_id: SceneId::new(scene),
+            length_ms: 1_000,
+            preset_id: None,
+        })
+        .collect();
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source("video", "media", video),
+            add("b", "i1", "video"),
+            Edit::ShowSet { show },
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the file is open");
+    engine.replan();
+    let act = |action| {
+        block_on(control.call(Call::Action { action })).expect("done");
+    };
+    act(Action::ShowPlay {
+        show_id: jstream_protocol::ShowId::new("s"),
+        bookmark_id: None,
+        rehearse: false,
+    });
+    assert_eq!(engine.upcoming().as_deref(), Some("b"));
+    act(Action::ShowSeek { at_ms: 1_500 });
+    assert!(plays(&engine, 5), "the jump lands 500 ms into the file");
+    act(Action::ShowSeek { at_ms: 1_200 });
+    assert!(plays(&engine, 2), "a jump within the clip seeks it again");
+    let _ = fs::remove_dir_all(dir);
+}

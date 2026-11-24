@@ -462,6 +462,7 @@ pub fn Modal(
                         crate::panels::learn::row_context(at, &event);
                     }
                     event.stop_propagation();
+                    crate::chrome::swallow(&event);
                 }
             >
                 {children()}

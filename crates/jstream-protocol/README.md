@@ -398,7 +398,18 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.184 because `live.set` takes a filter's `live` settings
+`PROTOCOL_VERSION` is 0.186 because a value binding and a reader motion row (`midi`,
+`data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
+`replace`; a value binding's target sums its `add` bindings onto the last moved
+`replace` binding's value or its stored value, a binding gains `enabled`, and a
+`replace` row sets its property itself
+([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)), and a channel's `inputs` and a value binding's input
+may be an `audio` level, a source's, a bus's or the program mix's, followed by its
+attack and release
+([ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md));
+0.185 because `profile.get` names each stream's video encoder:
+`StreamProfile` gains `encoder`, the name of the one encoding it now, and `hardware`,
+whether it runs on dedicated hardware; 0.184 because `live.set` takes a filter's `live` settings
 (`filter.set_settings`), an item's opacity (`item.set_opacity`) and the gains
 (`source.set_audio` and `bus.set_fader` carrying `gain_db` alone, and `send.set`) as live
 values, so a drag on any of them follows live and commits as one undo step
@@ -1394,7 +1405,8 @@ means), and AAC audio
 at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
 is refused with `invalid_argument` naming the field. Whether the machine has an encoder
 for the codec is not checked there, since a profile is valid on any machine: an
-`output.start` on a machine with none fails. `encoder.delete` is refused while
+`output.start` on a machine with none fails. Every codec streams (HEVC and AV1 through
+enhanced RTMP) and records to MP4. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
 no `profile_id` back at the engine's default (H.264 CBR 8000 kbit/s, a keyframe every
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
@@ -1592,7 +1604,8 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
 Value bindings (0.168, [ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
 are the other half of ADR-0122's binding system: a MIDI control or a live-data field
 driving one number, listed in `state.get`'s `value_bindings` by ID.
-- **`ValueBinding {binding_id, <kind and its fields>, target}`** reads what a `midi` or
+- **`ValueBinding {binding_id, <kind and its fields>, target, amount?, mode?,
+  enabled?}`** reads what a `midi` or
   `data` motion modifier reads, with the same fields flattened (`kind`, `control`,
   `controller`, `channel`, `input`, `key`, `field`, `range`, `states`, `smoothing_ms`,
   `curve`, `from`, `to`). `ValueBinding::problem` refuses another `kind`, a malformed
@@ -1619,6 +1632,15 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
   count}` for each MIDI input that has sent a control change, for a client that learns
   one: the control whose `count` grows is the one moved.
+- A value binding's **`mode`** (since 0.186,
+  [ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)) is `replace` (the
+  default, omitted) or `add`. Each tick, a target takes the value of the `replace` binding
+  that moved last, or its stored value when none has, plus every moved `add` binding's
+  value, kept in its range. **`enabled`** (default `true`, omitted) set to false bypasses
+  a binding: it stays listed and drives nothing.
+- A value binding's input may also be `kind` `audio` (since 0.186,
+  [ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)): an
+  audio modifier's fields, its attack and release following the level.
 - A value binding's input may also be `kind` `channel` (since 0.169), and its optional
   `amount` names a channel that scales it: its value is `from + (value - from) ×
   amount`, so a channel at 0 holds it at `from` (a missing channel scales by 1).
@@ -1628,7 +1650,8 @@ controls into one live value, 0 to 1, that anything bindable follows, listed in
 `state.get`'s `channels` by ID (at most `MAX_CHANNELS`, 256).
 - **`ChannelInfo {channel_id, name, scene_id?, default, inputs, combine, average_ms,
   rise_ms, fall_ms, curve, on, off_value}`**: up to 8 `inputs`, each the fields a `midi`,
-  `data` (without `color_from`) or `channel` modifier takes; `combine` is `latest` (the
+  `data` (without `color_from`), `channel` or (since 0.186, ADR-0206) `audio` modifier
+  takes; `combine` is `latest` (the
   input that moved last, the default), `max`, `min`, `sum`, `product` or `average`;
   then, in order, the switch (`on` false holds `off_value`), a moving average over
   `average_ms` (≤ 10,000), a linear fade up over `rise_ms` and down over `fall_ms` (each
@@ -1978,7 +2001,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
-  the cap (0.13; missing, they parse as absent and 0). `cleartext` says whether
+  the cap (0.13; missing, they parse as absent and 0), and since 0.185 a preview
+  stream's session too while it is a hardware one. `cleartext` says whether
   publishing sends the stream key across the network unencrypted: a generic RTMP
   target whose URL is plain `rtmp://` to a host other than `localhost` or a loopback
   address (`OutputKind::sends_key_in_cleartext`; 0.37, missing it parses as `false`).
@@ -2101,7 +2125,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   client) and `dropped` on the way, the frames its encoder took more than a frame
   period after they were handed over (`late`), the encoder's average time per frame
   (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
-  video and audio for an output, video for a preview stream). Most frames lost come
+  video and audio for an output, video for a preview stream). Since 0.185 it also
+  names the video encoder encoding the stream now (`encoder`, as the platform names
+  it, after any fallback) and whether that one runs on dedicated hardware
+  (`hardware`). Most frames lost come
   first; a stream that ran in none of the window, or has ended, is left out. `mixer`
   (omitted when it mixed no block in the window) counts the mixer's `blocks`, the
   `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
@@ -3205,6 +3232,17 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   as `width` and `height` do one side of the box after `scale` (ADR-0178), and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
+- **`mode`** (since 0.186,
+  [ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)): `add` (the default,
+  omitted) applies a value as above. A `midi`, `data`, `channel` or `audio` modifier may
+  be `replace` instead (another kind is refused at `motion.<n>.mode`): its value is the
+  property itself, a position, angle, depth or crop in its own unit, an opacity from 0 to
+  1, a scale, width or height factor, or an effect's or source's number setting. The last
+  enabled `replace` modifier on a property sets it, and the `add` ones then apply on top.
+  Its `amount` channel pulls it toward the item's own value. A model's material and a
+  colour setting take no `replace`. During a Move, a property both sides replace blends,
+  and one only one side replaces switches halfway. A scene camera's motion takes `mode`
+  as well, a replaced pan or tilt being the turn itself.
 - **Effect settings** (since 0.109,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): `property`
   `effect` drives a number setting of one of the item's own effects instead, which

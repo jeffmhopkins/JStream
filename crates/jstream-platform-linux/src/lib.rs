@@ -7,7 +7,7 @@
 //! stream's DMA-BUF frames into the engine's device (`LinuxGpu`), run-time loading of
 //! libpipewire (`PipeWire`) with audio input, output and loopback through it
 //! (`PipeWireAudio`), ALSA audio input and output as ADR-0060 §4's fallback
-//! (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264 and HEVC encoding from CPU
+//! (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264, HEVC and AV1 encoding from CPU
 //! frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder
 //! and the decoder of the engine's own H.264 streams, downloaded only on the user's
 //! request and checked against its pin (`OpenH264Store`, `OpenH264Encoder`,
