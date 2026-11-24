@@ -31,6 +31,30 @@ fn histogram_buckets_hold_their_frames() {
     }
 }
 
+/// A drawer's submits are averaged per frame over the window, counted from its
+/// thread's running count: what the thread had submitted before the meter's first frame
+/// belongs to no frame.
+#[test]
+fn a_drawer_reports_its_submits_per_frame() {
+    let profiler = Profiler::new(ms(33), Arc::new(SourceMeters::default()));
+    let mut meter = profiler.program_meter();
+    let start = Instant::now();
+    let mut thread_total = 1000;
+    meter.submitted(thread_total);
+    for frame in 0..10u64 {
+        thread_total += 12;
+        meter.submitted(thread_total);
+        meter.end_frame(ms(5), start + ms(1000 * frame), drop);
+    }
+    let info = profiler.profile(None, None, None, InputTotals::default());
+    let program = info
+        .drawers
+        .iter()
+        .find(|d| d.drawer == Drawer::Program)
+        .expect("the program drew");
+    assert!((program.submits.get() - 12.0).abs() < 0.01, "{program:?}");
+}
+
 /// A drawer's units come out costliest first with their share of its time, its frames
 /// against the budget, and its phases per frame.
 #[test]
