@@ -174,7 +174,7 @@ test('cuts, audio tracks, media drops, deletes, the lock and the show menu', asy
   await expect(a1).toHaveCount(1);
   const a = await a1.boundingBox();
   await page.mouse.click(a.x + 30, a.y + a.height / 2, { button: 'right' });
-  await menu.getByRole('menuitem', { name: 'Add audio clip' }).hover();
+  await menu.getByRole('menuitem', { name: /^Add source audio at / }).hover();
   await page.getByRole('menuitem', { name: 'Mic · ES-9 Line' }).click();
   await expect(show.locator('.show-au')).toHaveCount(1);
   await expect(show.locator('.show-au span')).toHaveText('fade in 0.5 s · fade out 0.5 s');

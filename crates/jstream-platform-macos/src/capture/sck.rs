@@ -17,12 +17,13 @@ use block2::{DynBlock, RcBlock};
 use dispatch2::{DispatchQueue, DispatchRetained};
 use jstream_platform::mailbox::Mailbox;
 use jstream_platform::media::{
-    ColorInfo, FrameSize, MediaTime, PixelFormat, VideoFrame, VideoFrameInfo,
+    ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, VideoFrame,
+    VideoFrameInfo,
 };
 use jstream_platform::nv12::bgra_to_nv12;
 use jstream_platform::{
     Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-    CursorCapture, PlatformError, PointerPosition, VideoSurface,
+    CursorCapture, GpuContext, PlatformError, PointerPosition, VideoSurface,
 };
 use objc2::rc::Retained;
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
@@ -34,8 +35,8 @@ use objc2_core_graphics::{
 };
 use objc2_core_media::CMSampleBuffer;
 use objc2_core_video::{
-    CVPixelBufferGetBytesPerRow, CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType,
-    CVPixelBufferGetWidth,
+    CVPixelBuffer, CVPixelBufferGetBytesPerRow, CVPixelBufferGetHeight,
+    CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
 };
 use objc2_foundation::{NSArray, NSError, NSString};
 use objc2_screen_capture_kit::{
@@ -50,6 +51,7 @@ use super::policy::{
     stop_reason, window_id, window_name,
 };
 use crate::fourcc::CV_BGRA;
+use crate::gpu::SurfaceGpu;
 use crate::pixel_buffer::{ReadLocked, presentation_time};
 use crate::{MacosVersion, check_floor, timebase};
 
@@ -60,11 +62,17 @@ const FRAME: &str = "a captured frame";
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long dropping a stream waits for it to stop.
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
+/// The surfaces a stream on the GPU path keeps in its pool: one render reads, one waits
+/// in the mailbox, one the GPU may still read after its frame dropped, and three for
+/// ScreenCaptureKit to write (its default is 3, at most 8).
+const GPU_QUEUE_DEPTH: isize = 6;
 
 /// Display and window capture through ScreenCaptureKit (ADR-0063 §3).
 ///
 /// It delivers `VideoSurface::Cpu` NV12 frames in BT.709 limited range, converted from
-/// ScreenCaptureKit's sRGB BGRA, with the cursor drawn in unless
+/// ScreenCaptureKit's sRGB BGRA; on a GPU context
+/// ([`Capture::on_context`]) it delivers the BGRA frames themselves as `VideoSurface::Gpu`
+/// frames instead, with no copy (`crate::gpu`). The cursor is drawn in unless
 /// [`CursorCapture::Hidden`] leaves it out. `pts` is each frame's presentation time on
 /// the [`MachClock`](crate::MachClock) time line. A window's frames
 /// keep the size it had when the capture started: a resized window is scaled to fit,
@@ -75,8 +83,11 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 /// System Settings pane until it is granted and JStream restarts.
 #[derive(Debug)]
 pub struct ScreenCaptureKitCapture {
-    /// Whether this backend has asked macOS for the permission, which it does once.
-    asked: AtomicBool,
+    /// Whether this backend has asked macOS for the permission, which it does once. The
+    /// backend on a GPU context shares it.
+    asked: Arc<AtomicBool>,
+    /// The GPU context's state, on the GPU path.
+    gpu: Option<SurfaceGpu>,
 }
 
 impl ScreenCaptureKitCapture {
@@ -87,7 +98,8 @@ impl ScreenCaptureKitCapture {
     pub fn new() -> Result<Self, PlatformError> {
         check_floor(MacosVersion::current())?;
         Ok(Self {
-            asked: AtomicBool::new(false),
+            asked: Arc::new(AtomicBool::new(false)),
+            gpu: None,
         })
     }
 
@@ -203,7 +215,27 @@ impl Capture for ScreenCaptureKitCapture {
             what,
             display,
             shows_cursor(options.cursor),
+            self.gpu.clone(),
         )?))
+    }
+
+    /// This backend on `context`, which [`MetalGpu`](crate::MetalGpu) opened: each
+    /// capture delivers ScreenCaptureKit's BGRA frames as `GpuFrame`s, textures over the
+    /// frames' own IOSurfaces (`Bgra8UnormSrgb`, `TEXTURE_BINDING | COPY_SRC`), in sRGB
+    /// (BT.709 primaries, full range), at the size ScreenCaptureKit delivers. Render stages
+    /// each frame on each submit that reads it, and the frame's IOSurface goes back to
+    /// ScreenCaptureKit once the GPU is done with it.
+    ///
+    /// # Errors
+    /// [`PlatformError::InvalidState`] for a context another backend opened.
+    fn on_context(&self, context: &GpuContext) -> Result<Option<Arc<dyn Capture>>, PlatformError> {
+        Ok(Some(Arc::new(Self {
+            asked: Arc::clone(&self.asked),
+            gpu: Some(SurfaceGpu::of(
+                context,
+                "ScreenCaptureKitCapture::on_context",
+            )?),
+        })))
     }
 }
 
@@ -385,7 +417,7 @@ fn shows_cursor(cursor: CursorCapture) -> bool {
 
 /// The stream's settings for content of `size` pixels, with the pointer drawn in when
 /// `cursor` is set.
-fn configuration(size: FrameSize, cursor: bool) -> Retained<SCStreamConfiguration> {
+fn configuration(size: FrameSize, cursor: bool, gpu: bool) -> Retained<SCStreamConfiguration> {
     // SAFETY: a fresh configuration, set up before any stream uses it. Each setter takes
     // a plain value, and `kCGColorSpaceSRGB` is a Core Graphics constant, set when the
     // framework loads and never written.
@@ -398,6 +430,9 @@ fn configuration(size: FrameSize, cursor: bool) -> Retained<SCStreamConfiguratio
         config.setShowsCursor(cursor);
         config.setScalesToFit(true);
         config.setPreservesAspectRatio(true);
+        if gpu {
+            config.setQueueDepth(GPU_QUEUE_DEPTH);
+        }
         config
     }
 }
@@ -434,6 +469,8 @@ impl Shared {
 /// `Output`'s state.
 struct Ivars {
     shared: Arc<Shared>,
+    /// The GPU context's state, on the GPU path: frames are delivered as GPU frames.
+    gpu: Option<SurfaceGpu>,
     /// A frame the reader never took, reused for the next one of the same size. Only the
     /// stream's serial queue locks it, so the lock is never contended.
     spare: Mutex<Option<VideoFrame>>,
@@ -477,9 +514,10 @@ define_class!(
 );
 
 impl Output {
-    fn new(shared: Arc<Shared>) -> Retained<Self> {
+    fn new(shared: Arc<Shared>, gpu: Option<SurfaceGpu>) -> Retained<Self> {
         let this = Self::alloc().set_ivars(Ivars {
             shared,
+            gpu,
             spare: Mutex::new(None),
         });
         // SAFETY: `NSObject`'s `init`, once, on the fresh allocation.
@@ -507,8 +545,9 @@ impl Ivars {
         }
     }
 
-    /// The sample's frame as NV12, or `None` when there is nothing new to show.
-    fn convert(&self, sample: &CMSampleBuffer) -> Result<Option<VideoFrame>, PlatformError> {
+    /// The sample's frame, as NV12 or on the GPU path as a GPU frame, or `None` when
+    /// there is nothing new to show.
+    fn convert(&self, sample: &CMSampleBuffer) -> Result<Option<VideoSurface>, PlatformError> {
         match frame_use(frame_status(sample)) {
             FrameUse::Deliver => {}
             FrameUse::Skip => return Ok(None),
@@ -526,6 +565,9 @@ impl Ivars {
         // SAFETY: the sample is live for the callback.
         let pts = presentation_time(unsafe { sample.presentation_time_stamp() }, FRAME)?;
         self.shared.captured.fetch_add(1, Ordering::Relaxed);
+        if let Some(gpu) = &self.gpu {
+            return self.gpu_frame(gpu, &image, pts).map(Some);
+        }
         let locked = ReadLocked::lock(&image, FRAME)?;
         let stride = CVPixelBufferGetBytesPerRow(&image);
         let height = CVPixelBufferGetHeight(&image);
@@ -546,7 +588,38 @@ impl Ivars {
         let mut out = self.output(w, h)?;
         out.set_pts(pts);
         bgra_to_nv12(bytes, stride, &mut out)?;
-        Ok(Some(out))
+        Ok(Some(VideoSurface::Cpu(out)))
+    }
+
+    /// `image`, ScreenCaptureKit's BGRA pixel buffer, as a GPU frame over its IOSurface.
+    fn gpu_frame(
+        &self,
+        gpu: &SurfaceGpu,
+        image: &CVPixelBuffer,
+        pts: MediaTime,
+    ) -> Result<VideoSurface, PlatformError> {
+        let too_large = || PlatformError::Unsupported {
+            what: "a ScreenCaptureKit frame larger than 4294967295 pixels on a side".into(),
+        };
+        let w = u32::try_from(CVPixelBufferGetWidth(image)).map_err(|_| too_large())?;
+        let h = u32::try_from(CVPixelBufferGetHeight(image)).map_err(|_| too_large())?;
+        let size = FrameSize::new(w, h)?;
+        self.shared
+            .size
+            .store((u64::from(w) << 32) | u64::from(h), Ordering::Relaxed);
+        let info = VideoFrameInfo {
+            size,
+            format: PixelFormat::Bgra8,
+            // Desktop pixels: sRGB (the configuration asks for it), which has BT.709's
+            // primaries, in full range.
+            color: ColorInfo {
+                space: ColorSpace::Bt709,
+                range: ColorRange::Full,
+            },
+            pts,
+        };
+        let frame = gpu.bgra_frame(image, info, wgpu::TextureFormat::Bgra8UnormSrgb)?;
+        Ok(VideoSurface::Gpu(frame))
     }
 
     /// The frame to convert into: the spare one if it has this size, else a new one.
@@ -564,8 +637,8 @@ impl Ivars {
         }
     }
 
-    fn publish(&self, frame: VideoFrame) {
-        if let Some(old) = self.shared.mailbox.put(VideoSurface::Cpu(frame)) {
+    fn publish(&self, frame: VideoSurface) {
+        if let Some(old) = self.shared.mailbox.put(frame) {
             self.shared.skipped.fetch_add(1, Ordering::Relaxed);
             if let (VideoSurface::Cpu(old), Ok(mut spare)) = (old, self.spare.lock()) {
                 *spare = Some(old);
@@ -629,12 +702,13 @@ impl SckStream {
         what: String,
         display: Option<u32>,
         cursor: bool,
+        gpu: Option<SurfaceGpu>,
     ) -> Result<Self, PlatformError> {
         let size = filter_size(filter).ok_or_else(|| PlatformError::DeviceLost {
             what: what.clone(),
             reason: "it has no area to capture".into(),
         })?;
-        let config = configuration(size, cursor);
+        let config = configuration(size, cursor, gpu.is_some());
         let shared = Arc::new(Shared {
             mailbox: Mailbox::new(),
             captured: AtomicU64::new(0),
@@ -643,7 +717,7 @@ impl SckStream {
             what,
             size: AtomicU64::new(0),
         });
-        let output = Output::new(Arc::clone(&shared));
+        let output = Output::new(Arc::clone(&shared), gpu);
         let queue = DispatchQueue::new("org.jstream.screencapturekit", None);
         let delegate: &ProtocolObject<dyn SCStreamDelegate> = ProtocolObject::from_ref(&*output);
         // SAFETY: a fresh allocation, initialised once, with a live filter and
@@ -734,6 +808,11 @@ impl Drop for SckStream {
         let _ = unsafe { stream.removeStreamOutput_type_error(sink, SCStreamOutputType::Screen) };
         // Wait for any callback already queued, so none runs after `output` is released.
         self.queue.exec_sync(|| {});
+        // Frames of this stream that render has finished with go back now, not at the
+        // context's next frame.
+        if let Some(gpu) = &self.output.ivars().gpu {
+            gpu.collect();
+        }
     }
 }
 
@@ -811,6 +890,51 @@ mod hw_tests {
         // A second capture starts after the first is dropped.
         let mut again = capture.start(&primary.target).expect("start again");
         let _ = again.latest();
+    }
+
+    #[test]
+    #[ignore = "needs the Screen Recording permission"]
+    fn capture_on_a_gpu_context_delivers_bgra_gpu_frames() {
+        use jstream_platform::GpuInterop;
+        assert!(
+            ScreenCaptureKitCapture::screen_recording_granted(),
+            "grant the terminal Screen Recording first"
+        );
+        let context = crate::MetalGpu::new()
+            .open_device()
+            .expect("a Metal device");
+        let capture = ScreenCaptureKitCapture::new()
+            .expect("backend")
+            .on_context(&context)
+            .expect("our context")
+            .expect("a GPU path");
+        let primary = capture
+            .targets()
+            .expect("targets")
+            .into_iter()
+            .find(|t| t.primary)
+            .expect("a primary display");
+        let mut stream = capture.start(&primary.target).expect("start");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let frame = loop {
+            if let Some(f) = stream.latest().expect("capturing") {
+                break f;
+            }
+            assert!(Instant::now() < deadline, "no frame within 10 s");
+            std::thread::sleep(Duration::from_millis(16));
+        };
+        let VideoSurface::Gpu(frame) = frame else {
+            panic!("expected a GPU frame");
+        };
+        assert_eq!(frame.info().format, PixelFormat::Bgra8);
+        assert_eq!(
+            frame.texture().format(),
+            wgpu::TextureFormat::Bgra8UnormSrgb
+        );
+        frame.stage(context.queue()).expect("staged");
+        context.queue().submit([]);
+        drop(frame);
+        drop(stream);
     }
 
     #[test]

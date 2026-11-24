@@ -22,13 +22,13 @@ use leptos::web_sys::{Element, EventTarget, Node};
 /// What keeps the browser's own right-click menu and text selection: text fields (not
 /// checkboxes, sliders or buttons), editable text, code, a link (its menu has Copy link),
 /// and readable text worth copying: an error (`.problem`, the problem bar's message, a
-/// settings page's `.settings-error`, a toast), the connection details, About's facts,
-/// the agent's activity log, and anything the markup marks `.selectable`. The style sheet's
-/// `user-select: text` rule lists the same.
+/// settings page's `.settings-error`, a toast's text but not its buttons), the connection
+/// details, About's facts, the agent's activity log, and anything the markup marks
+/// `.selectable`. The style sheet's `user-select: text` rule lists the same.
 pub const TEXT: &str = "input:not([type=checkbox]):not([type=radio]):not([type=range])\
     :not([type=button]):not([type=submit]):not([type=reset]):not([type=color])\
     :not([type=file]):not([type=image]), textarea, [contenteditable]:not([contenteditable=false]), \
-    pre, code, a[href], .problem, .problem-bar > span, .settings-error, .toast, .connection dd, \
+    pre, code, a[href], .problem, .problem-bar > span, .settings-error, .toast-text, .connection dd, \
     .about-facts dd, .activity-log, .selectable";
 
 /// Whether an event on `target` is on text that keeps the browser's own menu and

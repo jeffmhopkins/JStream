@@ -884,14 +884,15 @@ fn handled(live: Live) -> Arc<Engine> {
 
 /// The macOS backends, as the daemon creates them (its `macos_backends`): the Mach
 /// clock, ScreenCaptureKit capture, AVFoundation webcams and media files, Core Audio,
-/// VideoToolbox and AudioToolbox codecs, and the engine's own GPU device until the Metal
-/// interop (`NoGpuInterop`). There is no virtual camera. Creating them opens no device:
+/// VideoToolbox and AudioToolbox codecs, and the Metal GPU interop (`MetalGpu`), whose
+/// device the engine composites on, capture delivers GPU frames to and VideoToolbox
+/// encodes from. There is no virtual camera. Creating them opens no device:
 /// capture, webcams and audio check the release floor, and ask for their permissions
 /// only when a pipeline first uses them.
 #[cfg(target_os = "macos")]
 fn macos_backends() -> anyhow::Result<Backends> {
     use jstream_platform_macos::{
-        AvFoundationVideoDevices, AvMediaDecoders, CoreAudioIo, MachClock, NoGpuInterop,
+        AvFoundationVideoDevices, AvMediaDecoders, CoreAudioIo, MachClock, MetalGpu,
         ScreenCaptureKitCapture, VideoToolboxCodecs,
     };
     Ok(Backends {
@@ -904,7 +905,7 @@ fn macos_backends() -> anyhow::Result<Backends> {
         ),
         audio: Arc::new(CoreAudioIo::new().context("could not open Core Audio")?),
         codecs: Arc::new(VideoToolboxCodecs::new()),
-        gpu: Arc::new(NoGpuInterop),
+        gpu: Arc::new(MetalGpu::new()),
         media: Arc::new(AvMediaDecoders::new()),
         vcam: None,
     })
