@@ -377,6 +377,11 @@ pub enum ShowEnd {
         /// The bookmark.
         bookmark_id: String,
     },
+    /// An end a newer server sends that this version doesn't know. Never sent; the
+    /// engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 impl ShowEnd {
@@ -503,6 +508,9 @@ impl ShowInfo {
             && self.bookmark(bookmark_id).is_none()
         {
             return problem("end.bookmark_id", "must name one of the show's bookmarks");
+        }
+        if self.end == ShowEnd::Unknown {
+            return problem("end.type", "must be `stop`, `loop` or `go_to`");
         }
         None
     }

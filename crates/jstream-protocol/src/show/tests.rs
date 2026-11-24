@@ -217,6 +217,18 @@ fn the_end_goes_to_a_bookmark_the_show_holds() {
 }
 
 #[test]
+fn an_end_from_a_newer_server_parses_but_is_refused() {
+    let end: ShowEnd = serde_json::from_value(serde_json::json!({"type": "fade_out", "ms": 3000}))
+        .expect("parses");
+    assert_eq!(end, ShowEnd::Unknown);
+    let show = ShowInfo {
+        end,
+        ..ShowInfo::new("s")
+    };
+    assert_eq!(field(&show).as_deref(), Some("end.type"));
+}
+
+#[test]
 fn show_actions_are_checked_as_the_call_would_be() {
     assert_eq!(
         Action::ShowGoToNumber { number: 9 }.bind_problem(),

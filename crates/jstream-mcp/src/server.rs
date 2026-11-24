@@ -517,8 +517,8 @@ impl Server {
              its key and goes live, on `history`, whose undo can remove a stream key \
              redo doesn't restore, on `pack`, whose writes and deletes change files on \
              disk that undo doesn't reach, on `values`, whose shared values a browser \
-             source page given them may send off the machine, on `timeline`, whose \
-             cues may set those values, on `collection`, whose open and new stop every \
+             source page given them may send off the machine, on `timeline` and \
+             `show`, whose cues may set those values, on `collection`, whose open and new stop every \
              output and clear every client's undo, on `ptz`, which moves physical \
              cameras and can overwrite a camera's stored preset, and on `device`, \
              `pairing` and `ui_settings`; every other edit, a delete included, is undone with \
