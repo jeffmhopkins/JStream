@@ -140,8 +140,8 @@ Contents ([Design](#design) explains the choices):
   count as its own, and `camera_of`, the camera a 3D scene is seen through, a
   keyframe's override or else its parent's), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
-  in either mode, and `followed_preview`, the scene the canvas moves to when the preview
-  scene changes in studio mode), the `Selection`,
+  in either mode, and `followed_scene`, the scene the canvas moves to when the preview
+  scene changes in studio mode, or the program scene outside it), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`, and a
   3D model's depth, `SourceDepths`, from the same;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
@@ -416,7 +416,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the items selected in it: a primary item (shown in the Inspector) and any
   others the canvas selected with it. A new session reads the program scene
   before the state, so it starts on the scene on program, or in studio mode on the
-  preview scene, which it then follows (`followed_preview`). It is fixed up after every
+  preview scene, which it then follows (`followed_scene`). Outside studio mode the
+  canvas stands for program, so it follows every new program scene, whatever switched
+  it (a click, a hotkey, a trigger, a sequence or another client), and turning studio mode
+  off shows the program scene. It is fixed up after every
   change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
   item that left the scene is dropped, the next selected one becoming primary. The
@@ -1417,7 +1420,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   studio controls between them (`StudioControls`). Turning it on sends
   `studio.set_preview` for the scene the canvas shows, and while it is on a new preview
   scene from `studio.changed` or `studio.get` is selected, so the canvas follows it
-  (`followed_preview`). The controls and the Transitions panel (a tab beside Outputs in
+  (`followed_scene`); turned off, the canvas shows the program scene and follows it
+  again. The engine's preview scene is left alone then: it is every client's, and the
+  engine has no studio mode (ADR-0052 §4). The controls and the Transitions panel (a tab beside Outputs in
   the Editing layout, under the canvas in Live) share one state, which the shell
   provides (`provide_transitions`): the scenes (groups left out) and presets read with
   `state.get` and the studio state with `studio.get`, re-read on `state.changed` and
