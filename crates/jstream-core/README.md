@@ -2434,6 +2434,15 @@ names in the shot when it places the light (`look_sky`), so it is uploaded thoug
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
 drawn for a sky alone. A reflection's models take the same sky
 (`an_environment_light_lights_a_scene_lit_model_with_its_sky`).
+A model source's own video filters run over that layer, not over its transparent
+stand-in ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6): `Planner::shown`
+plans no chain for a source whose frame carries a model, and `boxed` plans one per item
+that shows it (`ChainOwner::Shown`, by source, scene and item) over the item's layer,
+which the item's effects then read in place of the layer. Its output is what the pass
+places when the item has no effects (`boxed_key`, `key`), `GpuKey::boxed_item` names
+the item behind any of the three images, and `ChainOrder::chain` draws the layer before
+whichever chain reads it. A profile counts it toward the item's effects, as its box is
+(`golden_a_models_source_filters_run_over_its_layer`).
 A model's `texture` and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
 decision 5) name other sources. Planning resolves each where it places the model
 (`look_maps`) as an item would show it, its frame, its video chain or, for a `scene`

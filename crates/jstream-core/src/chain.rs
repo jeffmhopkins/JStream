@@ -80,6 +80,9 @@ pub(crate) enum ChainOwner {
     /// scene is planned under there: the scene, or a group's view through a keyframe
     /// (ADR-0049 §3). Each has a chain of its own, as each draws its own picture.
     Placed(SourceId, SceneId),
+    /// A model source's chain over the layer an item of a scene draws the model into
+    /// (ADR-0107 decision 6): one per item that shows it, before the item's effects.
+    Shown(SourceId, SceneId, ItemId),
 }
 
 impl std::fmt::Display for ChainOwner {
@@ -92,6 +95,9 @@ impl std::fmt::Display for ChainOwner {
             Self::Master(Some(mix)) => write!(f, "the master stage over mix {mix}"),
             Self::Output(id) => write!(f, "output {id}"),
             Self::Placed(id, scene) => write!(f, "source {id} over scene {scene}"),
+            Self::Shown(id, scene, item) => {
+                write!(f, "source {id} over item {item} in scene {scene}")
+            }
         }
     }
 }
@@ -1467,6 +1473,13 @@ impl Chains {
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
     pub(crate) fn failed(&self, key: &GpuKey) -> bool {
         match key {
+            // A model's source's filters draw nothing over a layer that failed.
+            GpuKey::Filtered(owner @ ChainOwner::Shown(_, scene, item)) => {
+                self.failed.contains(owner)
+                    || self
+                        .failed
+                        .contains(&ChainOwner::Item(scene.clone(), item.clone()))
+            }
             GpuKey::Filtered(owner) => self.failed.contains(owner),
             // A model's layer, shown as drawn when it has no effects (ADR-0107).
             GpuKey::ItemBox(scene, item) => self
@@ -6663,6 +6676,100 @@ mod tests {
                 "a flat item in the same pose covers the same cells\nflat:\n{flat}"
             );
         }
+    }
+
+    /// ADR-0107 decision 6: a model's source's video filters run over the layer each
+    /// item draws the model into, before the item's effects, so a filtered model is
+    /// drawn and filtered where it used to draw nothing (#1661). Each item that shows
+    /// it has a chain of its own.
+    #[test]
+    fn golden_a_models_source_filters_run_over_its_layer() {
+        let blue = Edit::FilterAdd {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("cam"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("blue"),
+            kind: "color_correction".into(),
+            settings: [("multiply", serde_json::json!("#0000ff"))]
+                .into_iter()
+                .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo"), blue]);
+        let filtered = "
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            ";
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            filtered,
+            "the source's filter colours the model",
+        );
+        // The item's effects read what the source's filters drew. The same filter ID
+        // on both is two filters.
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("blue"),
+                kind: "color_correction".into(),
+                settings: [("multiply", serde_json::json!("#ffffff"))]
+                    .into_iter()
+                    .collect(),
+                enabled: Some(true),
+                index: None,
+            }],
+        );
+        let shot = model_shot(&graph, "plane");
+        assert_golden(&shot, filtered, "then the item's effects run over that");
+        // A second item of the model is filtered by a chain of its own.
+        let mut right = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(56.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(16.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        right.fit_mode = jstream_protocol::FitMode::Stretch;
+        apply(
+            &mut graph,
+            vec![Edit::ItemAdd {
+                scene_id: SceneId::new("main"),
+                item_id: ItemId::new("again"),
+                source_id: SourceId::new("cam"),
+                transform: None,
+                geometry: Some(right),
+                opacity: None,
+                blend: None,
+            }],
+        );
+        let shot = model_shot(&graph, "plane");
+        assert_golden(
+            &shot,
+            "
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            BBBBBBBB....BBBB
+            ",
+            "each item of the model is filtered",
+        );
     }
 
     /// `cam`, cropped to the middle half of its frame and stretched over the canvas.
