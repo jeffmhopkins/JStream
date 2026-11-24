@@ -1209,7 +1209,7 @@ Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
 happened. Placeholder output actions do too: they only step the state machine.
 `clock.hold`, `clock.step` and `clock.release` (ADR-0172) do too: they hold or step the
-media clock, wake the sources' thread and run the timelines' and the running show's tick, so a cue a step
+media clock, wake the sources' thread and run the running show's tick and then the timelines', so a cue a step
 passed fires before it returns; an `output.start` while the clock is held or still
 ahead of real time, or a hold while an output runs, is `action_failed`.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
@@ -1697,8 +1697,9 @@ preset changed in one batch that one undo takes back.
   pass (`looped`) or the end of a `once` timeline (`ended`, which stops it);
   `next_due` is the next cue or pass boundary.
 - **Ticks:** the live ticker (`live_tick`, which also sends coalesced `live.changed`
-  events) runs `timeline_tick`, then sleeps until the next timeline is due, as well as
-  until its gestures are. A tick runs every playing timeline's due cues in time order
+  events) runs the running show's tick ([Shows](#shows)), then `timeline_tick`, so a
+  sequence the show started is ticked with the others, then waits until the next
+  timeline or show point is due, as well as until its gestures are. A tick runs every playing timeline's due cues in time order
   across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
   it at the cue's time, so that timeline's first cues are due in the next round. A
   round sends each loop or end in time order with its cues, once the cues due at or
@@ -1713,8 +1714,13 @@ preset changed in one batch that one undo takes back.
   itself, at 0), the next tick waits at least `CAPPED_WAIT_NS` (a frame at 60 fps), so
   such a cycle fires at most 16 cues a frame instead of spinning the ticker.
   `timeline.play` and `timeline.seek` from a client run a tick before they return and
-  start the ticker while a timeline plays (`start_ticker`). So do `clock.hold`,
-  `clock.step` and `clock.release` (ADR-0172): the ticker sleeps in real time, so on a
+  start the ticker while a timeline plays (`start_ticker`), or, if it is already
+  waiting, wake it to plan again: it waits on `Shared::ticker`, a condvar of the
+  collection lock, and goes on waiting only while `ticker_rev`, which `start_ticker`
+  counts up, is the count it planned with, so a timeline started while it waits for a
+  later cue is not held back. It holds the engine at most `TICKER_HOLD` (250 ms) a
+  wait, so a dropped engine is not kept for a far cue. So do `clock.hold`,
+  `clock.step` and `clock.release` (ADR-0172): the ticker waits in real time, so on a
   held clock a cue a step passed fires in that step's call, before the next snapshot.
 - **A cue** runs through `State::action`, as the call would (with no audit or activity
   entry of its own, and nothing logged), credited to the client and request that
@@ -1774,7 +1780,11 @@ collection's `ShowInfo` (overlay tracks flattened by start, a `timeline.play` cu
 sequence clip as long as its sequence, every other cue an event) and starts a `Runner`
 from the start or as a jump to a bookmark would land. The plan is built again on every
 call and tick, so editing a running show takes effect at once. The live ticker advances
-it with the timelines (`show_tick`), as do `clock.step` and `clock.release`. Each
+it before the timelines (`show_tick`), as do `clock.step` and `clock.release`, so a
+sequence clip's cues fire on time. A show call ends by ticking the show and the
+timelines and waking the ticker (`show_settle`), so after a jump it plans from the
+landing, not the point it was waiting for. `show.play` at a bookmark lands as a jump
+there would, with its arrive transition. Each
 `Effect` runs as of its own time (`cue_at`) as the call a key or pad would make:
 `scene.switch` with the clip's preset, `scene.set_keyframe` on the program scene,
 `timeline.play` or `timeline.seek` and `timeline.stop`, or the cue's own action (a
@@ -1786,7 +1796,10 @@ it. `studio.get`'s `show` reports it, and `show.changed` says what it did.
 `src/tests/shows.rs` checks playing through, pausing before a pausing bookmark's
 point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
 going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
-off script, stopping, deleting, and refused calls.
+off script, stopping, deleting, refused calls, a sequence clip's cue firing within the
+`clock.step` that starts it, and a jump waking the live ticker in real time.
+`src/tests/timelines.rs` checks that a timeline played while the ticker waits for a
+later cue fires on time.
 
 <a id="privacy"></a>
 ## No privacy screen
@@ -4369,7 +4382,8 @@ reads both under the collection lock and the snapshot thread only receives them.
 `jstream-live` thread takes the collection lock only to send due `live.changed` events,
 release committed values, fire due timeline cues (each runs as its action's call
 would under that lock, [Timelines](#timelines)) and advance the running show
-([Shows](#shows)), and sleeps without it. The
+([Shows](#shows)), and waits without it (on the lock's `Shared::ticker` condvar,
+which releases it). The
 `jstream-values` thread does the same: it takes the collection lock for each tick, reads
 the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or

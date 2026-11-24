@@ -316,3 +316,95 @@ fn arm_sets_the_spot_the_next_continue_jumps_to() {
     assert_eq!(show.at_ms, 2500);
     assert_eq!(program(&control).as_deref(), Some("c"));
 }
+
+/// A sequence the show starts has its cues ticked with the show: under `clock.step`, a
+/// cue of it the step passes fires before the step returns (#1713 B1).
+#[test]
+fn a_sequence_the_show_starts_fires_its_cues_on_time() {
+    use jstream_protocol::{TimelineCue, TimelineId, TimelineInfo, TimelineLoop};
+    let engine = Engine::new();
+    engine.set_source_clock(Arc::new(FakeClock::new(Timebase::MILLIS)));
+    let control = connected(&engine);
+    let mut show = ShowInfo::new("s");
+    show.program = vec![clip("ca", "a", 3000)];
+    show.sequences = vec![SequenceTrack {
+        track_id: "s1".into(),
+        name: String::new(),
+        cues: vec![ShowCue::new(
+            "t",
+            100,
+            &Action::TimelinePlay {
+                delay_ms: None,
+                timeline_id: TimelineId::new("t"),
+            },
+        )],
+    }];
+    apply(
+        &control,
+        vec![
+            create("a"),
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline: TimelineInfo {
+                    lanes: Vec::new(),
+                    starts: Vec::new(),
+                    stops: Vec::new(),
+                    labels: Vec::new(),
+                    timeline_id: TimelineId::new("t"),
+                    name: String::new(),
+                    duration_ms: 1000,
+                    looping: TimelineLoop::Once,
+                    cues: vec![TimelineCue::new(
+                        50,
+                        &Action::ValuesSet {
+                            name: "v".into(),
+                            value: Some(json!(1)),
+                        },
+                    )],
+                },
+            },
+            Edit::ShowSet { show },
+        ],
+    );
+    act(&control, Action::ClockHold).expect("hold");
+    act(&control, play()).expect("play");
+    // One step over both the sequence's start, at 100, and its cue, at 150.
+    step(&control, 160);
+    assert!(
+        value_set(&control),
+        "the sequence's cue at 150 didn't fire by 160"
+    );
+}
+
+/// A show jump made while the live ticker waits for the show's next point wakes it, so
+/// what follows the landing runs on time (#1713 B2). Real time: program `a` 5 s then
+/// `b`, a pausing bookmark at 4 s; Continue soon after the start jumps to 4 s, so `b`
+/// is due a second later, not when the ticker planned to wake at 4 s.
+#[test]
+fn a_show_jump_wakes_the_live_ticker() {
+    use std::time::{Duration, Instant};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut show = ShowInfo::new("s");
+    show.program = vec![clip("ca", "a", 5000), clip("cb", "b", 1000)];
+    show.bookmarks = vec![bookmark("p", 4000, true)];
+    apply(
+        &control,
+        vec![create("a"), create("b"), Edit::ShowSet { show }],
+    );
+    act(&control, play()).expect("play");
+    assert_eq!(program(&control).as_deref(), Some("a"));
+    std::thread::sleep(Duration::from_millis(100));
+    let continued = Instant::now();
+    act(&control, Action::ShowContinue).expect("continue");
+    let deadline = continued + Duration::from_secs(6);
+    while Instant::now() < deadline && program(&control).as_deref() != Some("b") {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let elapsed = continued.elapsed();
+    assert_eq!(program(&control).as_deref(), Some("b"));
+    assert!(
+        elapsed < Duration::from_millis(2500),
+        "the cut due 1 s after Continue came after {elapsed:?}"
+    );
+}

@@ -280,29 +280,27 @@ impl State {
                 id: show_id.to_string(),
             })?;
         let plan = plan(info, &self.graph);
-        let (at_ms, landing) = match bookmark_id {
-            None => (0, Landing::PlayOn),
-            Some(id) => {
-                let b = plan.bookmarks.iter().find(|b| b.id == id).ok_or_else(|| {
-                    ProtocolError::invalid_argument(
-                        "bookmark_id",
-                        "must name one of the show's bookmarks",
-                    )
-                })?;
-                let landing = if b.pausing {
-                    Landing::Pausing
-                } else {
-                    Landing::PlayOn
-                };
-                (b.at_ms, landing)
-            }
-        };
+        let bookmark =
+            match bookmark_id {
+                None => None,
+                Some(id) => Some(plan.bookmarks.iter().position(|b| b.id == id).ok_or_else(
+                    || {
+                        ProtocolError::invalid_argument(
+                            "bookmark_id",
+                            "must name one of the show's bookmarks",
+                        )
+                    },
+                )?),
+            };
         if self.show.is_some() {
             self.show_stop(ShowChange::Stopped, wake);
         }
         let now = self.show_now();
         let mut runner = Runner::new();
-        let steps = runner.start(&plan, at_ms, landing, now);
+        let steps = match bookmark {
+            Some(i) => runner.start_at_bookmark(&plan, i, now),
+            None => runner.start(&plan, 0, Landing::PlayOn, now),
+        };
         self.show = Some(Run {
             show_id: show_id.clone(),
             runner,
@@ -310,8 +308,7 @@ impl State {
         });
         self.emit_show(ShowChange::Started, None, None, wake);
         self.run_show_steps(&plan, steps, wake);
-        self.show_tick(wake);
-        self.start_ticker();
+        self.show_settle(wake);
         Ok(())
     }
 
@@ -366,7 +363,17 @@ impl State {
             None => return,
         };
         self.run_show_steps(&plan, steps, wake);
+        self.show_settle(wake);
+    }
+
+    /// After a show call: runs what fell due, ticks the timelines (a sequence the show
+    /// started ran as of its step's time, which skips its own tick), and wakes the live
+    /// ticker so it plans from the show's new next point.
+    fn show_settle(&mut self, wake: &mut Vec<Waker>) {
         self.show_tick(wake);
+        if self.cue_at.is_none() {
+            self.timeline_tick(wake);
+        }
         self.start_ticker();
     }
 

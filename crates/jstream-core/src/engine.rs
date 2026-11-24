@@ -68,7 +68,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
 use std::task::Waker;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -119,6 +119,9 @@ struct Shared {
     /// Whether the `jstream-tempo` thread has started: once per engine, however often
     /// JTunnel starts again (ADR-0147 §1).
     tempo: AtomicBool,
+    /// Wakes the live ticker early, on the collection lock, when a call moves its next
+    /// due time earlier than the one it is waiting for ([`State::start_ticker`]).
+    ticker: Condvar,
     /// Every JTunnel sender's live data (ADR-0171 decision 2), which the receiver puts
     /// state messages in and `data.list` and `data.get` read. Its lock is its own, a
     /// leaf: never taken under the collection lock by its writer, the receive thread.
@@ -241,6 +244,7 @@ impl Default for Engine {
                     sheets: AtomicUsize::new(0),
                     hearing: Mutex::new(SceneHearing::default()),
                     tempo: AtomicBool::new(false),
+                    ticker: Condvar::new(),
                     data,
                     keys: Mutex::new(None),
                     audit: Audit::default(),
@@ -4968,6 +4972,9 @@ struct State {
     /// Whether the live ticker thread is running: it sends coalesced `live.changed`
     /// events and releases committed live values ([`live_ticker`]).
     ticking: bool,
+    /// Counts the calls that may have moved the live ticker's next due time while it
+    /// runs: it waits only while this is the count it planned with ([`live_ticker`]).
+    ticker_rev: u64,
     /// The value bindings' smoothing and the setter edits they give now (ADR-0178).
     driver: crate::value_bindings::ValueDriver,
     /// Whether the `jstream-values` thread is running: it ticks [`State::channels`] and
@@ -5570,8 +5577,9 @@ impl State {
     fn clock_moved(&mut self, wake: &mut Vec<Waker>) {
         self.live.clock_moved();
         if self.cue_at.is_none() {
-            self.timeline_tick(wake);
+            // The show first: a sequence it starts is then ticked with the others.
             self.show_tick(wake);
+            self.timeline_tick(wake);
             self.start_ticker();
         }
     }
@@ -5882,10 +5890,17 @@ impl State {
         }
     }
 
-    /// Starts the live ticker if a timeline plays and it isn't running, so the timeline's
-    /// cues fire when they fall due.
+    /// Starts the live ticker if a timeline plays or a show runs and it isn't running, so
+    /// their cues fire when they fall due. If it is running, wakes it, so it plans again
+    /// from what this call changed: a timeline started or a show jumped while it waits
+    /// for a later cue is not left late.
     fn start_ticker(&mut self) {
-        if (!self.timelines.is_empty() || self.show_ticking()) && !self.ticking {
+        if self.ticking {
+            self.ticker_rev = self.ticker_rev.wrapping_add(1);
+            if let Some(shared) = self.shared.upgrade() {
+                shared.ticker.notify_all();
+            }
+        } else if !self.timelines.is_empty() || self.show_ticking() {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
     }
@@ -7371,7 +7386,8 @@ impl State {
         for event in self.gestures.due(now) {
             self.subscribers.emit(&event, wake);
         }
-        let cues = [self.timeline_tick(wake), self.show_tick(wake)]
+        // The show first: a sequence it starts is then ticked with the others.
+        let cues = [self.show_tick(wake), self.timeline_tick(wake)]
             .into_iter()
             .flatten()
             .min();
@@ -8043,19 +8059,49 @@ fn live_ticker(shared: &Weak<Shared>) {
             return;
         };
         let mut wake = Vec::new();
-        let next = {
+        let (next, rev) = {
             let mut state = lock(&engine.state);
             let next = state.live_tick(Instant::now(), &mut wake);
             if next.is_none() {
                 state.ticking = false;
             }
-            next
+            (next, state.ticker_rev)
         };
         drop(engine);
         wake_all(wake);
-        match next {
-            Some(at) => thread::sleep(at.saturating_duration_since(Instant::now())),
-            None => return,
+        let Some(at) = next else {
+            return;
+        };
+        if !wait_for_tick(shared, at, rev) {
+            return;
+        }
+    }
+}
+
+/// The longest the live ticker waits holding the engine alive: past it, it lets go and
+/// takes it again, so an engine being dropped is not kept for a far cue.
+const TICKER_HOLD: Duration = Duration::from_millis(250);
+
+/// Waits until `at`, or until a call moves the ticker's plan ([`State::start_ticker`]
+/// counts it in `ticker_rev`, which was `rev` when the plan was made). False once the
+/// engine is gone.
+fn wait_for_tick(shared: &Weak<Shared>, at: Instant, rev: u64) -> bool {
+    loop {
+        let Some(engine) = shared.upgrade() else {
+            return false;
+        };
+        let now = Instant::now();
+        let state = lock(&engine.state);
+        if state.ticker_rev != rev || now >= at {
+            return true;
+        }
+        let wait = at.saturating_duration_since(now).min(TICKER_HOLD);
+        let (state, _) = engine
+            .ticker
+            .wait_timeout(state, wait)
+            .unwrap_or_else(PoisonError::into_inner);
+        if state.ticker_rev != rev {
+            return true;
         }
     }
 }

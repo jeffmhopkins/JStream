@@ -268,8 +268,38 @@ impl<T: Ord + Clone> Runner<T> {
     ) -> Vec<Step<K>> {
         *self = Self::new();
         let mut out = Vec::new();
-        let transition = plan.default_transition.clone();
-        self.land(plan, at_ms, landing, transition, now_ns, None, &mut out);
+        let arrival = Arrival {
+            at_ms,
+            landing,
+            transition: plan.default_transition.clone(),
+            jumped_from: None,
+        };
+        self.land(plan, arrival, now_ns, &mut out);
+        out
+    }
+
+    /// Starts the show at its `bookmark`th bookmark, landing as a jump there would: the
+    /// bookmark's pause or play on, and its arrive transition for a program cut. A
+    /// bookmark the plan doesn't have starts from the top.
+    pub fn start_at_bookmark<K: ShowKeys<Timeline = T>>(
+        &mut self,
+        plan: &Plan<K>,
+        bookmark: usize,
+        now_ns: i64,
+    ) -> Vec<Step<K>> {
+        let Some(b) = plan.bookmarks.get(bookmark) else {
+            return self.start(plan, 0, Landing::PlayOn, now_ns);
+        };
+        *self = Self::new();
+        let mut out = Vec::new();
+        let (at_ms, landing, transition) = bookmark_landing(plan, b);
+        let arrival = Arrival {
+            at_ms,
+            landing,
+            transition,
+            jumped_from: None,
+        };
+        self.land(plan, arrival, now_ns, &mut out);
         out
     }
 
@@ -645,6 +675,27 @@ impl<T: Ord + Clone> Runner<T> {
                 at_ns: due,
                 effect: Effect::Looped { region: i, pass },
             });
+            // A sequence clip that ends here has run out: it stops as playing on would
+            // stop it, and plays again from the loop's start if it spans it.
+            let here = spanning(plan, p, Edge::At);
+            let ended: Vec<(T, usize)> = self
+                .applied
+                .sequences
+                .iter()
+                .filter(|&(timeline, clip)| {
+                    here.sequences
+                        .get(timeline)
+                        .is_none_or(|&(c, _)| c != *clip)
+                })
+                .map(|(timeline, &clip)| (timeline.clone(), clip))
+                .collect();
+            for (timeline, clip) in ended {
+                self.applied.sequences.remove(&timeline);
+                out.push(Step {
+                    at_ns: due,
+                    effect: Effect::SequenceStop { clip, timeline },
+                });
+            }
             let target = spanning(plan, from, Edge::At);
             let transition = region
                 .wrap
@@ -721,7 +772,13 @@ impl<T: Ord + Clone> Runner<T> {
         let target = target.filter(|&(t, landing, _)| landing == Landing::Pausing || t < p);
         match target {
             Some((t, landing, transition)) => {
-                self.land(plan, t, landing, transition, due, Some(p), out);
+                let arrival = Arrival {
+                    at_ms: t,
+                    landing,
+                    transition,
+                    jumped_from: Some(p),
+                };
+                self.land(plan, arrival, due, out);
             }
             None => {
                 self.anchor(p, due);
@@ -764,26 +821,30 @@ impl<T: Ord + Clone> Runner<T> {
         now_ns: i64,
         out: &mut Vec<Step<K>>,
     ) {
-        let from = self.position_ms(now_ns);
-        self.land(plan, at_ms, landing, transition, now_ns, Some(from), out);
+        let arrival = Arrival {
+            at_ms,
+            landing,
+            transition,
+            jumped_from: Some(self.position_ms(now_ns)),
+        };
+        self.land(plan, arrival, now_ns, out);
     }
 
-    /// Lands at `at_ms` (at most the show's length) as of `at_ns`: [`Effect::Jumped`]
-    /// when `jumped_from` is given, the state there, then the pause or play on.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one private landing path for every caller"
-    )]
+    /// Lands as `arrival` says, as of `at_ns`: [`Effect::Jumped`] when it jumped, the
+    /// state there, then the pause or play on.
     fn land<K: ShowKeys<Timeline = T>>(
         &mut self,
         plan: &Plan<K>,
-        at_ms: u32,
-        landing: Landing,
-        transition: Option<K::Preset>,
+        arrival: Arrival<K::Preset>,
         at_ns: i64,
-        jumped_from: Option<u32>,
         out: &mut Vec<Step<K>>,
     ) {
+        let Arrival {
+            at_ms,
+            landing,
+            transition,
+            jumped_from,
+        } = arrival;
         let t = at_ms.min(plan.length_ms());
         if let Some(from_ms) = jumped_from {
             out.push(Step {
@@ -1019,6 +1080,18 @@ fn arrive_at<K: ShowKeys>(plan: &Plan<K>, at_ms: u32) -> Option<K::Preset> {
 }
 
 /// Where and how a jump to bookmark `b` lands, and its transition.
+/// Where and how a landing arrives ([`Runner::land`]).
+struct Arrival<P> {
+    /// Where, at most the show's length.
+    at_ms: u32,
+    /// Whether it pauses there or plays on.
+    landing: Landing,
+    /// The transition a program cut it makes uses.
+    transition: Option<P>,
+    /// The play head it jumped from, for [`Effect::Jumped`]; `None` for a start.
+    jumped_from: Option<u32>,
+}
+
 fn bookmark_landing<K: ShowKeys>(
     plan: &Plan<K>,
     b: &Bookmark<K>,

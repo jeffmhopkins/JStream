@@ -27,7 +27,8 @@
 //!
 //! At a point `p`, in this order:
 //! 1. a loop the play head is in, and is not leaving, that ends at `p` wraps to its start
-//!    (so a bookmark at a loop's end is outside it, and never pauses a pass);
+//!    (so a bookmark at a loop's end is outside it, and never pauses a pass); a sequence
+//!    clip that ended at `p` stops, and plays again if it spans the loop's start;
 //! 2. a pausing bookmark at `p` pauses the show *before* anything at `p`: whatever sits at
 //!    `p` happens on Continue. A bookmark the show just resumed from, or a loop's start
 //!    it just wrapped to, does not pause again;

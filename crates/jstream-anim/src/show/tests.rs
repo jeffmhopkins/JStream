@@ -1807,3 +1807,40 @@ fn end_loop_to_a_bookmark_at_the_end_does_not_spin() {
         }
     }
 }
+
+#[test]
+fn a_loop_wrap_plays_again_a_sequence_clip_that_ends_at_the_loops_end() {
+    let mut p = plan(vec![clip("A", 100)]);
+    p.sequences.push(seq(1, 10, 20));
+    p.loops.push(lp(0, 10, 30, Leave::AtOnce));
+    let mut rig = Rig::new(p);
+    rig.start(0, Landing::PlayOn);
+    let at_start = rig.at(10);
+    assert!(
+        at_start.contains(&Effect::SequencePlay {
+            clip: 0,
+            timeline: 1,
+            offset_ms: 0
+        }),
+        "{at_start:?}"
+    );
+    for (pass, at) in [(1, 30), (2, 50)] {
+        let wrap = rig.at(at);
+        assert_eq!(
+            wrap,
+            vec![
+                Effect::Looped { region: 0, pass },
+                Effect::SequenceStop {
+                    clip: 0,
+                    timeline: 1
+                },
+                Effect::SequencePlay {
+                    clip: 0,
+                    timeline: 1,
+                    offset_ms: 0
+                },
+            ],
+            "pass {pass}"
+        );
+    }
+}
