@@ -692,7 +692,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   phases they make up, with the readback's wait (`Compositor::readback_wait`) in the
   finish phase. The GPU times of one timed frame's units, added up, are also the
   frame's GPU time (`DrawMeter::take_gpu_frame`), which the program's draw hands to
-  `resolution::Governor` (ADR-0197, see [Runtime](#runtime)). A meter keeps its units in maps from frame to frame, so a steady frame
+  `resolution::Governor` (ADR-0197, see [Runtime](#runtime)); the size it chooses comes
+  back to the meter (`DrawMeter::model_percent`) and is the drawer's `model_resolution`
+  and, counted over the frames below 100, its `model_frames_reduced`. A meter keeps its units in maps from frame to frame, so a steady frame
   allocates nothing, and publishes running totals once a second through `arc-swap`
   (`DrawerSlot`); the render thread's collector frees the totals it replaces. The
   render thread also times one frame in four (`GPU_EVERY`) on the GPU, where the device
@@ -1577,8 +1579,8 @@ The **3D rendering switches** (`studio.set_rendering`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decision 1) are an application setting too, answered before the collection lock
 (`Engine::rendering_call`): a `screen_space_steps` that isn't one of
-`SCREEN_SPACE_STEPS`, or a `max_probe_resolution` that isn't one of
-`PROBE_RESOLUTIONS`, is `invalid_argument` and changes nothing; otherwise each switch the
+`SCREEN_SPACE_STEPS`, a `max_probe_resolution` that isn't one of
+`PROBE_RESOLUTIONS`, or a `model_resolution` that isn't one of `MODEL_RESOLUTIONS`, is `invalid_argument` and changes nothing; otherwise each switch the
 call names takes its value
 (`RenderFeatures::with`), the live sources' `FilterAssets` take them
 (`LiveSources::set_features`), and the engine re-plans when one changed and, with the
@@ -4699,18 +4701,27 @@ Before a frame is given up that way, 3D models give up pixels
 ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)).
 `resolution::Governor` runs once a tick in the program's draw, after the poll: it takes
 the GPU time of the latest timed frame that came back (`DrawMeter::take_gpu_frame`, the
-units of one frame of every four added up) and whether the conversions are behind, and
+units of one frame of every four added up), whether the conversions are behind and
+whether a model's layer was drawn since the last tick (`Chains::model_drawn`), and
 sets `Chains::model_percent` to one of 100, 85, 75, 67 and 50. It steps down at once
 when the GPU is behind and when three timed frames in a row took over 88% of the frame's
-budget; it steps up when the time the larger size is expected to take (all of the frame's
+budget; it steps up when the time the larger size is expected to take (the frame's time
+divided by what the step down to this size saved, the first frame timed after it over the
+last before it; until one has been timed, the worst case, all of the frame's time
 growing with the model's pixels) has stayed under 78% for 5 seconds, a wait that doubles,
 up to 80 seconds, each time a step up is undone within 15; and it decides nothing for 10
-ticks after a change, while the frames in flight are the old size. A device that can't
-time its frames steps on the first signal alone. Each change logs one line. The
-environment variable `JSTREAM_MODEL_RESOLUTION` set to `off` keeps 100, one of the
-sizes keeps that size, and `auto` or nothing chooses; any other value is logged and read
-as `auto`. A drawer whose meter has no budget (not the program's) stays at 100
-(`resolution.rs`'s tests).
+ticks after a change, while the frames in flight are the old size, and nothing for its
+first 3 seconds, whose frames upload and compile. A device that can't
+time its frames steps on the first signal alone. It steps down only while a model is
+drawn, since fewer pixels gain nothing without one, and each change logs one line
+([ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
+The rendering switches' `model_resolution` (`Shot::model_resolution`, read each tick)
+decides who chooses: 0 leaves it to the governor, and a size holds that size, from which
+the governor goes on when the choice is handed back. A drawer whose meter has no budget
+(not the program's) never lowers it itself. The size goes to the meter each tick
+(`DrawMeter::model_percent`), and `profile.get` reports it as the drawer's
+`model_resolution`, with the frames of the window drawn below 100 as
+`model_frames_reduced` (`resolution.rs`'s tests).
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back, as do JPEG and PNG preview streams'
 picture queues (*Preview streams*), and virtual cameras the program; a mix with a
