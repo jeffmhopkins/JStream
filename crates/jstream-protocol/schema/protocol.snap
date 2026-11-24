@@ -4492,6 +4492,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "submits": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average number of GPU submits the thread made per frame. Each submit costs\nthe thread a fixed time in the driver however little work it carries, so a high\ncount with a low `gpu_ms` is CPU time that batching would save. The compositor's\nown submits only: a platform's or a browser's on the same queue are not counted."
         }
       },
       "required": [
@@ -14378,7 +14383,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "encoder_sessions": {
               "default": 0,
-              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. A preview stream's session counts\nin both while it is a hardware one (since 0.179). Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
+              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. A preview stream's session counts\nin both while it is a hardware one (since 0.180). Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
@@ -19089,5 +19094,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.179"
+  "title": "JStream protocol 0.180"
 }

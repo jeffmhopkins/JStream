@@ -385,9 +385,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.179 because `profile.get` names each stream's video encoder:
+`PROTOCOL_VERSION` is 0.180 because `profile.get` names each stream's video encoder:
 `StreamProfile` gains `encoder`, the name of the one encoding it now, and `hardware`,
-whether it runs on dedicated hardware; 0.178 because the rendering switches say how many pixels 3D models
+whether it runs on dedicated hardware; 0.179 because `profile.get` counts each drawing thread's GPU
+submits per frame (`DrawerProfile`'s `submits`); 0.178 because the rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
@@ -1923,7 +1924,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
-  the cap (0.13; missing, they parse as absent and 0), and since 0.179 a preview
+  the cap (0.13; missing, they parse as absent and 0), and since 0.180 a preview
   stream's session too while it is a hardware one. `cleartext` says whether
   publishing sends the stream key across the network unencrypted: a generic RTMP
   target whose URL is plain `rtmp://` to a host other than `localhost` or a loopback
@@ -2023,7 +2024,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `stats.tick`'s `drops` leave out), since 0.178 the
   size its 3D models were drawn at when the window ended (`model_resolution`, a
   percentage, 100 from an older server) and the frames drawn with them below 100
-  (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  (`model_frames_reduced`), since 0.179 the GPU submits it made per frame (`submits`:
+  each costs the thread a fixed time however little work it carries, and only the
+  compositor's own are counted), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the
@@ -2040,7 +2043,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   client) and `dropped` on the way, the frames its encoder took more than a frame
   period after they were handed over (`late`), the encoder's average time per frame
   (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
-  video and audio for an output, video for a preview stream). Since 0.179 it also
+  video and audio for an output, video for a preview stream). Since 0.180 it also
   names the video encoder encoding the stream now (`encoder`, as the platform names
   it, after any fallback) and whether that one runs on dedicated hardware
   (`hardware`). Most frames lost come
