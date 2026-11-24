@@ -329,6 +329,28 @@ pub fn Sources() -> impl IntoView {
     let pasting = crate::clipboard::Pasting::from_page();
     let filter = Filter::new();
     let reorder = Reorder::new();
+    // A row with audio dragged out towards the Show panel's tracks: its source's audio
+    // (ADR-0216's "Add source audio").
+    let show_panel = use_context::<crate::panels::show::ShowPanel>();
+    let carry = move |event: &leptos::ev::PointerEvent, dropped: bool| {
+        let Some(panel) = show_panel else { return };
+        let source = reorder.dragged.get_untracked().and_then(|key| {
+            studio.collection.with_untracked(|c| {
+                let c = c.as_ref()?;
+                let (_, item) = c.item(&ItemId::new(key))?;
+                let source = c.source(&item.source_id)?;
+                source
+                    .audio
+                    .is_some()
+                    .then(|| (source.source_id.to_string(), source.name.clone()))
+            })
+        });
+        match source {
+            Some((id, name)) => panel.carry_source(&id, &name, event, dropped),
+            None if dropped => panel.carry.set(None),
+            None => {}
+        }
+    };
     // The nested scenes' rows that show their items, by item.
     let expanded = RwSignal::new(HashSet::<ItemId>::new());
     let manager = use_context::<LabelManager>();
@@ -1017,9 +1039,20 @@ pub fn Sources() -> impl IntoView {
                 <ul
                     class="rows tree-rows"
                     class:reordering=move || reorder.dragged.with(Option::is_some)
-                    on:pointermove=move |event| reorder.moved(&event)
-                    on:pointerup=move |_| reorder.up(drop)
-                    on:pointercancel=move |_| reorder.cancel()
+                    on:pointermove=move |event| {
+                        reorder.moved(&event);
+                        carry(&event, false);
+                    }
+                    on:pointerup=move |event| {
+                        carry(&event, true);
+                        reorder.up(drop);
+                    }
+                    on:pointercancel=move |_| {
+                        if let Some(panel) = show_panel {
+                            panel.carry.set(None);
+                        }
+                        reorder.cancel();
+                    }
                 >
                     <For each=shown_rows key=Row::key children=row />
                 </ul>

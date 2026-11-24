@@ -73,7 +73,13 @@ Contents:
   item's modifiers at one moment into `Offsets`, without allocating, so the render
   thread calls it per item per frame: positions, angles and crop add, scale, opacity, width and height
   multiply (`Offsets::size_of` gives the box's two factors, scale times each side's), and a step that would leave a sum non-finite is skipped. `Offsets::blend` mixes two sides' outputs across a keyframe move, which keeps
-  every wave's phase.
+  every wave's phase. A `Modifier` with `replace`
+  ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)) sets its property
+  instead: `Offsets::set` holds each property's last replaced value with its amount,
+  `Offsets::base` gives a property's own value as that sets it, and `Offsets::on` adds
+  the offsets to it. `opacity_of`, `scale_of` and `size_of` take the replaced opacity
+  and factors. `blend` blends a property both sides set, and switches one only one side
+  sets halfway through.
 - Audio-reactive modifiers
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): `Kind::Audio`
   holds an `Audio`: a `Measure` (`Level`, `Peak`, `Onset`, or a `Band` between two

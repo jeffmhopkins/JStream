@@ -3741,6 +3741,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Whether it runs. Default `true`, which isn't written.",
           "type": "boolean"
         },
+        "mode": {
+          "$ref": "#/$defs/MappingMode",
+          "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.186).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+        },
         "modifier_id": {
           "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
           "type": "string"
@@ -4218,7 +4222,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         },
         "inputs": {
-          "description": "What sets it: at most 8 readers, each a `midi`, `data` or `channel` modifier's kind\nand parameters, whose `from` and `to` map the reading onto the channel's 0 to 1.\nA `channel` input can't lead back to this channel. Default none.",
+          "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.186,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
           "items": {
             "$ref": "#/$defs/MotionKind"
           },
@@ -10327,6 +10331,21 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "type": "object"
     },
+    "MappingMode": {
+      "description": "How a mapping meets the value it drives (ADR-0203, since 0.186): it adds to it, or\nreplaces it.",
+      "oneOf": [
+        {
+          "const": "add",
+          "description": "An offset: its value is added to the stored value (multiplied into a scale), so\nthe stored value, keyframes and other mappings still count.",
+          "type": "string"
+        },
+        {
+          "const": "replace",
+          "description": "An override: its value is the value, in the property's or setting's own unit;\n`add` mappings still add on top.",
+          "type": "string"
+        }
+      ]
+    },
     "MasterInfo": {
       "description": "The master stage, as `state.get` reports it: what applies to everything leaving\nJStream (ADR-0080 §1).",
       "properties": {
@@ -11567,6 +11586,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "enabled": {
           "description": "Whether it applies. Default `true`; omitted when `true`.",
           "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/MappingMode",
+          "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.186). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
         },
         "modifier_id": {
           "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -15028,7 +15051,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "encoder_sessions": {
               "default": 0,
-              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
+              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. A preview stream's session counts\nin both while it is a hardware one (since 0.185). Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
@@ -17916,7 +17939,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "paints": {
           "default": 0,
-          "description": "How many times the `jstream-sources` thread painted it: a source that draws its\nown frames as they come due (`waveform`, `spectrum`, `timer`).",
+          "description": "How many times it painted: the `jstream-sources` thread's paints of a source that\ndraws its own frames as they come due (`waveform`, `spectrum`, `timer`), and each\nnew frame a `browser` page painted on the GPU that a plan took (#1556).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -18078,6 +18101,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "encoder": {
+          "default": "",
+          "description": "The name of the video encoder encoding it now, as the platform names it: the one\nit fell back to when the one it opened refused its first frame. Empty from an\nengine that does not report it.",
+          "type": "string"
+        },
         "fps": {
           "$ref": "#/$defs/Finite32",
           "default": 0.0,
@@ -18096,6 +18124,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "hardware": {
+          "default": false,
+          "description": "Whether that encoder runs on dedicated hardware.",
+          "type": "boolean"
         },
         "kbps": {
           "default": 0,
@@ -19323,6 +19356,14 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII\nletters, digits, `_` and `-`.",
           "type": "string"
         },
+        "enabled": {
+          "description": "Whether it drives (ADR-0203, since 0.186): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+          "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/MappingMode",
+          "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.186).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
+        },
         "target": {
           "$ref": "#/$defs/ValueTarget",
           "description": "What it drives."
@@ -20225,5 +20266,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.184"
+  "title": "JStream protocol 0.186"
 }

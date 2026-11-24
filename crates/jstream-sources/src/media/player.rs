@@ -737,6 +737,9 @@ mod tests {
         sizes: fn(i64) -> u32,
         /// Told when a seek starts, then waited on before it finishes.
         gate: Option<(Sender<()>, Receiver<()>)>,
+        /// When set, the clip waits on it once before saying it has ended, so a test
+        /// can look at the player before the decode thread reaches the end (#1746).
+        end_gate: Option<Receiver<()>>,
     }
 
     impl Clip {
@@ -756,6 +759,7 @@ mod tests {
                 next: 0,
                 sizes,
                 gate: None,
+                end_gate: None,
             }
         }
     }
@@ -767,6 +771,9 @@ mod tests {
 
         fn next_video(&mut self) -> Result<Option<VideoFrame>, PlatformError> {
             if self.next >= self.frames {
+                if let Some(go) = self.end_gate.take() {
+                    let _ = go.recv();
+                }
                 return Ok(None);
             }
             let side = (self.sizes)(self.next);
@@ -889,8 +896,13 @@ mod tests {
     fn the_length_is_shared_once_a_play_ends() {
         let mut clip = Clip::new(5, false, |_| 2);
         clip.next = 1;
+        // Held at the end until the first look, so a quick decode thread can't learn
+        // the length before it (#1746).
+        let (go, go_rx) = channel();
+        clip.end_gate = Some(go_rx);
         let player = start(clip, 8, false);
         assert_eq!(player.state().length, None, "not known before the end");
+        go.send(()).expect("the decode thread waits at the end");
         wait(&player, "the end", |s| s.ended);
         assert_eq!(player.state().length, Some(5 * PERIOD_US));
     }

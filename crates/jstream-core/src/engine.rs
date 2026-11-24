@@ -3028,7 +3028,13 @@ impl Engine {
             }
         }
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        let hardware = count(sessions.iter().filter(|e| e.hardware()).count());
+        // A preview stream's hardware session counts too (#1691): it is one of the
+        // sessions a capped encoder has given out.
+        let preview = usize::from(
+            gate.program()
+                .is_some_and(|program| program.preview_hardware().taken()),
+        );
+        let hardware = count(sessions.iter().filter(|e| e.hardware()).count() + preview);
         let encoder = gate
             .running
             .get(output_id)
@@ -3046,7 +3052,7 @@ impl Engine {
                 hardware: own.hardware(),
                 dedicated: own.dedicated(),
             });
-        (encoder, count(sessions.len()), hardware)
+        (encoder, count(sessions.len() + preview), hardware)
     }
 
     fn host(&mut self) -> Arc<MediaHost> {
@@ -3968,7 +3974,16 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
-    /// [`State::set_upcoming`], for tests until the show runner calls it.
+    /// The scene a show runs to next ([`State::set_upcoming`]), for tests.
+    #[cfg(test)]
+    pub(crate) fn upcoming(&self) -> Option<String> {
+        lock(&self.shared.state)
+            .studio
+            .upcoming()
+            .map(|id| id.as_str().to_owned())
+    }
+
+    /// [`State::set_upcoming`], for tests that name it without a show.
     #[cfg(test)]
     pub(crate) fn set_upcoming(&self, scene_id: Option<&str>) -> Result<(), ProtocolError> {
         let scene_id = scene_id.map(SceneId::new);
@@ -5650,8 +5665,12 @@ impl State {
         {
             // A channel the collection has just gained is followed before a lane takes it.
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         self.channels
             .lanes_start(timeline_id, &info, start, from_ms.is_some());
@@ -7168,10 +7187,6 @@ impl State {
     /// media file on it is held at its first frame and the cut to it starts nothing.
     /// The warm scenes are published again when it changed. A scene the collection
     /// doesn't hold is `not_found`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the show runner (alpha.13 ST1) calls it")
-    )]
     pub(crate) fn set_upcoming(&mut self, scene_id: Option<&SceneId>) -> Result<(), ProtocolError> {
         if self.studio.set_upcoming(self.graph.state(), scene_id)? {
             self.publish_warm();
@@ -7730,8 +7745,12 @@ impl State {
         // A channel the collection has just gained is followed before it is set.
         if let Some(engine) = self.shared.upgrade() {
             let midi = self.live.midi();
-            self.channels
-                .keep(&self.graph, midi.as_deref(), &engine.data);
+            self.channels.keep(
+                &self.graph,
+                midi.as_deref(),
+                &engine.data,
+                self.live.filter_assets().motion_heard(),
+            );
         }
         let missing = |channel_id: &str| ProtocolError::NotFound {
             entity: EntityKind::Channel,
@@ -7802,8 +7821,15 @@ impl State {
                 self.channels.scene_live(program);
             }
         }
-        let settling = self.channels.tick(&self.graph, midi.as_deref(), data, now);
-        let changed = self.driver.tick(&self.graph, midi.as_deref(), data, now);
+        // The scopes the collection's audio inputs hear (ADR-0206).
+        let assets = self.live.filter_assets();
+        let heard = assets.motion_heard();
+        let settling = self
+            .channels
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
+        let changed = self
+            .driver
+            .tick(&self.graph, midi.as_deref(), data, heard, now);
         if changed && self.refresh_shown() {
             self.redraw();
         }
