@@ -70,7 +70,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
-  `Action` (`output.start`, `output.stop`, `output.toggle` (0.179, ADR-0208), `output.set_key`, `output.clear_key`,
+  `Action` (`output.start`, `output.stop`, `output.toggle` (0.180, ADR-0208), `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
@@ -385,11 +385,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.179 because a key chord or a controller trigger can run several
+`PROTOCOL_VERSION` is 0.180 because a key chord or a controller trigger can run several
 actions: `hotkey.set` and `binding.set` add an action to a chord or trigger already
 bound (refusing only an equal one), `hotkey.clear` and `binding.clear` take an optional
 `action`, and `output.toggle` starts a stopped output and stops a running one
-([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)); 0.178 because the rendering switches say how many pixels 3D models
+([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)); 0.179 because `profile.get` counts each drawing thread's GPU
+submits per frame (`DrawerProfile`'s `submits`); 0.178 because the rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
@@ -1297,7 +1298,7 @@ covers = ["crates/jstream-protocol/src/output.rs"]
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
 `output.start`; `output.delete` removes one, and is refused with `invalid_argument`
-while it runs. `output.toggle` (0.179,
+while it runs. `output.toggle` (0.180,
 [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)) starts an output
 that is stopped or failed and stops any other, and is run as the `output.start` or
 `output.stop` it resolves to, with that action's events and errors: it is what a "go
@@ -1402,7 +1403,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   what one notch zooms). Bound to any other action, `hotkey.set` is `invalid_argument`
   on `action.type`.
 - **`hotkey.set {chord, action}`** binds a chord to an action; its inverse is
-  `hotkey.clear` naming that action. A chord runs several actions (0.179,
+  `hotkey.clear` naming that action. A chord runs several actions (0.180,
   [ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)), in the order
   they were bound: `hotkey.set` on a bound chord adds the action after its others, and
   is refused with `already_exists` (entity `hotkey`, the chord as `id`) only for an
@@ -1547,7 +1548,7 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   `trigger.<field>`, with `Trigger::problem`'s reason.
 - **`binding.set {trigger, action}`** binds a trigger to an action; its inverse is
   `binding.clear` naming that action. Like a chord, a trigger runs several actions in
-  bind order (0.179, ADR-0208): it is refused with `already_exists` (entity `binding`,
+  bind order (0.180, ADR-0208): it is refused with `already_exists` (entity `binding`,
   the trigger as `Display` writes it, such as `MIDI note 36 on channel 10`, as `id`)
   only for an action the trigger runs already. The action is checked as `hotkey.set`
   checks it: the same actions can't be bound, and an object it names must exist.
@@ -2041,7 +2042,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `stats.tick`'s `drops` leave out), since 0.178 the
   size its 3D models were drawn at when the window ended (`model_resolution`, a
   percentage, 100 from an older server) and the frames drawn with them below 100
-  (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  (`model_frames_reduced`), since 0.179 the GPU submits it made per frame (`submits`:
+  each costs the thread a fixed time however little work it carries, and only the
+  compositor's own are counted), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the

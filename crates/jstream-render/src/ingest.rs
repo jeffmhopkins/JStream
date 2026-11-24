@@ -489,6 +489,7 @@ mod tests {
             },
             image.texture().size(),
         );
+        crate::gpu::count_submit();
         compositor.queue().submit([encoder.finish()]);
         buffer.slice(..).map_async(wgpu::MapMode::Read, |result| {
             result.expect("the readback maps");
