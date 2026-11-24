@@ -491,7 +491,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   (`--ptz-camera`), the picker, the head answering, a typed zoom aiming it, the control
   button on each axis, a preset named and saved from its menu and Save, and the selected
   scene's shot set from the position and from a preset, then cleared, with the other
-  camera keeping its own pose; and as the desktop app (its global stubbed, as
+  camera keeping its own pose; a drive held on the pad's arrow key stopped when the
+  focus leaves the pad, and a held Near stopped when the focus leaves it, read off the
+  page's WebSocket; and as the desktop app (its global stubbed, as
   `browse.spec.js` does), the gear opening Settings › Devices' camera list, a camera
   added without a port saved with VISCA over IP's, and a name taken already refused
   unsaved.

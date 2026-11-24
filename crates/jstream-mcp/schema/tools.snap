@@ -7542,7 +7542,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.183).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
             "oneOf": [
               {
                 "const": "pan",
@@ -9013,7 +9013,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.183), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -16713,7 +16713,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.183).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
             "oneOf": [
               {
                 "const": "pan",
@@ -18184,7 +18184,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.183), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -28731,7 +28731,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.183).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
             "oneOf": [
               {
                 "const": "pan",
@@ -30202,7 +30202,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.183), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -40340,7 +40340,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.183).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
             "oneOf": [
               {
                 "const": "pan",
@@ -41805,7 +41805,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.183), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",
@@ -53318,7 +53318,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "PtzAxis": {
-            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.183).",
+            "description": "An axis of a PTZ head's position that a value binding drives (ADR-0209, since 0.177).",
             "oneOf": [
               {
                 "const": "pan",
@@ -54789,7 +54789,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.183), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
+                "description": "One axis of a PTZ camera's position (ADR-0209, since 0.177), in the head's own\ncounts (ADR-0146 §5): the engine aims the head there as the value moves. The\ncamera is named as `ptz.*` actions and shots name it, so a collection carries\nthe mapping to a machine that lists a camera by that name; on a machine that\ndoesn't, it drives nothing.",
                 "properties": {
                   "axis": {
                     "$ref": "#/$defs/PtzAxis",

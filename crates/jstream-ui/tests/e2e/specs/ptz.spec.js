@@ -71,6 +71,43 @@ test.describe('with cameras listed', () => {
     await pick.selectOption('Close');
     await expect(ptz.getByRole('textbox', { name: 'Zoom', exact: true })).toHaveValue('0');
   });
+
+  test('a held drive or focus stops when the focus leaves it', async ({ page, daemon }) => {
+    // The actions the page sends, read off its WebSocket.
+    const sent = [];
+    page.on('websocket', (ws) => ws.on('framesent', ({ payload }) => {
+      if (typeof payload !== 'string') return;
+      try {
+        const action = JSON.parse(payload)?.call?.action;
+        if (action?.type?.startsWith('ptz.')) sent.push(action);
+      } catch { /* not JSON */ }
+    }));
+    await connect(page, daemon);
+    const ptz = await openPtz(page);
+    await expect(ptz.getByRole('status', { name: 'Answering' })).toBeVisible();
+
+    // An arrow key held on the pad drives; the focus moving away stops that camera.
+    const pad = ptz.getByRole('group', { name: 'Pan and tilt' });
+    await pad.focus();
+    await page.keyboard.down('ArrowLeft');
+    await expect.poll(() => sent.filter((a) => a.type === 'ptz.drive').length).toBe(1);
+    expect(sent.at(-1)).toMatchObject({ camera: 'Wide', tilt: 0, zoom: 0 });
+    expect(sent.at(-1).pan).toBeLessThan(0);
+    await ptz.getByRole('combobox', { name: 'Camera' }).focus();
+    await expect.poll(() => sent.at(-1)).toEqual({ type: 'ptz.drive', camera: 'Wide', pan: 0, tilt: 0, zoom: 0 });
+    await page.keyboard.up('ArrowLeft');
+    expect(sent.filter((a) => a.type === 'ptz.drive')).toHaveLength(2);
+
+    // Near held in manual focus stops when the person leaves manual.
+    await ptz.getByRole('button', { name: 'Manual' }).click();
+    const near = ptz.getByRole('button', { name: 'Focus nearer' });
+    await near.hover();
+    await page.mouse.down();
+    await expect.poll(() => sent.at(-1)?.focus).toBe('near');
+    await page.keyboard.press('Tab');
+    await expect.poll(() => sent.at(-1)).toMatchObject({ type: 'ptz.focus', camera: 'Wide', focus: 'stop' });
+    await page.mouse.up();
+  });
 });
 
 /** The engine WebSocket URL for a page served at `pageUrl`. */

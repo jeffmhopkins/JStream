@@ -480,9 +480,10 @@ impl Ptz {
     /// at the fastest speed. A camera this machine doesn't list is skipped. A camera is
     /// sent an aim only when its bound pose changed, so a control at rest sends nothing,
     /// and the head's queue keeps only the latest unsent aim. Pan and tilt move together
-    /// in VISCA, so a binding on only one of them takes the other from where the head
-    /// last answered it was (or was last aimed); until it has answered, a pan or tilt
-    /// binding waits.
+    /// in VISCA, so a binding on only one of them takes the other from the pose the
+    /// bindings last aimed, else from where the head last answered it was; until it has
+    /// answered, a pan or tilt binding waits. So after the pad moves the tilt, the next
+    /// move of a pan-only binding puts the tilt back where the bindings left it.
     pub(crate) fn follow_axes(&mut self, aims: &[crate::value_bindings::PtzAim]) {
         if self.heads.is_empty() {
             self.bound.clear();

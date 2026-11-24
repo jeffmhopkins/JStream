@@ -330,7 +330,7 @@ Contents ([Design](#design) explains the choices):
 - **PTZ panel** (`panels/ptz.rs`, ADR-0146, ADR-0209): `Ptz`, the "PTZ cameras" dock panel
   (`PanelId::Ptz`, on the right from the View menu). It reads `ptz.list` every 500 ms while
   shown and controls the picked camera: a pad of arrows that drive while held
-  (`ptz.drive`, stopped on release, on leaving and on cleanup), Home, Wide and Tele, focus
+  (`ptz.drive`, stopped on release, on leaving, on the focus leaving the pad or the window, and on cleanup, to the camera driven), Home, Wide and Tele, focus
   modes with Near and Far, one Speed (`drive_speeds`, `zoom_speed`), the pose as number
   fields that aim (`aim_pose`) each with `learn::Learn` on a `ValueTarget::PtzAxis`
   (`mapping_range`), presets 1 to 16 and a field with Save arming a store, a preset menu

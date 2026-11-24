@@ -7,10 +7,13 @@
 //!   app (`ptz_cameras.rs`); with no camera listed the panel says how to add one (in a
 //!   browser, the daemon's `--ptz-camera`).
 //! - **Pan and tilt** are a pad of eight arrows around Home. Holding an arrow drives the
-//!   head (`ptz.drive`) at the panel's Speed; letting go, or the pointer leaving, stops
-//!   it. With the pad focused the arrow keys do the same. Home sends `ptz.home`.
+//!   head (`ptz.drive`) at the panel's Speed; letting go, the pointer leaving, the focus
+//!   leaving the pad, the window losing the focus or the panel closing stops it, sent to
+//!   the camera that was driven. With the pad focused the arrow keys do the same. Home
+//!   sends `ptz.home`.
 //! - **Zoom** has Wide and Tele, held as the arrows are. **Focus** has Auto, One push
-//!   and Manual, and Near and Far held while it is manual (`ptz.focus`).
+//!   and Manual, and Near and Far held while it is manual (`ptz.focus`), stopped the
+//!   same ways, and by leaving manual.
 //! - **Speed** is the pan step, 1 to 24; tilt takes the same step up to 23, and zoom and
 //!   focus the step scaled to 1 to 8.
 //! - **Position** shows the pan, tilt, zoom and focus the head last answered. Each is a
@@ -29,7 +32,7 @@
 //!
 //! Nothing here but the shot is an edit: control is runtime actions, never undone.
 //!
-//! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#live-panels
+//! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#ptz
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
@@ -272,8 +275,11 @@ pub fn Ptz() -> impl IntoView {
     let names = RwSignal::new(Value::Null);
     let menu = RwSignal::new(None::<Menu>);
     let renaming = RwSignal::new(None::<(u8, String)>);
-    // The drive the pointer or a key holds now, so letting go stops only that one.
-    let driving = StoredValue::new(false);
+    // The camera a held pointer or key drives now, so letting go stops that camera's
+    // drive even when the shown camera changed meanwhile, and only when one runs.
+    let driving = StoredValue::new(None::<String>);
+    // The camera whose manual focus Near or Far is held now, likewise.
+    let focusing = StoredValue::new(None::<String>);
 
     let read = move || {
         let Some(s) = session.get() else {
@@ -350,7 +356,18 @@ pub fn Ptz() -> impl IntoView {
         let Some(name) = camera.get_untracked() else {
             return;
         };
-        driving.set_value((pan, tilt, zoom) != (0, 0, 0));
+        // A new drive of another camera stops the one before it first.
+        if let Some(before) = driving.get_value()
+            && before != name
+        {
+            act(Action::PtzDrive {
+                camera: before,
+                pan: 0,
+                tilt: 0,
+                zoom: 0,
+            });
+        }
+        driving.set_value(Some(name.clone()));
         act(Action::PtzDrive {
             camera: name,
             pan,
@@ -359,25 +376,71 @@ pub fn Ptz() -> impl IntoView {
         });
     };
     let stop = move || {
-        if driving.get_value() {
-            drive(0, 0, 0);
+        if let Some(name) = driving.get_value() {
+            driving.set_value(None);
+            act(Action::PtzDrive {
+                camera: name,
+                pan: 0,
+                tilt: 0,
+                zoom: 0,
+            });
         }
     };
+    // Manual focus Near or Far held on the shown camera.
+    let focus_hold = move |mode: PtzFocus| {
+        let Some(name) = camera.get_untracked() else {
+            return;
+        };
+        focusing.set_value(Some(name.clone()));
+        act(Action::PtzFocus {
+            camera: name,
+            focus: mode,
+            speed: Some(zoom_speed(speed.get_untracked())),
+        });
+    };
+    let focus_end = move || {
+        if let Some(name) = focusing.get_value() {
+            focusing.set_value(None);
+            act(Action::PtzFocus {
+                camera: name,
+                focus: PtzFocus::Stop,
+                speed: None,
+            });
+        }
+    };
+    // The window losing the focus (another app, another window) takes the key or
+    // pointer release with it, so it stops whatever is held.
+    let leaving = window_event_listener(leptos::ev::blur, move |_| {
+        stop();
+        focus_end();
+    });
+    on_cleanup(move || leaving.remove());
+    // Closing the panel mid-drive: the session outlives the panel, so stop the head.
     on_cleanup(move || {
-        if driving.try_get_value() == Some(true)
-            && let (Some(s), Some(name)) = (session.get(), camera.try_get_untracked().flatten())
-        {
+        let Some(s) = session.get() else {
+            return;
+        };
+        let mut stops = Vec::new();
+        if let Some(name) = driving.try_get_value().flatten() {
+            stops.push(Action::PtzDrive {
+                camera: name,
+                pan: 0,
+                tilt: 0,
+                zoom: 0,
+            });
+        }
+        if let Some(name) = focusing.try_get_value().flatten() {
+            stops.push(Action::PtzFocus {
+                camera: name,
+                focus: PtzFocus::Stop,
+                speed: None,
+            });
+        }
+        for action in stops {
             let control = s.control.clone();
             spawn_local(async move {
                 let _ = control
-                    .call(jstream_control::protocol::Call::Action {
-                        action: Action::PtzDrive {
-                            camera: name,
-                            pan: 0,
-                            tilt: 0,
-                            zoom: 0,
-                        },
-                    })
+                    .call(jstream_control::protocol::Call::Action { action })
                     .await;
             });
         }
@@ -394,12 +457,10 @@ pub fn Ptz() -> impl IntoView {
         let Some(name) = camera.get_untracked() else {
             return;
         };
-        let speed = matches!(mode, PtzFocus::Near | PtzFocus::Far)
-            .then(|| zoom_speed(speed.get_untracked()));
         act(Action::PtzFocus {
             camera: name,
             focus: mode,
-            speed,
+            speed: None,
         });
     };
     let home = move || {
@@ -616,6 +677,22 @@ pub fn Ptz() -> impl IntoView {
             stop();
         }
     };
+    // The focus leaving the pad takes a held key's release elsewhere, so it stops the
+    // drive; moving between the pad and its own buttons doesn't.
+    let pad_left = move |e: leptos::ev::FocusEvent| {
+        use leptos::wasm_bindgen::JsCast;
+        let inside = e
+            .related_target()
+            .and_then(|t| t.dyn_into::<leptos::web_sys::Node>().ok())
+            .zip(
+                e.current_target()
+                    .and_then(|t| t.dyn_into::<leptos::web_sys::Node>().ok()),
+            )
+            .is_some_and(|(to, pad)| pad.contains(Some(&to)));
+        if !inside {
+            stop();
+        }
+    };
     let panel_keys = move |e: leptos::ev::KeyboardEvent| {
         if e.key() == "Escape" && saving.get_untracked() {
             e.prevent_default();
@@ -688,7 +765,7 @@ pub fn Ptz() -> impl IntoView {
 
     let pad = move || {
         view! {
-            <div class="ptz-pad" role="group" aria-label="Pan and tilt" tabindex="0" on:keydown=pad_keys on:keyup=pad_keys_up>
+            <div class="ptz-pad" role="group" aria-label="Pan and tilt" tabindex="0" on:keydown=pad_keys on:keyup=pad_keys_up on:focusout=pad_left>
                 {PAD.iter().map(|cell| match *cell {
                     Some((direction, label, angle)) => held(
                         label,
@@ -721,30 +798,30 @@ pub fn Ptz() -> impl IntoView {
                 <div class="ptz-lens-row">
                     <span class="ptz-lens-label">"Focus"</span>
                     <div class="segmented" role="group" aria-label="Focus mode">
-                        <button type="button" class:on=move || !manual.get() on:click=move |_| { manual.set(false); focus(PtzFocus::Auto); }>"Auto"</button>
-                        <button type="button" on:click=move |_| { manual.set(false); focus(PtzFocus::OnePush); }>"One push"</button>
+                        <button type="button" class:on=move || !manual.get() on:click=move |_| { focus_end(); manual.set(false); focus(PtzFocus::Auto); }>"Auto"</button>
+                        <button type="button" on:click=move |_| { focus_end(); manual.set(false); focus(PtzFocus::OnePush); }>"One push"</button>
                         <button type="button" class:on=move || manual.get() on:click=move |_| { manual.set(true); focus(PtzFocus::Manual); }>"Manual"</button>
                     </div>
                 </div>
                 {move || manual.get().then(|| {
-                    let focusing = StoredValue::new(false);
-                    let near = StoredValue::new(move || { focusing.set_value(true); focus(PtzFocus::Near); });
-                    let far = StoredValue::new(move || { focusing.set_value(true); focus(PtzFocus::Far); });
-                    let end = move || {
-                        if focusing.get_value() {
-                            focusing.set_value(false);
-                            focus(PtzFocus::Stop);
-                        }
+                    // Held as the drive buttons are, stopping on every way a press ends.
+                    let hold = move |label: &'static str, text: &'static str, mode: PtzFocus| view! {
+                        <button type="button" class="ptz-hold" title=label aria-label=label
+                            on:pointerdown=move |e: leptos::ev::PointerEvent| {
+                                if e.button() == 0 {
+                                    focus_hold(mode);
+                                }
+                            }
+                            on:pointerup=move |_| focus_end()
+                            on:pointerleave=move |_| focus_end()
+                            on:pointercancel=move |_| focus_end()
+                            on:blur=move |_| focus_end()>{text}</button>
                     };
                     view! {
                         <div class="ptz-lens-row">
                             <span class="ptz-lens-label"></span>
-                            <button type="button" class="ptz-hold" title="Focus nearer"
-                                on:pointerdown=move |_| near.with_value(|f| f())
-                                on:pointerup=move |_| end() on:pointerleave=move |_| end()>"Near"</button>
-                            <button type="button" class="ptz-hold" title="Focus farther"
-                                on:pointerdown=move |_| far.with_value(|f| f())
-                                on:pointerup=move |_| end() on:pointerleave=move |_| end()>"Far"</button>
+                            {hold("Focus nearer", "Near", PtzFocus::Near)}
+                            {hold("Focus farther", "Far", PtzFocus::Far)}
                         </div>
                     }
                 })}

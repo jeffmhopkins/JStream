@@ -123,6 +123,9 @@ pub fn PtzCameraSettingView() -> impl IntoView {
     let address = RwSignal::new(String::new());
     let transport = RwSignal::new(TRANSPORTS[0].0.to_owned());
     let visca = RwSignal::new(1_u8);
+    // A save in flight: the page asks for one at a time, so a refusal's undo never
+    // lands over a later save.
+    let busy = RwSignal::new(false);
     let clear_form = move || {
         editing.try_set(None);
         name.try_set(String::new());
@@ -131,6 +134,10 @@ pub fn PtzCameraSettingView() -> impl IntoView {
         visca.try_set(1);
     };
     let save = move |next: PtzCameraSetting, from_form: bool| {
+        if busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
         let before = setting.get_untracked();
         setting.set(next.clone());
         spawn_local(async move {
@@ -156,6 +163,7 @@ pub fn PtzCameraSettingView() -> impl IntoView {
                     problem.try_set(Some(why));
                 }
             }
+            busy.try_set(false);
         });
     };
     let toggle = move |on: bool| {
@@ -201,6 +209,7 @@ pub fn PtzCameraSettingView() -> impl IntoView {
                 <input
                     type="checkbox"
                     aria-label="Control PTZ cameras"
+                    prop:disabled=move || busy.get()
                     prop:checked=move || setting.with(|now| now.on)
                     on:change=move |event| toggle(event_target_checked(&event))
                 />
@@ -227,8 +236,8 @@ pub fn PtzCameraSettingView() -> impl IntoView {
                                     <span class="device-dates">
                                         {format!("{}, {kind}, VISCA address {}", c.address, c.visca)}
                                     </span>
-                                    <button type="button" on:click=move |_| edit(index)>"Edit"</button>
-                                    <button type="button" on:click=move |_| remove(index)>"Remove"</button>
+                                    <button type="button" prop:disabled=move || busy.get() on:click=move |_| edit(index)>"Edit"</button>
+                                    <button type="button" prop:disabled=move || busy.get() on:click=move |_| remove(index)>"Remove"</button>
                                 </li>
                             }
                         }).collect_view()}
@@ -274,7 +283,7 @@ pub fn PtzCameraSettingView() -> impl IntoView {
                         <option value=n.to_string()>{format!("VISCA {n}")}</option>
                     }).collect_view()}
                 </select>
-                <button type="submit">{move || if editing.get().is_some() { "Save camera" } else { "Add camera" }}</button>
+                <button type="submit" prop:disabled=move || busy.get()>{move || if editing.get().is_some() { "Save camera" } else { "Add camera" }}</button>
                 {move || editing.get().is_some().then(|| view! {
                     <button type="button" on:click=move |_| clear_form()>"Cancel"</button>
                 })}
