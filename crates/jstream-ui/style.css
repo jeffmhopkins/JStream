@@ -107,6 +107,14 @@ body {
 }
 
 ::selection { background: var(--selection); }
+/* The chrome selects no text, so a click or a drag across panels highlights nothing.
+   Text fields and readable text keep it: the same list as `chrome::TEXT`. */
+body { -webkit-user-select: none; user-select: none; }
+input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, .problem,
+.problem-bar > span, .connection dd, .activity-log, .selectable { -webkit-user-select: text; user-select: text; }
+input[type="checkbox"], input[type="radio"], input[type="range"], input[type="button"],
+input[type="submit"], input[type="reset"], input[type="color"], input[type="file"],
+input[type="image"] { -webkit-user-select: none; user-select: none; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; border: 2px solid var(--panel); }
@@ -188,20 +196,23 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .app-header .brand-mark { width: 22px; height: 22px; border-radius: 5px; }
 .app-header .spacer { flex: 1 1 auto; }
 .app-header .readout { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
-.top-menu { position: relative; }
+/* Stretched to the bar's full height, so its dropdown can hang flush under it. */
+.top-menu { position: relative; align-self: stretch; display: flex; align-items: center; }
 .menu-button { position: relative; z-index: 2; padding: 6px 10px; border: none; border-radius: 5px; background: transparent; color: var(--muted); }
 .menu-button:hover:not(:disabled), .menu-button.open { background: var(--hover); color: var(--text); }
 .menu-catcher { position: fixed; inset: 0; z-index: 1; }
 .dropdown {
   position: absolute;
-  top: 36px;
+  /* Flush under the bar: the header's bottom padding and border below the button. */
+  top: calc(100% + 9px);
   left: 0;
   z-index: 3;
   min-width: 240px;
   padding: 6px;
   background: var(--menu);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 .menu-head { margin: 4px 8px 6px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -2639,10 +2650,14 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .chan-level { flex: 0 0 48px; text-align: right; }
 .chan-driver { margin: 0; }
 .chan-head { margin-top: 8px; }
-.chan-adds { display: flex; gap: 4px; }
-.chan-add { border: none; background: none; color: var(--link); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.chan-head .eyebrow { white-space: nowrap; }
+.chan-adds { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 4px; min-width: 0; }
+.chan-add { white-space: nowrap; border: none; background: none; color: var(--link); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .chan-add.learning { color: var(--accent); }
 .chan-popover { padding: 6px; background: var(--menu); border: 1px solid var(--border); border-radius: 8px; }
+/* The "+ Data" popover: DataReads' fields stacked, then Cancel and Add input. */
+.chan-data { display: flex; flex-direction: column; gap: 6px; }
+.chan-data-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .chan-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .chan-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 6px 0 10px; border-radius: 5px; background: var(--raised); }
 .chan-row.link { cursor: pointer; }
@@ -2969,6 +2984,7 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-btn { height: 30px; padding: 0 12px; white-space: nowrap; }
 .show-btn.on { background: var(--selected); border-color: var(--accent); }
 .show-edit .show-continue { height: 34px; padding: 0 18px; border: 0; border-radius: 6px; background: var(--show-bookmark); color: var(--show-bookmark-ink); font-weight: 700; font-size: 14px; white-space: nowrap; }
+.show-edit .show-continue:disabled { opacity: .4; cursor: default; }
 .show-edit .show-continue:hover:not(:disabled) { background: var(--show-bookmark); filter: brightness(1.08); }
 .show-keycap { background: var(--raised); border: 1px solid var(--border); border-radius: 10px; padding: 2px 9px; font: inherit; font-size: 12px; color: var(--text-soft); }
 .show-next { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -2990,13 +3006,19 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-ruler-row { display: flex; height: 46px; border-bottom: 1px solid var(--line); }
 .show-corner { width: 130px; flex: none; border-right: 1px solid var(--line); }
 .show-ruler { position: relative; flex: 1; overflow: hidden; font: 11px "IBM Plex Mono", ui-monospace, monospace; color: var(--dim); }
-.show-ruler.armable { cursor: crosshair; }
+.show-ruler.scrubs { cursor: ew-resize; }
 .show-tick { position: absolute; top: 22px; height: 24px; padding: 6px 0 0 5px; border-left: 1px solid var(--border); white-space: nowrap; }
 .show-track { display: flex; border-bottom: 1px solid var(--zone); }
 .show-track.show-group { border-top: 3px solid var(--line); }
 .show-track-program { background: var(--canvas-bg); }
 .show-track-head { width: 130px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; border-right: 1px solid var(--line); background: var(--panel); }
 .show-track-head b { font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.show-track-head { cursor: grab; position: relative; user-select: none; }
+.show-track-head b { overflow: hidden; text-overflow: ellipsis; }
+.show-track.lifted { opacity: 0.55; }
+.show-track.lifted .show-track-head { cursor: grabbing; }
+.show-track.reorder-target .show-track-head { box-shadow: inset 0 0 0 2px var(--accent); }
+.show-track-rename { position: absolute; left: 6px; right: 6px; top: 50%; transform: translateY(-50%); height: 24px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 4px; background: var(--app); color: var(--text); font-size: 12px; z-index: 2; }
 .show-tag { display: inline-block; width: 24px; color: var(--show-tag); font: 700 11px "IBM Plex Mono", ui-monospace, monospace; }
 .show-track-icons { font-size: 9px; color: var(--faint); letter-spacing: 2px; white-space: nowrap; }
 .show-track-icons i { font-style: normal; }
@@ -3048,7 +3070,8 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-flag small { font: 600 9px "IBM Plex Sans", system-ui, sans-serif; margin-left: 5px; padding: 0 4px; border: 1px solid var(--show-bookmark-ink); border-radius: 6px; }
 .show-armed { position: absolute; top: 0; bottom: calc(24px + var(--loops-h)); width: 0; margin-left: -1px; border-left: 2px dashed var(--show-armed); z-index: 4; }
 .show-armed em { position: absolute; top: 24px; left: 0; padding: 2px 6px; background: var(--show-armed); color: var(--canvas-bg); font: 700 10px "IBM Plex Mono", ui-monospace, monospace; font-style: normal; white-space: nowrap; border-radius: 0 3px 3px 0; }
-.show-head { position: absolute; top: 0; bottom: calc(24px + var(--loops-h)); width: 2px; margin-left: -1px; background: var(--show-head); box-shadow: 0 0 0 1px var(--canvas-bg); z-index: 5; }
+.show-head { position: absolute; top: 0; bottom: calc(24px + var(--loops-h)); width: 2px; margin-left: -1px; background: var(--show-head); box-shadow: 0 0 0 1px var(--canvas-bg); z-index: 7; cursor: ew-resize; }
+.show-head::before { content: ""; position: absolute; top: 0; bottom: 0; left: -5px; width: 12px; }
 .show-head em { position: absolute; top: 2px; left: 2px; padding: 3px 6px; background: var(--show-head); color: var(--canvas-bg); font: 700 10px "IBM Plex Mono", ui-monospace, monospace; font-style: normal; white-space: nowrap; border-radius: 0 3px 3px 0; }
 .show-head em.flip { left: auto; right: 2px; border-radius: 3px 0 0 3px; }
 .show-zoom-row { display: flex; align-items: center; height: 34px; flex: none; padding-right: 10px; }
@@ -3122,7 +3145,7 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
   --show-seg-4: #4a2330;
 }
 .dock-panel:not([hidden]):has(> .show-panel.run) { height: 100%; }
-.show-run { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.show-run { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow-y: auto; }
 .show-run-bar { min-height: 52px; padding: 8px 0; }
 .show-btn { height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); color: var(--text); font-size: 13px; white-space: nowrap; }
 .show-btn:hover { background: var(--button-hover); }
@@ -3132,7 +3155,7 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
 .show-seg button { padding: 0 14px; border: none; border-radius: 0; background: transparent; color: var(--muted); font-size: 13px; }
 .show-seg button.on { background: var(--selected); color: var(--text); font-weight: 600; }
 .show-run-status { margin-left: auto; color: var(--show-bookmark); font-weight: 600; white-space: nowrap; }
-.show-run-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 330px minmax(0, 1fr) 322px; gap: 14px; padding: 12px 0 8px; overflow: auto; align-items: start; }
+.show-run-body { flex: 1; min-height: 220px; display: grid; grid-template-columns: 330px minmax(0, 1fr) 322px; gap: 14px; padding: 12px 0 8px; overflow: auto; align-items: start; }
 .show-card { background: var(--show-card); border: 1px solid var(--show-card-line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
 .show-card h6, .show-run-marks h6 { margin: 0 0 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; color: var(--dim); }
 .show-run-marks h6 { font-weight: 400; margin-bottom: 8px; }
@@ -3196,3 +3219,53 @@ body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid va
   .show-run-body { grid-template-columns: minmax(0, 1fr); }
   .show-run-body > .show-run-marks { grid-row: auto; }
 }
+/* The Run view's bookmark notes: a fold under the cards, normal text. */
+.show-notes { margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface, var(--raised)); }
+.show-notes-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; background: none; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; text-align: left; }
+.show-notes-head:hover { background: none; color: var(--text); }
+.show-notes-caret { width: 10px; color: var(--muted); }
+.show-notes-body { max-height: 150px; overflow: auto; padding: 0 12px 10px 30px; }
+.show-notes-here { margin: 0; white-space: pre-wrap; line-height: 1.5; color: var(--text); }
+.show-notes-here.hint { color: var(--muted); }
+.show-notes-next { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.show-notes-next h6 { margin: 0 0 4px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.show-notes-next p { margin: 0; white-space: pre-wrap; line-height: 1.5; color: var(--text-soft); }
+.show-notes-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding-right: 10px; }
+.show-notes-bar .show-notes-head { width: auto; flex: 1 1 auto; }
+.show-notes-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: 12px; white-space: nowrap; }
+.show-notes-tools { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.show-notes-tools .show-btn { height: 26px; padding: 0 8px; }
+.show-notes-value { min-width: 64px; text-align: center; color: var(--text-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* Teleprompter: large text that rolls; room below so the last line can reach the reading line. */
+.show-notes.prompter .show-notes-body { max-height: min(34vh, 320px); padding: 4px 24px 0; scroll-behavior: auto; }
+.show-notes.prompter .show-notes-body::after { content: ""; display: block; height: min(36vh, 315px); }
+.show-notes.prompter .show-notes-here { line-height: 1.35; font-weight: 500; }
+.show-notes-here p, .show-notes-said p { margin: 0 0 .6em; white-space: pre-wrap; }
+.show-notes-here p:last-child, .show-notes-said p:last-child { margin-bottom: 0; }
+.show-notes-here p.direction, .show-notes-said p.direction { font-style: italic; color: var(--muted); }
+.show-notes-next .show-notes-said { line-height: 1.5; color: var(--text-soft); }
+/* The Run view's run of show: one row per bookmark, in order. */
+.show-rundown { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow-y: auto; position: relative; border: 1px solid var(--border); border-radius: 8px; background: var(--show-mark-bg); }
+.show-rundown li + li { border-top: 1px solid var(--border); }
+.show-row { display: grid; grid-template-columns: 26px 52px minmax(0, 1fr) auto 44px 64px; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: 0; border-left: 4px solid transparent; border-radius: 0; background: none; color: var(--text); text-align: left; font-size: 13px; }
+.show-row:hover { background: var(--raised); }
+.show-row-n { color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; }
+.show-row-at { color: var(--text-soft); font: 12px "IBM Plex Mono", ui-monospace, monospace; }
+.show-row-name { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.show-row-name b { font-size: 15px; white-space: nowrap; }
+.show-row-name i { font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.show-row .show-tag { width: auto; white-space: nowrap; padding: 2px 5px; border-radius: 3px; font: 700 10px "IBM Plex Mono", ui-monospace, monospace; }
+.show-row-flag { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-align: center; }
+.show-row-key { text-align: right; }
+.show-row.past { opacity: .45; }
+.show-row.loop-start { border-left-color: var(--show-loop); }
+.show-row.current, .show-row.here { background: var(--show-here-bg); border-left-color: var(--show-bookmark); }
+.show-row.current .show-row-flag, .show-row.here .show-row-flag { color: var(--show-bookmark); }
+.show-row.next { border-left-color: var(--accent); }
+.show-row.next .show-row-flag { color: var(--accent); }
+/* A mixer strip's name drags its audio onto the Show panel's tracks (ADR-0216). */
+.strip-name.carries { cursor: grab; touch-action: none; }
+/* Scene audio rows: read-only, each clip linked to its scene clip (ADR-0216). */
+.show-track-linked .show-track-head { cursor: default; }
+.show-au.show-linked { opacity: 0.8; border-style: dashed; }
+.show-au.show-linked .show-link { font-style: normal; margin-right: 4px; font-size: 10px; }

@@ -168,9 +168,10 @@ note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer
 [[target]]
 release = "beta.1"
 title = "Looping media files play without a gap at the wrap"
-status = "planned"
+status = "done"
 issues = [445]
-note = "a bug fix for beta.1: the 25-40 ms gap at each wrap"
+prs = [448, 452, 875]
+note = "the Windows run on alpha.11 found no gap across two wraps of an AAC loop, and its picture steps 1.000 s through each wrap (#445); the audio drifts about 0.3% long within a pass and resyncs at the wrap, which #445 left for a new issue if it matters; MP3's priming and padding cut (#875) was not in that run"
 
 [[target]]
 release = "beta.1"

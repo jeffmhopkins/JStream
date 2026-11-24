@@ -393,6 +393,12 @@ pub fn rename(show: &mut ShowInfo, id: &str, name: &str) -> bool {
                 .iter_mut()
                 .find(|t| t.track_id == id)
                 .map(|t| &mut t.name)
+        })
+        .or_else(|| {
+            show.audio
+                .iter_mut()
+                .find(|t| t.track_id == id)
+                .map(|t| &mut t.name)
         });
     match slot {
         Some(slot) if *slot != name => {
@@ -477,6 +483,42 @@ pub fn add_audio_track(show: &mut ShowInfo) -> Option<String> {
         clips: Vec::new(),
     });
     Some(id)
+}
+
+/// Deletes overlay or audio track `id` with its clips. Program, K and the sequence
+/// tracks stay: they are the show's own. `false` when there is no such track.
+pub fn delete_track(show: &mut ShowInfo, id: &str) -> bool {
+    let before = show.overlays.len() + show.audio.len();
+    show.overlays.retain(|t| t.track_id != id);
+    show.audio.retain(|t| t.track_id != id);
+    show.overlays.len() + show.audio.len() < before
+}
+
+/// Moves track `id` to where track `onto` is, among the tracks of its own kind: overlays
+/// (which changes which draws over which), sequence tracks or audio tracks. `false` when
+/// the two aren't tracks of one kind, or are the same track.
+pub fn move_track(show: &mut ShowInfo, id: &str, onto: &str) -> bool {
+    fn shift<T>(
+        tracks: &mut Vec<T>,
+        of: impl Fn(&T) -> &str,
+        id: &str,
+        onto: &str,
+    ) -> Option<bool> {
+        let from = tracks.iter().position(|t| of(t) == id)?;
+        let Some(to) = tracks.iter().position(|t| of(t) == onto) else {
+            return Some(false);
+        };
+        if from == to {
+            return Some(false);
+        }
+        let track = tracks.remove(from);
+        tracks.insert(to, track);
+        Some(true)
+    }
+    shift(&mut show.overlays, |t| &t.track_id, id, onto)
+        .or_else(|| shift(&mut show.sequences, |t| &t.track_id, id, onto))
+        .or_else(|| shift(&mut show.audio, |t| &t.track_id, id, onto))
+        .unwrap_or(false)
 }
 
 /// Where a clip of `length_ms` fits on a track of `spans` (start, length) near `at_ms`:
@@ -617,6 +659,38 @@ pub fn set_span(show: &mut ShowInfo, clip: &str, start_ms: u32, length_ms: u32) 
         }
     }
     false
+}
+
+/// Stretches audio or overlay clip `clip` over the whole show, from 0 to program's end.
+/// `false` when another clip on its track is in the way, or it already spans it.
+pub fn span_show(show: &mut ShowInfo, clip: &str) -> bool {
+    let end = show.length_ms();
+    end > 0 && set_span(show, clip, 0, end)
+}
+
+/// Puts source `source`'s audio on audio track `track` at `at_ms`, or on a new audio
+/// track when `track` is `None` or isn't one (a source dragged onto the tracks): one
+/// edit. `whole` spans it over the whole show. Returns the clip's ID, or `None` when it
+/// doesn't fit there or the show holds the most tracks.
+pub fn place_source_audio(
+    show: &mut ShowInfo,
+    track: Option<&str>,
+    source: SourceId,
+    at_ms: u32,
+    length_ms: u32,
+    whole: bool,
+) -> Option<String> {
+    let track = match track.filter(|t| show.audio.iter().any(|a| a.track_id == *t)) {
+        Some(t) => t.to_owned(),
+        None => add_audio_track(show)?,
+    };
+    let end = show.length_ms();
+    let (at_ms, length_ms) = if whole && end > 0 {
+        (0, end)
+    } else {
+        (at_ms, length_ms)
+    };
+    add_audio_clip(show, &track, source, at_ms, length_ms, (0, 0))
 }
 
 /// Sets audio or overlay clip `clip`'s fades (a fade handle dragged), fitted inside it.
@@ -833,6 +907,88 @@ mod tests {
         assert!(!s.bookmarks[1].pausing);
         assert!(rename(&mut s, &id, " Demo "));
         assert_eq!(s.bookmarks[1].name, "Demo");
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn tracks_rename_and_delete_with_their_clips() {
+        let mut s = show();
+        let ov = add_overlay_track(&mut s).unwrap_or_default();
+        let au = add_audio_track(&mut s).unwrap_or_default();
+        add_overlay_clip(&mut s, &ov, "logo".into(), 0, 10_000);
+        assert!(rename(&mut s, &ov, " Lower thirds "));
+        assert_eq!(s.overlays[0].name, "Lower thirds");
+        assert!(rename(&mut s, &au, "Music"));
+        assert_eq!(s.audio[0].name, "Music");
+        assert!(delete_track(&mut s, &ov));
+        assert!(s.overlays.is_empty());
+        assert!(
+            !delete_track(&mut s, "program"),
+            "program is the show's own"
+        );
+        assert!(delete_track(&mut s, &au));
+        assert!(s.audio.is_empty());
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn tracks_reorder_among_their_own_kind() {
+        let mut s = show();
+        let a = add_overlay_track(&mut s).unwrap_or_default();
+        let b = add_overlay_track(&mut s).unwrap_or_default();
+        let c = add_overlay_track(&mut s).unwrap_or_default();
+        let au = add_audio_track(&mut s).unwrap_or_default();
+        let order = |s: &ShowInfo| {
+            s.overlays
+                .iter()
+                .map(|t| t.track_id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert!(move_track(&mut s, &c, &a), "the top one to the bottom");
+        assert_eq!(order(&s), [c.clone(), a.clone(), b.clone()]);
+        assert!(move_track(&mut s, &c, &b), "and back to the top");
+        assert_eq!(order(&s), [a.clone(), b.clone(), c.clone()]);
+        assert!(!move_track(&mut s, &a, &a));
+        assert!(
+            !move_track(&mut s, &a, &au),
+            "an overlay doesn't go among audio"
+        );
+        assert!(!move_track(&mut s, &a, "program"), "nor under program");
+        assert_eq!(order(&s), [a, b, c]);
+        assert_eq!(s.problem(), None);
+    }
+
+    #[test]
+    fn a_sources_audio_goes_on_a_track_or_a_new_one_and_can_span_the_show() {
+        let mut s = show();
+        let end = s.length_ms();
+        // Dropped on the tracks with no audio track: one is made for it.
+        let id = place_source_audio(&mut s, None, "cam".into(), 10_000, 30_000, false)
+            .unwrap_or_default();
+        assert_eq!(s.audio.len(), 1);
+        assert_eq!(
+            (s.audio[0].clips[0].start_ms, s.audio[0].clips[0].length_ms),
+            (10_000, 30_000)
+        );
+        assert!(span_show(&mut s, &id));
+        assert_eq!(
+            (s.audio[0].clips[0].start_ms, s.audio[0].clips[0].length_ms),
+            (0, end)
+        );
+        assert!(!span_show(&mut s, &id), "already spans it");
+        // On that track again it can't overlap: it goes up against the clip it hit.
+        let a1 = s.audio[0].track_id.clone();
+        assert!(
+            place_source_audio(&mut s, Some(&a1), "mic".into(), 5_000, 10_000, false).is_some()
+        );
+        assert_eq!(s.audio[0].clips[1].start_ms, end);
+        assert_eq!(s.audio.len(), 1);
+        // The whole show at once, on a new track.
+        assert!(place_source_audio(&mut s, None, "mic".into(), 5_000, 10_000, true).is_some());
+        assert_eq!(
+            (s.audio[1].clips[0].start_ms, s.audio[1].clips[0].length_ms),
+            (0, end)
+        );
         assert_eq!(s.problem(), None);
     }
 

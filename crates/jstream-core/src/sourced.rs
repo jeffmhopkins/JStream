@@ -76,12 +76,14 @@ const MAX_INTENSITY: f32 = 64.0;
 /// The largest range a light reaches, as its kind keeps it.
 const MAX_RANGE_PX: f32 = 1_000_000.0;
 
-/// `light` as `drives` change it, each modifier's value given by `value`, and whether
-/// it paints by `tint`.
+/// `light` as `drives` change it, what each modifier makes of a setting's own value given
+/// by `value` (its own plus the modifier's, or for a `replace` modifier what it sets,
+/// ADR-0203), and whether it paints by `tint`. A number's last `replace` modifier sets
+/// it before the others add to it; on a colour, a `replace` modifier does nothing.
 pub(crate) fn light(
     light: &ShownLight,
     drives: &[(MotionSetting, Modifier)],
-    value: impl Fn(&Modifier) -> f64,
+    value: impl Fn(&Modifier, f64) -> f64,
     tint: impl Fn(&Modifier) -> Tint,
 ) -> LightLook {
     let mut look = LightLook {
@@ -94,6 +96,14 @@ pub(crate) fn light(
     };
     let mut lighten = 0.0f32;
     let mut add = [0.0f32; 5];
+    let mut set: [Option<f32>; 5] = [None; 5];
+    let own = [
+        look.intensity,
+        look.range_px,
+        look.cone_deg,
+        look.softness,
+        look.shadow_softness,
+    ];
     for (setting, modifier) in drives {
         if setting.material.is_some() {
             continue;
@@ -113,13 +123,27 @@ pub(crate) fn light(
             }
             continue;
         }
-        let v = value(modifier) as f32;
+        if modifier.replace {
+            if let Some(i) = slot.filter(|_| modifier.enabled) {
+                let v = value(modifier, f64::from(own[i])) as f32;
+                if v.is_finite() {
+                    set[i] = Some(v);
+                }
+            }
+            continue;
+        }
+        let v = value(modifier, 0.0) as f32;
         if !v.is_finite() {
             continue;
         }
         match slot {
             None => lighten += v,
             Some(i) => add[i] += v,
+        }
+    }
+    for (i, to) in set.iter().enumerate() {
+        if let Some(to) = to {
+            add[i] += to - own[i];
         }
     }
     if lighten != 0.0 {
@@ -167,7 +191,7 @@ pub(crate) fn environment(
     intensity: f32,
     sky: &ShownEnvironment,
     drives: &[(MotionSetting, Modifier)],
-    value: impl Fn(&Modifier) -> f64,
+    value: impl Fn(&Modifier, f64) -> f64,
     tint: impl Fn(&Modifier) -> Tint,
 ) -> SkyLook {
     let mut colors = [
@@ -179,6 +203,15 @@ pub(crate) fn environment(
     ];
     let mut lighten = [0.0f32; 5];
     let mut add = [0.0f32; 6];
+    let mut set: [Option<f32>; 6] = [None; 6];
+    let own = [
+        intensity,
+        sky.stars,
+        sky.star_brightness,
+        sky.nebula,
+        sky.galaxy,
+        sky.warp,
+    ];
     for (setting, modifier) in drives {
         if setting.material.is_some() {
             continue;
@@ -203,13 +236,27 @@ pub(crate) fn environment(
             }
             continue;
         }
-        let v = value(modifier) as f32;
+        if modifier.replace {
+            if let Ok(i) = slot {
+                let v = value(modifier, f64::from(own[i])) as f32;
+                if modifier.enabled && v.is_finite() {
+                    set[i] = Some(v);
+                }
+            }
+            continue;
+        }
+        let v = value(modifier, 0.0) as f32;
         if !v.is_finite() {
             continue;
         }
         match slot {
             Err(i) => lighten[i] += v,
             Ok(i) => add[i] += v,
+        }
+    }
+    for (i, to) in set.iter().enumerate() {
+        if let Some(to) = to {
+            add[i] += to - own[i];
         }
     }
     let [sky_color, horizon, ground, nebula_a, nebula_b] = std::array::from_fn(|i| {
@@ -236,10 +283,11 @@ pub(crate) fn environment(
 /// How `drives` change a model's materials as its item draws it, at most one drive a
 /// modifier, on the stack: the drives and how many of them there are. A painting
 /// modifier (`tint`) sets a `color` or an `emissive` while it has a colour, and adds
-/// nothing.
+/// nothing. `value` gives what a modifier adds to 0. A material's values are the model's
+/// own, which this doesn't know, so a `replace` modifier (ADR-0203) drives nothing here.
 pub(crate) fn materials(
     drives: &[(MotionSetting, Modifier)],
-    value: impl Fn(&Modifier) -> f64,
+    value: impl Fn(&Modifier, f64) -> f64,
     tint: impl Fn(&Modifier) -> Tint,
 ) -> ([MaterialDrive<'_>; MAX_MOTION_MODIFIERS], usize) {
     let mut out = [MaterialDrive::default(); MAX_MOTION_MODIFIERS];
@@ -266,7 +314,10 @@ pub(crate) fn materials(
             n += 1;
             continue;
         }
-        let v = value(modifier) as f32;
+        if modifier.replace {
+            continue;
+        }
+        let v = value(modifier, 0.0) as f32;
         if !v.is_finite() || v == 0.0 {
             continue;
         }
@@ -304,6 +355,7 @@ mod tests {
             },
             clock: Clock::Engine,
             enabled: true,
+            replace: false,
         }
     }
 
@@ -315,8 +367,9 @@ mod tests {
     }
 
     /// Each modifier's value is its ID parsed as a number.
-    fn by_id(m: &Modifier) -> f64 {
-        m.id.parse().unwrap_or(f64::NAN)
+    /// Its own value plus the number its ID spells.
+    fn by_id(m: &Modifier, own: f64) -> f64 {
+        own + m.id.parse().unwrap_or(f64::NAN)
     }
 
     fn lamp() -> ShownLight {

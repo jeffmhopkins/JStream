@@ -26,6 +26,8 @@ fn fader(controller: u8) -> MotionKind {
 fn bind(id: &str, target: ValueTarget) -> Edit {
     Edit::BindingSetValue {
         binding: ValueBinding {
+            enabled: true,
+            mode: jstream_protocol::MappingMode::Replace,
             binding_id: id.into(),
             input: fader(7),
             target,
@@ -187,6 +189,8 @@ fn a_binding_reads_a_controller_or_a_data_field_only() {
         &mut g,
         vec![Edit::BindingSetValue {
             binding: ValueBinding {
+                enabled: true,
+                mode: jstream_protocol::MappingMode::Replace,
                 binding_id: "k".into(),
                 input: MotionKind::Drift {
                     rate_per_s: Finite32::ONE,
