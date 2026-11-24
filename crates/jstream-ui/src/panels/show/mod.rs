@@ -339,6 +339,73 @@ pub fn ModeSwitch() -> impl IntoView {
     }
 }
 
+/// Whether the Next monitor shows beside the canvas, and how: while the open show runs
+/// in the Run view, its Next monitor isn't Off, and studio mode is off. `Some(still)`
+/// when it shows.
+pub fn next_monitor_shown(studio: Studio) -> Memo<Option<bool>> {
+    let panel = use_context::<ShowPanel>();
+    Memo::new(move |_| {
+        let panel = panel?;
+        if studio.studio_mode.get() || panel.mode.get() != Mode::Run || !panel.is_running() {
+            return None;
+        }
+        match panel.show()?.next_monitor {
+            model::NextMonitor::Off => None,
+            model::NextMonitor::Still => Some(true),
+            model::NextMonitor::Live => Some(false),
+        }
+    })
+}
+
+/// The Next monitor beside the canvas: what Continue will put on program, under a label
+/// naming it, as one picture (Still) or a live one (Live).
+#[component]
+pub fn NextPane() -> impl IntoView {
+    let panel = expect_context::<ShowPanel>();
+    let studio = expect_context::<Studio>();
+    let shown = next_monitor_shown(studio);
+    let target = Memo::new(move |_| {
+        let show = panel.show()?;
+        let run = panel.run.get();
+        let head = panel.head();
+        Some((
+            run::next_picture(&show, &run, head),
+            run::next(&show, &run, head).title,
+        ))
+    });
+    let scene = Signal::derive(move || {
+        target
+            .get()
+            .and_then(|(scene, _)| scene)
+            .map(jstream_control::protocol::SceneId::new)
+    });
+    let label = move || {
+        let title = target.get().map(|(_, title)| title).unwrap_or_default();
+        let still = shown.get() == Some(true);
+        format!(
+            "Next on Continue · {title}{}",
+            if still {
+                " · still picture, not rendered live"
+            } else {
+                ""
+            }
+        )
+    };
+    view! {
+        <div class="stage-pane show-next-pane">
+            <div class="stage-label show-next-label">{label}</div>
+            <section class="region monitor show-next" aria-label="Next on Continue">
+                {move || {
+                    let still = shown.get() == Some(true);
+                    view! {
+                        <crate::canvas::monitor::Monitor scene=scene still=still label="show-next" />
+                    }
+                }}
+            </section>
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::model::demo;

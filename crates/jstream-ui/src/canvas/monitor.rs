@@ -57,6 +57,23 @@ async fn act(control: &Weak<dyn Control>, action: Action) -> Option<Result<(), S
 /// The program monitor: the program mix, drawn into a canvas that fills its box.
 #[component]
 pub fn ProgramMonitor() -> impl IntoView {
+    view! { <Monitor scene=Signal::stored(None) still=false label="program" /> }
+}
+
+/// A monitor of `scene` (the program mix while it is `None`), drawn into a canvas that
+/// fills its box, following the scene as it changes. A `still` monitor keeps one
+/// picture: it closes its stream once the first frame is drawn, and opens one again
+/// only when the scene changes, so it costs the engine one frame per change (the Show
+/// panel's Next monitor set to Still). `label` names it in `preview.report`.
+#[component]
+pub fn Monitor(
+    /// The scene to show, or `None` for the program mix.
+    scene: Signal<Option<jstream_control::protocol::SceneId>>,
+    /// Whether to keep one picture rather than a moving one.
+    still: bool,
+    /// The monitor's name in `preview.report`.
+    label: &'static str,
+) -> impl IntoView {
     let session = expect_context::<SessionContext>();
     let studio = expect_context::<Studio>();
     let shared_taps = use_context::<PreviewTaps>();
@@ -174,17 +191,71 @@ pub fn ProgramMonitor() -> impl IntoView {
             if let Some(control) = control.clone() {
                 reporting.set_value(crate::views::report_every_second(
                     control,
-                    crate::views::label("monitor", Some("program")),
+                    crate::views::label("monitor", Some(label)),
                     tally.clone(),
                 ));
             }
-            reopen(Stream::first(
-                measured(),
-                Screen::supports_h264(),
-                live_fps.get_untracked(),
-            ));
+            reopen(Stream {
+                scene: scene.get_untracked(),
+                fps: if still { 1 } else { live_fps.get_untracked() },
+                ..Stream::first(
+                    measured(),
+                    Screen::supports_h264(),
+                    live_fps.get_untracked(),
+                )
+            });
         }
     });
+
+    // Closes the open stream, keeping the picture drawn.
+    let close = move || {
+        let Some(stream) = open.try_update_value(Option::take).flatten() else {
+            return;
+        };
+        if let Some(taps) = shared_taps.and_then(|taps| taps.get()) {
+            taps.remove(stream.channel);
+        }
+        if let Some(open) = session.get() {
+            let control = Rc::downgrade(&open.control);
+            let channel = stream.channel;
+            spawn_local(async move {
+                let _closed = act(&control, Action::PreviewUnsubscribe { channel }).await;
+            });
+        }
+    };
+    // A still monitor stops once it has its picture.
+    if still {
+        Effect::new(move |_| {
+            if shown.get() == Shown::Live {
+                close();
+            }
+        });
+    }
+    // A new scene: a stream of it, once the canvas is up.
+    {
+        let reopen = Rc::clone(&reopen);
+        Effect::new(
+            move |before: Option<Option<jstream_control::protocol::SceneId>>| {
+                let now = scene.get();
+                if let Some(before) = before
+                    && before != now
+                    && screen.borrow().is_some()
+                {
+                    shown.set(Shown::Starting);
+                    reopen(Stream {
+                        scene: now.clone(),
+                        fps: if still { 1 } else { live_fps.get_untracked() },
+                        ..Stream::first(
+                            measured(),
+                            Screen::supports_h264(),
+                            live_fps.get_untracked(),
+                        )
+                    });
+                }
+                now
+            },
+        );
+    }
 
     // A new base rate, or a box resized (the window, the dock, studio mode turned on):
     // once it holds for `preview::SETTLE`, a stream for it, when it differs enough.
@@ -197,6 +268,7 @@ pub fn ProgramMonitor() -> impl IntoView {
             let Some(fps) = live_fps.try_get_untracked() else {
                 return;
             };
+            let fps = if still { 1 } else { fps };
             if let Some(next) = reopened(&current, fps, measured()) {
                 reopen(next);
             }
@@ -236,19 +308,7 @@ pub fn ProgramMonitor() -> impl IntoView {
         if let Some(handle) = reporting.try_update_value(Option::take).flatten() {
             handle.clear();
         }
-        let Some(stream) = open.try_update_value(Option::take).flatten() else {
-            return;
-        };
-        if let Some(taps) = shared_taps.and_then(|taps| taps.get()) {
-            taps.remove(stream.channel);
-        }
-        if let Some(open) = session.get() {
-            let control = Rc::downgrade(&open.control);
-            let channel = stream.channel;
-            spawn_local(async move {
-                let _closed = act(&control, Action::PreviewUnsubscribe { channel }).await;
-            });
-        }
+        close();
     });
 
     view! {

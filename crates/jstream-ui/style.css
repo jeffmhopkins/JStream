@@ -2889,3 +2889,6 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-strip-armed { position: absolute; top: -6px; bottom: 2px; width: 2px; margin-left: -1px; padding: 0; border: none; border-radius: 0; background: var(--accent); color: transparent; overflow: visible; }
 .show-strip-armed::after { content: "armed"; position: absolute; top: -12px; left: 4px; color: var(--accent); font-size: 10px; }
 .show-run-foot { margin: 0; padding: 9px 0 0; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; }
+/* Show panel: the Next monitor beside the canvas (panels/show/mod.rs NextPane). */
+.stage-label.show-next-label { color: var(--show-bookmark); border-top-color: var(--show-bookmark); text-transform: none; letter-spacing: 0; }
+.region.monitor.show-next { outline: 2px solid var(--show-bookmark); outline-offset: -2px; }
