@@ -2988,3 +2988,22 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .show-notes-here p:last-child, .show-notes-said p:last-child { margin-bottom: 0; }
 .show-notes-here p.direction, .show-notes-said p.direction { font-style: italic; color: var(--muted); }
 .show-notes-next .show-notes-said { line-height: 1.5; color: var(--text-soft); }
+/* The Run view's run of show: one row per bookmark, in order. */
+.show-rundown { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow-y: auto; position: relative; border: 1px solid var(--border); border-radius: 8px; background: var(--show-mark-bg); }
+.show-rundown li + li { border-top: 1px solid var(--border); }
+.show-row { display: grid; grid-template-columns: 26px 52px minmax(0, 1fr) auto 44px 64px; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: 0; border-left: 4px solid transparent; border-radius: 0; background: none; color: var(--text); text-align: left; font-size: 13px; }
+.show-row:hover { background: var(--raised); }
+.show-row-n { color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; }
+.show-row-at { color: var(--text-soft); font: 12px "IBM Plex Mono", ui-monospace, monospace; }
+.show-row-name { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.show-row-name b { font-size: 15px; white-space: nowrap; }
+.show-row-name i { font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.show-row .show-tag { width: auto; white-space: nowrap; padding: 2px 5px; border-radius: 3px; font: 700 10px "IBM Plex Mono", ui-monospace, monospace; }
+.show-row-flag { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-align: center; }
+.show-row-key { text-align: right; }
+.show-row.past { opacity: .45; }
+.show-row.loop-start { border-left-color: var(--show-loop); }
+.show-row.current, .show-row.here { background: var(--show-here-bg); border-left-color: var(--show-bookmark); }
+.show-row.current .show-row-flag, .show-row.here .show-row-flag { color: var(--show-bookmark); }
+.show-row.next { border-left-color: var(--accent); }
+.show-row.next .show-row-flag { color: var(--accent); }

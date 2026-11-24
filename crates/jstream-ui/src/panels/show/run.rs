@@ -349,8 +349,13 @@ pub struct BookmarkCard {
     pub here: bool,
     /// Whether a loop starts here (the violet top edge).
     pub loop_start: bool,
-    /// Whether the play head is past it (dimmed).
+    /// Whether the play head is past it, and past the bookmark after it (dimmed).
     pub past: bool,
+    /// Whether it is the bookmark the show is in: paused at, or last passed (highlighted).
+    pub current: bool,
+    /// Whether it comes next: the one after the current one, or the first while the show
+    /// is stopped.
+    pub next: bool,
 }
 
 /// What is on program at a bookmark, for its card.
@@ -371,6 +376,21 @@ fn bookmark_scene(show: &ShowView, b: &BookmarkView) -> String {
 
 /// The bookmark buttons, in show order.
 pub fn cards(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Vec<BookmarkCard> {
+    let running = run.show.is_some();
+    let current = match &run.phase {
+        RunPhase::Paused { bookmark, .. } => show.bookmarks.iter().position(|b| &b.id == bookmark),
+        _ if running => show.bookmarks.iter().rposition(|b| b.at_ms <= head),
+        _ => None,
+    };
+    let next = match current {
+        Some(i) => i + 1,
+        None if running => show
+            .bookmarks
+            .iter()
+            .position(|b| b.at_ms > head)
+            .unwrap_or(usize::MAX),
+        None => 0,
+    };
     show.bookmarks
         .iter()
         .enumerate()
@@ -396,7 +416,9 @@ pub fn cards(show: &ShowView, run: &model::RunView, head: u32, now: f64) -> Vec<
                 at: time::clock(b.at_ms),
                 key: b.key.clone(),
                 here: waited.is_some(),
-                past: waited.is_none() && run.show.is_some() && b.at_ms < head,
+                past: running && current.is_some_and(|c| i < c),
+                current: current == Some(i),
+                next: next == i,
                 tag,
                 loop_start,
             }
@@ -715,30 +737,55 @@ fn Bookmarks() -> impl IntoView {
         let now = panel.clock.get();
         panel.run.with(|run| cards(&show, run, head, now))
     };
+    // The current row stays in view, a third of the way down, as the show moves on.
+    let rows = NodeRef::<leptos::html::Ol>::new();
+    let current = Memo::new(move |_| list().iter().position(|c| c.here || c.current));
+    Effect::new(move |_| {
+        let (Some(at), Some(list)) = (current.get(), rows.get()) else {
+            return;
+        };
+        let Some(row) = list
+            .children()
+            .item(at as u32)
+            .and_then(|el| leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlElement>(el).ok())
+        else {
+            return;
+        };
+        let top = row.offset_top() - list.client_height() / 3;
+        list.set_scroll_top(top.max(0));
+    });
     view! {
         <div class="show-run-marks">
-            <h6>"BOOKMARKS"<span>" · click or press the key to go there now"</span></h6>
-            <div class="show-run-grid">
+            <h6>"RUN OF SHOW"<span>" · click or press the key to go there now"</span></h6>
+            <ol class="show-rundown" node_ref=rows>
                 {move || list().into_iter().map(|c| {
                     let id = c.id.clone();
+                    let title = format!("Go to {} now", c.name);
+                    let flag = if c.here || c.current {
+                        Some("NOW")
+                    } else if c.next {
+                        Some("NEXT")
+                    } else {
+                        None
+                    };
                     view! {
-                        <button type="button" class="show-mark-card" class:here=c.here
-                            class:loop-start=c.loop_start class:past=c.past
-                            on:click=move |_| panel.send(Command::GoTo(id.clone()))>
-                            <span class="show-mark-n">{c.number}</span>
-                            <b>{c.name}</b>
-                            <span class="show-mark-scene">{c.scene}</span>
-                            <span class="show-mark-foot">
-                                <span>
-                                    <span class=format!("show-tag show-tag-{}", c.tag.class())>{c.tag.label()}</span>
-                                    " " {c.at}
-                                </span>
-                                {c.key.map(|k| view! { <kbd class="show-key">{k}</kbd> })}
-                            </span>
-                        </button>
+                        <li>
+                            <button type="button" class="show-row" class:here=c.here
+                                class:current=c.current class:next=c.next class:past=c.past
+                                class:loop-start=c.loop_start
+                                title=title
+                                on:click=move |_| panel.send(Command::GoTo(id.clone()))>
+                                <span class="show-row-n">{c.number}</span>
+                                <span class="show-row-at">{c.at}</span>
+                                <span class="show-row-name"><b>{c.name}</b><i>{c.scene}</i></span>
+                                <span class=format!("show-tag show-tag-{}", c.tag.class())>{c.tag.label()}</span>
+                                <span class="show-row-flag">{flag}</span>
+                                <span class="show-row-key">{c.key.map(|k| view! { <kbd class="show-key">{k}</kbd> })}</span>
+                            </button>
+                        </li>
                     }
                 }).collect_view()}
-            </div>
+            </ol>
         </div>
     }
 }
