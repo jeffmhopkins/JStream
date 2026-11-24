@@ -321,6 +321,145 @@ fn arm_sets_the_spot_the_next_continue_jumps_to() {
     assert_eq!(program(&control).as_deref(), Some("c"));
 }
 
+fn overlays(control: &dyn Control) -> Vec<String> {
+    match query(control, Query::StudioGet) {
+        Ok(QueryResult::StudioGet { overlays, .. }) => {
+            overlays.iter().map(|id| id.as_str().to_owned()).collect()
+        }
+        other => panic!("not studio.get: {other:?}"),
+    }
+}
+
+fn scene_ids(control: &dyn Control) -> Vec<String> {
+    match query(control, Query::SceneList) {
+        Ok(QueryResult::SceneList { scenes, .. }) => scenes
+            .iter()
+            .map(|scene| scene.scene_id.as_str().to_owned())
+            .collect(),
+        other => panic!("not scene.list: {other:?}"),
+    }
+}
+
+#[test]
+fn an_overlay_clip_puts_its_scene_over_program_for_its_span() {
+    let (_engine, control) = engine_with_show();
+    apply(&control, vec![create("logo")]);
+    let mut show = match query(&control, Query::StateGet) {
+        Ok(QueryResult::StateGet { shows, .. }) => shows[0].clone(),
+        other => panic!("not state.get: {other:?}"),
+    };
+    show.overlays = vec![jstream_protocol::OverlayTrack {
+        track_id: "v2".into(),
+        name: String::new(),
+        clips: vec![jstream_protocol::OverlayClip {
+            clip_id: "o".into(),
+            scene_id: SceneId::new("logo"),
+            start_ms: 200,
+            length_ms: 300,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+        }],
+    }];
+    apply(&control, vec![Edit::ShowSet { show }]);
+    act(&control, play()).expect("play");
+    assert!(overlays(&control).is_empty());
+    let before = scene_ids(&control);
+    assert!(
+        !before.iter().any(|id| id.starts_with("show-scene")),
+        "the show scene is never listed: {before:?}"
+    );
+    step(&control, 250);
+    assert_eq!(overlays(&control), ["logo"]);
+    assert_eq!(
+        program(&control).as_deref(),
+        Some("a"),
+        "program stays under it"
+    );
+    step(&control, 300);
+    assert!(overlays(&control).is_empty(), "down at the clip's end");
+}
+
+/// The overlay-removed report: an overlay clip taken out of the running show comes
+/// down at once, and one added under the play head goes up.
+#[test]
+fn an_edit_of_the_running_show_takes_a_removed_overlay_down_and_puts_an_added_one_up() {
+    let (_engine, control) = engine_with_show();
+    apply(&control, vec![create("logo"), create("bug")]);
+    let mut show = match query(&control, Query::StateGet) {
+        Ok(QueryResult::StateGet { shows, .. }) => shows[0].clone(),
+        other => panic!("not state.get: {other:?}"),
+    };
+    let overlay = |id: &str, scene: &str| jstream_protocol::OverlayClip {
+        clip_id: id.into(),
+        scene_id: SceneId::new(scene),
+        start_ms: 0,
+        length_ms: 3000,
+        fade_in_ms: 0,
+        fade_out_ms: 0,
+    };
+    show.overlays = vec![jstream_protocol::OverlayTrack {
+        track_id: "v2".into(),
+        name: String::new(),
+        clips: vec![overlay("ov-logo", "logo")],
+    }];
+    apply(&control, vec![Edit::ShowSet { show: show.clone() }]);
+    act(&control, play()).expect("play");
+    step(&control, 100);
+    assert_eq!(overlays(&control), ["logo"]);
+    show.overlays[0].clips = vec![overlay("ov-bug", "bug")];
+    apply(&control, vec![Edit::ShowSet { show: show.clone() }]);
+    assert_eq!(overlays(&control), ["bug"], "logo down, bug up");
+    show.overlays.clear();
+    apply(&control, vec![Edit::ShowSet { show }]);
+    assert!(overlays(&control).is_empty(), "down when its track goes");
+    assert_eq!(running(&control).state, ShowState::Playing);
+}
+
+#[test]
+fn overlay_actions_work_with_no_show_running() {
+    let (_engine, control) = engine_with_show();
+    let logo = || SceneId::new("b");
+    act(&control, Action::OverlayHide { scene_id: logo() }).expect("nothing to hide");
+    act(&control, Action::OverlayShow { scene_id: logo() }).expect("show");
+    assert_eq!(overlays(&control), ["b"]);
+    act(&control, Action::OverlayToggle { scene_id: logo() }).expect("toggle");
+    assert!(overlays(&control).is_empty());
+    act(&control, Action::OverlayToggle { scene_id: logo() }).expect("toggle");
+    assert_eq!(overlays(&control), ["b"]);
+    assert_eq!(
+        act(
+            &control,
+            Action::OverlayShow {
+                scene_id: SceneId::new("nope")
+            }
+        ),
+        Err("not_found")
+    );
+}
+
+#[test]
+fn the_show_scene_can_not_be_deleted_and_hears_its_overlays() {
+    let (engine, control) = engine_with_show();
+    act(
+        &control,
+        Action::OverlayShow {
+            scene_id: SceneId::new("b"),
+        },
+    )
+    .expect("show");
+    let show_scene = engine.show_scene_id().expect("made");
+    let result = block_on(control.call(Call::Batch(Batch {
+        edits: vec![Edit::SceneDelete {
+            scene_id: show_scene.clone(),
+        }],
+        expected_rev: None,
+        idempotency_key: None,
+        ends_gesture: None,
+    })));
+    assert_eq!(result.as_ref().err().and_then(code), Some("not_found"));
+    assert_eq!(engine.show_scene_id(), Some(show_scene));
+}
+
 /// A sequence the show starts has its cues ticked with the show: under `clock.step`, a
 /// cue of it the step passes fires before the step returns (#1713 B1).
 #[test]
