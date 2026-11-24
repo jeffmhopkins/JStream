@@ -241,4 +241,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0235](0235-pair-a-device-by-approving-it-on-the-host.md) | Pair a device by approving it on the host | accepted | maintainer |  |
 | [ADR-0236](0236-a-hitch-steps-the-model-size-down-no-further.md) | A hitch the models' GPU time doesn't show steps the model size down no further | accepted | agent |  |
 | [ADR-0237](0237-an-item-shown-or-hidden-on-a-3d-scene-keeps-its-chain.md) | An item shown or hidden on a 3D scene keeps the scene's chain running | accepted | agent |  |
+| [ADR-0238](0238-a-scenes-views-share-one-sky.md) | A scene's views share one sky | accepted | agent |  |
 <!-- @generated end adr-index -->

@@ -2293,7 +2293,11 @@ under its items, flat and seen through no camera, only in the cache frame that d
 The compositor leaves the layer as it is when it still holds the sky asked for (the same
 values, a camera looking the same way), so a scene whose camera and sky hold still pays
 for its sky once, not once a frame.
-`Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
+`Chains::skies` keeps one `SkyState` per scene family (`sky_family`, the parent of a
+keyframe scene, so every view of a scene shows one sky, warp and arrival,
+[ADR-0238](../../docs/adr/0238-a-scenes-views-share-one-sky.md)), and
+`Chains::skies_drawn` the frames that drew each drawn scene's sky and leaving-sky
+layers, which it places only in those frames. A sky state holds the warp it
 streams at now, which moves toward the setting, as its item's motion modifiers drive
 it (`sourced::environment`), at its ramp's pace (dropping while it
 is above it, which zooms the deep sky back in), and how far its
@@ -2332,7 +2336,8 @@ it, so the program never asks a let-go still for its pixels again on every frame
 only past 32 kept does a draw drop those it doesn't show), and `light_scene` and a probe's capture
 add a directional light from that picture in that colour (`arrival_light`,
 `an_arrival_picture_shows_ahead_and_lights_the_scene`,
-`an_arrival_of_a_planet_and_its_sun_lights_from_the_sun`).
+`an_arrival_of_a_planet_and_its_sun_lights_from_the_sun`; the arrival test's keyframe of
+the scene keeps the one sky state and its arrival, which lights the view too).
 Its stars, star brightness, nebula, galaxy band and colours are drawn as those
 modifiers drive them too.
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,

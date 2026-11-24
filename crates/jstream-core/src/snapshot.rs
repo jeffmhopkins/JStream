@@ -8756,7 +8756,7 @@ fn scene_environment<'c>(
         let [turn_deg, tilt_deg, roll_deg] = chains
             .skies
             .borrow()
-            .get(id)
+            .get(&sky_family(shot, id))
             .filter(|_| sky.backdrop)
             .map_or(
                 [
@@ -8935,7 +8935,7 @@ fn draw_sky_of(
         let (environment, look, _) =
             environment_at((shot, &*cache), (placed, light, sky), at, live);
         let mut skies = chains.skies.borrow_mut();
-        let state = skies.entry(scene.clone()).or_default();
+        let state = skies.entry(sky_family(shot, scene)).or_default();
         state.step(
             cache.frame(),
             at.as_secs_f64(),
@@ -9034,10 +9034,10 @@ fn draw_sky_of(
         ),
         target,
     )?;
-    if let Some(state) = chains.skies.borrow_mut().get_mut(scene) {
-        state.drawn = Some(cache.frame());
-        state.left = left;
-    }
+    chains
+        .skies_drawn
+        .borrow_mut()
+        .insert(scene.clone(), (Some(cache.frame()), left));
     Ok(())
 }
 
@@ -9055,7 +9055,11 @@ pub(crate) fn arrival_light(
     if !sky.backdrop || sky.sky_picture_light <= 0.0 {
         return None;
     }
-    let state = chains.skies.borrow().get(scene_id).copied()?;
+    let state = chains
+        .skies
+        .borrow()
+        .get(&sky_family(shot, scene_id))
+        .copied()?;
     let arrival = state.arrival?;
     // The arrival lights the scene from its last picture: a sun over a planet
     // (ADR-0198).
@@ -9126,6 +9130,14 @@ fn note_picture_mean(chains: &mut Chains, (source, frame): (&SourceId, &Frame), 
 /// doesn't draw now ([`note_picture_mean`]).
 const PICTURE_MEANS_KEPT: usize = 32;
 
+/// The scene family whose sky state scene `scene`'s backdrop shows (ADR-0238): its
+/// parent for a keyframe scene, so every view of a scene shows one sky, else itself.
+fn sky_family(shot: &Shot, scene: &SceneId) -> SceneId {
+    shot.cameras
+        .get(scene)
+        .map_or_else(|| scene.clone(), |camera| camera.family.clone())
+}
+
 /// The sources of the arrival pictures the scenes' backdrops show now (ADR-0188), as
 /// their sky state picked them.
 fn shown_arrivals(shot: &Shot, chains: &Chains) -> BTreeSet<SourceId> {
@@ -9133,9 +9145,10 @@ fn shown_arrivals(shot: &Shot, chains: &Chains) -> BTreeSet<SourceId> {
         return BTreeSet::new();
     }
     let skies = chains.skies.borrow();
-    skies
-        .iter()
-        .filter_map(|(scene, state)| {
+    shot.lights
+        .keys()
+        .filter_map(|scene| {
+            let state = skies.get(&sky_family(shot, scene))?;
             let (placed, _, _) = first_environment(shot, scene).0?;
             let part = arrival_parts(shot, placed, state.arrival?)?.last()?;
             Some(part.source.clone())
@@ -9418,11 +9431,11 @@ fn sky_layers<'a>(
     (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
     canvas: FrameSize,
 ) -> Vec<&'a jstream_render::Image> {
-    let Some(state) = chains.skies.borrow().get(scene).copied() else {
+    let Some((drawn, left)) = chains.skies_drawn.borrow().get(scene).copied() else {
         return Vec::new();
     };
     let frame = Some(cache.frame());
-    if state.drawn != frame {
+    if drawn != frame {
         return Vec::new();
     }
     let sized = |key: GpuKey| {
@@ -9430,7 +9443,7 @@ fn sky_layers<'a>(
             .get(&key)
             .filter(|image| (image.width(), image.height()) == (canvas.width(), canvas.height()))
     };
-    let leaving = (state.left == frame)
+    let leaving = (left == frame)
         .then(|| sized(GpuKey::SkyLeaving(scene.clone())))
         .flatten();
     leaving

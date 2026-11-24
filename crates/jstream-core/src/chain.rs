@@ -680,11 +680,13 @@ struct Running {
     warned: bool,
 }
 
-/// A scene's sky backdrop from frame to frame (ADR-0167).
+/// The cache frames that last drew a scene's [`crate::snapshot::GpuKey::Sky`] layer and
+/// its [`crate::snapshot::GpuKey::SkyLeaving`] layer.
+pub(crate) type SkyDrawn = (Option<u64>, Option<u64>);
+
+/// A scene family's sky backdrop from frame to frame (ADR-0167, ADR-0238).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct SkyState {
-    /// The cache frame that last drew it.
-    pub(crate) drawn: Option<u64>,
     /// The cache frame its travel last advanced in, and the media time then.
     pub(crate) stepped: Option<(u64, f64)>,
     /// The warp it streams at now, moving toward its setting at its ramp's pace.
@@ -701,9 +703,6 @@ pub(crate) struct SkyState {
     /// The sky it cross-fades from since its warp last started aimed ahead, while it
     /// does.
     pub(crate) leaving: Option<LeavingSky>,
-    /// The cache frame that last drew the sky it cross-fades from, as a scene places
-    /// its [`crate::snapshot::GpuKey::SkyLeaving`] layer only in the frame that drew it.
-    pub(crate) left: Option<u64>,
     /// The arrival picture it shows (ADR-0188), if any.
     pub(crate) arrival: Option<Arrival>,
     /// How many arrival pictures it has picked, which seeds the next pick.
@@ -1041,10 +1040,14 @@ pub(crate) struct Chains {
     /// The scenes whose extra environment lights were logged, once each (ADR-0151
     /// decision 9).
     pub(crate) environments_warned: BTreeSet<jstream_protocol::SceneId>,
-    /// Each 3D scene's sky backdrop (ADR-0167): the frame it was last drawn in, as a
-    /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it, and how
-    /// far its stars have travelled at warp.
+    /// Each 3D scene family's sky backdrop (ADR-0167): how far its stars have travelled
+    /// at warp, and the arrival it shows. One per family, so every view of a scene
+    /// shows the same sky (ADR-0238).
     pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyState>>,
+    /// Each drawn scene's sky layers: the cache frame that last drew its
+    /// [`GpuKey::Sky`] layer and the one that last drew its
+    /// [`GpuKey::SkyLeaving`] layer, as a scene places each only in the frame that drew it.
+    pub(crate) skies_drawn: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyDrawn>>,
     /// The average colour of each arrival picture a backdrop shows now (ADR-0188),
     /// straight sRGB, with the version of the frame it was taken from: the colour its
     /// light shines in. A picture no longer shown is let go.
@@ -5041,6 +5044,64 @@ mod tests {
             // It shines from ahead, back toward the viewer.
             assert!(light.aim[2] > 0.9, "{:?}", light.aim);
         }
+        // ADR-0238: a keyframe of the scene, another view of it, shows the same sky:
+        // one sky state for the family, the arrival it picked unchanged, and the
+        // picture lighting the view too.
+        let arrived = chains.skies.borrow().get(&main).and_then(|sky| sky.arrival);
+        assert!(arrived.is_some(), "the scene's sky picked an arrival");
+        let view = SceneId::new("view");
+        apply(
+            &mut graph,
+            vec![Edit::SceneCreateVariant {
+                scene_id: view.clone(),
+                variant_of: main.clone(),
+                name: "View".into(),
+            }],
+        );
+        let viewed = snapshot::plan_with(
+            &graph,
+            Some(&view),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    match id.as_str() {
+                        "cam" => white.clone(),
+                        "planet" => red.clone(),
+                        "sun" => green.clone(),
+                        _ => lamp.clone(),
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&viewed, &LiveParams::default()),
+            &[(CANVAS.0 / 2, CANVAS.1 / 2)],
+        );
+        assert_eq!(
+            chains.skies.borrow().keys().cloned().collect::<Vec<_>>(),
+            vec![main.clone()],
+            "one sky for the scene and its view"
+        );
+        assert_eq!(
+            chains.skies.borrow().get(&main).and_then(|sky| sky.arrival),
+            arrived,
+            "the view shows the arrival the scene picked"
+        );
+        assert!(
+            snapshot::arrival_light(
+                (&viewed, &cache, &chains),
+                &view,
+                MediaTime::zero(Timebase::MILLIS),
+                &LiveParams::default(),
+            )
+            .is_some(),
+            "and it lights the view"
+        );
     }
 
     /// ADR-0187: as a warp aimed ahead starts, the backdrop cross-fades from the sky its
