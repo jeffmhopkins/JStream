@@ -33,7 +33,7 @@ only one of these things:
 <a id="decision"></a>
 ## Decision
 1. **A `mode` on both kinds of mapping.** `MappingMode` is `add` or `replace`. It is a
-   minor protocol version, 0.181 ([R-API-001](../RULES.md#R-API-001)).
+   minor protocol version, 0.177 ([R-API-001](../RULES.md#R-API-001)).
    - `ValueBinding.mode` defaults to `replace`, so every binding written before this
      version keeps working as it did.
    - `MotionModifier.mode` and `CameraMotionModifier.mode` default to `add`, for the same

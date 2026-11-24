@@ -305,7 +305,7 @@ pub struct ValueBinding {
     /// Its ID, unique among the collection's value bindings: 1 to 64 bytes of ASCII
     /// letters, digits, `_` and `-`.
     pub binding_id: String,
-    /// What it reads: a `midi`, `data`, (since 0.169) `channel` or (since 0.178,
+    /// What it reads: a `midi`, `data`, (since 0.169) `channel` or (since 0.177,
     /// ADR-0206) `audio` modifier's kind and parameters.
     #[serde(flatten)]
     pub input: MotionKind,
@@ -317,7 +317,7 @@ pub struct ValueBinding {
     /// fully. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
-    /// Whether it replaces its target's value or adds to it (ADR-0203, since 0.181).
+    /// Whether it replaces its target's value or adds to it (ADR-0203, since 0.177).
     /// Default `replace`, omitted. Each target takes its stored value, or the last moved
     /// `replace` binding's by ID, plus every moved `add` binding's, kept in its range.
     #[serde(
@@ -325,7 +325,7 @@ pub struct ValueBinding {
         skip_serializing_if = "crate::MappingMode::is_replace"
     )]
     pub mode: crate::MappingMode,
-    /// Whether it drives (ADR-0203, since 0.181): false bypasses it, its target showing
+    /// Whether it drives (ADR-0203, since 0.177): false bypasses it, its target showing
     /// what the others give. Default `true`, omitted.
     #[serde(default = "enabled", skip_serializing_if = "is_true")]
     pub enabled: bool,

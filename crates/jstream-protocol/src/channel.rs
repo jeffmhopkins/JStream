@@ -88,7 +88,7 @@ pub struct ChannelInfo {
     /// sets it, 0 to 1. Default 0.
     #[serde(default)]
     pub default: Finite32,
-    /// What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,
+    /// What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.177,
     /// ADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the
     /// reading onto the channel's 0 to 1. An `audio` reader's attack and release follow
     /// its level, as on an item.

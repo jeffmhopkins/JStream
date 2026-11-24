@@ -384,12 +384,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.181 because a value binding and a reader motion row (`midi`,
+`PROTOCOL_VERSION` is 0.177 because a value binding and a reader motion row (`midi`,
 `data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
 `replace`; a value binding's target sums its `add` bindings onto the last moved
 `replace` binding's value or its stored value, a binding gains `enabled`, and a
 `replace` row sets its property itself
-([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)); 0.178 because a channel's `inputs` and a value binding's input
+([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)), and a channel's `inputs` and a value binding's input
 may be an `audio` level, a source's, a bus's or the program mix's, followed by its
 attack and release
 ([ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)); 0.176 because `profile.get`'s drawers report
@@ -1563,13 +1563,13 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - **`midi.last_controls`** answers `MidiControlInfo {input, channel, controller, value,
   count}` for each MIDI input that has sent a control change, for a client that learns
   one: the control whose `count` grows is the one moved.
-- A value binding's **`mode`** (since 0.181,
+- A value binding's **`mode`** (since 0.177,
   [ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)) is `replace` (the
   default, omitted) or `add`. Each tick, a target takes the value of the `replace` binding
   that moved last, or its stored value when none has, plus every moved `add` binding's
   value, kept in its range. **`enabled`** (default `true`, omitted) set to false bypasses
   a binding: it stays listed and drives nothing.
-- A value binding's input may also be `kind` `audio` (since 0.178,
+- A value binding's input may also be `kind` `audio` (since 0.177,
   [ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)): an
   audio modifier's fields, its attack and release following the level.
 - A value binding's input may also be `kind` `channel` (since 0.169), and its optional
@@ -1581,7 +1581,7 @@ controls into one live value, 0 to 1, that anything bindable follows, listed in
 `state.get`'s `channels` by ID (at most `MAX_CHANNELS`, 256).
 - **`ChannelInfo {channel_id, name, scene_id?, default, inputs, combine, average_ms,
   rise_ms, fall_ms, curve, on, off_value}`**: up to 8 `inputs`, each the fields a `midi`,
-  `data` (without `color_from`), `channel` or (since 0.178, ADR-0206) `audio` modifier
+  `data` (without `color_from`), `channel` or (since 0.177, ADR-0206) `audio` modifier
   takes; `combine` is `latest` (the
   input that moved last, the default), `max`, `min`, `sum`, `product` or `average`;
   then, in order, the switch (`on` false holds `off_value`), a moving average over
@@ -3112,7 +3112,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   as `width` and `height` do one side of the box after `scale` (ADR-0178), and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
-- **`mode`** (since 0.181,
+- **`mode`** (since 0.177,
   [ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)): `add` (the default,
   omitted) applies a value as above. A `midi`, `data`, `channel` or `audio` modifier may
   be `replace` instead (another kind is refused at `motion.<n>.mode`): its value is the

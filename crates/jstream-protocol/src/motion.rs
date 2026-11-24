@@ -532,7 +532,7 @@ pub enum MotionClock {
     Unknown,
 }
 
-/// How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or
+/// How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or
 /// replaces it.
 #[derive(
     Clone,
@@ -628,7 +628,7 @@ pub struct MotionModifier {
     /// collection doesn't hold applies it fully. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
-    /// Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default
+    /// Whether it adds to its property or replaces it (ADR-0203, since 0.177). Default
     /// `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace.
     #[serde(default, skip_serializing_if = "MappingMode::is_add")]
     pub mode: MappingMode,

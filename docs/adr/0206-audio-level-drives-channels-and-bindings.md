@@ -31,7 +31,7 @@ maintainer asked for it.
    the `audio` bus, else the program mix), its measure (level, peak, onset or a band),
    `floor_db` and `ceiling_db`, `attack_ms` and `release_ms`, its curve, and `from` and
    `to`, which map it onto the channel's 0 to 1 or the setting's range. A minor protocol
-   version, 0.178 ([R-API-001](../RULES.md#R-API-001)). A camera's motion still refuses
+   version, 0.177 ([R-API-001](../RULES.md#R-API-001)). A camera's motion still refuses
    `audio` ([ADR-0176](0176-controllers-and-live-data-drive-scene-cameras.md)); a camera
    follows a channel that hears it instead.
 2. **The values thread hears it.** The scopes the engine keeps for audio motion

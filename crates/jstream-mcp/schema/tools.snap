@@ -2549,7 +2549,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.177).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
               },
               "modifier_id": {
                 "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
@@ -2748,7 +2748,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "inputs": {
-                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
+                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.177,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
                 "items": {
                   "$ref": "#/$defs/MotionKind"
                 },
@@ -6033,7 +6033,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "MappingMode": {
-            "description": "How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or\nreplaces it.",
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or\nreplaces it.",
             "oneOf": [
               {
                 "const": "add",
@@ -7170,7 +7170,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
+                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.177). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
               },
               "modifier_id": {
                 "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -8887,12 +8887,12 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "enabled": {
-                "description": "Whether it drives (ADR-0203, since 0.181): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+                "description": "Whether it drives (ADR-0203, since 0.177): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
                 "type": "boolean"
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.181).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
+                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.177).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
               },
               "target": {
                 "$ref": "#/$defs/ValueTarget",
@@ -11703,7 +11703,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.177).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
               },
               "modifier_id": {
                 "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
@@ -11902,7 +11902,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "inputs": {
-                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
+                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.177,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
                 "items": {
                   "$ref": "#/$defs/MotionKind"
                 },
@@ -15187,7 +15187,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "MappingMode": {
-            "description": "How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or\nreplaces it.",
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or\nreplaces it.",
             "oneOf": [
               {
                 "const": "add",
@@ -16324,7 +16324,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
+                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.177). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
               },
               "modifier_id": {
                 "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -18041,12 +18041,12 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "enabled": {
-                "description": "Whether it drives (ADR-0203, since 0.181): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+                "description": "Whether it drives (ADR-0203, since 0.177): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
                 "type": "boolean"
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.181).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
+                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.177).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
               },
               "target": {
                 "$ref": "#/$defs/ValueTarget",
@@ -18963,7 +18963,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "inputs": {
-                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
+                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.177,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
                 "items": {
                   "$ref": "#/$defs/MotionKind"
                 },
@@ -23704,7 +23704,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.177).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
               },
               "modifier_id": {
                 "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
@@ -23903,7 +23903,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "inputs": {
-                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
+                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.177,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
                 "items": {
                   "$ref": "#/$defs/MotionKind"
                 },
@@ -27188,7 +27188,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "MappingMode": {
-            "description": "How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or\nreplaces it.",
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or\nreplaces it.",
             "oneOf": [
               {
                 "const": "add",
@@ -28325,7 +28325,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
+                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.177). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
               },
               "modifier_id": {
                 "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -30042,12 +30042,12 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "enabled": {
-                "description": "Whether it drives (ADR-0203, since 0.181): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+                "description": "Whether it drives (ADR-0203, since 0.177): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
                 "type": "boolean"
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.181).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
+                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.177).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
               },
               "target": {
                 "$ref": "#/$defs/ValueTarget",
@@ -30914,7 +30914,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "MappingMode": {
-            "description": "How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or\nreplaces it.",
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or\nreplaces it.",
             "oneOf": [
               {
                 "const": "add",
@@ -31525,7 +31525,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
+                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.177). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
               },
               "modifier_id": {
                 "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -35319,7 +35319,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.177).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
               },
               "modifier_id": {
                 "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
@@ -35518,7 +35518,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "inputs": {
-                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
+                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.177,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
                 "items": {
                   "$ref": "#/$defs/MotionKind"
                 },
@@ -38799,7 +38799,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "MappingMode": {
-            "description": "How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or\nreplaces it.",
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or\nreplaces it.",
             "oneOf": [
               {
                 "const": "add",
@@ -39936,7 +39936,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
+                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.177). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
               },
               "modifier_id": {
                 "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -41647,12 +41647,12 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "enabled": {
-                "description": "Whether it drives (ADR-0203, since 0.181): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+                "description": "Whether it drives (ADR-0203, since 0.177): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
                 "type": "boolean"
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.181).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
+                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.177).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
               },
               "target": {
                 "$ref": "#/$defs/ValueTarget",
@@ -43916,7 +43916,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.177).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
               },
               "modifier_id": {
                 "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
@@ -44025,7 +44025,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "MappingMode": {
-            "description": "How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or\nreplaces it.",
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or\nreplaces it.",
             "oneOf": [
               {
                 "const": "add",
@@ -48295,7 +48295,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
+                "description": "Whether it adds to the camera's property or replaces it (ADR-0203, since 0.177).\nDefault `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may\nreplace."
               },
               "modifier_id": {
                 "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
@@ -48494,7 +48494,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "inputs": {
-                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.178,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
+                "description": "What sets it: at most 8 readers, each a `midi`, `data`, `channel` or (since 0.177,\nADR-0206) `audio` modifier's kind and parameters, whose `from` and `to` map the\nreading onto the channel's 0 to 1. An `audio` reader's attack and release follow\nits level, as on an item.\nA `channel` input can't lead back to this channel. Default none.",
                 "items": {
                   "$ref": "#/$defs/MotionKind"
                 },
@@ -51779,7 +51779,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "MappingMode": {
-            "description": "How a mapping meets the value it drives (ADR-0203, since 0.181): it adds to it, or\nreplaces it.",
+            "description": "How a mapping meets the value it drives (ADR-0203, since 0.177): it adds to it, or\nreplaces it.",
             "oneOf": [
               {
                 "const": "add",
@@ -52916,7 +52916,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.181). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
+                "description": "Whether it adds to its property or replaces it (ADR-0203, since 0.177). Default\n`add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may replace."
               },
               "modifier_id": {
                 "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
@@ -54633,12 +54633,12 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               "enabled": {
-                "description": "Whether it drives (ADR-0203, since 0.181): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
+                "description": "Whether it drives (ADR-0203, since 0.177): false bypasses it, its target showing\nwhat the others give. Default `true`, omitted.",
                 "type": "boolean"
               },
               "mode": {
                 "$ref": "#/$defs/MappingMode",
-                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.181).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
+                "description": "Whether it replaces its target's value or adds to it (ADR-0203, since 0.177).\nDefault `replace`, omitted. Each target takes its stored value, or the last moved\n`replace` binding's by ID, plus every moved `add` binding's, kept in its range."
               },
               "target": {
                 "$ref": "#/$defs/ValueTarget",

@@ -116,7 +116,7 @@ pub struct CameraMotionModifier {
     /// none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
-    /// Whether it adds to the camera's property or replaces it (ADR-0203, since 0.181).
+    /// Whether it adds to the camera's property or replaces it (ADR-0203, since 0.177).
     /// Default `add`, omitted. Only a `midi`, `data`, `channel` or `audio` modifier may
     /// replace.
     #[serde(default, skip_serializing_if = "crate::MappingMode::is_add")]

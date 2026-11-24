@@ -681,7 +681,7 @@ stamp = { hash = "b3:bcb60471022246c7", by = "agent:claude-warp-aim", note = "on
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:3f358a3a59286cf9", by = "agent:claude", note = "Re-read: tools.snap only gained the mode and enabled schema fields; the MCP section holds" }
+stamp = { hash = "b3:c5200424881cc86f", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:34b92306cdcaa650", by = "agent:claude-sun", note = "design.rs guide gains the ADR-0198 nested-scene arrival sentence; the MCP architecture section names nothing this changes" }
@@ -885,10 +885,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:d3f4cc48d072cabe", by = "agent:claude", note = "Re-read: the protocol overview of value bindings and motion holds; ADR-0203's fields are detailed in the protocol README | merge: snapshots and version merged (0.176 drop counters from main, 0.181 here); the protocol overview holds | kept from the merged side: Re-read the protocol overview: it names no drawer fields or kbps interval; the 0.176 additive change fits it." }
+stamp = { hash = "b3:21fbb2a7a0b91fb4", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read the protocol overview: it names no drawer fields or kbps interval; the 0.176 additive change fits it." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:8e726bc58ff69d8f", by = "agent:claude", note = "Re-read: the protocol overview of value bindings and motion holds; ADR-0203's fields are detailed in the protocol README | merge: snapshots and version merged (0.176 drop counters from main, 0.181 here); the protocol overview holds | kept from the merged side: Re-read the protocol overview: it names no drawer fields or kbps interval; the 0.176 additive change fits it." }
+stamp = { hash = "b3:05d099fe343696cd", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read the protocol overview: it names no drawer fields or kbps interval; the 0.176 additive change fits it." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -900,16 +900,16 @@ stamp = { hash = "b3:138243dd2b7d1475", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: edit list adds bus.set_monitor (a bus's monitor, protocol 0.42); re-read the rest against the mock's set_monitor and the snapshots." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:7047005b396c0eab", by = "agent:claude", note = "Re-read: the protocol overview of value bindings and motion holds; ADR-0203's fields are detailed in the protocol README" }
+stamp = { hash = "b3:379a14e7e657e2f1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/camera_aim.rs"]
 stamp = { hash = "b3:308cc15f74393559", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the live-aim bullet beside PTZ cameras; the rest of the protocol section holds; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/camera_motion.rs"]
-stamp = { hash = "b3:778f8075945d2456", by = "agent:claude", note = "Re-read: the protocol overview of value bindings and motion holds; ADR-0203's fields are detailed in the protocol README" }
+stamp = { hash = "b3:2fcd50ba13721eaa", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/channel.rs"]
-stamp = { hash = "b3:5fe1dd8bf964fa36", by = "agent:claude", note = "Snapshots move to 0.178; the protocol section holds" }
+stamp = { hash = "b3:3c6dbca001790909", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/clap.rs"]
 stamp = { hash = "b3:346b89300e9dc7a9", by = "agent:claude-settings", note = "Re-read: the protocol section's envelope, versioning and command model still hold for an additive 0.94 query and action; the mock answers them as an engine without CLAP | merge: wave/alpha5 brought #1275's final Settings dialog, #1269's projects (protocol 0.94, collection.* calls, File menu project items), #1272's MIDI/JTunnel crates and main's #1301/#1302/#1308/#1309; re-read: the CLAP scan text this branch wrote (plugin.clap_scan, plugin.clap_rescan, the Audio plugins page) is independent of what the wave changed here, and any CLAP version it names is now 0.95 | merge: Merged wave/alpha5 (protocol 0.96 to 0.105: controller bindings, the network listener, keyframe timing, labels, blending space, effect quarantine, view reports, wheel chords and camera controls; READMEs trimmed to maps). This branch is renumbered on top as protocol 0.106 (plugin.clap_scan, plugin.clap_rescan, with the since-0.106 notes, and PluginClapRescan classified in Action::takes_steps). The Settings dialog keeps Audio plugins beside the wave's Devices page with its network setting. The core README's CLAP lines sit in the trimmed map, and the platform-windows README takes the wave's map. Snapshots are regenerated." }
@@ -990,7 +990,7 @@ stamp = { hash = "b3:178e5fad9950df20", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:3708666a19e3f518", by = "agent:grok", note = "Re-read the canvas sentence. canvas.set_frame_rate sets the base rate to 30 or 60 at protocol 0.89, beside canvas.set_size." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/motion.rs"]
-stamp = { hash = "b3:3d574efff2fbf190", by = "agent:claude", note = "Re-read: the protocol overview of value bindings and motion holds; ADR-0203's fields are detailed in the protocol README" }
+stamp = { hash = "b3:b87385650741c2aa", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/organise.rs"]
 stamp = { hash = "b3:2031d27ef862a130", by = "agent:claude", note = "Edited: organisation now says sources, scenes, bindings and timelines carry labels, label.delete's plan clears all and label.members lists them; hotkey.set_labels added beside hotkey.set; label.members in the reads; label.delete's refusal names every carrier (ADR-0133). Checked against the protocol and mock changes." }
@@ -1041,7 +1041,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Proto
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:def42e7b298e93c6", by = "agent:claude", note = "Re-read: the protocol overview of value bindings and motion holds; ADR-0203's fields are detailed in the protocol README | merge: snapshots and version merged (0.176 drop counters from main, 0.181 here); the protocol overview holds | kept from the merged side: Re-read the protocol overview: it names no drawer fields or kbps interval; the 0.176 additive change fits it." }
+stamp = { hash = "b3:4e6e7a56992fb6e1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read the protocol overview: it names no drawer fields or kbps interval; the 0.176 additive change fits it." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -4566,7 +4566,7 @@ stamp = { hash = "b3:e90844923a76aa3e", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "added 'Views report back': preview.report's label rules, ViewCounts fields, run restart, session-only, 16-view limit, errors; checked against command.rs, preview.rs and the engine | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
 
 ["CRATE-jstream-protocol#bindings"."body"]
-stamp = { hash = "b3:bd0cbb5facc02f41", by = "agent:claude", note = "Added mode (replace default) and enabled to ValueBinding's shape and a bullet on per-target summing (ADR-0203)" }
+stamp = { hash = "b3:63bdb5b87de31694", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["CRATE-jstream-protocol#bindings"."dep:docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
 stamp = { hash = "b3:90465e14077d637b", by = "agent:r9bzj2", note = "New section for 0.96 controller bindings (ADR-0122): binding.set/clear, Trigger, Binding, state.get bindings, delete.plan bindings, removed_bindings, entity binding, checked against binding.rs, the graph's and the mock's checks, and the parity cases | merge: Merged wave/alpha5 (page API schema 8, projects 0.94, collection tool, #1272's crates): re-read for what it changed here; the binding text holds beside it" }
@@ -4575,7 +4575,7 @@ stamp = { hash = "b3:90465e14077d637b", by = "agent:r9bzj2", note = "New section
 stamp = { hash = "b3:a37bba619c95806a", by = "agent:release-alpha8", note = "Added value bindings: ValueBinding, ValueTarget, set_value/clear_value checks, left in place, midi.last_controls, against binding.rs and value.rs. Re-read after renumbering the ADR to 0178 (0177 was taken). | merge: ADR-0178 as merged (schema 19 after #1609's 18, at most 256, five target types, left in place when the target goes, learn via midi.last_controls) matches the value-binding paragraph CC PR 3 value bindings added, and ValueBinding::problem agrees with binding.rs." }
 
 ["CRATE-jstream-protocol#bindings"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:7047005b396c0eab", by = "agent:claude", note = "Added mode (replace default) and enabled to ValueBinding's shape and a bullet on per-target summing (ADR-0203)" }
+stamp = { hash = "b3:379a14e7e657e2f1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["CRATE-jstream-protocol#calls"."body"]
 stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to command.rs, envelope.rs, query.rs, the modules its text names; #purpose still covers all of src/**; depends_on 0013-command-model.md, RULES.md#R-ARCH-006, matching what it relies on; self-links to #design now name this anchor" }
@@ -4617,16 +4617,16 @@ stamp = { hash = "b3:c499997af40d7f9e", by = "agent:channels", note = "Added 0.1
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:d3f4cc48d072cabe", by = "agent:claude", note = "Re-read: new optional fields with defaults that keep old behaviour are a minor bump as this section says; snapshots updated | merge: #1694 (drop counters, protocol 0.176, preview_skipped) merged under this branch's 0.181; this section still holds with both | kept from the merged side: Re-read: schema and examples snapshots regenerated and reviewed (preview_skipped added, kbps description, version 0.176); additive only." }
+stamp = { hash = "b3:21fbb2a7a0b91fb4", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read: schema and examples snapshots regenerated and reviewed (preview_skipped added, kbps description, version 0.176); additive only." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:8e726bc58ff69d8f", by = "agent:claude", note = "Re-read: new optional fields with defaults that keep old behaviour are a minor bump as this section says; snapshots updated | merge: #1694 (drop counters, protocol 0.176, preview_skipped) merged under this branch's 0.181; this section still holds with both | kept from the merged side: Re-read: schema and examples snapshots regenerated and reviewed (preview_skipped added, kbps description, version 0.176); additive only." }
+stamp = { hash = "b3:05d099fe343696cd", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read: schema and examples snapshots regenerated and reviewed (preview_skipped added, kbps description, version 0.176); additive only." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:def42e7b298e93c6", by = "agent:claude", note = "Re-read: new optional fields with defaults that keep old behaviour are a minor bump as this section says; snapshots updated | merge: snapshots regenerated with main's preview_skipped and this branch's mode/enabled; both are additive minor changes | kept from the merged side: Re-read: schema and examples snapshots regenerated and reviewed (preview_skipped added, kbps description, version 0.176); additive only." }
+stamp = { hash = "b3:4e6e7a56992fb6e1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read: schema and examples snapshots regenerated and reviewed (preview_skipped added, kbps description, version 0.176); additive only." }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
 stamp = { hash = "b3:676067bd06525692", by = "agent:channels", note = "Added channel.values to the query list and the channel actions to the actions list." }
@@ -4686,7 +4686,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:def42e7b298e93c6", by = "agent:claude", note = "Re-read: version bump to 0.181 changes no error shape; a bad mode is invalid_argument at the field like other checks | merge: version resolved to 0.181 above main's 0.176; no error shape changed | kept from the merged side: Re-read: version.rs is listed as PROTOCOL_VERSION's home; the bump to 0.176 changes nothing here." }
+stamp = { hash = "b3:4e6e7a56992fb6e1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read: version.rs is listed as PROTOCOL_VERSION's home; the bump to 0.176 changes nothing here." }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:626ba3cd643e0e61", by = "agent:claude", note = "Added solid_outline (hull of the eight projected corners, None if one is behind the viewer), outline_contains and SolidBounds::of_size to the solid.rs entry; checked against solid.rs." }
@@ -4767,7 +4767,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:f3086e3eeb71137a", by = "agent:claude", note = "Re-read: MappingMode follows the non-exhaustive enum with Unknown pattern the design describes; version bump only" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:def42e7b298e93c6", by = "agent:claude", note = "Re-read: MappingMode follows the non-exhaustive enum with Unknown pattern the design describes; version bump only | merge: version 0.181 after main's 0.176; design unchanged | kept from the merged side: Re-read the design notes: an additive serde(default) field and a minor bump follow R-API-001 as described." }
+stamp = { hash = "b3:4e6e7a56992fb6e1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read the design notes: an additive serde(default) field and a minor bump follow R-API-001 as described." }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4857,10 +4857,10 @@ stamp = { hash = "b3:4762fe740a80f740", by = "agent:cockpit-demo", note = "edite
 stamp = { hash = "b3:c36ce34e34ae25ea", by = "agent:cockpit-demo", note = "edited: a step that passes a cue has fired it on return, an overflowing step is invalid_argument, and output.start fails while held or still ahead of real time, saying how far" }
 
 ["CRATE-jstream-protocol#motion"."body"]
-stamp = { hash = "b3:1889b0e31e5ff524", by = "agent:claude", note = "Added the mode bullet: replace only on readers, the property itself in its unit, last replace then adds, amount pulls toward own, materials and colours excluded, Move blending, cameras | kept from the merged side: Added that a number driven with no material adds to the same number driven by name (sourced::materials pushes separate drives that render sums, 1 + sum for emissive_strength); painted colours not claimed" }
+stamp = { hash = "b3:255486c7e0bf94dd", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Added that a number driven with no material adds to the same number driven by name (sourced::materials pushes separate drives that render sums, 1 + sum for emissive_strength); painted colours not claimed" }
 
 ["CRATE-jstream-protocol#motion"."file:crates/jstream-protocol/src/motion.rs"]
-stamp = { hash = "b3:3d574efff2fbf190", by = "agent:claude", note = "Added the mode bullet: replace only on readers, the property itself in its unit, last replace then adds, amount pulls toward own, materials and colours excluded, Move blending, cameras" }
+stamp = { hash = "b3:b87385650741c2aa", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["CRATE-jstream-protocol#organisation"."body"]
 stamp = { hash = "b3:20616f57d663f9d1", by = "agent:claude", note = "Screen-space reflections are now off by default (RenderFeatures::DEFAULT, serde default false), per the streaming PC measurement: edited the reflections option text to say on-screen reflections need the switch, off by default." }
@@ -4917,16 +4917,16 @@ stamp = { hash = "b3:138243dd2b7d1475", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: audio.rs gains BusMonitor {device, tap}, MonitorTap (pre_filters, post_filters, unknown skipped in the schema), BusMonitor::problem and MAX_MONITOR_DEVICE_LEN; BusInfo.monitor; Edit::BusSetMonitor named and classified (plugin.rs); edit list and Audio bullet updated; version paragraph says 0.42 for bus monitors; fixtures and parity cover set, change, removal, a deleted bus's monitor and three refusals." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/binding.rs"]
-stamp = { hash = "b3:7047005b396c0eab", by = "agent:claude", note = "Re-read: MappingMode, ValueBinding mode/enabled and camera mode are optional fields within the crate's stated purpose" }
+stamp = { hash = "b3:379a14e7e657e2f1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/camera_aim.rs"]
 stamp = { hash = "b3:308cc15f74393559", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; re-read: nothing in this section names what changed (the new actions, query, endpoints or flags), and it still holds; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/camera_motion.rs"]
-stamp = { hash = "b3:778f8075945d2456", by = "agent:claude", note = "Re-read: MappingMode, ValueBinding mode/enabled and camera mode are optional fields within the crate's stated purpose" }
+stamp = { hash = "b3:2fcd50ba13721eaa", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/channel.rs"]
-stamp = { hash = "b3:5fe1dd8bf964fa36", by = "agent:claude", note = "Channel inputs and binding inputs accept audio, version 0.178; the purpose holds" }
+stamp = { hash = "b3:3c6dbca001790909", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/clap.rs"]
 stamp = { hash = "b3:346b89300e9dc7a9", by = "agent:claude-settings", note = "Re-read: clap.rs is a new module of plain wire types (ClapScanInfo, ClapFolder, ClapFound, ClapFailed), within the crate's purpose; the Contents sections list it | merge: wave/alpha5 brought #1275's final Settings dialog, #1269's projects (protocol 0.94, collection.* calls, File menu project items), #1272's MIDI/JTunnel crates and main's #1301/#1302/#1308/#1309; re-read: the CLAP scan text this branch wrote (plugin.clap_scan, plugin.clap_rescan, the Audio plugins page) is independent of what the wave changed here, and any CLAP version it names is now 0.95 | merge: Merged wave/alpha5 (protocol 0.96 to 0.105: controller bindings, the network listener, keyframe timing, labels, blending space, effect quarantine, view reports, wheel chords and camera controls; READMEs trimmed to maps). This branch is renumbered on top as protocol 0.106 (plugin.clap_scan, plugin.clap_rescan, with the since-0.106 notes, and PluginClapRescan classified in Action::takes_steps). The Settings dialog keeps Audio plugins beside the wave's Devices page with its network setting. The core README's CLAP lines sit in the trimmed map, and the platform-windows README takes the wave's map. Snapshots are regenerated." }
@@ -5007,7 +5007,7 @@ stamp = { hash = "b3:178e5fad9950df20", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:3708666a19e3f518", by = "agent:grok", note = "Re-read the overview. It points at the version section, which is now 0.89 for canvas.set_frame_rate." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/motion.rs"]
-stamp = { hash = "b3:3d574efff2fbf190", by = "agent:claude", note = "Re-read: MappingMode, ValueBinding mode/enabled and camera mode are optional fields within the crate's stated purpose" }
+stamp = { hash = "b3:b87385650741c2aa", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/organise.rs"]
 stamp = { hash = "b3:2031d27ef862a130", by = "agent:claude", note = "Its inputs changed by hotkey.set_labels, HotkeyBinding.labels with with_labels, TimelineInfo.labels, label.members with LabelMembers, LabelledScene and LabelledTimeline, the plugin scopes, fixtures and version 0.100 (ADR-0133). The purpose re-read lists modules, not commands, so it holds." }
@@ -5058,7 +5058,7 @@ stamp = { hash = "b3:cf554a900c0209d0", by = "agent:smooth-paths", note = "Addit
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:def42e7b298e93c6", by = "agent:claude", note = "Re-read: MappingMode, ValueBinding mode/enabled and camera mode are optional fields within the crate's stated purpose | merge: main's 0.176 drop-counter fix meets this branch's 0.181 mapping fields; purpose holds | kept from the merged side: Re-read the crate purpose: event, profile, fixtures and version changes (preview_skipped, kbps window, 0.176) fit what it describes." }
+stamp = { hash = "b3:4e6e7a56992fb6e1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Re-read the crate purpose: event, profile, fixtures and version changes (preview_skipped, kbps window, 0.176) fit what it describes." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -5112,13 +5112,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:af57933a4d79c4c1", by = "agent:claude", note = "Added the 0.181 paragraph for ADR-0203 (mode on bindings and reader motion rows, enabled on bindings); version.rs minor is 181 | merge: #1694 (drop counters, protocol 0.176, preview_skipped) merged under this branch's 0.181; this section still holds with both | kept from the merged side: Edited: 0.176 adds profile.get drawers' preview_skipped, and render_ticks no longer counts preview-only pictures (#1690); number agreed with the atlas thread (0.173-0.175 taken by #1681, #1663, #1691)." }
+stamp = { hash = "b3:bf7fad3ff05cf8ab", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Edited: 0.176 adds profile.get drawers' preview_skipped, and render_ticks no longer counts preview-only pictures (#1690); number agreed with the atlas thread (0.173-0.175 taken by #1681, #1663, #1691)." }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:def42e7b298e93c6", by = "agent:claude", note = "Added the 0.181 paragraph for ADR-0203 (mode on bindings and reader motion rows, enabled on bindings); version.rs minor is 181 | merge: Kept the 0.181 (ADR-0203) and 0.178 (ADR-0206) paragraphs and added main's 0.176 preview_skipped paragraph between them | kept from the merged side: Edited: 0.176 adds profile.get drawers' preview_skipped, and render_ticks no longer counts preview-only pictures (#1690); number agreed with the atlas thread (0.173-0.175 taken by #1681, #1663, #1691)." }
+stamp = { hash = "b3:4e6e7a56992fb6e1", by = "agent:claude", note = "Renumbered this PR's protocol bump to 0.177 (main's 0.176 plus one, per the landing rule): ADR-0203 and ADR-0206 now share 0.177; re-read, the section holds | kept from the merged side: Edited: 0.176 adds profile.get drawers' preview_skipped, and render_ticks no longer counts preview-only pictures (#1690); number agreed with the atlas thread (0.173-0.175 taken by #1681, #1663, #1691)." }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
