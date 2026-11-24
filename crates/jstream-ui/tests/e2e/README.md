@@ -569,6 +569,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   file dropped as a browser URI list, made into a source and scene in the same batch
   as the show; the lock refusing Delete; a trim held mid-drag and let go with Escape,
   sending nothing; and the picker's menu duplicating, renaming and deleting a show.
+- **Show labels** (`show-labels.spec.js`): a crowded show sent as one `show.set` over
+  the page's own socket, with short program clips, keyframes in stacks, events close
+  together and thin overlay clips. No keyframe's name or count runs into the next
+  diamond, a stack of four is named once with "+3" and lists all four in its tooltip,
+  no named event pill runs into the next, a cut badge with its label clears its
+  neighbours, and a clip's name stays inside its clip; hovering a keyframe whose name
+  was left out shows it.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

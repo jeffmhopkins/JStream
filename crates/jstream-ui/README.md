@@ -1191,7 +1191,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `host::element_at`; a source's audio goes on the A track it is let go on, or a new
   one (`edits::place_source_audio`). A track head drags to reorder its kind's rows
   (`edits::move_track`, refused across kinds by `geom::reorder_refusal`), and its menu
-  renames and deletes overlay and audio tracks. A scene clip's own audio is never
+  renames and deletes overlay and audio tracks. Labels keep out of each other's way
+  from the rows' measured width: `geom::place_marks` stacks markers closer than
+  `CLUSTER_PX` and gives each stack's first marker the room up to the next stack (its
+  name cut short with a CSS ellipsis, left out under `MIN_LABEL_PX`, "+N" for the rest),
+  `geom::cut_room` gives a cut badge half the gap each side, and a clip too narrow to
+  name draws none; hover and tooltips show the whole name. A scene clip's own audio is never
   stored ([ADR-0216](../../docs/adr/0216-a-scene-clips-audio-is-drawn-linked-under-it.md)):
   `wire::heard_in` finds the sources a scene is heard through when shown, and
   `view_of` draws a read-only `TrackKind::Linked` row per video track whose clips keep
