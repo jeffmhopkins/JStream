@@ -520,6 +520,10 @@ fn drawer_profile(
             preview_skipped: now
                 .preview_skipped
                 .saturating_sub(before.map_or(0, |b| b.preview_skipped)),
+            submits: per_frame(
+                now.submits.saturating_sub(before.map_or(0, |b| b.submits)),
+                frames,
+            ),
             phases,
         },
         drawn,
@@ -591,10 +595,14 @@ fn unit(key: &UnitKey) -> ProfileUnit {
             ChainOwner::Scene(scene_id) => ProfileUnit::SceneChain {
                 scene_id: scene_id.clone(),
             },
-            ChainOwner::Item(scene_id, item_id) => ProfileUnit::ItemEffects {
-                scene_id: scene_id.clone(),
-                item_id: item_id.clone(),
-            },
+            // A model source's filters over an item's layer are timed with the item
+            // (`run_chains`), so this arm only names them the same way.
+            ChainOwner::Item(scene_id, item_id) | ChainOwner::Shown(_, scene_id, item_id) => {
+                ProfileUnit::ItemEffects {
+                    scene_id: scene_id.clone(),
+                    item_id: item_id.clone(),
+                }
+            }
             ChainOwner::Master(mix_id) => ProfileUnit::MasterChain {
                 mix_id: mix_id.clone(),
             },
@@ -731,6 +739,11 @@ fn percent(used: Duration, span: Duration) -> Finite32 {
 /// `nanos` in milliseconds.
 fn ms(nanos: u64) -> Finite32 {
     finite((nanos as f64 / 1_000_000.0) as f32)
+}
+
+/// `total` over `frames` frames, as an average per frame.
+fn per_frame(total: u64, frames: u64) -> Finite32 {
+    finite((total as f64 / frames.max(1) as f64) as f32)
 }
 
 fn finite(value: f32) -> Finite32 {

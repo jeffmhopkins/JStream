@@ -8,29 +8,35 @@
 //! source's settings and filters are in the Properties dialog the header's button opens. With no item selected, the
 //! selected scene's header over its object count, the scenes that use it as a source,
 //! and its transition overrides. Every field sends its edit when it changes, so the
-//! canvas and the Inspector show the same committed numbers. While the Show panel's
-//! selection names something in the open show, its page (`show::inspector`) comes first.
+//! canvas and the Inspector show the same committed numbers. A drag on a placement or
+//! crop field shows on output as it goes, through a gesture's `live.set` (ADR-0032),
+//! and its release commits the gesture in one batch, one undo step (#1734). While the
+//! Show panel's selection names something in the open show, its page
+//! (`show::inspector`) comes first.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
 use super::curve::CurveEditor;
+use super::gesture::EditDrag;
 use super::keyframe_timing::{self, KeyframeTimingFields};
 use super::motion::MotionSection;
-use super::number::{AxisRow, NumberField};
+use super::number::{AxisRow, NumberField, Scrubbing};
 use super::scene_properties::SceneDialog;
 use super::show::inspector as show_inspector;
 use super::source_properties::{self, PropertiesDialog};
 use super::studio;
 use crate::app::SessionContext;
+use crate::canvas::live::{Live, Values};
+use crate::canvas::model;
 use crate::hotkeys;
 use crate::icons::{Icon, named};
 use crate::panels::labels::{LabelChips, LabelPopover, TagButton, TagPopover, Tagged, carried};
 use crate::panels::sources::icon_of;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    Bezier, BlendMode, Chord, Crop, Edit, Finite32, FitMode, Glide, ItemEasing, ItemGeometry,
-    ItemId, ItemInfo, ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm, SceneId, SourceId,
-    SourceKind, TransitionEffect, TransitionPresetId, TransitionsInfo,
+    Bezier, BlendMode, Chord, Crop, Edit, Finite32, FitMode, GestureId, Glide, ItemEasing,
+    ItemGeometry, ItemId, ItemInfo, ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm,
+    SceneId, SourceId, SourceKind, TransitionEffect, TransitionPresetId, TransitionsInfo,
 };
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -1014,6 +1020,126 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
 /// The item's Transform tab (its box, 3D, crop and blending) and Behaviour tab (its
 /// scene switches and hotkeys). Both stay mounted while another tab shows, so a field
 /// keeps what is typed in it.
+/// The live values an Inspector edit shows while its field is dragged: an item's
+/// geometry or crop, which the engine takes as live values (ADR-0032). `None` for any
+/// other edit, which is sent once, on release.
+pub fn live_values(edit: &Edit) -> Option<Values> {
+    match edit {
+        Edit::ItemSetGeometry {
+            item_id, geometry, ..
+        } => Some((vec![(item_id.clone(), *geometry)], Vec::new())),
+        Edit::ItemSetCrop { item_id, crop, .. } => {
+            Some((Vec::new(), vec![(item_id.clone(), *crop)]))
+        }
+        _ => None,
+    }
+}
+
+/// The gesture of a drag on one of the Placement fields (#1734): opened by the drag's
+/// first value, which goes out with `live.set` as every later one does, and ended by
+/// the release's batch (`ends_gesture`), so the whole drag is one undo step, or
+/// cancelled when the release changes nothing.
+#[derive(Clone, Copy)]
+struct FieldDrag {
+    live: StoredValue<Option<Live>, LocalStorage>,
+    scene: StoredValue<SceneId>,
+    studio: Studio,
+    session: SessionContext,
+}
+
+impl FieldDrag {
+    fn new(scene: SceneId, studio: Studio, session: SessionContext) -> FieldDrag {
+        let live = StoredValue::new_local(None::<Live>);
+        // A drag still open when the fields go (the selection changed) leaves no
+        // live values behind.
+        on_cleanup(move || {
+            if let Some(Some(live)) = live.try_update_value(Option::take) {
+                live.cancel();
+            }
+        });
+        FieldDrag {
+            live,
+            scene: StoredValue::new(scene),
+            studio,
+            session,
+        }
+    }
+
+    /// Shows `edit`'s value on output, opening the gesture with the first.
+    fn show(self, edit: &Edit) {
+        let Some((placed, crops)) = live_values(edit) else {
+            return;
+        };
+        if self.live.with_value(Option::is_none) {
+            let Some(open) = self.session.get() else {
+                return;
+            };
+            let studio = self.studio;
+            let id = GestureId::new(studio.fresh_id(&open, "field"));
+            let live = Live::new(id, self.scene.get_value(), self.session, move |error| {
+                studio.problem.set(Some(error.to_string()));
+            });
+            self.live.set_value(Some(live));
+        }
+        self.live.with_value(|live| {
+            if let Some(live) = live {
+                live.show(placed, crops);
+            }
+        });
+    }
+
+    /// Sends `edit`: with the open gesture's end once its live values are out, or alone.
+    fn send(self, edit: Edit) {
+        let Some(live) = self.live.try_update_value(Option::take).flatten() else {
+            if let Some(s) = self.session.get() {
+                self.studio.apply(&s, vec![edit]);
+            }
+            return;
+        };
+        let Some((placed, crops)) = live_values(&edit) else {
+            live.cancel();
+            if let Some(s) = self.session.get() {
+                self.studio.apply(&s, vec![edit]);
+            }
+            return;
+        };
+        let (studio, session) = (self.studio, self.session);
+        live.commit(move |scene_id, gesture| {
+            let Some(open) = session.get() else { return };
+            leptos::task::spawn_local(async move {
+                let result =
+                    model::commit(&*open.control, scene_id, placed, crops, gesture.clone()).await;
+                if let Err(error) = result {
+                    studio.problem.set(Some(error.to_string()));
+                    if let Some(gesture) = gesture {
+                        // The engine still holds the gesture: drop its live values.
+                        let _cancelled = model::live_cancel(&*open.control, gesture).await;
+                    }
+                }
+            });
+        });
+    }
+
+    /// Follows a field's drag: each value through `edit_for` to output, and an end the
+    /// release didn't send (an unchanged value, a lost pointer) cancels the gesture.
+    /// `edit_for` gives the stored value too, so a drag back to where it started shows
+    /// it rather than keeping the last other frame (#1740's review, N2).
+    fn follow(self, scrubbing: Scrubbing, edit_for: impl Fn(f64) -> Option<Edit>) {
+        match scrubbing {
+            Scrubbing::Moved(v) => {
+                if let Some(edit) = edit_for(v) {
+                    self.show(&edit);
+                }
+            }
+            Scrubbing::Ended | Scrubbing::Cancelled(_) => {
+                if let Some(Some(live)) = self.live.try_update_value(Option::take) {
+                    live.cancel();
+                }
+            }
+        }
+    }
+}
+
 #[component]
 fn Placement(
     scene: SceneId,
@@ -1067,6 +1193,9 @@ fn Placement(
             studio.apply(&s, vec![edit]);
         }
     };
+    let drag = FieldDrag::new(scene.clone(), studio, session);
+    // The fields a control can be mapped onto, and their menu.
+    let mapper = crate::panels::item_map::ItemMapper::new(scene.clone(), item.clone());
     let ids = StoredValue::new((item, scene));
 
     // W % or H %: the size as a % of the source's own, blank while that isn't known.
@@ -1075,54 +1204,45 @@ fn Placement(
             let size = source_size.get()?;
             percent(&geometry.get()?, size, across).map(f64::from)
         });
-        let commit = move |v: f64| {
+        let edit_for = move |v: f64, live: bool| {
             let (Some(g), Some(size)) = (geometry.get_untracked(), source_size.get_untracked())
             else {
-                return false;
+                return None;
             };
-            let Some(placed) = with_percent(&g, size, across, to_f32(v), linked.get_untracked())
-            else {
-                return false;
-            };
-            if placed == g {
-                return false;
-            }
+            let placed = with_percent(&g, size, across, to_f32(v), linked.get_untracked())
+                .filter(|p| live || *p != g)?;
             let (item_id, scene) = ids.get_value();
-            send(Edit::ItemSetGeometry {
+            Some(Edit::ItemSetGeometry {
                 item_id,
                 scene_id: Some(scene),
                 geometry: placed,
-            });
-            true
+            })
         };
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
         let (label, caption) = if across { ("W %", "W") } else { ("H %", "H") };
         view! {
             <NumberField label caption inline=true unit="%" value step=1.0 decimals=1 min=f64::from(MIN_PERCENT)
-                max=f64::from(MAX_PERCENT) send=commit />
+                max=f64::from(MAX_PERCENT) send=commit live=live />
         }
     };
 
     let field = move |param: Param| {
         let value =
             Signal::derive(move || geometry.get().map(|g| f64::from(param_value(&g, param))));
-        let commit = move |v: f64| {
-            let Some(g) = geometry.get_untracked() else {
-                return false;
-            };
-            let Some(placed) = with_param(&g, param, to_f32(v), linked.get_untracked()) else {
-                return false;
-            };
-            if placed == g {
-                return false;
-            }
+        let edit_for = move |v: f64, live: bool| {
+            let g = geometry.get_untracked()?;
+            let placed = with_param(&g, param, to_f32(v), linked.get_untracked())
+                .filter(|p| live || *p != g)?;
             let (item_id, scene) = ids.get_value();
-            send(Edit::ItemSetGeometry {
+            Some(Edit::ItemSetGeometry {
                 item_id,
                 scene_id: Some(scene),
                 geometry: placed,
-            });
-            true
+            })
         };
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
         let (label, step, decimals, fixed, unit) = match param {
             Param::X => ("X", 1.0, 2, false, "px"),
             Param::Y => ("Y", 1.0, 2, false, "px"),
@@ -1138,9 +1258,16 @@ fn Placement(
         // Rotation is a row of its own, its label in the row's label column; the rest
         // are an axis row's fields, each captioned inside its box.
         let inline = param != Param::Rotation;
+        let map = mapper.mark(match param {
+            Param::X => jstream_protocol::MotionProperty::X,
+            Param::Y => jstream_protocol::MotionProperty::Y,
+            Param::W => jstream_protocol::MotionProperty::Width,
+            Param::H => jstream_protocol::MotionProperty::Height,
+            Param::Rotation => jstream_protocol::MotionProperty::Rotation,
+        });
         view! {
             <NumberField label unit value step decimals fixed inline=inline min=f64::from(min)
-                max=f64::from(max) send=commit />
+                max=f64::from(max) map send=commit live=live />
         }
     };
 
@@ -1171,21 +1298,18 @@ fn Placement(
     let depth_field = move |which: Depth3| {
         let value =
             Signal::derive(move || geometry.get().map(|g| f64::from(depth_value(&g, which))));
-        let commit = move |v: f64| {
-            let Some(g) = geometry.get_untracked() else {
-                return false;
-            };
-            let Some(placed) = with_depth(&g, which, to_f32(v)).filter(|p| *p != g) else {
-                return false;
-            };
+        let edit_for = move |v: f64, live: bool| {
+            let g = geometry.get_untracked()?;
+            let placed = with_depth(&g, which, to_f32(v)).filter(|p| live || *p != g)?;
             let (item_id, scene) = ids.get_value();
-            send(Edit::ItemSetGeometry {
+            Some(Edit::ItemSetGeometry {
                 item_id,
                 scene_id: Some(scene),
                 geometry: placed,
-            });
-            true
+            })
         };
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
         let (label, unit, step, decimals) = match which {
             Depth3::Tilt => ("Tilt (X)", "°", 0.5, 1),
             Depth3::Turn => ("Turn (Y)", "°", 0.5, 1),
@@ -1193,9 +1317,24 @@ fn Placement(
             Depth3::Perspective => ("Perspective", "px", 10.0, 0),
         };
         let (min, max) = which.range();
-        view! {
-            <NumberField label unit value step decimals min=f64::from(min)
-                max=f64::from(max) send=commit />
+        // Tilt, turn and depth take mappings; the perspective is no motion property.
+        let property = match which {
+            Depth3::Tilt => Some(jstream_protocol::MotionProperty::Tilt),
+            Depth3::Turn => Some(jstream_protocol::MotionProperty::Turn),
+            Depth3::Depth => Some(jstream_protocol::MotionProperty::Depth),
+            Depth3::Perspective => None,
+        };
+        match property {
+            Some(property) => view! {
+                <NumberField label unit value step decimals min=f64::from(min)
+                    max=f64::from(max) map=mapper.mark(property) send=commit live=live />
+            }
+            .into_any(),
+            None => view! {
+                <NumberField label unit value step decimals min=f64::from(min)
+                    max=f64::from(max) send=commit live=live />
+            }
+            .into_any(),
         }
     };
     // Whether the box turns to face a 3D scene's camera (ADR-0151 decision 2).
@@ -1224,8 +1363,8 @@ fn Placement(
             "Face the camera"
         </label>
     };
-    // The card's surface (ADR-0151 decision 10): lit by a 3D scene's lights, and its
-    // back hidden. Its numbers are for agents and the API.
+    // The card's surface (ADR-0151 decision 10): lit by a 3D scene's lights, its back
+    // hidden, and once lit its shadows, roughness, metalness and glow (A17).
     let surface = Memo::new(move |_| geometry.get().map(|g| g.surface.unwrap_or_default()));
     let set_surface = move |change: fn(&mut jstream_protocol::Surface, bool), on: bool| {
         let Some(g) = geometry.get_untracked() else {
@@ -1245,6 +1384,44 @@ fn Placement(
                 ..g
             },
         });
+    };
+    // A lit card's numbers; the fields are off while the card is unlit, where they
+    // change nothing.
+    let surface_number = move |which: SurfaceNumber| {
+        let value = Signal::derive(move || {
+            surface
+                .get()
+                .filter(|s| s.lit)
+                .map(|s| f64::from(which.get(&s)))
+        });
+        let commit = move |v: f64| {
+            let Some(g) = geometry.get_untracked() else {
+                return false;
+            };
+            let before = g.surface.unwrap_or_default();
+            let Some(next) = which.with(before, v) else {
+                return false;
+            };
+            if next == before {
+                return false;
+            }
+            let (item_id, scene) = ids.get_value();
+            send(Edit::ItemSetGeometry {
+                item_id,
+                scene_id: Some(scene),
+                geometry: ItemGeometry {
+                    surface: (next != jstream_protocol::Surface::DEFAULT).then_some(next),
+                    ..g
+                },
+            });
+            true
+        };
+        let (label, max, title) = which.facts();
+        view! {
+            <span title=title>
+                <NumberField label value step=0.05 decimals=2 min=0.0 max send=commit />
+            </span>
+        }
     };
     let surface_fields = view! {
         <label class="check" title="In a 3D scene, the scene's lights, their shadows and its environment light the card, as a flat 3D surface">
@@ -1282,6 +1459,23 @@ fn Placement(
             />
             "Hide the back"
         </label>
+        <label class="check" title="A lit card darkens where the scene's lights cast a shadow on it">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || !surface.get().is_some_and(|s| s.lit)
+                prop:checked=move || surface.get().is_some_and(|s| s.shadows)
+                on:change=move |event| {
+                    set_surface(|s, on| s.shadows = on, event_target_checked(&event));
+                }
+            />
+            "Receives shadows"
+        </label>
+        <div class="field-grid">
+            {surface_number(SurfaceNumber::Roughness)}
+            {surface_number(SurfaceNumber::Metalness)}
+            {surface_number(SurfaceNumber::Glow)}
+        </div>
     };
     let depth_hint = Signal::derive(move || {
         if geometry.get().is_some_and(|g| in_3d(&g) || g.billboard) {
@@ -1331,25 +1525,27 @@ fn Placement(
     let crop = Memo::new(move |_| current.with(|i| i.as_ref().map(|i| i.crop)));
     let crop_field = move |side: Side, label: &'static str, caption: &'static str| {
         let value = Signal::derive(move || crop.get().map(|c| f64::from(crop_side(&c, side))));
-        let commit = move |v: f64| {
-            let Some(c) = crop.get_untracked() else {
-                return false;
-            };
+        let edit_for = move |v: f64, live: bool| {
+            let c = crop.get_untracked()?;
             let next = with_side(&c, side, to_f32(v));
-            if next == c {
-                return false;
-            }
             let (item_id, scene) = ids.get_value();
-            send(Edit::ItemSetCrop {
+            (live || next != c).then_some(Edit::ItemSetCrop {
                 item_id,
                 scene_id: Some(scene),
                 crop: next,
-            });
-            true
+            })
         };
+        let commit = move |v: f64| edit_for(v, false).map(|edit| drag.send(edit)).is_some();
+        let live = move |scrubbing| drag.follow(scrubbing, move |v| edit_for(v, true));
+        let map = mapper.mark(match side {
+            Side::Left => jstream_protocol::MotionProperty::CropLeft,
+            Side::Right => jstream_protocol::MotionProperty::CropRight,
+            Side::Top => jstream_protocol::MotionProperty::CropTop,
+            Side::Bottom => jstream_protocol::MotionProperty::CropBottom,
+        });
         view! {
             <NumberField label caption unit="px" value step=1.0 decimals=0 min=0.0
-                max=f64::from(MAX_CROP) inline=true send=commit />
+                max=f64::from(MAX_CROP) inline=true map send=commit live=live />
         }
     };
     let crop_hint = Signal::derive(move || {
@@ -1364,22 +1560,31 @@ fn Placement(
     let opacity = Signal::derive(move || {
         current.with(|i| i.as_ref().map(|i| f64::from(i.opacity.get()) * 100.0))
     });
-    let send_opacity = move |v: f64| {
+    // A drag on the opacity's field or slider follows live (ADR-0213): each frame's
+    // value goes out as a gesture's `live.set`, and the release commits it, one undo step.
+    let opacity_drag = EditDrag::new();
+    let opacity_edit = move |v: f64, live: bool| {
         let max = f64::from(jstream_protocol::MAX_OPACITY) * 100.0;
-        let Some(opacity) = Finite32::new(to_f32(v.clamp(0.0, max) / 100.0)) else {
-            return false;
-        };
-        if current.with_untracked(|i| i.as_ref().is_some_and(|i| i.opacity == opacity)) {
-            return false;
+        let opacity = Finite32::new(to_f32(v.clamp(0.0, max) / 100.0))?;
+        if !live && current.with_untracked(|i| i.as_ref().is_some_and(|i| i.opacity == opacity)) {
+            return None;
         }
         let (item_id, scene) = ids.get_value();
-        send(Edit::ItemSetOpacity {
+        Some(Edit::ItemSetOpacity {
             item_id,
             scene_id: Some(scene),
             opacity,
-        });
-        true
+        })
     };
+    let send_opacity = move |v: f64| match opacity_edit(v, false) {
+        Some(edit) => {
+            opacity_drag.send(vec![edit]);
+            true
+        }
+        None => false,
+    };
+    let follow_opacity =
+        move |scrubbing| opacity_drag.follow(scrubbing, move |v| opacity_edit(v, true));
     let send_blend = move |name: String| {
         let Some(mode) = BlendMode::ALL.into_iter().find(|m| blend_name(*m) == name) else {
             return;
@@ -1480,6 +1685,7 @@ fn Placement(
     view! {
         <div class="tab-panel" role="tabpanel" aria-label="Transform"
             hidden=move || tab.get() != Tab::Transform>
+        {mapper.menu()}
         <Fold title="Position and size" open=true>
             <Show when=move || geometry.get().is_none()>
                 <p class="note">
@@ -1539,7 +1745,7 @@ fn Placement(
                     </select>
                 </label>
                 // A slider over 0 to 100 %, beside the field that also takes the boost
-                // above it; the slider sends once, on release.
+                // above it. Both follow a drag live and commit once, on release.
                 <div class="slider-field">
                     <span class="field-label">"Opacity"</span>
                     <div class="slider-number">
@@ -1551,15 +1757,25 @@ fn Placement(
                             aria-label="Opacity"
                             disabled=move || opacity.with(Option::is_none)
                             prop:value=move || opacity.get().map_or(100.0, |v| v.min(100.0)).to_string()
+                            on:input=move |event| {
+                                if let Ok(v) = event_target_value(&event).parse::<f64>()
+                                    && let Some(edit) = opacity_edit(v, true)
+                                {
+                                    opacity_drag.show(vec![edit]);
+                                }
+                            }
                             on:change=move |event| {
-                                if let Ok(v) = event_target_value(&event).parse::<f64>() {
-                                    send_opacity(v);
+                                let sent = event_target_value(&event)
+                                    .parse::<f64>()
+                                    .is_ok_and(send_opacity);
+                                if !sent {
+                                    opacity_drag.end();
                                 }
                             }
                         />
                         <NumberField named=Signal::stored("Opacity".to_owned()) unit="%"
                             value=opacity step=1.0 decimals=0 min=0.0 max=400.0
-                            send=send_opacity />
+                            map=mapper.mark(jstream_protocol::MotionProperty::Opacity) send=send_opacity live=follow_opacity />
                     </div>
                 </div>
             </div>
@@ -1895,7 +2111,14 @@ pub(crate) fn HotkeyRow(
                     class="icon-button"
                     title=title.clone()
                     aria-label=title
-                    on:click=move |_| send(vec![Edit::HotkeyClear { chord: chord.clone() }])
+                    on:click=move |_| {
+                        let edits = studio.collection.with_untracked(|c| {
+                            c.as_ref()
+                                .map(|c| c.unbind_edits(&chord, &id.get_value()))
+                                .unwrap_or_default()
+                        });
+                        send(edits);
+                    }
                 >
                     "×"
                 </button>
@@ -1924,10 +2147,88 @@ pub(crate) fn HotkeyRow(
     }
 }
 
+/// One of a lit card's surface numbers in the Inspector's 3D fold (A17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SurfaceNumber {
+    /// 0 is a mirror-like sheen, 1 fully matte.
+    Roughness,
+    /// 0 is paint or paper, 1 metal.
+    Metalness,
+    /// How much of its picture a lit card adds back unlit (`emissive`), 0 to 4.
+    Glow,
+}
+
+impl SurfaceNumber {
+    /// The field's label, its largest value and its tooltip.
+    pub fn facts(self) -> (&'static str, f64, &'static str) {
+        match self {
+            SurfaceNumber::Roughness => (
+                "Roughness",
+                1.0,
+                "How matte the lit card is: 0 shines like glass, 1 is fully matte",
+            ),
+            SurfaceNumber::Metalness => (
+                "Metalness",
+                1.0,
+                "How metallic the lit card is: 0 is paint or paper, 1 metal",
+            ),
+            SurfaceNumber::Glow => (
+                "Glow",
+                4.0,
+                "How much of its own picture the lit card adds back unlit, so a screen still glows in a dark set",
+            ),
+        }
+    }
+
+    /// The number in `surface`.
+    pub fn get(self, surface: &jstream_protocol::Surface) -> f32 {
+        match self {
+            SurfaceNumber::Roughness => surface.roughness.get(),
+            SurfaceNumber::Metalness => surface.metalness.get(),
+            SurfaceNumber::Glow => surface.emissive.get(),
+        }
+    }
+
+    /// `surface` with the number set to `value`, kept to its range; `None` for a value
+    /// that isn't finite.
+    pub fn with(
+        self,
+        mut surface: jstream_protocol::Surface,
+        value: f64,
+    ) -> Option<jstream_protocol::Surface> {
+        let (_, max, _) = self.facts();
+        let kept = Finite32::new(value.clamp(0.0, max) as f32)?;
+        match self {
+            SurfaceNumber::Roughness => surface.roughness = kept,
+            SurfaceNumber::Metalness => surface.metalness = kept,
+            SurfaceNumber::Glow => surface.emissive = kept,
+        }
+        Some(surface)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use jstream_control::protocol::{Size, Vec2};
+
+    #[test]
+    fn a_surface_number_is_kept_to_its_range() {
+        let base = jstream_protocol::Surface::DEFAULT;
+        let rough = SurfaceNumber::Roughness.with(base, 0.25).expect("finite");
+        assert_eq!(SurfaceNumber::Roughness.get(&rough), 0.25);
+        let metal = SurfaceNumber::Metalness.with(base, 3.0).expect("finite");
+        assert_eq!(
+            SurfaceNumber::Metalness.get(&metal),
+            1.0,
+            "metalness tops at 1"
+        );
+        let glow = SurfaceNumber::Glow.with(base, 3.0).expect("finite");
+        assert_eq!(SurfaceNumber::Glow.get(&glow), 3.0, "glow goes to 4");
+        let low = SurfaceNumber::Glow.with(base, -1.0).expect("finite");
+        assert_eq!(SurfaceNumber::Glow.get(&low), 0.0);
+        assert!(SurfaceNumber::Glow.with(base, f64::NAN).is_none());
+    }
 
     fn geometry(cx: f32, cy: f32, w: f32, h: f32) -> ItemGeometry {
         ItemGeometry::try_new(
@@ -2024,6 +2325,39 @@ mod tests {
         let turned = with_param(&g, Param::Rotation, 400.0, false).expect("a box");
         assert_eq!(turned.rotation_deg.get(), 360.0);
         assert_eq!(turned.center, g.center);
+    }
+
+    #[test]
+    fn a_dragged_box_or_crop_shows_live_and_anything_else_waits_for_the_release() {
+        // #1734: placement and crop are live values; opacity is not.
+        let item = ItemId::new("item");
+        let scene = Some(SceneId::new("scene"));
+        let g = geometry(10.0, 20.0, 40.0, 30.0);
+        let placed = Edit::ItemSetGeometry {
+            item_id: item.clone(),
+            scene_id: scene.clone(),
+            geometry: g,
+        };
+        assert_eq!(
+            live_values(&placed),
+            Some((vec![(item.clone(), g)], Vec::new()))
+        );
+        let crop = with_side(&Crop::NONE, Side::Left, 8.0);
+        let cropped = Edit::ItemSetCrop {
+            item_id: item.clone(),
+            scene_id: scene.clone(),
+            crop,
+        };
+        assert_eq!(
+            live_values(&cropped),
+            Some((Vec::new(), vec![(item.clone(), crop)]))
+        );
+        let opacity = Edit::ItemSetOpacity {
+            item_id: item,
+            scene_id: scene,
+            opacity: Finite32::ZERO,
+        };
+        assert_eq!(live_values(&opacity), None);
     }
 
     #[test]

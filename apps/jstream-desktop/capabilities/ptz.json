@@ -1,6 +1,6 @@
 {
   "identifier": "ptz",
-  "description": "The app's own main window may save the \"Accept a PTZ controller\" setting, its endpoints and its allowed controllers, which apply at the next start. No other command is granted.",
+  "description": "The app's own main window may save the \"Accept a PTZ controller\" setting, its endpoints and its allowed controllers, which apply at the next start, and the \"Control PTZ cameras\" camera list, which applies at once. No other command is granted.",
   "windows": ["main"],
-  "permissions": ["allow-set-ptz-controllers"]
+  "permissions": ["allow-set-ptz-controllers", "allow-set-ptz-cameras"]
 }

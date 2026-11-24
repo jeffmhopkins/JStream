@@ -643,8 +643,22 @@ pub(crate) fn edits() -> Vec<Edit> {
             chord: Chord::new("Ctrl+Digit1"),
             labels: vec![LabelId::new("lbl_sponsor")],
         },
+        // A second action on the same chord, then clearing just it, then the chord (ADR-0208).
+        Edit::HotkeySet {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: Action::OutputToggle {
+                output_id: OutputId::new("out_yt"),
+            },
+        },
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
+            action: Some(Action::OutputToggle {
+                output_id: OutputId::new("out_yt"),
+            }),
+        },
+        Edit::HotkeyClear {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: None,
         },
         Edit::BindingSet {
             trigger: pad_trigger(),
@@ -656,6 +670,11 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::BindingClear {
             trigger: pad_trigger(),
+            action: Some(Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+                via: Vec::new(),
+            }),
         },
         // A value binding, then its removal (ADR-0178).
         Edit::BindingSetValue {
@@ -680,6 +699,17 @@ pub(crate) fn edits() -> Vec<Edit> {
                 binding_id: "mic_fader".into(),
                 target: ValueTarget::SourceGain {
                     source_id: SourceId::new("src_mic"),
+                },
+                ..value_bindings().remove(0)
+            },
+        },
+        // A value binding aiming a PTZ camera's zoom (ADR-0209).
+        Edit::BindingSetValue {
+            binding: ValueBinding {
+                binding_id: "wide_zoom".into(),
+                target: ValueTarget::PtzAxis {
+                    camera: "wide".into(),
+                    axis: crate::PtzAxis::Zoom,
                 },
                 ..value_bindings().remove(0)
             },
@@ -1829,6 +1859,9 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputStop {
             output_id: OutputId::new("out_yt"),
         },
+        Action::OutputToggle {
+            output_id: OutputId::new("out_yt"),
+        },
         Action::OutputSetKey {
             output_id: OutputId::new("out_yt"),
             key: SecretString::new("fixture-key-0000"),
@@ -2775,6 +2808,7 @@ fn profile_info() -> ProfileInfo {
             model_resolution: 85,
             model_frames_reduced: 120,
             preview_skipped: 4,
+            submits: ms(42.5),
             phases: PhaseProfile {
                 uploads_ms: ms(1.25),
                 captures_ms: ms(0.5),

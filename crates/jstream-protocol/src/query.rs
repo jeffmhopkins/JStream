@@ -650,7 +650,7 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         channels: Box<Vec<ChannelInfo>>,
         /// Every show (ADR-0210), ordered by ID. Omitted when there are none, and
-        /// missing (from a server older than 0.179) parses as empty.
+        /// missing (from a server older than 0.180) parses as empty.
         // Boxed, as `channels` is, to keep a call's result small.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         shows: Box<Vec<crate::ShowInfo>>,
@@ -744,11 +744,11 @@ pub enum QueryResult {
         /// decision 1, since 0.147). Omitted by an older server, which draws every effect.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rendering: Option<crate::RenderFeatures>,
-        /// The show running (ADR-0210, since 0.179), where its play head is and what it
+        /// The show running (ADR-0210, since 0.180), where its play head is and what it
         /// is doing. Omitted when no show runs.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         show: Option<Box<crate::RunningShow>>,
-        /// The scenes up over program as overlays (ADR-0210, since 0.179), bottom first,
+        /// The scenes up over program as overlays (ADR-0210, since 0.180), bottom first,
         /// whether a show or `overlay.show` put them there. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         overlays: Vec<SceneId>,

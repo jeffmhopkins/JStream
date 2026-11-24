@@ -548,7 +548,7 @@ impl Touched {
                 self.exists.insert(Object::Hotkey(chord.clone()));
                 self.uses_named(action);
             }
-            Edit::HotkeyClear { chord } => {
+            Edit::HotkeyClear { chord, .. } => {
                 self.exists.insert(Object::Hotkey(chord.clone()));
             }
             // A binding's labels are its metadata (ADR-0133), and use each label.
@@ -562,7 +562,7 @@ impl Touched {
                 self.exists.insert(Object::Binding(trigger.clone()));
                 self.uses_named(action);
             }
-            Edit::BindingClear { trigger } => {
+            Edit::BindingClear { trigger, .. } => {
                 self.exists.insert(Object::Binding(trigger.clone()));
             }
             // A value binding is left in place when what it names goes, so it uses

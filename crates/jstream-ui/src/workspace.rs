@@ -235,6 +235,8 @@ fn panel_view(panel: PanelId) -> AnyView {
         PanelId::Agent => view! { <AgentActivity /> }.into_any(),
         PanelId::Channels => view! { <crate::panels::channels::Channels /> }.into_any(),
         PanelId::Sequence => view! { <crate::panels::sequence::Sequence /> }.into_any(),
+        PanelId::Mappings => view! { <crate::panels::mappings::Mappings /> }.into_any(),
+        PanelId::Ptz => view! { <crate::panels::ptz::Ptz /> }.into_any(),
         PanelId::Show => view! { <crate::panels::show::Show /> }.into_any(),
     }
 }

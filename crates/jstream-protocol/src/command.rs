@@ -998,13 +998,16 @@ pub enum Edit {
     /// Binds a key chord to an action (ADR-0024 §5). A client that listens for keys
     /// sends the action when the chord is pressed; the engine only stores the binding.
     /// Only actions can be bound, so pressing a hotkey never adds to an undo history.
-    /// Rejected with `invalid_argument` for a chord that isn't valid (see [`Chord`]) or
-    /// an action that can't be bound (`output.set_key`, whose stream key is never stored
-    /// in the collection), with `already_exists` (entity `hotkey`) for a chord that is
-    /// already bound (rebinding is a batch of `hotkey.clear` then `hotkey.set`), and with
-    /// `not_found` for a scene or output the action names that doesn't exist. Deleting
-    /// that object later removes the binding with it (ADR-0040 §3). Inverse:
-    /// `hotkey.clear`.
+    /// Since 0.181 (ADR-0208) a chord can run several actions: binding a chord that is
+    /// already bound adds this action after its others, and a press runs them all, in
+    /// the order they were bound. Rejected with `invalid_argument` for a chord that isn't
+    /// valid (see [`Chord`]) or an action that can't be bound (`output.set_key`, whose
+    /// stream key is never stored in the collection), with `already_exists` (entity
+    /// `hotkey`) for a chord already bound to an equal action (before 0.181, for any chord
+    /// already bound), and with `not_found` for a scene or output the action names that
+    /// doesn't exist. Deleting that object later removes that action's binding with it
+    /// (ADR-0040 §3), leaving the chord's others. Inverse: `hotkey.clear` naming the
+    /// action.
     #[serde(rename = "hotkey.set")]
     HotkeySet {
         /// The chord, such as `Ctrl+Digit1` or `F1`.
@@ -1012,12 +1015,18 @@ pub enum Edit {
         /// The action request it runs, checked as an `action` call is.
         action: Action,
     },
-    /// Removes a hotkey binding. Rejected with `not_found` (entity `hotkey`) for a chord
-    /// that isn't bound. Inverse: `hotkey.set` with its action.
+    /// Removes a hotkey binding: with `action`, that one action of the chord's, and
+    /// without it, every action the chord runs (ADR-0208). The chord's labels go with its
+    /// last action. Rejected with `not_found` (entity `hotkey`) for a chord that isn't
+    /// bound, or isn't bound to `action`. Inverse: `hotkey.set` with each action it
+    /// removed, in their order, then `hotkey.set_labels` when the chord lost its labels.
     #[serde(rename = "hotkey.clear")]
     HotkeyClear {
         /// The chord to unbind.
         chord: Chord,
+        /// The one action to unbind (since 0.181, ADR-0208). Omitted unbinds them all.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action: Option<Action>,
     },
     /// Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,
     /// so it shows in each label's action group beside the keyframes and timelines that
@@ -1039,10 +1048,14 @@ pub enum Edit {
     /// never adds to an undo history. Rejected with `invalid_argument` at
     /// `trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at
     /// `action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with
-    /// `already_exists` (entity `binding`) for a trigger that is already bound
-    /// (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`
+    /// `already_exists` (entity `binding`) for a trigger that is already bound to an equal
+    /// action (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`
     /// for an object the action names that doesn't exist. Deleting that object later
-    /// removes the binding with it, as for hotkeys. Inverse: `binding.clear`.
+    /// removes the binding with it, as for hotkeys. Since 0.181 (ADR-0208) a trigger can
+    /// run several actions, as a chord can: binding a trigger that is already bound adds
+    /// this action after its others, the engine runs them all in that order, and
+    /// `already_exists` is only for a trigger already bound to an equal action. Inverse:
+    /// `binding.clear` naming the action.
     #[serde(rename = "binding.set")]
     BindingSet {
         /// What fires it.
@@ -1050,12 +1063,17 @@ pub enum Edit {
         /// The action request it runs, checked as an `action` call is.
         action: Action,
     },
-    /// Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that
-    /// isn't bound. Inverse: `binding.set` with its action.
+    /// Removes a binding: with `action`, that one action of the trigger's, and without
+    /// it, every action the trigger runs (ADR-0208). Rejected with `not_found` (entity
+    /// `binding`) for a trigger that isn't bound, or isn't bound to `action`. Inverse:
+    /// `binding.set` with each action it removed, in their order.
     #[serde(rename = "binding.clear")]
     BindingClear {
         /// The trigger to unbind.
         trigger: Trigger,
+        /// The one action to unbind (since 0.181, ADR-0208). Omitted unbinds them all.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action: Option<Action>,
     },
     /// Sets a value binding (since 0.168, ADR-0178): a MIDI control or a live-data field
     /// driving one number, a new one or the whole of one with the same `binding_id` in
@@ -1106,7 +1124,7 @@ pub enum Edit {
         /// The channel's ID.
         channel_id: String,
     },
-    /// Sets a show (ADR-0210, since 0.179): a new one, or the whole of one with the same
+    /// Sets a show (ADR-0210, since 0.180): a new one, or the whole of one with the same
     /// `show_id` in its place. A show running when it is set again runs on with the new
     /// one from where its play head is. Rejected with `invalid_argument` at
     /// `show.<field>` for what [`ShowInfo::problem`] refuses, and at `show` for a 65th
@@ -1504,6 +1522,15 @@ pub enum Action {
     #[serde(rename = "output.stop")]
     OutputStop {
         /// The output to stop.
+        output_id: OutputId,
+    },
+    /// Starts an output that is stopped or failed, and stops one that is starting,
+    /// running or reconnecting (since 0.181, ADR-0208), so one key or pad can go live and
+    /// end the stream. The engine runs it as the `output.start` or `output.stop` it
+    /// resolves to, with that action's events, audit entry and errors.
+    #[serde(rename = "output.toggle")]
+    OutputToggle {
+        /// The output to start or stop.
         output_id: OutputId,
     },
     /// Stores an output's stream key in the OS credential store (R-SEC-001), replacing
@@ -2159,7 +2186,7 @@ pub enum Action {
     /// `output.start` still fails, as while held.
     #[serde(rename = "clock.release")]
     ClockRelease,
-    /// Runs a show (ADR-0210, since 0.179) from its start, or from one of its bookmarks,
+    /// Runs a show (ADR-0210, since 0.180) from its start, or from one of its bookmarks,
     /// as a jump there would land. Of the show that runs, paused by `show.pause`, with no
     /// `bookmark_id`, it plays on from the play head instead. One show runs at a time: playing another stops the one
     /// running, which emits `show.changed` (`stopped`). Running is studio state like the
@@ -2179,13 +2206,13 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         rehearse: bool,
     },
-    /// Stops the running show where it is (ADR-0210, since 0.179): program keeps what is
+    /// Stops the running show where it is (ADR-0210, since 0.180): program keeps what is
     /// on it, and the sequences the show started stop, while ones started by hand or a
     /// trigger play on. Emits `show.changed` (`stopped`). With no show running it
     /// succeeds and emits nothing.
     #[serde(rename = "show.stop")]
     ShowStop,
-    /// Pauses the running show where it is (ADR-0210 decision 5, since 0.179): its play
+    /// Pauses the running show where it is (ADR-0210 decision 5, since 0.180): its play
     /// head holds, and program keeps what is on it, as at a pausing bookmark.
     /// `show.continue`, or `show.play` of the same show with no `bookmark_id`, plays on
     /// from there. `studio.get` reports it `paused` with no `bookmark_id`. Emits
@@ -2193,7 +2220,7 @@ pub enum Action {
     /// script, it succeeds and does nothing.
     #[serde(rename = "show.pause")]
     ShowPause,
-    /// Continues the running show (ADR-0210 decision 5, since 0.179). Waiting at a
+    /// Continues the running show (ADR-0210 decision 5, since 0.180). Waiting at a
     /// pausing bookmark, or where `show.pause` held it, it plays on; with a spot armed (`show.arm`), it jumps there;
     /// off script, it goes on to the next clip; in a loop, it leaves as the loop's
     /// `leave` says; playing, it jumps to the next pausing bookmark, applying state as any
@@ -2203,16 +2230,16 @@ pub enum Action {
     #[serde(rename = "show.continue")]
     ShowContinue,
     /// Jumps the running show back to the pausing bookmark before its play head
-    /// (ADR-0210, since 0.179), or to its start if there is none, and waits there. Emits
+    /// (ADR-0210, since 0.180), or to its start if there is none, and waits there. Emits
     /// `show.changed` (`jumped`). With no show running it succeeds and does nothing.
     #[serde(rename = "show.back")]
     ShowBack,
     /// Jumps the running show to the next pausing bookmark without playing what is
-    /// between (ADR-0210, since 0.179), and waits there. Emits `show.changed`
+    /// between (ADR-0210, since 0.180), and waits there. Emits `show.changed`
     /// (`jumped`). With no show running it succeeds and does nothing.
     #[serde(rename = "show.skip")]
     ShowSkip,
-    /// Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.179):
+    /// Jumps a show to one of its bookmarks at once (ADR-0210 decision 5, since 0.180):
     /// the state there is what playing there would have left (decision 6), and the
     /// transition is the bookmark's own. It acts only while that show runs, so a key
     /// bound to a bookmark does nothing during another show; with that show not running
@@ -2226,7 +2253,7 @@ pub enum Action {
         bookmark_id: String,
     },
     /// Jumps the running show to its bookmark number `number`, 1 to 8, counted in show
-    /// order (ADR-0210 decision 5, since 0.179), so a row of pads needs no rebinding when
+    /// order (ADR-0210 decision 5, since 0.180), so a row of pads needs no rebinding when
     /// bookmarks move. Acts as `show.go_to`. With no show running, or fewer bookmarks, it
     /// succeeds and does nothing. Fails with `invalid_argument` at `number` outside 1 to
     /// 8.
@@ -2235,7 +2262,7 @@ pub enum Action {
         /// The bookmark's place in the show, 1 to 8.
         number: u8,
     },
-    /// Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.179),
+    /// Jumps the running show's play head to `at_ms` at once (ADR-0210, since 0.180),
     /// as a jump to a bookmark there would: for scrubbing, and for an agent. A spot
     /// inside a video seeks it. Emits `show.changed` (`jumped`). With no show running it
     /// succeeds and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.
@@ -2245,7 +2272,7 @@ pub enum Action {
         at_ms: u32,
     },
     /// Arms a spot in the running show for the next `show.continue` (ADR-0210 decision
-    /// 14, since 0.179), which a click on the ruler does while a show runs, so a click
+    /// 14, since 0.180), which a click on the ruler does while a show runs, so a click
     /// never jumps program on air. `studio.get` reports it in `show.armed_ms`; arming
     /// again moves it, and omitting `at_ms` disarms it. With no show running it succeeds
     /// and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.
@@ -2255,7 +2282,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at_ms: Option<u32>,
     },
-    /// Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.179), with
+    /// Puts a scene over program as an overlay (ADR-0210 decision 11, since 0.180), with
     /// or without a show running: on the internal show scene's top layer, through its
     /// fade, and steady while program transitions under it. Runtime state like the
     /// program scene: no `rev`, never undone or saved; `studio.get` lists it in
@@ -2266,7 +2293,7 @@ pub enum Action {
         /// The scene to put over program.
         scene_id: SceneId,
     },
-    /// Takes a scene down from over program, through its fade (ADR-0210, since 0.179).
+    /// Takes a scene down from over program, through its fade (ADR-0210, since 0.180).
     /// Hiding one that isn't up does nothing. Fails as `overlay.show` does.
     #[serde(rename = "overlay.hide")]
     OverlayHide {
@@ -2274,7 +2301,7 @@ pub enum Action {
         scene_id: SceneId,
     },
     /// `overlay.show` if the scene isn't up as an overlay, else `overlay.hide`
-    /// (ADR-0210, since 0.179). A retried toggle flips twice, so a caller that may retry
+    /// (ADR-0210, since 0.180). A retried toggle flips twice, so a caller that may retry
     /// sends `overlay.show` or `overlay.hide`.
     #[serde(rename = "overlay.toggle")]
     OverlayToggle {
@@ -2282,7 +2309,9 @@ pub enum Action {
         scene_id: SceneId,
     },
     /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
-    /// loads again, and a `media` file plays from its start. Other kinds have nothing to
+    /// loads again, a `media` file plays from its start, and a `timer` countdown or
+    /// stopwatch starts its count again (ADR-0214, since 0.183), as it does when the
+    /// program shows it again. Other kinds, a `timer` clock among them, have nothing to
     /// restart, so for them it succeeds and does nothing, as it does for a source no mix
     /// shows yet. Runtime state like a scene switch's restart: it changes no `rev` and is
     /// never undone. Fails with `not_found` for a source the collection doesn't hold.
@@ -2296,9 +2325,10 @@ pub enum Action {
     /// from its start. On a looping file a point past the end lands where that many
     /// plays would reach; on one that doesn't loop, on its last frame. A kind with
     /// nothing to seek starts over as `source.restart` starts it (a `browser` page loads
-    /// again), and a kind with nothing to restart does nothing. A seek made before the
+    /// again), a `timer` counts on as if it had started `at_ms` ago (since 0.183), and a
+    /// kind with nothing to restart does nothing. A seek made before the
     /// program shows the source holds: being shown doesn't start it again from its
-    /// start, as `restart_on_show` would, so a switch and a seek may come in either
+    /// start, as `restart_on_show` or a `timer` would, so a switch and a seek may come in either
     /// order. Runtime state like `source.restart`: it changes no `rev` and is never
     /// undone. Fails with `not_found` for a source the collection doesn't hold.
     #[serde(rename = "source.seek")]
@@ -2584,6 +2614,7 @@ impl Action {
         match self {
             Action::OutputStart { .. } => "output.start",
             Action::OutputStop { .. } => "output.stop",
+            Action::OutputToggle { .. } => "output.toggle",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
             Action::LiveSet { .. } => "live.set",
@@ -2669,6 +2700,7 @@ impl Action {
         match self {
             Action::OutputStart { output_id }
             | Action::OutputStop { output_id }
+            | Action::OutputToggle { output_id }
             | Action::OutputSetKey { output_id, .. }
             | Action::OutputClearKey { output_id } => {
                 vec![(EntityKind::Output, output_id.as_str())]
@@ -2913,6 +2945,7 @@ impl Action {
             )),
             Action::OutputStart { .. }
             | Action::OutputStop { .. }
+            | Action::OutputToggle { .. }
             | Action::OutputClearKey { .. }
             | Action::AudioResetLoudness {}
             | Action::SceneSwitch { .. }
@@ -3008,6 +3041,7 @@ impl Action {
             | Action::OutputStart { .. }
             | Action::PreviewReport { .. }
             | Action::OutputStop { .. }
+            | Action::OutputToggle { .. }
             | Action::OutputSetKey { .. }
             | Action::OutputClearKey { .. }
             | Action::LiveSet { .. }

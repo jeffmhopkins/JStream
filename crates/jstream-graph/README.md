@@ -39,11 +39,11 @@ protocol's types (`Overrides`).
   `Chains` (`State::master`,
   [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), the `folders`
   and `labels`, each in its own order, the
-  `hotkeys`: each `Chord` bound to the protocol `Action` it fires
+  `hotkeys`: each `Chord` bound to the protocol `Action`s it fires, in bind order (ADR-0208)
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §3), with the labels each binding carries beside them (`hotkey_labels`,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), the `bindings`:
-  each controller `Trigger` bound to the `Action` it fires
+  each controller `Trigger` bound to the `Action`s it fires, likewise
   ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)),
   the `value_bindings` by ID, each a control or live-data field driving a number
   ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)),
@@ -131,9 +131,13 @@ goes up by exactly one, and the result (`Applied`) carries the **inverse batch**
 the batch **touched**. `Graph::with_values(edits)` is the other way in: a copy of the
 graph with each edit that applies applied, skipping any that fails, at the same `rev`,
 with no inverse, applied in place on one clone, which is made again without an edit
-that fails. The engine draws open gestures' source settings and driving value bindings
-through it ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md),
-[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md)).
+that fails. The engine draws open gestures' source and filter settings, opacities and
+gains, and driving value bindings, through it
+([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md),
+[ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md),
+[ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)); `State::filter` finds the
+filter a live value names, as `filter.set_settings` finds it, so the engine can check its
+kind's `live` flags.
 `Graph::place_keyframe` records the keyframe each placed scene is switched to
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
 [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)) on the graph itself:
@@ -476,15 +480,22 @@ that does not want to change the graph it has.
   too. None of it is a dependency edge.
 - **Hotkeys** (`hotkey.rs`): `hotkey.set` binds a chord to an action and
   `hotkey.clear` unbinds it, checked in this order: the chord's spelling
-  (`invalid_argument` on `chord`), whether it is already bound (`already_exists`) or
-  bound at all (`not_found`, entity `hotkey`), an action that can't be bound
+  (`invalid_argument` on `chord`), whether it runs that action already
+  (`already_exists`) or is bound to it, or at all for a clear without `action`
+  (`not_found`, entity `hotkey`), an action that can't be bound
   (`Action::bind_problem`: `output.set_key`, whose key is never stored, and the
   session-only (preview and live), server-answered and YouTube actions, and a
   `values.set` whose name or value the call would refuse, at `action.name` or
   `action.value`), a wheel chord (`Chord::is_wheel`, ADR-0112 §3) bound to an action
   that doesn't take steps (`Action::takes_steps`; `invalid_argument` on `action.type`),
   and the objects the action names
-  (`not_found`; a channel's actions name their channel, ADR-0183). Each is undone by the other. A rebind is `hotkey.clear` then
+  (`not_found`; a channel's actions name their channel, ADR-0183). A chord keeps its
+  actions in a list, in bind order, and runs them all
+  ([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)): `hotkey.set`
+  appends. `take` removes some of a chord's actions and returns the edits that put them
+  back in their exact order: clear the actions kept after the first removed one, then
+  set the removed ones and those again, then its labels if it was emptied, so an action
+  bound since stays bound. A rebind is `hotkey.clear` without `action` then
   `hotkey.set` in one batch. `hotkey.set_labels` (ADR-0133) sets a binding's labels,
   whole: the binding must exist, then each label, each once (`checked_labels`); an
   empty list removes them, and the inverse sets the old ones. Clearing or removing a
@@ -507,12 +518,13 @@ that does not want to change the graph it has.
   bind a MIDI `Trigger` (a note, a controller or a program, on one channel or any, from
   one input or any) to an action and unbind it, with the hotkeys' checks in the same
   order: the trigger's `Trigger::problem` (`invalid_argument` at `trigger.<field>`),
-  whether it is already bound (`already_exists`) or bound at all (`not_found`, entity
-  `binding`), `Action::bind_problem`, and the objects the action names. Deleting what
+  whether it runs that action already (`already_exists`) or is bound to it (`not_found`,
+  entity `binding`), `Action::bind_problem`, and the objects the action names. Deleting what
   a binding's action names removes it as it removes a hotkey: the result's
   `removed_bindings` lists them after `removed_hotkeys`, the inverse ends with a
   `binding.set` for each after the hotkeys', and `delete.plan` lists them, ordered by
-  trigger. The touched set names the binding and the objects its action names.
+  trigger. A trigger keeps several actions in bind order as a chord does (`take_trigger`,
+  ADR-0208). The touched set names the binding and the objects its action names.
 - **Value bindings** (`value.rs`, ADR-0178): `binding.set_value` sets one whole by its
   `binding_id` (inverse `binding.clear_value`, or `binding.set_value` with the one it
   replaced) after `ValueBinding::problem` (`invalid_argument` at `binding.<field>`), the
@@ -527,6 +539,10 @@ that does not want to change the graph it has.
   names only the binding. `Graph::value_range` gives a target's range now (`ValueRange`:
   a number's ends and whether it is whole, or a switch), `None` while it is missing, and
   `value_edit` the setter edit that gives it a value, clamped, rounded or switched.
+  A PTZ head's axis (`ptz_axis`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md))
+  is bound with no lookup and no setter probe, since the camera list is the machine's,
+  not the collection's: its range is the axis's whole counts, and it has no
+  `value_edit`, as the engine aims the head instead of editing.
 - **Channels** (`channel.rs`, ADR-0183): `channel.set` sets one whole by its
   `channel_id` (inverse `channel.delete`, or `channel.set` with the one it replaced)
   after `ChannelInfo::problem` (`invalid_argument` at `channel.<field>`), the limit of

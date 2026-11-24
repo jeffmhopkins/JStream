@@ -101,6 +101,10 @@ pub async fn run<C: Control>(
                 .iter()
                 .filter(|b| wheel || !b.chord.is_wheel())
                 .map(|b| b.chord.to_string())
+                // A chord running several actions (ADR-0208) is listed once per action:
+                // register it once.
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
                 .collect()
         } else {
             Vec::new()
@@ -274,17 +278,17 @@ async fn read_studio<C: Control>(control: &C) -> Result<Studio, ControlError> {
     }
 }
 
-/// Runs the action bound to `chord`, logging why when it can't.
+/// Runs every action bound to `chord`, in the order they were bound (ADR-0208), logging
+/// why for each one it can't run. One failing doesn't stop the rest.
 async fn run_binding<C: Control>(control: &C, bindings: &[HotkeyBinding], chord: &str) {
-    let Some(binding) = bindings.iter().find(|b| b.chord.as_str() == chord) else {
-        return;
-    };
-    let Some(action) = binding.action() else {
-        tracing::warn!(%chord, "the hotkey's action is one this version doesn't know");
-        return;
-    };
-    if let Err(error) = control.call(Call::Action { action }).await {
-        tracing::warn!(%chord, %error, "the hotkey's action failed");
+    for binding in bindings.iter().filter(|b| b.chord.as_str() == chord) {
+        let Some(action) = binding.action() else {
+            tracing::warn!(%chord, "the hotkey's action is one this version doesn't know");
+            continue;
+        };
+        if let Err(error) = control.call(Call::Action { action }).await {
+            tracing::warn!(%chord, %error, "the hotkey's action failed");
+        }
     }
 }
 

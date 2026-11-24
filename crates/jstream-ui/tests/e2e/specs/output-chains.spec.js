@@ -106,7 +106,7 @@ test('filters added to the program output and to an output count on their FX but
 
   // One setting: it opens in place, and a change there is one edit.
   await expect(audioRows(page).first()).toHaveClass(/\bopen\b/);
-  const gain = audioRows(page).first().locator('.filter-editor').getByRole('spinbutton');
+  const gain = audioRows(page).first().locator('.filter-editor').locator('.number-field input');
   await gain.fill('-3');
   await gain.press('Enter');
   await expect(audioRows(page).first().locator('.filter-summary')).toHaveText('−3.0 dB');

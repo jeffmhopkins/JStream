@@ -10,6 +10,7 @@ use crate::jtunnel;
 use crate::logs::LogFile;
 use crate::network;
 use crate::ptz;
+use crate::ptz_cameras;
 use crate::ui::{self, Ui};
 use anyhow::Context;
 use jstream_crash::Secrets;
@@ -95,6 +96,9 @@ pub struct Startup {
     pub ptz_file: Option<PathBuf>,
     /// The PTZ controller endpoints the setting opened, kept until the app exits.
     pub ptz_controllers: Option<jstream_core::PtzControllers>,
+    /// The "Control PTZ cameras" setting's file, which `set_ptz_cameras` writes, when
+    /// the data folder is known.
+    pub ptz_cameras_file: Option<PathBuf>,
 }
 
 impl Startup {
@@ -108,6 +112,7 @@ impl Startup {
             jtunnel_file: None,
             ptz_file: None,
             ptz_controllers: None,
+            ptz_cameras_file: None,
         }
     }
 }
@@ -149,6 +154,7 @@ pub fn start(
         // media clock (ADR-0123 §1).
         jtunnel::start(&engine, &jtunnel::setting_file(data));
         let ptz_controllers = ptz::start(&engine, &ptz::setting_file(data));
+        ptz_cameras::start(&engine, &ptz_cameras::setting_file(data));
         let agents = options.mcp.then(|| host::Agents {
             port: options.port.unwrap_or(host::MCP_PORT),
             token_file: data.join(host::TOKEN_FILE),
@@ -218,6 +224,7 @@ pub fn start(
             wheel_focus_only: wheel_focus_only() || !host.global_wheel(),
             jtunnel: &jtunnel::read(&jtunnel::setting_file(data)),
             ptz: &ptz::read(&ptz::setting_file(data)),
+            ptz_cameras: &ptz_cameras::read(&ptz_cameras::setting_file(data)),
         },
     );
     Startup {
@@ -227,6 +234,7 @@ pub fn start(
         network_file: Some(network::setting_file(data)),
         jtunnel_file: Some(jtunnel::setting_file(data)),
         ptz_file: Some(ptz::setting_file(data)),
+        ptz_cameras_file: Some(ptz_cameras::setting_file(data)),
         ptz_controllers,
     }
 }

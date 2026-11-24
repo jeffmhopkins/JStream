@@ -42,7 +42,8 @@ pub fn property_name(property: CameraProperty) -> &'static str {
     }
 }
 
-fn unit(property: CameraProperty) -> &'static str {
+/// The unit a camera property is in: degrees, pixels, or none for a switch.
+pub fn unit(property: CameraProperty) -> &'static str {
     match property {
         CameraProperty::Fov | CameraProperty::Roll | CameraProperty::Pan | CameraProperty::Tilt => {
             "°"

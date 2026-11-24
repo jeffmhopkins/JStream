@@ -3,7 +3,7 @@
 //!
 //! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
 //! network, networkOpen, wheelFocusOnly, browse, allowNetwork, jtunnel, setJtunnel, ptz,
-//! setPtz, saveScreenshot, openSaved, showSaved, setZoom }` that can't be reassigned, and only on a page from the
+//! setPtz, ptzCameras, setPtzCameras, saveScreenshot, openSaved, showSaved, setZoom }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
 //! so no other page ever sees the token. `collection` is the default project's folder
 //! (ADR-0163), which `collection` asset paths are relative to until the engine names
@@ -21,6 +21,9 @@
 //! reason it wasn't; it too applies at the next start. `ptz` and `setPtz(setting)` are
 //! "Accept a PTZ controller" the same way (`{on, endpoints: [{address, transport, visca,
 //! target}], allow: [ip]}`, `ptz.rs`), through the `set_ptz_controllers` command.
+//! `ptzCameras` and `setPtzCameras(setting)` are "Control PTZ cameras" (`{on, cameras:
+//! [{name, address, transport, visca}]}`, `ptz_cameras.rs`), through the
+//! `set_ptz_cameras` command, which applies a saved list at once.
 //! `saveScreenshot(png, name)` sends a screenshot's bytes to the `save_screenshot`
 //! command, its name percent-encoded in a header, and resolves to the path it saved in
 //! Downloads, or rejects with why not; `openSaved(path)` and `showSaved(path)` ask
@@ -125,13 +128,16 @@ pub struct Page<'a> {
     pub jtunnel: &'a crate::jtunnel::Setting,
     /// "Accept a PTZ controller" as the app read it.
     pub ptz: &'a crate::ptz::Setting,
+    /// "Control PTZ cameras" as the app read it.
+    pub ptz_cameras: &'a crate::ptz_cameras::Setting,
 }
 
 /// The script, for a page from `origin`, connecting to `url` with `token`. `vcam` is
 /// the virtual camera's status ([`crate::host::VcamStatus::as_str`]). `collection` is
 /// the default project's folder. `network` is the "Allow devices on my network" setting, and
 /// `network_open` whether the network listener opened. `jtunnel` is the JTunnel
-/// setting as the app read it, and `ptz` the PTZ controller one.
+/// setting as the app read it, `ptz` the PTZ controller one and `ptz_cameras` the PTZ
+/// camera one.
 pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
     let Page {
         vcam,
@@ -141,10 +147,12 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
         wheel_focus_only,
         jtunnel,
         ptz,
+        ptz_cameras,
     } = *page;
     // As a string the page parses, so nothing in a sender's name can end the script.
     let jtunnel = serde_json::to_string(jtunnel).unwrap_or_else(|_| "{}".to_owned());
     let ptz = serde_json::to_string(ptz).unwrap_or_else(|_| "{}".to_owned());
+    let ptz_cameras = serde_json::to_string(ptz_cameras).unwrap_or_else(|_| "{}".to_owned());
     format!(
         "if (window.location.origin === {origin}) {{\
          Object.defineProperty(window, {global}, {{\
@@ -174,6 +182,14 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
          var internals = window.__TAURI_INTERNALS__;\
          if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(\"the app can't save settings here\");\
          return internals.invoke(\"set_ptz_controllers\", {{ setting: setting }})\
+         .then(function (problem) {{ return problem === null ? null : String(problem); }},\
+         function (error) {{ return String(error); }});\
+         }},\
+         ptzCameras: Object.freeze(JSON.parse({ptz_cameras})),\
+         setPtzCameras: function (setting) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(\"the app can't save settings here\");\
+         return internals.invoke(\"set_ptz_cameras\", {{ setting: setting }})\
          .then(function (problem) {{ return problem === null ? null : String(problem); }},\
          function (error) {{ return String(error); }});\
          }},\
@@ -212,6 +228,7 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
         wheel_focus_only = if wheel_focus_only { "true" } else { "false" },
         jtunnel = js_string(&jtunnel),
         ptz = js_string(&ptz),
+        ptz_cameras = js_string(&ptz_cameras),
     )
 }
 
@@ -323,6 +340,15 @@ mod tests {
                     }],
                     allow: vec!["192.168.1.50".into()],
                 },
+                ptz_cameras: &crate::ptz_cameras::Setting {
+                    on: true,
+                    cameras: vec![crate::ptz_cameras::Camera {
+                        name: "</script>".into(),
+                        address: "192.168.1.40:52381".into(),
+                        transport: "visca_ip".into(),
+                        visca: 1,
+                    }],
+                },
             },
         );
         assert!(script.starts_with("if (window.location.origin === \"http://jstream.localhost\")"));
@@ -342,6 +368,8 @@ mod tests {
         assert!(script.contains("jtunnel: Object.freeze(JSON.parse(\"{\\\"on\\\":true"));
         assert!(script.contains("invoke(\"set_ptz_controllers\", { setting: setting })"));
         assert!(script.contains("ptz: Object.freeze(JSON.parse("));
+        assert!(script.contains("invoke(\"set_ptz_cameras\", { setting: setting })"));
+        assert!(script.contains("ptzCameras: Object.freeze(JSON.parse("));
         assert!(script.contains("invoke(\"set_zoom\", { factor: Number(factor) })"));
         assert!(
             !script.contains("</script>"),

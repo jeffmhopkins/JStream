@@ -187,13 +187,17 @@ pub enum PanelId {
     Channels,
     /// The open sequence: its lanes and triggers (ADR-0184).
     Sequence,
+    /// Everything that is mapped: sources, channels and targets in one table.
+    Mappings,
+    /// Live control of the machine's PTZ cameras (ADR-0146, ADR-0209).
+    Ptz,
     /// A show: its timeline (Edit) or its show-time controls (Run).
     Show,
 }
 
 impl PanelId {
     /// Every panel, in the View menu's order.
-    pub const ALL: [PanelId; 14] = [
+    pub const ALL: [PanelId; 16] = [
         PanelId::Scenes,
         PanelId::Objects,
         PanelId::Inspector,
@@ -207,6 +211,8 @@ impl PanelId {
         PanelId::Transitions,
         PanelId::Channels,
         PanelId::Sequence,
+        PanelId::Mappings,
+        PanelId::Ptz,
         PanelId::Show,
     ];
 
@@ -226,6 +232,8 @@ impl PanelId {
             PanelId::Agent => "Agent activity",
             PanelId::Channels => "Channels",
             PanelId::Sequence => "Sequence",
+            PanelId::Mappings => "Mappings",
+            PanelId::Ptz => "PTZ cameras",
             PanelId::Show => "Show",
         }
     }
@@ -246,6 +254,8 @@ impl PanelId {
             PanelId::Agent => "agent",
             PanelId::Channels => "channels",
             PanelId::Sequence => "sequence",
+            PanelId::Mappings => "mappings",
+            PanelId::Ptz => "ptz",
             PanelId::Show => "show",
         }
     }
@@ -260,11 +270,13 @@ impl PanelId {
             | PanelId::Chat
             | PanelId::Stats
             | PanelId::Agent
-            | PanelId::Channels => Zone::Right,
+            | PanelId::Channels
+            | PanelId::Ptz => Zone::Right,
             PanelId::Mixer
             | PanelId::Outputs
             | PanelId::Transitions
             | PanelId::Sequence
+            | PanelId::Mappings
             | PanelId::Show => Zone::Bottom,
         }
     }

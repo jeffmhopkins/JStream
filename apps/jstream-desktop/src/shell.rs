@@ -238,7 +238,12 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 /// `network_file` is where `set_network` saves "Allow devices on my network",
 /// `jtunnel_file` where `set_jtunnel` saves "Receive from JTunnel senders", and
 /// `ptz_file` where `set_ptz_controllers` saves "Accept a PTZ controller", whose open
-/// endpoints `ptz_controllers` holds until exit.
+/// endpoints `ptz_controllers` holds until exit, and `ptz_cameras_file` where
+/// `set_ptz_cameras` saves "Control PTZ cameras" and applies it to the engine.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one per setting the window saves, and the controllers it holds"
+)]
 pub fn run(
     ui: Ui,
     script: Option<String>,
@@ -247,6 +252,7 @@ pub fn run(
     jtunnel_file: Option<PathBuf>,
     ptz_file: Option<PathBuf>,
     ptz_controllers: Option<jstream_core::PtzControllers>,
+    ptz_cameras_file: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let start = start_url()?;
     let mut builder = tauri::Builder::default().manage(crate::folders::Saved::default());
@@ -260,12 +266,17 @@ pub fn run(
     if let Some(file) = ptz_file {
         builder = builder.manage(crate::ptz::File(file));
     }
+    if let Some(path) = ptz_cameras_file {
+        let engine = host.as_ref().map(Host::engine).unwrap_or_default();
+        builder = builder.manage(crate::ptz_cameras::File { path, engine });
+    }
     let app = builder
         .invoke_handler(tauri::generate_handler![
             crate::pick::pick_path,
             crate::network::set_network,
             crate::jtunnel::set_jtunnel,
             crate::ptz::set_ptz_controllers,
+            crate::ptz_cameras::set_ptz_cameras,
             crate::screenshots::save_screenshot,
             crate::screenshots::open_saved,
             crate::screenshots::show_saved,

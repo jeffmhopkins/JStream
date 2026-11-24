@@ -91,7 +91,7 @@ use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
-    RenderSnapshot, SceneShots, WarmModels,
+    RenderSnapshot, SceneShots, WarmModels, WarmStills,
 };
 use crate::snapshot::{self, CaptureImage, CaptureKey, Captures, GpuKey, LiveParams, Shot, View};
 
@@ -178,7 +178,7 @@ pub(crate) type DrawFn = Box<
             &mut [MixFrame],
             MediaTime,
             &mut DrawMeter,
-            &WarmModels,
+            (&WarmModels, &WarmStills),
         ) -> Result<Option<Reclaimed>, DrawError>,
 >;
 
@@ -560,7 +560,7 @@ pub(crate) fn cpu_draw() -> OpenDraw {
              frames: &mut [MixFrame],
              at: MediaTime,
              _: &mut DrawMeter,
-             _: &WarmModels| {
+             _: (&WarmModels, &WarmStills)| {
                 for frame in frames
                     .iter_mut()
                     .filter(|frame| frame.due && frame.readback)
@@ -2009,7 +2009,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
         // frame may take (ADR-0197).
         let mut governor: Option<crate::resolution::Governor> = None;
         let draw: DrawFn = Box::new(
-            move |program, scenes, live, captures, frames, at, meter, warm| {
+            move |program, scenes, live, captures, frames, at, meter, (warm, stills)| {
                 if let Some(hook) = &hook {
                     hook(&compositor);
                 }
@@ -2223,6 +2223,10 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                         drawn.map_err(|err| draw_error(&compositor, &err))?;
                     }
                 }
+                // The warm scenes' stills the cache holds no texture of, after every
+                // draw of the tick, so a switch to one draws them at once (ADR-0212).
+                snapshot::keep_warm_stills(&compositor, &mut cache, stills)
+                    .map_err(|err| draw_error(&compositor, &err))?;
                 meter.end_gpu(&mut compositor);
                 // After the tick's last submit, so the count comes down once all of it ran.
                 if converted {
@@ -3957,7 +3961,7 @@ impl Frames {
     fn draw(
         &mut self,
         draw: &mut DrawFn,
-        (shot, scenes, live, warm): (&Shot, &SceneShots, &LiveParams, &WarmModels),
+        (shot, scenes, live, warm): (&Shot, &SceneShots, &LiveParams, (&WarmModels, &WarmStills)),
         captures: &RenderCaptures,
         (at, deadline): (MediaTime, Instant),
         meter: &mut DrawMeter,
@@ -4263,7 +4267,12 @@ fn render_loop(job: RenderJob) {
                 let deadline = started + budget;
                 frames.draw(
                     &mut draw,
-                    (shot, scenes, live, reader.warm_models()),
+                    (
+                        shot,
+                        scenes,
+                        live,
+                        (reader.warm_models(), reader.warm_stills()),
+                    ),
                     &captures,
                     (due, deadline),
                     &mut meter,
@@ -4282,6 +4291,7 @@ fn render_loop(job: RenderJob) {
             match tick {
                 Ok(Ok(freed)) => {
                     // The totals it replaces go to the collector (R-RT-003).
+                    meter.submitted(jstream_render::submits_on_this_thread());
                     meter.end_frame(started.elapsed(), Instant::now(), |old| {
                         collector.free(Garbage::Profile(old));
                     });
@@ -6280,7 +6290,10 @@ mod tests {
                 &mut frames,
                 MediaTime::zero(Timebase::NANOS),
                 &mut crate::profile::DrawMeter::default(),
-                &crate::runtime::WarmModels::new(),
+                (
+                    &crate::runtime::WarmModels::new(),
+                    &crate::runtime::WarmStills::new(),
+                ),
             )
             .expect("draw");
             assert_eq!(frames[0].out, rgba[..8], "from a {own:?} capture");
@@ -6322,7 +6335,10 @@ mod tests {
                 &mut [],
                 MediaTime::zero(Timebase::NANOS),
                 &mut crate::profile::DrawMeter::default(),
-                &crate::runtime::WarmModels::new(),
+                (
+                    &crate::runtime::WarmModels::new(),
+                    &crate::runtime::WarmStills::new(),
+                ),
             )
         };
         assert!(call().is_ok(), "a usable device draws");
@@ -6712,7 +6728,10 @@ mod tests {
                 &mut frames,
                 at,
                 &mut meter,
-                &crate::runtime::WarmModels::new(),
+                (
+                    &crate::runtime::WarmModels::new(),
+                    &crate::runtime::WarmStills::new(),
+                ),
             )
             .expect("drawn");
             if frames[1].ready.is_some() {

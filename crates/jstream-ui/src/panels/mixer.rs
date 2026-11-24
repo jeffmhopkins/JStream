@@ -22,9 +22,10 @@ use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::menu::Entry;
 use crate::panels::confirm::{Confirm, Pending};
+use crate::panels::gesture::EditDrag;
 use crate::panels::inspector::Fold;
 use crate::panels::learn::{FADER_THROW, Learn};
-use crate::panels::number::NumberField;
+use crate::panels::number::{NumberField, Scrubbing};
 use crate::store::plan_summary;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
@@ -707,12 +708,30 @@ impl Panel {
         change: Edit,
         patch: impl FnOnce(&mut Snapshot) + 'static,
     ) -> impl Future<Output = Result<(), String>> + 'static {
+        self.commit_via(None, change, patch)
+    }
+
+    /// [`Panel::commit`], ending `drag`'s gesture with the batch when one is open
+    /// (ADR-0213), so a dragged fader or send is one undo step.
+    fn commit_via(
+        self,
+        drag: Option<EditDrag>,
+        change: Edit,
+        patch: impl FnOnce(&mut Snapshot) + 'static,
+    ) -> impl Future<Output = Result<(), String>> + 'static {
         let session = self.session.get();
+        let committed = drag.map(|drag| drag.commit_async(vec![change.clone()]));
         async move {
             let Some(session) = session else {
                 return Err("Not connected.".into());
             };
-            edit(&*session.control, change).await?;
+            match committed {
+                Some(committed) => committed
+                    .await
+                    .map(drop)
+                    .map_err(|error| describe(&error))?,
+                None => edit(&*session.control, change).await?,
+            }
             self.snapshot.try_update(|snapshot| {
                 if let Some(snapshot) = snapshot.as_mut() {
                     patch(snapshot);
@@ -758,9 +777,10 @@ impl Panel {
         );
     }
 
-    /// Sets a source's gain, if it is in range.
+    /// Sets a source's gain, if it is in range, ending `drag`'s gesture with it.
     fn commit_gain(
         self,
+        drag: EditDrag,
         source_id: SourceId,
         db: f32,
     ) -> impl Future<Output = Result<(), String>> + 'static {
@@ -768,7 +788,8 @@ impl Panel {
         async move {
             let gain_db = gain?;
             let patched = source_id.clone();
-            self.commit(
+            self.commit_via(
+                Some(drag),
                 Edit::SourceSetAudio {
                     source_id,
                     enabled: None,
@@ -1329,6 +1350,17 @@ fn meter(
     .into_any()
 }
 
+/// A source's fader at `db` as a live value (ADR-0213), if the gain is in range.
+fn source_gain(source_id: SourceId, db: f32) -> Option<Edit> {
+    Some(Edit::SourceSetAudio {
+        source_id,
+        enabled: None,
+        follow: None,
+        gain_db: Some(checked_gain(db).ok()?),
+        muted: None,
+    })
+}
+
 /// A gain the user is changing: the value to show, the dragged one while a drag holds
 /// it, and the sender that commits one through `commit`, showing its error if it fails.
 fn held_gain<Fut>(
@@ -1366,6 +1398,7 @@ fn fader<Fut>(
     gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
     problem: RwSignal<Option<String>>,
     commit: impl Fn(f32) -> Fut + Copy + Send + Sync + 'static,
+    live: Live<impl Fn(f32) -> Option<Edit> + Copy + Send + Sync + 'static>,
 ) -> AnyView
 where
     Fut: Future<Output = Result<(), String>> + 'static,
@@ -1384,7 +1417,11 @@ where
             aria-label=move || format!("{} fader", label())
             aria-valuetext=move || format_gain(shown())
             prop:value=move || db_to_position(shown()).to_string()
-            on:input=move |event| dragging.set(Some(position(&event)))
+            on:input=move |event| {
+                let db = position(&event);
+                dragging.set(Some(db));
+                live.show(db);
+            }
             on:change=move |event| send(position(&event))
         />
         <button
@@ -1407,6 +1444,7 @@ fn channel_gain<Fut>(
     gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
     problem: RwSignal<Option<String>>,
     commit: impl Fn(f32) -> Fut + Copy + Send + Sync + 'static,
+    live: Live<impl Fn(f32) -> Option<Edit> + Copy + Send + Sync + 'static>,
 ) -> AnyView
 where
     Fut: Future<Output = Result<(), String>> + 'static,
@@ -1427,7 +1465,11 @@ where
             aria-label=move || format!("{} fader", label())
             aria-valuetext=move || format_gain(shown())
             prop:value=move || db_to_position(shown()).to_string()
-            on:input=move |event| dragging.set(Some(position(&event)))
+            on:input=move |event| {
+                let db = position(&event);
+                dragging.set(Some(db));
+                live.show(db);
+            }
             on:change=move |event| send(position(&event))
         />
         <NumberField
@@ -1445,9 +1487,33 @@ where
                 send(db as f32);
                 true
             }
+            live=move |scrubbing| live.follow(scrubbing)
         />
     }
     .into_any()
+}
+
+/// A fader's or a gain field's drag as a gesture (ADR-0213): the drag whose `live.set`
+/// shows each value, and the live value of a gain in dB.
+#[derive(Clone, Copy)]
+struct Live<F> {
+    drag: EditDrag,
+    edit_for: F,
+}
+
+impl<F: Fn(f32) -> Option<Edit> + Copy + 'static> Live<F> {
+    /// Shows `db` on the mix, opening the gesture with the first.
+    fn show(self, db: f32) {
+        if let Some(edit) = (self.edit_for)(db) {
+            self.drag.show(vec![edit]);
+        }
+    }
+
+    /// Follows a gain field's drag.
+    fn follow(self, scrubbing: Scrubbing) {
+        self.drag
+            .follow(scrubbing, move |v| (self.edit_for)(v as f32));
+    }
 }
 
 /// A mute toggle.
@@ -1491,7 +1557,12 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
         move |enabled: Option<bool>, follow: Option<AudioFollow>, muted: Option<bool>| {
             panel.set_audio(id.get_value(), enabled, follow, muted);
         };
-    let commit_gain = move |db: f32| panel.commit_gain(id.get_value(), db);
+    let drag = EditDrag::new();
+    let commit_gain = move |db: f32| panel.commit_gain(drag, id.get_value(), db);
+    let live = Live {
+        drag,
+        edit_for: move |db| source_gain(id.get_value(), db),
+    };
     // The strip's name dragged onto the Show panel's tracks adds its audio there
     // (ADR-0213's "Add source audio").
     let show_panel = use_context::<crate::panels::show::ShowPanel>();
@@ -1563,6 +1634,7 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
                     move || audio().map_or(0.0, |a| a.gain_db.get()),
                     panel.problem,
                     commit_gain,
+                    live,
                 )}
                 {mute_button(muted, move || set_audio(None, None, Some(!muted())))}
                 <Learn
@@ -1627,10 +1699,15 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
     let enabled = move || audio().is_some_and(|a| a.enabled);
     let muted = move || audio().is_some_and(|a| a.muted);
     let reading = move || id.with_value(|id| panel.meters.with(|m| m.sources.get(id).copied()));
+    let drag = EditDrag::new();
+    let live = Live {
+        drag,
+        edit_for: move |db| source_gain(id.get_value(), db),
+    };
     let (_, shown, send) = held_gain(
         move || audio().map_or(0.0, |a| a.gain_db.get()),
         panel.problem,
-        move |db: f32| panel.commit_gain(id.get_value(), db),
+        move |db: f32| panel.commit_gain(drag, id.get_value(), db),
     );
     let value = Signal::derive(move || Some(f64::from(shown())));
     let named = Signal::derive(move || format!("{} gain", name()));
@@ -1658,6 +1735,7 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
                         send(db as f32);
                         true
                     }
+                    live=move |scrubbing| live.follow(scrubbing)
                 />
                 {mute_button(muted, move || {
                     panel.set_audio(id.get_value(), None, None, Some(!muted()));
@@ -1672,6 +1750,8 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
 #[component]
 fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
     let ids = StoredValue::new((source_id, bus_id));
+    // A drag on the send's gain follows on the mix, one undo step (ADR-0213).
+    let drag = EditDrag::new();
     let gain = move || {
         ids.with_value(|(source_id, bus_id)| {
             panel
@@ -1699,8 +1779,12 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
             },
             None => Edit::SendRemove { source_id, bus_id },
         };
-        panel.apply(change, move |s| {
+        let done = panel.commit_via(Some(drag), change, move |s| {
             s.patch_send(&patch_source, &patch_bus, gain_db)
+        });
+        spawn_local(async move {
+            let outcome = done.await;
+            panel.problem.try_set(outcome.err());
         });
     };
     let toggle = move |_| {
@@ -1710,15 +1794,29 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
             Some(Finite32::ZERO)
         })
     };
-    let change_gain = move |event: leptos::ev::Event| match event_target_value(&event)
-        .trim()
-        .parse::<f32>()
-        .map_err(|_| "Type a number of dB.".to_owned())
-        .and_then(checked_gain)
-    {
-        Ok(gain_db) => set(Some(gain_db)),
-        Err(problem) => panel.problem.set(Some(problem)),
+    // The send's gain: a drag shows each value live and commits once, on release
+    // (ADR-0213), one undo step.
+    let live_gain = move |db: f64| {
+        let (source_id, bus_id) = ids.get_value();
+        checked_gain(db as f32).ok().map(|gain_db| Edit::SendSet {
+            source_id,
+            bus_id,
+            gain_db,
+        })
     };
+    let follow_gain = move |scrubbing| drag.follow(scrubbing, live_gain);
+    let change_gain = move |db: f64| match checked_gain(db as f32) {
+        Ok(gain_db) => {
+            set(Some(gain_db));
+            true
+        }
+        Err(problem) => {
+            panel.problem.set(Some(problem));
+            false
+        }
+    };
+    let send_value = Signal::derive(move || gain().map(f64::from));
+    let send_name = Signal::derive(move || format!("Send to {} (dB)", bus_name()));
     view! {
         <li class="send">
             <label class="check">
@@ -1730,18 +1828,11 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
                 />
                 {bus_name}
             </label>
-            <input
-                type="number"
-                class="send-gain"
-                min=MIN_GAIN_DB.to_string()
-                max=MAX_GAIN_DB.to_string()
-                step="0.5"
-                aria-label=move || format!("Send to {} (dB)", bus_name())
-                disabled=move || gain().is_none()
-                prop:value=move || gain().map_or_else(String::new, |db| format!("{db:.1}"))
-                on:change=change_gain
-            />
-            " dB"
+            <span class="send-gain">
+                <NumberField named=send_name unit="dB" value=send_value step=0.5 decimals=1
+                    fixed=true min=f64::from(MIN_GAIN_DB) max=f64::from(MAX_GAIN_DB)
+                    send=change_gain live=follow_gain />
+            </span>
             <Show when=move || gain().is_some()>
                 <Learn
                     target=ids.with_value(|(source_id, bus_id)| ValueTarget::SendGain {
@@ -1778,6 +1869,18 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
     let renaming = RwSignal::new(false);
     let new_name = RwSignal::new(String::new());
 
+    // A drag on the fader follows on the mix, one undo step (ADR-0213).
+    let drag = EditDrag::new();
+    let live = Live {
+        drag,
+        edit_for: move |db| {
+            Some(Edit::BusSetFader {
+                bus_id: id.get_value(),
+                gain_db: Some(checked_gain(db).ok()?),
+                muted: None,
+            })
+        },
+    };
     let commit_gain = move |db: f32| {
         let bus_id = id.get_value();
         let gain = checked_gain(db);
@@ -1785,7 +1888,8 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
             let gain_db = gain?;
             let patched = bus_id.clone();
             panel
-                .commit(
+                .commit_via(
+                    Some(drag),
                     Edit::BusSetFader {
                         bus_id,
                         gain_db: Some(gain_db),
@@ -1907,6 +2011,7 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                 move || bus.with(|b| b.as_ref().map_or(0.0, |b| b.gain_db.get())),
                 panel.problem,
                 commit_gain,
+                live,
             )}
             {mute_button(muted, toggle_mute)}
             <Learn

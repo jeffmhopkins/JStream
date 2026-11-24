@@ -260,3 +260,55 @@ fn the_setter_keeps_the_value_within_the_range() {
     };
     assert_eq!(gain_db.map(Finite32::get), Some(-6.0));
 }
+
+/// ADR-0209: a PTZ axis takes whole head counts over its protocol range, names a
+/// camera the collection can't look up (it belongs to the machine), and gives no setter
+/// edit, since the engine aims the head instead.
+#[test]
+fn a_ptz_axis_is_bound_without_a_lookup_and_gives_no_edit() {
+    use jstream_protocol::PtzAxis;
+    let mut g = fixture();
+    let zoom = ValueTarget::PtzAxis {
+        camera: "any camera".into(),
+        axis: PtzAxis::Zoom,
+    };
+    let applied = apply_ok(&mut g, vec![bind("zoom", zoom.clone())]);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::BindingClearValue {
+            binding_id: "zoom".into()
+        }]
+    );
+    let range = g.value_range(&zoom).expect("a range");
+    assert_eq!(
+        range,
+        ValueRange::Number {
+            min: 0.0,
+            max: 65535.0,
+            whole: true
+        }
+    );
+    assert_eq!(value_edit(&zoom, range, 100.0), None);
+    let pan = ValueTarget::PtzAxis {
+        camera: "any camera".into(),
+        axis: PtzAxis::Pan,
+    };
+    assert!(matches!(
+        g.value_range(&pan),
+        Some(ValueRange::Number { min, .. }) if min == -524_287.0
+    ));
+    let unnamed = apply_err(
+        &mut g,
+        vec![bind(
+            "bad",
+            ValueTarget::PtzAxis {
+                camera: String::new(),
+                axis: PtzAxis::Tilt,
+            },
+        )],
+    );
+    assert!(
+        matches!(&unnamed, ProtocolError::InvalidArgument { field, .. } if field.ends_with("binding.target.camera")),
+        "{unnamed:?}"
+    );
+}
