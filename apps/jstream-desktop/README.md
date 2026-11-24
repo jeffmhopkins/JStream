@@ -85,7 +85,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   panels), saving the
   network setting (`network.rs`), the JTunnel setting (`jtunnel.rs`) and the PTZ
   controller setting (`ptz.rs`), and saving, opening and showing a screenshot
-  (`screenshots.rs`).
+  (`screenshots.rs`); and the main window's drags of files from the desktop, passed on
+  to the page as `bootstrap::drop_script` events ([Design](#design)).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.

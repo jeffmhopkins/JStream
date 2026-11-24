@@ -79,12 +79,15 @@ Contents ([Design](#design) explains the choices):
   check runs there. Nothing is downloaded. The comparison is tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
-  the saved layouts (`Layout`, with Editing and Live built in). Every change goes
+  the saved layouts (`Layout`, with Editing, Live and Show built in; a stored dock
+  that predates one gains it). Every change goes
   through it (`place`, `close`, `toggle`, `click_tab`, `resize_zone`, `resize_between`,
-  `save_as_new`, `apply`, `reset`), and it reads and writes itself as JSON. Tested
+  `save_as_new`, which takes the first "My layout N" no saved layout has, `apply`,
+  `reset`), and it reads and writes itself as JSON. Tested
   natively.
 - **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas
-  (in studio mode, the canvas beside the studio controls and the program monitor),
+  (in studio mode, the canvas beside the studio controls and the program monitor;
+  while a show runs in the Show panel's Run view, beside its Next monitor),
   with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
@@ -141,7 +144,9 @@ Contents ([Design](#design) explains the choices):
   3D model's depth, `SourceDepths`, from the same;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
-  and the kind descriptors read so far, the last failed call, the toast's confirmation
+  and the kind descriptors read so far, the collection's shows (`Collection::shows`,
+  ADR-0210) and the running show as `studio.get` and `show.changed` report it, with when
+  it was heard (`Studio::show`), the last failed call, the toast's confirmation
   (`notify`, `notify_with` for one with buttons, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
   kind and reads `kind.list` again, as a `gpu.device_lost` or `gpu.effect_slow` that
@@ -205,7 +210,8 @@ Contents ([Design](#design) explains the choices):
   with the edits they send to a scene, a source, a hotkey or a timeline tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
   blending, scene switches and hotkeys in the tabs `Tab` lists, with the stored tab and the
   arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
-  sections whose folds `Folds` remembers by title), the
+  sections whose folds `Folds` remembers by title, and ahead of either the Show page
+  while the Show panel's selection names something in the open show), the
   properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
   `looks` table in `looks.rs`), the control button beside a live setting, a fader or a send
   (`learn.rs`, ADR-0178 and ADR-0183, whose control matching, learned binding and channel
@@ -214,7 +220,8 @@ Contents ([Design](#design) explains the choices):
   values `live_values` reads, with channel IDs, the search and its order tested natively),
   the Sequence panel (`sequence.rs`: `Sequence`, its lanes, points and triggers, with the
   point order, the lane's drawn path and each trigger's sentence tested natively), its
-  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text,
+  Events lane (`events.rs`: `Events`, with each event kind's objects, action and chip text
+  (`action_text`, which the Show panel's cues use too),
   which cues it edits and how it finds one, tested natively), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
@@ -276,6 +283,26 @@ Contents ([Design](#design) explains the choices):
   pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
+- **Show** (`panels/show/`, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)):
+  `Show`, the Show panel (`PanelId::Show`, in the bottom dock), and `ShowPanel`, its
+  state, which the shell provides so the Inspector reads what it selected. It edits and
+  runs the collection's shows: `model.rs` is what it draws (`ShowView`, its tracks,
+  clips, bookmarks and loops, and `RunView`, where the runner is), `wire.rs` reads a
+  `ShowInfo` and the running show into them and turns each `Command` into its action,
+  `time.rs` is show time on screen (the clock's text, the ruler's ticks and the
+  `Viewport`), `edit.rs` the Edit view (the timeline, its tools and menus, with
+  `edit/geom.rs` for where things are drawn, `edit/gesture.rs` for what a drag does,
+  `edit/zoom.rs` for the zoom bar and `edit/drops.rs` for scenes and files dropped on
+  the tracks), `run.rs` the Run view, `edits.rs` each tool's change to a show,
+  `drop.rs` what a dropped media file becomes, `inspector.rs` the Inspector's Show page
+  and `inspect_edits.rs` its fields' changes; `NextPane` and `next_monitor_shown` are
+  the Next monitor beside the canvas. Every one of those but the components is a pure
+  function tested natively, `drop.rs` against `MockEngine` too. It sends `show.set`
+  (every edit, as one undo step) and `show.delete`, in a batch with `source.create`,
+  `scene.create` and the folder and item edits a media drop needs, and the actions
+  `show.play` (`rehearse` for Rehearse), `show.stop`, `show.continue`, `show.back`,
+  `show.go_to` and `show.arm`; it reads the shows from `state.get` and the running
+  show from `studio.get`'s `show`, kept current by `show.changed`.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
   Settings…, Video settings… and Plugins… open, with its pages (`SettingsPage`: General,
   Video, 3D rendering, Audio, Plugins, Devices)
@@ -349,8 +376,9 @@ Contents ([Design](#design) explains the choices):
   and remove dialog against a fake engine that notes each list, or fails one.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
-  redoes ([Canvas](#canvas)); `ProgramMonitor` (`monitor.rs`), the live program beside
-  it in studio mode.
+  redoes ([Canvas](#canvas)); `Monitor` (`monitor.rs`), a monitor of the program mix
+  or any scene, moving or one still picture: `ProgramMonitor`, the live program beside
+  it in studio mode, and the Show panel's Next monitor.
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)), and `fonts/` holds the bundled IBM Plex files with their licence,
@@ -859,6 +887,46 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Sequence panel (`sequence::open_sequence`), its hover button plays or stops it, it shows
   its elapsed time while it plays and the keys bound to play it, and its menu plays or
   stops, renames (F2), sets or removes a key and deletes it (Del).
+- **Shows** (`panels/show/`, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md),
+  [UI features › show](../../docs/UI-FEATURES.md#show)). The Show panel draws one
+  view-model, `ShowView` (`wire::view_of` of a `ShowInfo` and the collection, which names
+  each clip's scene, source, sequence or keyframe, or "(missing)", and lays program's
+  clips end to end from their lengths), and `RunView` (`wire::run_of` of `Studio::show`);
+  the Edit view, the Run view, the zoom bar and the Next monitor are functions of those
+  two, so what each says is tested natively. The play head runs on between reports from
+  the position and the time it was heard, ticked about 30 times a second while the panel
+  is open. `ShowPanel` lives with the shell rather than the panel, so the Inspector's
+  Show page reads its selection and closing the panel keeps its view; its lock is the
+  panel's own, never saved. **Every edit is one `show.set` of the whole show**, so one
+  undo step: each tool's gesture is a pure function from the show to the show
+  (`edits.rs`, and `inspect_edits.rs` for the Inspector's fields), and `ShowPanel::commit`
+  sends nothing when the result equals the show the engine has. Program clips carry
+  lengths, not starts, so a trim or a removal ripples by itself; `shift_from` moves what
+  sits on other tracks from the old end on. A drag is a `Grab` taken on the press and
+  `gesture::dragged`, the show as it would be if the pointer came up there, snapped by a
+  `Snapper` (clip edges, bookmarks, loop edges and the running play head within about
+  6 px, else 0.1 s, Shift free): the view draws that show in place of the engine's
+  (`ShowPanel::preview`) and sends it once on release, and Escape drops it. The preview
+  stays until the engine's answer brings the new show in, or 1.5 s pass. A refused drag
+  says why in its tip and sends nothing. A scene dragged from the Scenes panel reaches
+  the panel as a `Carry` the Scenes panel sets as the pointer moves (a pointer drag, as
+  the rows' own reorder is), and the Edit view finds the track under it with
+  `host::element_at`. Files arrive as a browser drop's `text/uri-list`
+  (`drop::dropped_paths`) or as the desktop app's `host::on_file_drop`; **one batch per
+  drop** makes each file's "Show media" folder, media source, scene and item
+  (`drop::plan_drop`, reusing a file's scene or source when it is there already) and
+  ends with the `show.set`, so a drop is one undo step too. A dropped video or audio
+  file's length (`edit::drops::media_length_ms`) is unknown until the engine reports
+  media durations, so it takes the show's image length for now. Run buttons send one
+  action each (`ShowPanel::send`, `wire::action_of`); Lock, the Next monitor and "+
+  Overlay track" are the panel's own state or a `show.set`. The Next monitor
+  (`NextPane`) is the canvas's `Monitor` of the scene `run::next_picture` names, as a
+  still picture (a one-frame stream closed once it is drawn, opened again when Next
+  changes) or a moving one, shown beside the canvas only while the open show runs in
+  the Run view outside studio mode (`next_monitor_shown`). Times on screen are
+  `Viewport` maths (`time.rs`) and positions `geom.rs`'s, placed with `style:`
+  properties, which the page's CSP allows. Its colours are `style.css`'s `--show-*`
+  tokens.
 - **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
   its filters (#1219, `filters::PropertiesAndFilters`): the source's picture on top
   (`device_preview::SourcePreview`: the draft of a capture kind, else the saved source
@@ -1118,7 +1186,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
   Sources (`Sources`), the Inspector (`Inspector`), Arrange (the prototype's
   Transform), Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
-  Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
+  Transitions (`StudioMode`), and beyond it Channels, Sequence and Show; `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
   so it is an empty state that says what it waits on, and is in no built-in layout. Stream stats
   (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
@@ -1402,8 +1470,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   Studio mode is the page's (`Studio::studio_mode`, kept by the browser). On, the stage
   under the header becomes a two-up (`workspace.rs`): the canvas on the left, which
-  edits the preview scene, the program monitor on the right (`canvas/monitor.rs`: the
-  program mix as a `preview.subscribe` with no `scene_id`, on a channel tapped from the
+  edits the preview scene, the program monitor on the right (`canvas/monitor.rs`'s
+  `Monitor` with no scene: the program mix as a `preview.subscribe` with no `scene_id`, on a channel tapped from the
   canvas's binary channel, sized for its box as the canvas's stream is and opened again
   for a new base rate or a box changed by a quarter), each under a `StageLabel`, and the
   studio controls between them (`StudioControls`). Turning it on sends
@@ -1554,8 +1622,16 @@ selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scen
 sends the edits; `preview.rs` chooses the preview stream and decides what to do with
 each H.264 frame and when each JPEG decodes. These are pure and tested natively,
 `model.rs` against `MockEngine`. `screen.rs` decodes and draws the preview in the
-browser, and `mod.rs` is the component. `monitor.rs` is studio mode's program monitor
-beside it ([Design › Studio mode](#design)).
+browser, and `mod.rs` is the component. `monitor.rs` is `Monitor`, a picture of the
+program mix or of one scene in a box of its own, following the scene it is given:
+studio mode's program monitor beside the canvas (`ProgramMonitor`,
+[Design › Studio mode](#design)) and the Show panel's Next monitor
+([Design › Shows](#design)). It opens its own `preview.subscribe` stream, sized for its
+box, on a channel tapped from the canvas's binary channel, and reports itself as the
+view `monitor:<label>` (`monitor:program`, `monitor:show-next`). Given a new scene it opens a
+stream of it. A still monitor asks for 1 fps and closes its stream once the first frame
+is drawn, keeping that picture, so it costs the engine one frame each time its scene
+changes.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::sized` from the shared collection and the sources' sizes, so it follows every state change the app
@@ -1589,7 +1665,8 @@ beside it ([Design › Studio mode](#design)).
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
-  `taps.rs`, the Properties dialog's picture and studio mode's program monitor) and one `preview.subscribe` stream on it, at the
+  `taps.rs`, the Properties dialog's picture and the monitors: studio mode's program
+  monitor and the Show panel's Next monitor) and one `preview.subscribe` stream on it, at the
   collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
   new stream of the same picture when the rate changes) and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends); when the stage settles at a size whose picture differs by a quarter or more, as when the window is maximized or the dock resized, the canvas opens a stream at the new size on a new channel. In the desktop app on its own engine (`host::own_engine`, false when the app is connected to another engine), where pictures cost no network, `preview::stage` always asks for the largest picture, so the docked canvas is full resolution at any size and a resize never restarts it. A resize restages only from its newest timeout, so a long drag opens one stream).
