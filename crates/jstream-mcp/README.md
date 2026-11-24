@@ -264,7 +264,9 @@ several shots as one switch with `via`, an orbiting `move` preset (`camera_path`
 `orbit`) and turns in more than one angle as one rotation
 ([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
-[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a sky all around a 3D set as an
+[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md), and `fixed_aperture`, a real
+lens's blur that follows the zoom and focus for a dolly zoom,
+[ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)), a sky all around a 3D set as an
 environment light with `backdrop` on, with `stars`, `nebula`, a `galaxy` band or a
 panorama `image`, and a `warp` that ramps itself over `warp_ramp_s` (motion modifiers on
 the light's item may drive its numbers and colours)

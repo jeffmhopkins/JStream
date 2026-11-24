@@ -60,6 +60,35 @@ fn level(control: &dyn Control) -> Option<(f32, bool, Option<Driver>)> {
         .map(|c| (c.value.get(), c.on, c.driver))
 }
 
+/// A collection file that holds a channel has it followed as soon as the engine loads
+/// it, before any action or edit, so what follows the channel reads its default rather
+/// than 0 from the start.
+#[test]
+fn a_loaded_collections_channels_are_followed_at_once() {
+    let dir = std::env::temp_dir().join(format!(
+        "jstream-core-channels-{}-loaded",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let path = dir.join("scenes.json");
+    {
+        let engine = Engine::new().with_collection_file(&path).expect("created");
+        let control = connected(&engine);
+        let mut lit = ChannelInfo::new("power");
+        lit.default = Finite32::ONE;
+        batch(&control, edits(vec![Edit::ChannelSet { channel: lit }])).expect("sets");
+    }
+    let engine = Engine::new().with_collection_file(&path).expect("loads");
+    let control = connected(&engine);
+    assert!(
+        until(|| level(&control) == Some((1.0, true, None))),
+        "its default with nothing done since the load: {:?}",
+        level(&control)
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A held note drives the channel to 1 and its release back to 0; an action takes over
 /// until the input moves again, and switching off holds the off value.
 #[test]

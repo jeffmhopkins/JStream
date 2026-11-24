@@ -248,7 +248,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   `depth_sort`, a depth of field's `focus_px` and `blur_px`,
   [ADR-0108](adr/0108-camera-depth-of-field.md), and `autofocus`, which glides the focus
   to what is at the frame's centre,
-  [ADR-0176](adr/0176-controllers-and-live-data-drive-scene-cameras.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
+  [ADR-0176](adr/0176-controllers-and-live-data-drive-scene-cameras.md), and
+  `fixed_aperture`, which scales the blur by the zoom and focus like a real lens,
+  [ADR-0223](adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
   canvas extended toward the viewer is one space, each item's geometry is its pose
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
@@ -832,7 +834,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
   protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
   ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77), and since 0.167 its
-  `autofocus` glides the focus to what is at the frame's centre.
+  `autofocus` glides the focus to what is at the frame's centre; since 0.191
+  `fixed_aperture` makes the blur follow the zoom and focus like a real lens.
   `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
   which a camera can't hear; `midi` and `data` since 0.167,
   [ADR-0176](adr/0176-controllers-and-live-data-drive-scene-cameras.md)), and

@@ -1292,7 +1292,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   parent is 2D (`camera_start`, [ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)). A note warns when items already have depth or angles
   (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
   on the camera's target with a 6 px blur and autofocus on, and shows an Autofocus check
-  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)),
+  ([ADR-0176](../../docs/adr/0176-controllers-and-live-data-drive-scene-cameras.md)), a
+  Real lens check (`real_lens`, the camera's `fixed_aperture`, turned on or off keeping
+  the blur it draws with,
+  [ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)),
   Focus distance and Aperture (blur), and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).

@@ -849,7 +849,8 @@ engine only passes cameras the graph accepted.
 **Depth of field.** A camera with `focus_px` and a `blur_px` above 0
 ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) blurs each fragment by its own
 distance along the view: `Shape.dof` carries the focus as a `w` (`focus / f`), the far
-blur and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
+blur (the view's, which a fixed-aperture camera scales by its zoom and focus,
+[ADR-0223](../../docs/adr/0223-a-camera-with-a-fixed-aperture-blurs-like-a-real-lens.md)) and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
 out `r = blur · |w − focus| / w`, at most that largest blur and 64 px, from the
 fragment's interpolated `w`. Under half a pixel it takes the
 one sample as before. Otherwise it averages 16 taps on a golden-angle spiral over the

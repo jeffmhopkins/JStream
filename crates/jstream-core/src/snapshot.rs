@@ -8435,6 +8435,7 @@ fn light_camera(
         focus_px: None,
         blur_px: jstream_protocol::Finite32::ZERO,
         autofocus: false,
+        fixed_aperture: false,
     };
     camera.validate().ok().map(|()| camera)
 }
