@@ -178,13 +178,21 @@ fn a_held_pad_talks_until_it_is_let_go() {
     // A JTunnel sender with "Use this sender's MIDI" on (ADR-0123 §3).
     let midi = engine.midi_inputs();
     midi.set_bindable(["Pads".to_owned()]);
-    // The runner's first tick only looks.
-    std::thread::sleep(Duration::from_millis(100));
     let note = |on: bool| {
         jstream_midi::Message::parse(&[if on { 0x90 } else { 0x80 }, 36, 100]).expect("a note")
     };
-    midi.push("Pads", 0, &note(true));
-    assert!(until(|| !muted(&control).1), "held: the master talks");
+    // The runner's first tick only looks, and a note sent before it never fires, so the
+    // pad is pressed again until one is heard.
+    assert!(
+        until(|| {
+            if !muted(&control).1 {
+                return true;
+            }
+            midi.push("Pads", 0, &note(true));
+            false
+        }),
+        "held: the master talks"
+    );
     midi.push("Pads", 1, &note(false));
     assert!(until(|| muted(&control).1), "let go: muted again");
 }
