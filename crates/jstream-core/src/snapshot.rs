@@ -1709,6 +1709,16 @@ impl Shot {
         })
     }
 
+    /// Whether the running transition moves its held screen's camera as its shown
+    /// scene's motion moves that scene's, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn held_camera_moves(&self) -> Option<bool> {
+        self.transition.as_ref().map(|t| match &t.moves {
+            (Some(from), Some(to)) => Arc::ptr_eq(from, to),
+            _ => false,
+        })
+    }
+
     /// The cameras the sky backdrops of the running transition's ends, the scene it
     /// leaves's first, are seen through `elapsed_ms` into it, or `None` without one, for
     /// tests.
@@ -2217,19 +2227,28 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
+            // What was on screen is held through its camera before its motion: within
+            // one family (an item shown or hidden, or a keyframe placed, on program) the
+            // family's motion moved it there, so it moves it here too, and the Move
+            // starts from the camera the screen showed rather than gliding in from the
+            // camera without it.
+            let to_moves = planner.camera_moves(&running.to, &mut shot);
+            let to_family = planner.family(&running.to);
             let moves = (
                 match &running.from {
                     transition::From::Scene(from) => planner.camera_moves(from, &mut shot),
+                    transition::From::OnScreen(_) if running.by_item => to_moves.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.camera_moves(&running.to, &mut shot),
+                to_moves,
             );
             let families = (
                 match &running.from {
                     transition::From::Scene(from) => planner.family(from),
+                    transition::From::OnScreen(_) if running.by_item => to_family.clone(),
                     transition::From::OnScreen(_) => None,
                 },
-                planner.family(&running.to),
+                to_family,
             );
             shot.transition = Some(Transitioning {
                 start: running.start,
@@ -9715,11 +9734,16 @@ fn moved_camera(
     })
 }
 
+/// The opacity under which autofocus sees through an item: mostly faded, it shows more of
+/// what is behind it than of itself.
+const MIN_FOCUS_OPACITY: f32 = 0.5;
+
 /// How far along `camera`'s viewing axis the nearest item that the passes of scene family
 /// `family` draw meets it (the program's, a mix's, the show scene's, or a chain phase's,
 /// which draws a scene with a video chain), at `at` with each item's motion: what autofocus focuses on
-/// (ADR-0176 decision 5). An item placed through a 3D group, or with no opacity left, is
-/// passed over; a model is met at the surface it draws (ADR-0218), and a model whose
+/// (ADR-0176 decision 5). An item placed through a 3D group, one blended onto what is
+/// behind it (any blend mode but `normal`), or one under [`MIN_FOCUS_OPACITY`], is
+/// passed over, since none of them hides what is behind it; a model is met at the surface it draws (ADR-0218), and a model whose
 /// mesh this frame doesn't have, or whose search isn't built yet, isn't met. `None` when
 /// the axis meets none.
 fn centre_distance(
@@ -9748,7 +9772,10 @@ fn centre_distance(
             let (Placement::Geometry(geometry) | Placement::Layer(geometry)) = placement else {
                 continue;
             };
-            if opacity <= 0.0 {
+            // Only what hides what is behind it is focused on: a see-through item, one
+            // blended onto what is behind (a glow or a hologram added on), or mostly
+            // faded, is passed over, so it can't pull the focus off the scene behind it.
+            if layer.blend != BlendMode::Normal || opacity < MIN_FOCUS_OPACITY {
                 continue;
             }
             let met = if layer.boxed.is_some_and(|boxed| boxed.model) {
@@ -10046,12 +10073,18 @@ fn moving_cameras(
             None => camera,
         })
     };
+    // A screen held within the family is moved as the scene it moves to is, from the
+    // same time, so the two ends agree where the screen and the scene do.
+    let held = match (&transition.moves.0, &transition.moves.1) {
+        (Some(from), Some(to)) if Arc::ptr_eq(from, to) => Some(transition.start),
+        _ => None,
+    };
     cameras.ends = (
         moved(
             &transition.moves.0,
             &transition.families.0,
             cameras.ends.0,
-            None,
+            held,
         ),
         moved(
             &transition.moves.1,

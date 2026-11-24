@@ -61,7 +61,10 @@ all still hold for a camera without it.
    `fov_deg` or `focus_px` first, and the view draws with what they leave. A move
    between cameras interpolates `blur_px`, `fov_deg` and `focus_px` as before and takes
    `fixed_aperture` from the camera it moves to, so a glide between two fixed-aperture
-   cameras blurs as a lens moving between them would. Rescaling the canvas scales
+   cameras blurs as a lens moving between them would. A move between a camera with a
+   fixed aperture and one without reads the interpolated `blur_px` as the end camera's
+   kind from its first frame, so the blur can jump as it starts; keyframes meant to glide
+   into each other should agree on `fixed_aperture`. Rescaling the canvas scales
    `blur_px` and the positions alike, and the blur scales with them.
 4. **Turning it on keeps the look.** The Scene properties dialog's Real lens check,
    under Depth of field, sets `blur_px` to the aperture that draws the blur the camera
