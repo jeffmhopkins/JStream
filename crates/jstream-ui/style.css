@@ -110,8 +110,9 @@ body {
 /* The chrome selects no text, so a click or a drag across panels highlights nothing.
    Text fields and readable text keep it: the same list as `chrome::TEXT`. */
 body { -webkit-user-select: none; user-select: none; }
-input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, .problem,
-.problem-bar > span, .connection dd, .activity-log, .selectable { -webkit-user-select: text; user-select: text; }
+input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, a[href], .problem,
+.problem-bar > span, .settings-error, .toast, .connection dd, .about-facts dd, .activity-log,
+.selectable { -webkit-user-select: text; user-select: text; }
 input[type="checkbox"], input[type="radio"], input[type="range"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="color"], input[type="file"],
 input[type="image"] { -webkit-user-select: none; user-select: none; }

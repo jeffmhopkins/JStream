@@ -265,7 +265,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **The browser's menu and selection** (`chrome.spec.js`): a right-click on the header's
   brand, readout and menu button, a dock tab, a panel heading and the canvas tools is
   swallowed, while the Sources panel's search field keeps the browser's menu and opens no
-  panel menu; in Connection details the header swallows and a value doesn't. A drag from
+  panel menu; in Connection details the header swallows and a value doesn't, and in About
+  a version value and a link don't. A drag from
   a dock tab across the panels, and a double-click on a tab or a caption, select no text,
   while a double-click in the search field selects its word. File, Edit and View hang
   flush under the header.
