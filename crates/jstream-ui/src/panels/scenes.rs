@@ -33,6 +33,7 @@ use crate::panels::labels::{
     LabelChips, LabelEditor, LabelManager, LabelPopover, TagButton, TagPopover, Tagged, carried,
 };
 use crate::panels::scene_properties::SceneDialog;
+use crate::panels::sequence;
 use crate::panels::studio::override_submenu;
 use crate::panels::tree::{
     Filter, Reorder, SearchBar, Side, Star, Tool, ToolBar, dropped_at, indent,
@@ -40,8 +41,8 @@ use crate::panels::tree::{
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary, reset_edits};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Action, Chord, DeleteTarget, Edit, FilterOwner, FolderId, LabelId, SceneId, SceneInfo,
-    TimelineId,
+    Action, Chord, DeleteTarget, Edit, FilterOwner, FolderId, KeyframeEdge, LabelId, SceneEdge,
+    SceneId, SceneInfo, TimelineId, TimelineTrigger,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -411,6 +412,31 @@ pub fn Scenes() -> impl IntoView {
     let folded = RwSignal::new(HashSet::<SceneId>::new());
 
     let menus = use_context::<Menus>();
+    // A scene dragged out of the list towards the Show panel's tracks.
+    let show_panel = use_context::<crate::panels::show::ShowPanel>();
+    let carry = move |event: &leptos::ev::PointerEvent, dropped: bool| {
+        let Some(panel) = show_panel else { return };
+        let Some(Node::Scene(scene)) = reorder.dragged.get_untracked().map(|k| Node::of(&k)) else {
+            if dropped {
+                panel.carry.set(None);
+            }
+            return;
+        };
+        let name = studio
+            .collection
+            .with_untracked(|c| {
+                c.as_ref()
+                    .and_then(|c| c.scene(&scene).map(|s| s.name.clone()))
+            })
+            .unwrap_or_default();
+        panel.carry.set(Some(crate::panels::show::Carry {
+            scene: scene.to_string(),
+            name,
+            x: f64::from(event.client_x()),
+            y: f64::from(event.client_y()),
+            dropped,
+        }));
+    };
     let dock = use_context::<DockState>();
     let scene_dialog = use_context::<SceneDialog>();
     let pasting = crate::clipboard::Pasting::from_page();
@@ -835,6 +861,12 @@ pub fn Scenes() -> impl IntoView {
                             Entry::Sep,
                             Entry::submenu("Transition in", Vec::new()),
                             Entry::submenu("Transition out", Vec::new()),
+                            sequence::trigger_submenu(
+                                studio,
+                                session,
+                                parent.clone(),
+                                keyframe_watches(&parent, &id),
+                            ),
                             Entry::Sep,
                             Entry::item(format!("Reset to “{parent_name}”"), move || {
                                 reset_keyframe(reset_id.clone());
@@ -935,6 +967,7 @@ pub fn Scenes() -> impl IntoView {
                         Entry::Sep,
                         override_submenu(studio, session, dock, &id, true),
                         override_submenu(studio, session, dock, &id, false),
+                        sequence::trigger_submenu(studio, session, id.clone(), scene_watches(&id)),
                         Entry::Sep,
                         Entry::item("Properties…", move || {
                             if let Some(dialog) = scene_dialog {
@@ -1349,11 +1382,21 @@ pub fn Scenes() -> impl IntoView {
             }
         };
         let clear_keys = move || {
-            let edits = chords
-                .get_untracked()
-                .into_iter()
-                .map(|chord| Edit::HotkeyClear { chord })
-                .collect();
+            let play = Action::TimelinePlay {
+                timeline_id: id.get_value(),
+                delay_ms: None,
+            };
+            let edits = studio.collection.with_untracked(|c| {
+                c.as_ref()
+                    .map(|c| {
+                        chords
+                            .get_untracked()
+                            .iter()
+                            .flat_map(|chord| c.unbind_edits(chord, &play))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            });
             send_all(edits);
         };
         let on_row_context = {
@@ -1614,9 +1657,20 @@ pub fn Scenes() -> impl IntoView {
             <ul
                 class="rows tree-rows"
                 class:reordering=move || reorder.dragged.with(Option::is_some)
-                on:pointermove=move |event| reorder.moved(&event)
-                on:pointerup=move |_| reorder.up(drop)
-                on:pointercancel=move |_| reorder.cancel()
+                on:pointermove=move |event| {
+                    reorder.moved(&event);
+                    carry(&event, false);
+                }
+                on:pointerup=move |event| {
+                    carry(&event, true);
+                    reorder.up(drop);
+                }
+                on:pointercancel=move |_| {
+                    if let Some(panel) = show_panel {
+                        panel.carry.set(None);
+                    }
+                    reorder.cancel();
+                }
             >
                 <For each=shown_rows key=|row| row.clone() children=row />
             </ul>
@@ -1687,6 +1741,47 @@ pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> im
             }
         />
     }
+}
+
+/// The triggers a scene's menu offers to start a sequence on (A14): the scene going on
+/// program, and leaving it.
+pub fn scene_watches(scene_id: &SceneId) -> Vec<(&'static str, TimelineTrigger)> {
+    vec![
+        (
+            "Play when it goes on program",
+            TimelineTrigger::Scene {
+                scene_id: scene_id.clone(),
+                edge: SceneEdge::Shown,
+                delay_ms: 0,
+            },
+        ),
+        (
+            "Play when it leaves program",
+            TimelineTrigger::Scene {
+                scene_id: scene_id.clone(),
+                edge: SceneEdge::Hidden,
+                delay_ms: 0,
+            },
+        ),
+    ]
+}
+
+/// The triggers a keyframe's menu offers to start a sequence on (A14): the keyframe of
+/// `parent` loading, and leaving.
+pub fn keyframe_watches(
+    parent: &SceneId,
+    keyframe_id: &SceneId,
+) -> Vec<(&'static str, TimelineTrigger)> {
+    let watch = |edge| TimelineTrigger::Keyframe {
+        scene_id: parent.clone(),
+        keyframe_id: Some(keyframe_id.clone()),
+        edge,
+        delay_ms: 0,
+    };
+    vec![
+        ("Play when it loads", watch(KeyframeEdge::Loads)),
+        ("Play when it leaves", watch(KeyframeEdge::Leaves)),
+    ]
 }
 
 #[cfg(test)]

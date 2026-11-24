@@ -391,6 +391,7 @@ impl Collection {
             filters: Default::default(),
             variant_of: Some(variant_of.clone()),
             overrides: Overrides::new(),
+            timelines: Vec::new(),
         });
         Ok(vec![Edit::SceneDelete {
             scene_id: scene_id.clone(),

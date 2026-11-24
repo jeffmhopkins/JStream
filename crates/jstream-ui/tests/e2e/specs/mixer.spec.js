@@ -299,3 +299,51 @@ test('vertical meters fill upwards from the engine levels', async ({ page, daemo
   await expect.poll(() => mic.first().evaluate((el) => parseFloat(el.style.height))).toBe(100);
   expect(await mic.first().evaluate((el) => el.style.width)).toBe('');
 });
+
+// #1739 (ADR-0213): a drag on a send's gain follows on the mix: its values go out as a
+// gesture's `live.set` before the release, which commits the gesture in one batch with
+// `ends_gesture`, so one Undo takes the whole drag back.
+test("dragging a send's gain shows it live before the release, and undoes in one step", async ({ page, daemon }) => {
+  const sent = [];
+  const received = [];
+  page.on('websocket', (ws) => {
+    ws.on('framesent', ({ payload }) => typeof payload === 'string' && sent.push(payload));
+    ws.on('framereceived', ({ payload }) => typeof payload === 'string' && received.push(payload));
+  });
+  await connect(page, daemon);
+  await showPanel(page, 'Audio mixer');
+  await fold(page).click();
+  const channels = mixer(page).getByRole('list', { name: 'Channels' });
+  const strip = channels.locator('li.mix-row').filter({ hasText: 'Mic · ES-9 Line' });
+  await strip.locator('details.routing summary').click();
+  const send = strip.getByRole('textbox', { name: 'Send to Master (dB)' });
+  await expect(send).toHaveValue('0.0');
+  const start = await rev(page);
+  const lives = () => sent.filter((f) => f.includes('"live.set"'));
+  await send.scrollIntoViewIfNeeded();
+  const box = await send.boundingBox();
+  const y = box.y + box.height / 2;
+  // From the field's right end, so the press lands on it however narrow it is.
+  const right = box.x + box.width - 3;
+  await page.mouse.move(right, y);
+  await page.mouse.down();
+  // One step of 0.5 dB per 3 px: 30 px to the left is 5 dB less.
+  await page.mouse.move(right - 30, y, { steps: 6 });
+  await expect(send).toHaveValue('−5.0');
+  await expect.poll(() => lives().length).toBeGreaterThan(0);
+  await expect.poll(() => received.some((f) => f.includes('"live.changed"'))).toBe(true);
+  expect(lives().at(-1)).toContain('"send.set"');
+  await expect.poll(() => lives().at(-1)).toMatch(/"gain_db":-5(\.0)?[,}]/);
+  expect(sent.some((f) => f.includes('"ends_gesture"'))).toBe(false);
+  expect(await rev(page)).toBe(start);
+
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(start + 1);
+  expect(sent.filter((f) => f.includes('"ends_gesture"'))).toHaveLength(1);
+  await expect(send).toHaveValue('−5.0');
+
+  await page.locator('header.app-header .top-menu[data-menu="edit"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'Edit' }).getByRole('menuitem', { name: 'Undo' }).click();
+  await expect.poll(() => rev(page)).toBe(start + 2);
+  await expect(send).toHaveValue('0.0');
+});

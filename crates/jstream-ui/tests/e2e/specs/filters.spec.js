@@ -274,14 +274,14 @@ test('with described kinds, rows summarise, the window keeps a change on Escape,
   // More than three settings: a click opens the dialog.
   await rows.nth(1).locator('.filter-name').click();
   const settings = page.getByRole('dialog', { name: 'Filters', exact: true });
-  await expect(settings.getByRole('spinbutton')).toHaveCount(3);
+  await expect(settings.locator('.number-field input')).toHaveCount(3);
   await page.keyboard.press('Escape');
   await expect(settings).toBeHidden();
 
   // A change is one edit at once, which closing the window keeps.
   const before = await rev(page);
   await rows.nth(1).locator('.filter-name').click();
-  const size = settings.getByRole('spinbutton').first();
+  const size = settings.locator('.number-field input').first();
   await size.fill('50');
   await size.press('Tab');
   await expect.poll(() => rev(page)).toBe(before + 1);
@@ -312,7 +312,7 @@ test('with described kinds, rows summarise, the window keeps a change on Escape,
 
   // The new one opens in place; a change there is one edit.
   await expect(rows.nth(2)).toHaveClass(/\bopen\b/);
-  const amount = rows.nth(2).locator('.filter-editor').getByRole('spinbutton');
+  const amount = rows.nth(2).locator('.filter-editor').locator('.number-field input');
   await amount.fill('0.5');
   await amount.press('Enter');
   await expect(rows.nth(2).locator('.filter-summary')).toHaveText('0.50');
@@ -336,7 +336,7 @@ test('a setting the engine refuses after its row or dialog has closed shows in t
   const rows = videoRows(panel(page));
   await rows.nth(0).locator('.filter-name').click();
   await expect(rows.nth(0)).toHaveClass(/\bopen\b/);
-  const amount = rows.nth(0).locator('.filter-editor').getByRole('spinbutton');
+  const amount = rows.nth(0).locator('.filter-editor').locator('.number-field input');
   await amount.fill('0.9');
   await amount.press('Enter');
   await rows.nth(0).locator('.filter-name').click();
@@ -349,10 +349,57 @@ test('a setting the engine refuses after its row or dialog has closed shows in t
   // The same from the Filters window, closed before the answer.
   await rows.nth(0).locator('.filter-row').dblclick();
   const dialog = page.getByRole('dialog', { name: 'Filters', exact: true });
-  const field = dialog.getByRole('spinbutton');
+  const field = dialog.locator('.number-field input');
   await field.fill('0.9');
   await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
   release();
   await expect(page.locator('.problem-bar')).toContainText('Amount is too sharp');
+});
+
+// #1734, #1739: a filter's number is the shared click-drag field, and a drag on a live
+// setting follows live (ADR-0213): its values reach the engine as a gesture's
+// `live.set` before the release, which commits the gesture in one batch with
+// `ends_gesture`, so one Undo takes the whole drag back.
+test('dragging a filter setting shows it live before the release, and undoes in one step', async ({ page, daemon }) => {
+  const sent = [];
+  const received = [];
+  page.on('websocket', (ws) => {
+    ws.on('framesent', ({ payload }) => typeof payload === 'string' && sent.push(payload));
+    ws.on('framereceived', ({ payload }) => typeof payload === 'string' && received.push(payload));
+  });
+  await describeKinds(page, KINDS);
+  await connect(page, daemon);
+  await showPanel(page, 'Filters');
+  await selectBackdrop(page);
+  const rows = videoRows(panel(page));
+  await rows.nth(0).locator('.filter-name').click();
+  await expect(rows.nth(0)).toHaveClass(/\bopen\b/);
+  const amount = rows.nth(0).locator('.filter-editor .number-field input');
+  await expect(amount).toHaveValue('0.2');
+  const lives = () => sent.filter((f) => f.includes('"live.set"'));
+  const before = await rev(page);
+  const box = await amount.boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + 10, y);
+  await page.mouse.down();
+  // One step of 0.05 per 3 px: 30 px is 0.5 more.
+  await page.mouse.move(box.x + 40, y, { steps: 6 });
+  await expect(amount).toHaveValue('0.7');
+  // Before the release: live values of the setting went out and the engine took them.
+  await expect.poll(() => lives().length).toBeGreaterThan(0);
+  await expect.poll(() => received.some((f) => f.includes('"live.changed"'))).toBe(true);
+  expect(lives().at(-1)).toContain('"filter.set_settings"');
+  await expect.poll(() => lives().at(-1)).toMatch(/"amount":0\.7/);
+  expect(sent.some((f) => f.includes('"ends_gesture"'))).toBe(false);
+  expect(await rev(page)).toBe(before);
+  await page.mouse.up();
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  expect(sent.filter((f) => f.includes('"ends_gesture"'))).toHaveLength(1);
+  await expect(rows.nth(0).locator('.filter-summary')).toHaveText('0.70');
+
+  await page.locator('header.app-header .top-menu[data-menu="edit"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'Edit' }).getByRole('menuitem', { name: 'Undo' }).click();
+  await expect.poll(() => rev(page)).toBe(before + 2);
+  await expect(rows.nth(0).locator('.filter-summary')).toHaveText('0.20');
 });

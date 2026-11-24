@@ -235,6 +235,9 @@ fn panel_view(panel: PanelId) -> AnyView {
         PanelId::Agent => view! { <AgentActivity /> }.into_any(),
         PanelId::Channels => view! { <crate::panels::channels::Channels /> }.into_any(),
         PanelId::Sequence => view! { <crate::panels::sequence::Sequence /> }.into_any(),
+        PanelId::Mappings => view! { <crate::panels::mappings::Mappings /> }.into_any(),
+        PanelId::Ptz => view! { <crate::panels::ptz::Ptz /> }.into_any(),
+        PanelId::Show => view! { <crate::panels::show::Show /> }.into_any(),
     }
 }
 
@@ -357,6 +360,13 @@ pub fn Workspace() -> impl IntoView {
         nudge_canvas();
     });
     share(dock);
+    // The Show panel's Next monitor sits beside the canvas while its show runs in the Run
+    // view, unless studio mode already puts a monitor there.
+    let next_monitor = crate::panels::show::next_monitor_shown(studio);
+    Effect::new(move |_| {
+        next_monitor.track();
+        nudge_canvas();
+    });
 
     let end_drag = move |drop: bool| {
         let panel = ui.dragging.get_untracked();
@@ -414,13 +424,16 @@ pub fn Workspace() -> impl IntoView {
                     {zone(Zone::Left)}
                     <div class="ws-centre">
                         {zone(Zone::CanvasTop)}
-                        <div class="stage-row" node_ref=stage_row class:two-up=studio_mode class:stacked=move || stacked.get()>
+                        <div class="stage-row" node_ref=stage_row class:two-up=move || studio_mode() || next_monitor.get().is_some() class:stacked=move || stacked.get()>
                             <div class="stage-pane">
                                 <Show when=studio_mode>
                                     <StageLabel side=Side::Preview />
                                 </Show>
                                 <section class="region canvas" aria-label="Canvas"><Canvas /></section>
                             </div>
+                            <Show when=move || next_monitor.get().is_some()>
+                                <crate::panels::show::NextPane />
+                            </Show>
                             <Show when=studio_mode>
                                 <StudioControls />
                                 <div class="stage-pane">

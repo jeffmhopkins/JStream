@@ -64,8 +64,8 @@ pub use audio::{
     gain_db_problem,
 };
 pub use binding::{
-    Binding, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo, Trigger, ValueBinding,
-    ValueTarget,
+    Binding, MAX_INPUT_NAME_LEN, MAX_VALUE_BINDINGS, MidiControlInfo, PtzAxis, Trigger,
+    ValueBinding, ValueTarget,
 };
 pub use camera_aim::{
     CameraAim, CameraAimInfo, MAX_AIM_PAN_DEG, MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, camera_aim_check,
@@ -128,6 +128,7 @@ pub use kind::{
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
+    live_problem,
 };
 pub use mix::{
     DEFAULT_BASE_FPS, FAST_BASE_FPS, MixInput, MixResolution, VideoMix, VideoMixInfo,

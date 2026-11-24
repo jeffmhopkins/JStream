@@ -207,7 +207,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   it (#1405). The program
   mix shows their frames and advances animations and videos on the media clock, and
   tells a source when it shows it again, unless `source.seek` played it on from a point
-  since (`LiveSources::seek`, see *Timelines*). `media` sources play through the injected
+  since (`LiveSources::seek`, see *Timelines*); a `timer` countdown or stopwatch
+  starts its count again then (ADR-0214, see *Snapshots*). `media` sources play through the injected
   backends' media files, and report their length when it is known
   (`LiveSources::duration_ms`, `source.sizes`' `duration_ms`). A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
@@ -256,7 +257,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `jtunnel/names.rs`): what the collection calls the sender's 32 modulation params, each
   the name of what reads its `params` key's `values.<n>` (an enabled `data` modifier on an
   item, named by its source and property, or on a scene's camera, by the scene and
-  property, a value binding, by its target, or a channel's input
+  property, a value binding, by its target (a PTZ axis as the camera and axis, `Wide
+  Zoom`, ADR-0209), or a channel's input
   ([ADR-0183](../../docs/adr/0183-virtual-control-channels.md)), by the channel's name or
   else its ID), a reader naming the sender winning a
   slot over one naming any, a slot read twice taking `+N`, cut to 40 bytes. The engine
@@ -478,7 +480,11 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   or range is unchanged across a batch keeps its follower, as does one (or a channel's
   input) whose input changed only its `smoothing_ms` (`same_but_smoothing`), which takes
   the new time and goes on driving; a missing target drives
-  nothing. A binding's `amount` scales its value toward `from` by a channel's level.
+  nothing. A binding's `amount` scales its value toward `from` by a channel's level. A
+  binding on a PTZ head's axis (`ptz_axis`,
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) makes no edit: the
+  tick rounds its value to a whole count (`PtzAim`) and the engine hands those to the
+  heads (`Ptz::follow_axes`, [PTZ cameras](#contents-media)).
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
   each channel's inputs with the same readers and smoothing, in an order where a
@@ -622,7 +628,12 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   when that session ends), and the
   shots of the scenes the studio shows, fired from `emit_studio` when the program or
   preview scene changes (the program's paced to the switch's duration by
-  `matched_speed`; the preview's only for cameras the program's shots don't name).
+  `matched_speed`; the preview's only for cameras the program's shots don't name), and
+  the value bindings on the heads' axes after each value tick (`follow_axes`,
+  ADR-0209): per camera an aim at the fastest speed, sent only when the bound pose
+  changed, a lone pan or tilt taking the other from the pose the bindings last aimed,
+  else the head's last answer (none until it answers), and a camera not listed
+  skipped.
 - **PTZ controllers** (`ptz/controller.rs`,
   [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): the other
   direction, a controller driving scene cameras, off until the host calls
@@ -710,7 +721,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   `gpu_timing` is on once any unit carries one. The composite's `gpu_ms` includes the
   frame's way out, which the draw names it around: the conversion to NV12 into the
   encoders' target and the copy of a readback, each a submit of its own after the
-  composite's. Its `ms` doesn't: on the CPU those stay in the finish phase. The preview hub's thread times none. The
+  composite's. Its `ms` doesn't: on the CPU those stay in the finish phase. The preview hub's thread times none. Each
+  drawer also counts the GPU submits its thread made (`DrawMeter::submitted`, from
+  `jstream_render::submits_on_this_thread` at the end of a frame), which `profile.get`
+  reports per frame as `submits`. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
   source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
   reads all of them, the threads from the host's `ThreadCpu`
@@ -777,7 +791,11 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   step with its events in order, values held until a render reader adopts the
   commit, a failed commit, cancel and expiry with their audit entries, validation and
   limits, takeover, a deleted item, coalesced `live.changed`, a source's live setting
-  drawn until committed or cancelled, and dropped with its source) and a live value drawn
+  drawn until committed or cancelled, and dropped with its source; a filter's live
+  setting, an opacity, a source's and the master's fader and a send drawn and heard until
+  committed or cancelled, one undo step, a non-live filter setting and a fader value
+  carrying more than its gain refused, and values dropped with their filter or send,
+  ADR-0213) and a live value drawn
   over the shot in `snapshot.rs`, the internal show scene drawn over program and over a
   fade, gone when its item is hidden, its items counted as drawn and redrawn as they move, scaled into an output of another size, left out of
   `scene.list` and `state.get`, and refused as program, preview, a `scene` source or a
@@ -1061,7 +1079,13 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
   starts again at its duration when its `restart` counter changes
-  (`a_timer_restarts_when_its_restart_counter_changes`, #1040), and a `media` file's
+  (`a_timer_restarts_when_its_restart_counter_changes`, #1040), and a countdown that
+  starts again each time its scene goes on program and keeps that count through a
+  rebuild for its look (`a_timer_starts_again_when_its_scene_goes_on_program`), keeps
+  counting when it is on both scenes of a switch
+  (`a_timer_on_both_scenes_keeps_counting_through_a_switch`), and starts again for
+  `source.restart` and counts on from a `source.seek`
+  (`source_restart_and_seek_start_a_timer_again`, ADR-0214), and a `media` file's
   `duration_ms` in `source.sizes` and a `source.seek` that holds whether it comes just
   before or just after the switch that shows the file, also on a file held at its start
   on the upcoming scene, and is `not_found` for a missing source
@@ -1092,8 +1116,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   syntax; the speed curve; and through the engine, the actions, the list and
   `profile.get`'s `ptz_cameras` (listed while the head runs, then gone), program
   switches firing shots (a keyframe scene's over its parent's, a camera not listed
-  skipped, a longer transition pacing a pose), and a preview moving only the cameras
-  the program doesn't frame.
+  skipped, a longer transition pacing a pose), a preview moving only the cameras
+  the program doesn't frame, and MIDI controls bound to a head's zoom and pan aiming
+  it, pan keeping the tilt the head answered (`value_bindings_aim_ptz_axes`).
 - **PTZ controllers and the live aim** (`src/ptz/controller/tests.rs`, `src/aim/tests.rs`,
   `src/tests/cameras.rs`, `src/tests/transitions.rs`): a VISCA controller emulator on
   loopback over all three transports, driving, aiming, zooming and reading a keyframe
@@ -1259,6 +1284,9 @@ unlocks, and it settles `active` only while that generation is the one in flight
 dropped any threads it opened, then settles `stopped`. The start answers
 `action_failed` and does not settle `active`. Once the pipeline is `active`, stop
 takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
+`output.toggle` (0.181, ADR-0208) reads whether the output runs under the state lock,
+then runs as the `output.start` or `output.stop` that resolves to, with its events,
+audit entry and errors.
 
 - **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
   `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
@@ -1460,7 +1488,9 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
-  setter, room for a new gesture among the client's 16),
+  setter, a fader's carrying its gain alone (`live_problem`), room for a new gesture
+  among the client's 16), refuses a `send.set` to a send that doesn't exist
+  (`values.<n>.bus_id`: a live value never adds a send, ADR-0213),
   then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
@@ -1476,15 +1506,24 @@ the render parameter channel, never through the collection:
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)) are live values
   too, for the parameters the source's kind marks `live`; a patch naming any other is
   refused at `values.<n>.patch.<param>` (`check_live_settings`). Each key of each
-  source is a parameter of its own. They don't go on the channel: while any gesture
-  holds one, the engine keeps `shown`, the collection with those values applied
+  source is a parameter of its own. So are, since protocol 0.184
+  ([ADR-0213](../../docs/adr/0213-number-drags-follow-live.md)), each `live` setting of
+  each filter (`filter.set_settings`, checked against the filter kind's descriptor the
+  same way, the filter found by `State::filter`), each item's opacity
+  (`item.set_opacity`, a keyframe scene's override a parameter of its own as for
+  placement), each source's and bus's fader (`source.set_audio`, `bus.set_fader`, the
+  gain alone) and each send (`send.set`). None of these go on the channel: while any
+  gesture holds one, the engine keeps `shown`, the collection with those values applied
   (`Graph::with_values`, which keeps `rev`), and uses it instead of the collection for
   the live sources, the audio mix and the render snapshot, rebuilding it (and
   publishing a snapshot) when the setting values change, when a gesture ends and after
-  every applied batch, undo and redo. No collection read shows it. A batch that
-  deletes a source drops the live settings addressed to it.
+  every applied batch, undo and redo. The mixer's audio sources and the bus routing
+  follow `shown` too (`redraw`, `route_audio`), so a live fader or send is heard as it
+  moves. No collection read shows it. A batch that deletes a source, filter, item, bus
+  or send drops the live values addressed to it (`Gestures::drop_missing`), and a
+  committed one is in the collection, so it doesn't wait on the releasing list.
 - **Value bindings** ([ADR-0178](../../docs/adr/0178-value-bindings-drive-any-number.md))
-  add their setter edits to `shown` the same way, after the gestures' settings, so a
+  add their setter edits to `shown` the same way, after the gestures' values, so a
   moved control wins over a gesture on the same setting; through them `shown` also
   carries filter settings, faders and sends, which the mixer and the render snapshot
   follow as they follow a stored change. The `jstream-values` thread rebuilds it when
@@ -1526,9 +1565,9 @@ the render parameter channel, never through the collection:
   `live.set` never does.
 - **Deletes.** After every applied batch, undo and redo, live values on an item that is
   gone are dropped from every gesture and from the releasing list.
-- **Not yet:** audio faders and sends, which need the mixer's own parameter channel and
-  its adopted generation in the same handover, and the `live` parameters of filter and
-  effect kinds.
+- **Not yet:** a parameter channel for the values drawn through `shown`, so a drag on
+  one costs no copy of the collection and no replan per value, and a sample-accurate
+  ramp for a live fader or send (ADR-0213's consequences).
 
 <a id="program-scene"></a>
 ## Program scene
@@ -1798,12 +1837,15 @@ preset changed in one batch that one undo takes back.
 - **`source.restart`** calls `LiveSources::restart` at `action_now` (the cue's time
   while a cue runs, otherwise the clock's now), which restarts the source's running
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
-  an effect pack's stand-in starts its program again. A source with no running instance
-  has nothing to restart.
+  an effect pack's stand-in starts its program again. A `timer`
+  (`Source::counts_from_zero`) is started again by moving its time zero instead
+  (`Entry::rezero`, [ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). A
+  source with no running instance has nothing to restart.
 - **`source.seek`** (since 0.177; not a cue, so `action_now` is the clock's now) is
   `not_found` for a source the collection doesn't hold, and otherwise calls
   `LiveSources::seek`, which plays the running instance on from the point (`Source::seek`: a `media` file
-  restarts its timeline there; a kind with nothing to seek restarts) and marks it
+  restarts its timeline there; a kind with nothing to seek restarts; a `timer`'s time
+  zero moves to `at_ms` before now, so it counts on from there) and marks it
   sought. A sought source isn't started again by the next plan that shows it
   (`Source::show`), nor cued at its start meanwhile, so a switch to its scene and the
   seek may come in either order. Its length, when it has one (`Source::duration`), is
@@ -2099,7 +2141,14 @@ keeps the still's upload while no mix draws it, for as long as the still is show
 is deleted or rebuilt), so a cut back to it draws it at once. A program-stage draw that
 needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none, which it logs once
 per shown still: #1562) until the thread has decoded the file again
-(`jstream_sources::Still::frame`, logged at info); the
+(`jstream_sources::Still::frame`, logged at info). So that a cut to a warm scene never
+draws its stills as nothing, the engine also publishes the still each warm scene's
+source shows (`LiveSources::warm_stills`, the same frame a plan of the scene draws,
+showing one no plan showed yet), and after each tick's draws the program stage uploads
+whole each one its cache holds no texture of, at most two a tick, asking for the pixels
+when they are gone, and keeps it as it keeps a drawn still's upload
+(`snapshot::keep_warm_stills`, ADR-0212, #1737;
+`a_warm_still_draws_on_the_first_program_frame_after_the_cut`); the
 render thread only reads atomics and unparks the thread, never decodes, and never frees
 the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). The
 decode takes the still's own decode lock, never the one `frame_if_held` takes, so a
@@ -2496,6 +2545,15 @@ names in the shot when it places the light (`look_sky`), so it is uploaded thoug
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
 drawn for a sky alone. A reflection's models take the same sky
 (`an_environment_light_lights_a_scene_lit_model_with_its_sky`).
+A model source's own video filters run over that layer, not over its transparent
+stand-in ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6): `Planner::shown`
+plans no chain for a source whose frame carries a model, and `boxed` plans one per item
+that shows it (`ChainOwner::Shown`, by source, scene and item) over the item's layer,
+which the item's effects then read in place of the layer. Its output is what the pass
+places when the item has no effects (`boxed_key`, `key`), `GpuKey::boxed_item` names
+the item behind any of the three images, and `ChainOrder::chain` draws the layer before
+whichever chain reads it. A profile counts it toward the item's effects, as its box is
+(`golden_a_models_source_filters_run_over_its_layer`).
 A model's `texture` and `reflection` ([ADR-0107](../../docs/adr/0107-3d-models.md)
 decision 5) name other sources. Planning resolves each where it places the model
 (`look_maps`) as an item would show it, its frame, its video chain or, for a `scene`
@@ -2804,7 +2862,8 @@ animation restarts with it, unless its kind keeps the old instance's time zero f
 change (`Registry::keeps_time`, `SourceKind::keeps_time`): a `timer` keeps counting
 through any change but its `mode`, `duration` or `restart` counter (#1027, #1040). The build then carries that
 time zero (`Entry::anchor`; a build queued while another is in flight keeps what that
-one keeps, so a later style edit can't undo a restart), the thread paints the new
+one keeps, so a later style edit can't undo a restart, and a `timer` started again
+moves that anchor with its running instance's zero, `Entry::rezero`), the thread paints the new
 instance for it as soon as it is created, off the lock, so its first plan already shows
 the count, and `install` gives it that start. A build that fails is logged at `warn` with the source ID
 and an error that never names a host path, and the source draws nothing; a kind that
@@ -3106,7 +3165,11 @@ calls under the lock never draw or decode. A still `image` is planned by its `js
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
-the first time it is shown, unless `source.seek` sought it since the program last
+the first time it is shown, and a `timer` countdown or stopwatch
+(`Source::counts_from_zero`) starts its count again: its time zero moves to the plan's
+time, shared with the thread's paint under one lock (`Running::zero`) so a paint for
+the old zero can't land after the new one, and it is painted there before the plan
+shows it (ADR-0214). Neither happens when `source.seek` sought it since the program last
 reached it (`LiveSources::seek`'s `sought`): then it plays on from the seek, and the
 plan clears the mark. Each source also remembers the last plan any mix looked at
 it in (the program's, a video mix's, or a scene or source preview's, all drawn in the
@@ -3410,7 +3473,15 @@ plan replaces only when a model changed;
 the render thread's draw uploads and keeps them (`Chains::keep_models`), so a switch
 to a warm scene uploads nothing
 (`a_warm_scenes_model_is_published_for_the_program_stage`). The limit's estimate
-doesn't count them. The set is also published after `studio.set_warm`
+doesn't count them. Their still images are published the same way
+(`RenderHub::publish_warm_stills`, a `WarmStills` list that `LiveSources::warm_stills`
+replaces only when a still changed, each the frame a plan of its scene draws; a source
+with a stored frame is left out; ADR-0212): the render thread uploads each one its cache
+holds no texture of after its draws (`snapshot::keep_warm_stills`, see *Snapshots*), so
+a switch to a warm scene draws its stills on its first frame, even on a program stage
+that opened since they were last drawn
+(`a_warm_scenes_still_is_published_as_the_frame_the_program_draws`). The limit counts
+each one as it counts any source's frame. The set is also published after `studio.set_warm`
 changes the budget, and after each plan when an edit kept a scene warm or bound one.
 The GPU-memory limit (ADR-0150) is applied to what was planned on every update, since
 the sizes it reads change without a new plan (`WarmCaptures::trim`): each source a
@@ -4410,7 +4481,8 @@ tap lock (`ProbeTap`) is a leaf: the probe takes it with no engine lock held, an
 render thread only tries it. The PTZ heads work
 the same way as the camera controls (ADR-0146): actions and shots go to each `jstream-ptz` thread over a channel,
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
-alone and `ptz.list` and `profile.get` take under the collection lock; the thread holds no engine lock
+alone and `ptz.list`, `profile.get` and the value tick's PTZ aims (`follow_axes`, for a
+head's answered pose, ADR-0209) take under the collection lock; the thread holds no engine lock
 while it sends or waits for a reply. A PTZ controller endpoint's thread is a client:
 each message it translates is a call on its session, which takes the collection lock
 as any call does, and it holds no lock while it waits on its socket. The engine's list
@@ -4576,7 +4648,8 @@ entries with their sentences in memory (`activity_log.rs`), whether or not the h
 a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
 or action the sentence table doesn't name reads as its command name. A controller
 binding reads by its trigger ("Bound MIDI note 36 on channel 10 from Pads to scene
-switch"), a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
+switch"), a clear naming one action by it ("Unbound scene switch from F8", ADR-0208),
+a channel by its name ("Set channel “Lights” to 50% over 0.8 s",
 "Switched channel “Power” off"), and a `source.seek` by its source and its point in
 tenths of a second, cut rather than rounded ("Played “Clip” from 83.4 s"). A timeline's cues
 get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
@@ -5098,10 +5171,12 @@ frame and publishes one snapshot of its totals about once a second, the meter's 
 allocation, handing the totals it replaces to the collector (*Profile* in
 [Purpose](#purpose)). The render thread uploads no 3D model: its draw's `Chains` asks the
 `jstream-models` thread for each (`Chains::upload_models_aside`, see *Snapshots*;
-[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). None of those threads lock the collection: the render thread reads the
+[ADR-0177](../../docs/adr/0177-models-upload-off-the-render-thread.md)). After its draws it
+uploads the warm scenes' stills its cache holds no texture of, from held pixels only
+(`snapshot::keep_warm_stills`, see *Snapshots*; ADR-0212). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
-values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a
+values, the warm scenes' replaced lists of captures, models and stills, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a
 mix no session needs any more, replaced lists of bus and source scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer

@@ -341,6 +341,11 @@ impl Frame {
         Self { probe, ..self }
     }
 
+    /// Which frame it is: two with the same version are the same bytes.
+    pub(crate) fn version(&self) -> u64 {
+        self.version
+    }
+
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
     pub(crate) fn with_version(self, version: u64) -> Self {
         Self { version, ..self }
@@ -1294,14 +1299,25 @@ impl Shot {
     /// Whether `image` is the layer of an item that shows a 3D model (ADR-0107): drawn
     /// in the canvas's pixels, so placed flat as [`Placement::Layer`].
     fn is_model_box(&self, image: &GpuKey) -> bool {
-        let owner = match image {
-            GpuKey::Filtered(owner @ ChainOwner::Item(..)) => owner.clone(),
-            GpuKey::ItemBox(scene, item) => ChainOwner::Item(scene.clone(), item.clone()),
-            _ => return false,
+        let Some((scene, item)) = image.boxed_item() else {
+            return false;
         };
         self.boxes
-            .get(&owner)
+            .get(&ChainOwner::Item(scene.clone(), item.clone()))
             .is_some_and(|boxed| boxed.boxed.model)
+    }
+
+    /// The chain of its source's video filters over the layer of the model item
+    /// `owner` (ADR-0107 decision 6), when the shot runs one.
+    fn shown_chain(&self, owner: &ChainOwner) -> Option<ChainOwner> {
+        let ChainOwner::Item(scene, item) = owner else {
+            return None;
+        };
+        let SourceRef::Frame(source) = &self.boxes.get(owner)?.source else {
+            return None;
+        };
+        let shown = ChainOwner::Shown(source.clone(), scene.clone(), item.clone());
+        self.chains.contains_key(&shown).then_some(shown)
     }
 
     /// Whether `image` is the layer of an item whose effects run over the canvas
@@ -2455,9 +2471,12 @@ fn key(image: &SourceRef, shot: &Shot) -> GpuKey {
         }
         SourceRef::Boxed(scene, item) => {
             let owner = ChainOwner::Item(scene.clone(), item.clone());
-            // A model's layer with no effects is shown as drawn (ADR-0107).
+            // A model's layer with no effects is shown as drawn (ADR-0107), or as its
+            // source's filters drew over it.
             if shot.chains.contains_key(&owner) {
                 GpuKey::Filtered(owner)
+            } else if let Some(shown) = shot.shown_chain(&owner) {
+                GpuKey::Filtered(shown)
             } else {
                 GpuKey::ItemBox(scene.clone(), item.clone())
             }
@@ -3277,15 +3296,33 @@ impl<'a> Planner<'a, '_> {
         if let Some(planned) = out.boxes.get(&owner) {
             return Some(planned.boxed);
         }
-        let mut chain = Chain::of_filters(
-            &owner,
-            item.effects(),
-            GpuKey::ItemBox(scene.clone(), item.id().clone()),
-            self.assets,
-        );
         // A model is drawn into a layer of its own, effects or not (ADR-0107).
         let model = matches!(source, SourceRef::Frame(id)
             if out.frames.get(id).is_some_and(|frame| frame.model.is_some()));
+        // Its source's video filters run over that layer first, once per item that
+        // shows it (decision 6), and the item's effects read what they draw.
+        let shown = match source {
+            SourceRef::Frame(id) if model => self.state.source(id).and_then(|source| {
+                let owner = ChainOwner::Shown(id.clone(), scene.clone(), item.id().clone());
+                let chain = Chain::of_filters(
+                    &owner,
+                    source.filters().chain(FilterChain::Video),
+                    GpuKey::ItemBox(scene.clone(), item.id().clone()),
+                    self.assets,
+                )?;
+                Some((owner, chain))
+            }),
+            _ => None,
+        };
+        let mut chain = Chain::of_filters(
+            &owner,
+            item.effects(),
+            match &shown {
+                Some((shown, _)) => GpuKey::Filtered(shown.clone()),
+                None => GpuKey::ItemBox(scene.clone(), item.id().clone()),
+            },
+            self.assets,
+        );
         // A card lit by its 3D scene is lit in a layer of its own (ADR-0151 decision 10),
         // when what it shows is a source's own frame, drawn before the passes are.
         let lit = !model
@@ -3392,6 +3429,9 @@ impl<'a> Planner<'a, '_> {
             self.assets.tempo().map(|tempo| tempo.0.as_ref()),
             self.assets.data(),
         );
+        if let Some((shown, chain)) = shown {
+            self.add_chain(shown, chain, out);
+        }
         if let Some(chain) = chain {
             self.add_chain(owner, chain, out);
         }
@@ -3983,6 +4023,15 @@ impl<'a> Planner<'a, '_> {
     fn shown(&mut self, source: &Source, out: &mut Shot) -> Option<SourceRef> {
         let id = source.id();
         let image = self.look(id, out)?;
+        // A model's filters run over each item's layer of it, not over its stand-in
+        // (ADR-0107 decision 6): `boxed` plans them where an item shows it.
+        if out
+            .frames
+            .get(id)
+            .is_some_and(|frame| frame.model.is_some())
+        {
+            return Some(image);
+        }
         let owner = ChainOwner::Source(id.clone());
         if out.chains.contains_key(&owner) {
             return Some(SourceRef::Filtered(id.clone()));
@@ -4165,6 +4214,19 @@ const REFERENCE_DEPTH: usize = 1;
 const COMPOSITE_DEPTH: usize = 0;
 
 impl GpuKey {
+    /// The item whose layer this is, or whose layer a chain drew this over: its box
+    /// ([`Self::ItemBox`]), its effects' output, or for a model the output of its
+    /// source's filters (ADR-0107 decision 6).
+    pub(crate) fn boxed_item(&self) -> Option<(&SceneId, &ItemId)> {
+        match self {
+            Self::ItemBox(scene, item)
+            | Self::Filtered(ChainOwner::Item(scene, item) | ChainOwner::Shown(_, scene, item)) => {
+                Some((scene, item))
+            }
+            _ => None,
+        }
+    }
+
     /// The layer `scene` is drawn into for the video filters that read it.
     pub(crate) fn reference(scene: &SceneId) -> Self {
         Self::Layer(scene.clone(), REFERENCE_DEPTH)
@@ -4402,6 +4464,12 @@ impl Shot {
             }
             if let Some(planned) = self.boxes.get(&owner) {
                 stack.push(planned.source.clone());
+            }
+            if let Some(shown) = self.shown_chain(&owner) {
+                if let Some(chain) = self.chains.get(&shown) {
+                    stack.extend(chain.scenes().cloned().map(SourceRef::Scene));
+                }
+                owners.insert(shown);
             }
             if let Some(chain) = self.chains.get(&owner) {
                 stack.extend(chain.scenes().cloned().map(SourceRef::Scene));
@@ -4647,7 +4715,10 @@ fn schedule_chains(shot: &Shot) -> Vec<ChainStep> {
     // after the plain models, which a scene it reads may show.
     for mapped in [false, true] {
         for owner in shot.boxes.keys() {
-            if shot.chains.contains_key(owner) || order.maps_of(shot, owner).is_some() != mapped {
+            if shot.chains.contains_key(owner)
+                || shot.shown_chain(owner).is_some()
+                || order.maps_of(shot, owner).is_some() != mapped
+            {
                 continue;
             }
             order.maps(shot, owner, &mut done);
@@ -4782,9 +4853,19 @@ impl ChainOrder {
                     self,
                 );
             }
-            if shot.boxes.contains_key(owner) {
-                self.maps(shot, owner, done);
-                self.steps.push(ChainStep::Box(owner.clone()));
+            // The layer the chain reads is drawn first: an item's effects', unless its
+            // model's source's filters, which read it, drew it before them.
+            let drawn = match owner {
+                ChainOwner::Shown(_, scene, item) => {
+                    Some(ChainOwner::Item(scene.clone(), item.clone()))
+                }
+                _ if matches!(chain.input, GpuKey::ItemBox(..)) => Some(owner.clone()),
+                _ => None,
+            }
+            .filter(|drawn| shot.boxes.contains_key(drawn));
+            if let Some(drawn) = drawn {
+                self.maps(shot, &drawn, done);
+                self.steps.push(ChainStep::Box(drawn));
             }
         }
         self.open.remove(owner);
@@ -4814,6 +4895,10 @@ fn boxed_key(
     if shot.chains.contains_key(&owner) {
         passes.filtered(shot, &owner, done);
         GpuKey::Filtered(owner)
+    } else if let Some(shown) = shot.shown_chain(&owner) {
+        // A model without effects shows what its source's filters drew over it.
+        passes.filtered(shot, &shown, done);
+        GpuKey::Filtered(shown)
     } else {
         match owner {
             ChainOwner::Item(scene, item) => GpuKey::ItemBox(scene, item),
@@ -5977,8 +6062,12 @@ impl Shot {
                     cost.scene_chains = cost.scene_chains.saturating_add(1);
                     (canvas, &mut cost.scene_layers, &mut cost.scene_passes)
                 }
-                ChainOwner::Item(..) => {
-                    let Some(boxed) = self.boxes.get(owner) else {
+                // A model's source's filters run over its item's layer, as effects do.
+                ChainOwner::Item(scene, item) | ChainOwner::Shown(_, scene, item) => {
+                    let Some(boxed) = self
+                        .boxes
+                        .get(&ChainOwner::Item(scene.clone(), item.clone()))
+                    else {
                         continue;
                     };
                     cost.item_effects = cost.item_effects.saturating_add(1);
@@ -6265,6 +6354,60 @@ fn upload_still(
             if cache.get(key).is_none() {
                 still.drew_nothing();
             }
+        }
+    }
+    Ok(())
+}
+
+/// How many of the warm scenes' stills one tick of the program stage uploads at most
+/// ([`keep_warm_stills`]): a stage that opens with many to upload spreads them over
+/// its first ticks.
+const WARM_STILLS_PER_TICK: usize = 2;
+
+/// Gets the program stage's cache ready to draw each of the warm scenes' stills `warm`
+/// (ADR-0212): one it holds no texture of is uploaded whole from its pixels if they
+/// are held, and its pixels are asked for if they are not, so a later tick uploads
+/// it. So a switch to a warm scene finds its stills on the GPU and draws them on its
+/// first frame. Called on the program stage's render thread after the tick's draws, so
+/// a still a mix drew this tick is left as that draw left it; it reads only held
+/// pixels and never decodes ([`crate::still`]).
+///
+/// # Errors
+/// What the compositor reports for an upload.
+pub(crate) fn keep_warm_stills(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    warm: &crate::runtime::WarmStills,
+) -> Result<(), RenderError> {
+    let mut uploads = 0;
+    for (key, frame) in warm {
+        let Pixels::Still(still) = &frame.pixels else {
+            continue;
+        };
+        if cache.get(key).is_some() {
+            continue;
+        }
+        let Some(pixels) = still.held() else {
+            still.want();
+            continue;
+        };
+        if uploads == WARM_STILLS_PER_TICK {
+            continue;
+        }
+        uploads += 1;
+        let size = (frame.width, frame.height);
+        let uploaded = cache
+            .upload_if_needed(compositor, key, frame.version, size, || {
+                Some(Packed(pixels))
+            })?
+            .is_some();
+        if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+            cache.set_extent(key, extent);
+        }
+        // Kept while its scene isn't drawn, as a drawn still's upload is.
+        cache.keep_while(key, still.alive());
+        if uploaded {
+            still.uploaded();
         }
     }
     Ok(())
@@ -6829,9 +6972,17 @@ fn run_chains(
         match step {
             ChainStep::Run(source) => {
                 if let Some(chain) = shot.chains.get(source) {
-                    meter.gpu_unit_chain(compositor, source);
+                    // A model source's filters over an item's layer count toward the
+                    // item, as its box does.
+                    let timed = match source {
+                        ChainOwner::Shown(_, scene, item) => {
+                            &ChainOwner::Item(scene.clone(), item.clone())
+                        }
+                        other => other,
+                    };
+                    meter.gpu_unit_chain(compositor, timed);
                     chains.run_one(compositor, cache, (source, chain), (at, beat));
-                    meter.chain(source, started);
+                    meter.chain(timed, started);
                 }
             }
             ChainStep::Box(owner) => {
@@ -7253,11 +7404,10 @@ fn track_camera(
     let ChainOwner::Item(scene, item) = owner else {
         return None;
     };
-    let (key, track, seen, ..) = transition.tracks.iter().find(|(key, ..)| match key {
-        GpuKey::Filtered(drawn) => drawn == owner,
-        GpuKey::ItemBox(s, i) => s == scene && i == item,
-        _ => false,
-    })?;
+    let (key, track, seen, ..) = transition
+        .tracks
+        .iter()
+        .find(|(key, ..)| key.boxed_item() == Some((scene, item)))?;
     let cameras = moving_cameras((shot, transition), chains, at, (live, captures));
     let elapsed = transition::elapsed_ms(transition.start, at);
     transition.camera(&cameras, (key, track, *seen), elapsed)
@@ -7598,9 +7748,7 @@ fn ready_casting_models(
             continue;
         }
         // A model's layer, or its effects' output over it: either is posed as the model.
-        let (GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item))) =
-            &layer.image
-        else {
+        let Some((scene, item)) = layer.image.boxed_item() else {
             continue;
         };
         let Some(boxed) = shot
@@ -7873,9 +8021,7 @@ fn pass_models<'s>(
         if !layer.boxed.is_some_and(|boxed| boxed.model) {
             continue;
         }
-        let (GpuKey::ItemBox(scene_id, item_id)
-        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
-        else {
+        let Some((scene_id, item_id)) = layer.image.boxed_item() else {
             continue;
         };
         let Some(geometry) =
@@ -9060,12 +9206,8 @@ fn layer_pose<'a>(
     let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
     // A model's own depth, in a 3D scene, when it is at least half opaque, as the
     // view depth takes it (ADR-0107 decision 7).
-    let depth = match (&layer.boxed, &layer.image, camera) {
-        (
-            Some(boxed),
-            GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item)),
-            Some(_),
-        ) if boxed.model && opacity >= 0.5 => {
+    let depth = match (&layer.boxed, layer.image.boxed_item(), camera) {
+        (Some(boxed), Some((scene, item)), Some(_)) if boxed.model && opacity >= 0.5 => {
             cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
         }
         _ => None,
@@ -9313,9 +9455,7 @@ fn depth_models<'a>(
             continue;
         }
         // A model's layer, or its effects' output over it: either is posed as the model.
-        let (GpuKey::ItemBox(scene_id, item_id)
-        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
-        else {
+        let Some((scene_id, item_id)) = layer.image.boxed_item() else {
             continue;
         };
         // A model under half opaque leaves the depth to what is behind it, as a card
@@ -11903,6 +12043,123 @@ pub(crate) mod tests {
         let mut snapshot = ResourceCache::new();
         assert_eq!(draw(&mut compositor, &mut snapshot, false), Some(GREEN));
         assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 2);
+    }
+
+    /// #1737 (ADR-0212): a warm scene's still is on the program stage's GPU before the
+    /// cut to it, so the first program frame after the cut draws it, never nothing: one
+    /// shown for the first time, and one whose pixels were let go of on another program
+    /// stage (as a stage opened again finds them), whose cache has no texture of it.
+    #[test]
+    fn a_warm_still_draws_on_the_first_program_frame_after_the_cut() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let size = FrameSize::new(64, 36).expect("invariant: non-zero");
+        let pixels = || {
+            let info = jstream_media::VideoFrameInfo {
+                size: FrameSize::new(512, 512).expect("invariant: non-zero"),
+                format: jstream_media::PixelFormat::Rgba8,
+                color: jstream_media::ColorInfo::default(),
+                pts: zero(),
+            };
+            let rgba = std::iter::repeat_n(GREEN, 512 * 512).flatten().collect();
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 512 * 4)])
+                .expect("invariant: a packed frame")
+        };
+        let stills = crate::still::Stills::default();
+        let key = GpuKey::Frame(SourceId::new("still"));
+        let on = |shown: &Arc<crate::still::ShownStill>| {
+            let mut planned = shot(vec![(
+                "program",
+                vec![
+                    fill("red"),
+                    placed(SourceRef::Frame(SourceId::new("still")), FULL),
+                ],
+            )]);
+            let frame = Frame::from_still(Arc::clone(shown), 3);
+            planned.frames.insert(SourceId::new("still"), frame.clone());
+            planned.uploads.push((key.clone(), SourceId::new("still")));
+            (planned, vec![(key.clone(), frame)])
+        };
+        let away = shot(vec![("program", vec![fill("red")])]);
+        // One tick of the program stage: the program, then the warm scenes' stills.
+        let tick = |compositor: &mut Compositor,
+                    cache: &mut ResourceCache<GpuKey>,
+                    shot: &Shot,
+                    warm: &crate::runtime::WarmStills| {
+            cache.begin_frame();
+            let output = compose(
+                compositor,
+                (cache, &mut Chains::default()),
+                (shot, zero()),
+                View {
+                    program: true,
+                    ..View::default()
+                },
+                &LiveParams::default(),
+                &Every(None),
+                super::DrawAt::read(size),
+            )
+            .expect("compose");
+            super::keep_warm_stills(compositor, cache, warm).expect("the warm stills");
+            drop(cache.end_frame(compositor));
+            output.pixels().expect("invariant: read back").pixel(32, 18)
+        };
+        let wait = |done: &dyn Fn() -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !done() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            done()
+        };
+
+        // Shown for the first time on a warm scene: uploaded while the program shows
+        // another scene, and its pixels let go of.
+        let first = stills.show(Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels()),
+            "first.png".into(),
+            move || Ok(pixels()),
+        )));
+        let (planned, warm) = on(&first);
+        let mut program = ResourceCache::new();
+        program.draw_uploads_small(true);
+        assert_eq!(tick(&mut compositor, &mut program, &away, &warm), Some(RED));
+        assert!(program.get(&key).is_some(), "uploaded while warm");
+        assert!(wait(&|| first.held().is_none()), "and let go of");
+        assert_eq!(
+            tick(&mut compositor, &mut program, &planned, &warm),
+            Some(GREEN),
+            "drawn on the first frame after the cut"
+        );
+
+        // Its pixels let go of on another program stage: a new stage's cache has no
+        // texture of it, so its pixels are asked for while it is warm.
+        let again = stills.show(Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels()),
+            "again.png".into(),
+            move || Ok(pixels()),
+        )));
+        let (planned, warm) = on(&again);
+        let mut before = ResourceCache::new();
+        before.draw_uploads_small(true);
+        assert_eq!(
+            tick(&mut compositor, &mut before, &planned, &Vec::new()),
+            Some(GREEN)
+        );
+        assert!(wait(&|| again.held().is_none()), "let go of");
+        let mut stage = ResourceCache::new();
+        stage.draw_uploads_small(true);
+        assert_eq!(tick(&mut compositor, &mut stage, &away, &warm), Some(RED));
+        assert!(stage.get(&key).is_none(), "no pixels to upload yet");
+        assert!(wait(&|| again.held().is_some()), "decoded again while warm");
+        assert_eq!(tick(&mut compositor, &mut stage, &away, &warm), Some(RED));
+        assert!(stage.get(&key).is_some(), "uploaded while warm");
+        assert_eq!(
+            tick(&mut compositor, &mut stage, &planned, &warm),
+            Some(GREEN),
+            "drawn on the first frame after the cut, never nothing"
+        );
     }
 
     /// A shot measures how much each frame it draws is enlarged, against the frame's

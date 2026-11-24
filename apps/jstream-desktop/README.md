@@ -52,6 +52,11 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   §3), the setting with its endpoints and allowed controllers in the data folder's
   `ptz_controllers.json`, opening the engine's controller endpoints from it, and
   `set_ptz_controllers`, the command that saves it.
+- **PTZ cameras** (`ptz_cameras.rs`): "Control PTZ cameras"
+  ([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1), the
+  switch and the machine's camera list in the data folder's `ptz_cameras.json`, giving
+  the engine its cameras from it at start (`Engine::start_ptz`), and `set_ptz_cameras`,
+  the command that saves it and applies it at once.
 - **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows, macOS, X11 and Wayland): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
@@ -64,9 +69,11 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   the virtual camera's status, the default project's folder (so a picked file under it
   can be stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
-  the JTunnel setting as it was at start with `setJtunnel`, which saves it, and
-  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands, and
-  `setZoom`, which zooms the window for the UI scale.
+  the JTunnel setting as it was at start with `setJtunnel`, which saves it, the PTZ
+  controller setting with `setPtz`, the PTZ camera list with `setPtzCameras`,
+  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands,
+  `setZoom`, which zooms the window for the UI scale, and `drop_script`, the event that
+  tells the page about files dragged onto the window.
 - **The person's folders** (`folders.rs`, `screenshots.rs`;
   [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   the default project in `Documents\JStream`, which `host::startup_project` moves the
@@ -83,9 +90,10 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   tested everywhere), shutdown, and the commands the page may call: a native file,
   save or folder dialog (`pick.rs`; on Linux the FileChooser portal's, on macOS AppKit's
   panels), saving the
-  network setting (`network.rs`), the JTunnel setting (`jtunnel.rs`) and the PTZ
-  controller setting (`ptz.rs`), and saving, opening and showing a screenshot
-  (`screenshots.rs`).
+  network setting (`network.rs`), the JTunnel setting (`jtunnel.rs`), the PTZ
+  controller setting (`ptz.rs`) and the PTZ camera list (`ptz_cameras.rs`), and saving, opening and showing a screenshot
+  (`screenshots.rs`); and the main window's drags of files from the desktop, passed on
+  to the page as `bootstrap::drop_script` events ([Design](#design)).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -312,6 +320,13 @@ folder, and its log `logs\cef.log`.
   scene cameras as the daemon's `--ptz-controller` lets it
   ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)). The page
   shows why an endpoint was refused, and the log names the endpoints at start.
+- **PTZ cameras.** Settings › Devices › "Control PTZ cameras" (off until turned on) and
+  its cameras (a name, a LAN address and port, a transport and a VISCA address) save
+  `ptz_cameras.json` in the data folder, and apply at once: the engine drives the heads
+  listed, as the daemon's `--ptz-camera` lets it
+  ([ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)), from the PTZ
+  panel, scene shots, hotkeys and mappings. The page shows why a camera was refused,
+  and the log names the cameras when they start.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager; on Linux in the Secret Service, else a `0600`
   file, [ADR-0071](../../docs/adr/0071-linux-secret-store.md); on macOS in the login
@@ -460,6 +475,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   calls `Engine::start_ptz_controllers` and keeps the handle until it exits, closing the
   endpoints first so their drives stop; a refused setting or a port that can't be bound
   is logged and the app runs without them. Off, no endpoint socket is open.
+- **PTZ cameras** (`ptz_cameras.rs`,
+  [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md) decision 1,
+  [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md) §1). The setting is
+  `{"on": true, "cameras": [{"name": "Wide", "address": "192.168.1.40:52381",
+  "transport": "visca_ip", "visca": 1}]}` in the data folder's `ptz_cameras.json`, kept
+  as the PTZ controller setting is: per machine, user-only, replaced whole, and saved
+  only once the engine would take it (`PtzCamera::new`, `PtzSetup::new`), even while
+  off; a missing, unreadable or malformed file is off. Only the page's `setPtzCameras`
+  saves it, through the Tauri command `set_ptz_cameras`, which the `ptz` capability
+  grants to the main window and nothing else. At start, and again on each save, the app
+  gives the engine the list (`Engine::start_ptz`, an empty one while off), which
+  replaces the running heads at once; a socket that can't be opened is logged at start,
+  and on a save the page is told the list was saved but didn't apply. The command holds
+  only a weak handle on the engine, as `set_jtunnel` does.
 - **Hotkeys while another app has the focus.** On Windows, macOS and Linux the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
@@ -478,8 +507,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   its own, installed only while one is set. The tap needs the Accessibility permission,
   asked for the first time a wheel chord is set; without it `set` returns the wheel
   chords with that reason, which is logged, and they are heard only while JStream has
-  the focus. So the app never sees any other key; a press
-  runs the binding's action as an `action` call from that session, and nothing it
+  the focus. So the app never sees any other key; each chord is registered once, and a
+  press runs every action bound to it, in bind order, as `action` calls from that
+  session, carrying on past one that fails
+  ([ADR-0208](../../docs/adr/0208-several-actions-per-key-or-trigger.md)), and nothing it
   hears is kept or sent anywhere else. A registered chord goes to JStream even while
   its window has the focus, so the page doesn't run it twice. A chord another
   application holds already is logged and heard only while JStream has the focus. The
@@ -551,6 +582,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `open` or `xdg-open` as one argument, and Show in folder runs Explorer's `/select`,
   `open -R`, or `xdg-open` on its folder. `setZoom(factor)` calls `set_zoom` and
   returns at once (see *UI scale*).
+- **Files dragged onto the window.** Tauri handles a drag of files from the desktop
+  natively, so the page gets no HTML drop with paths. `shell.rs` hears the main
+  window's drag events and runs `bootstrap::drop_script` in its webview for each step:
+  it dispatches `jstream-desktop-drop` on `window` with `{ kind, paths, x, y }`, `kind`
+  `over` (the drag entered or moved), `drop` or `leave`, `paths` the dragged files'
+  UTF-8 paths (Tauri names them as the drag enters and at the drop; the app keeps them
+  between), and `x`, `y` the pointer in the page's CSS pixels. Only WebView2 reports
+  physical pixels, so on Windows the position is divided by the window's scale factor;
+  WKWebView and WebKitGTK already report logical points. The detail is a JSON string
+  the page parses, so no file name can end the script. The app reads no dropped file
+  and grants no command for it: the page decides what to do with the paths, over the
+  WebSocket API as with a picked one (`jstream-ui`'s `host::on_file_drop`). A projector
+  window isn't told.
 - **UI scale** (`zoom.rs`). View › UI scale and Ctrl with `=`, `-` or `0` scale the UI
   from 50 % to 150 % (`jstream-ui`'s `ui_scale.rs`). In the app, the UI asks `set_zoom`
   to zoom the main window's webview, as a browser's own zoom does, so the device pixel
@@ -590,7 +634,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   backslash, quote, space or percent escape can reach its command line. Every
   other new window is refused, and a
   projector can open none. The page gets the Tauri commands `pick_path` (`pick.rs`),
-  `set_network` (`network.rs`), `set_jtunnel`, `set_ptz_controllers`,
+  `set_network` (`network.rs`), `set_jtunnel`, `set_ptz_controllers`, `set_ptz_cameras`,
   `save_screenshot`, `open_saved` and `show_saved` (`screenshots.rs`), and `set_zoom`
   (`zoom.rs`), and no other.
   `build.rs` declares them to `tauri-build`, which writes an `allow-` permission for

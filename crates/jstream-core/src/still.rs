@@ -10,6 +10,10 @@
 //! at once. A draw that needs the pixels again (a larger placement, a new program
 //! stage) finds none and asks for them, and the thread decodes the file again for a
 //! later draw ([`Still::frame`]), which keeps drawing the texture it has meanwhile.
+//! So that a cut to a warm scene never finds neither (#1737), the program stage also
+//! uploads each warm scene's still it holds no texture of before any mix draws it,
+//! asking for its pixels the same way when they are gone (ADR-0212,
+//! [`keep_warm_stills`](crate::snapshot::keep_warm_stills)).
 //!
 //! The render thread only reads and sets atomics here, and wakes the thread with
 //! [`Thread::unpark`] (R-RT-002, R-RT-003): it never decodes, and never drops the last
@@ -386,8 +390,10 @@ mod tests {
         let alive = std::sync::Arc::clone(shown.alive());
         assert!(alive.load(Ordering::Relaxed));
         drop(shown);
+        // The stills thread may hold the still for a moment as it looks at it, so the
+        // last reference can be its own.
         assert!(
-            !alive.load(Ordering::Relaxed),
+            eventually(|| !alive.load(Ordering::Relaxed)),
             "the cache may let its upload go"
         );
         assert_eq!(loads.load(Ordering::Relaxed), 1);

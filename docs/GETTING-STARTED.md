@@ -128,7 +128,10 @@ adds, which makes soft glows and veils brighter.
    tool bar's **Depth** (D) pushes it away or brings it closer, and **Turn** (R) turns
    and tilts it. Press K, or the camera button, for camera mode: a left drag orbits
    (or looks around, or moves, as its buttons pick), a right drag moves, the wheel zooms,
-   and **◆ Save view** keeps the shot as a new keyframe scene. Esc leaves it.
+   and **◆ Save view** keeps the shot as a new keyframe scene. Beside it, the arrow and
+   **−** **+** buttons pan, tilt and zoom the camera live while you hold them, as a
+   camera operator would, and **⌂ Home** brings it back; nothing of that is saved.
+   Esc leaves camera mode.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red

@@ -67,6 +67,7 @@ fn main() -> ExitCode {
         startup.jtunnel_file,
         startup.ptz_file,
         startup.ptz_controllers,
+        startup.ptz_cameras_file,
     ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
