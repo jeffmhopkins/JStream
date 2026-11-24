@@ -27,6 +27,113 @@ fn scene_name(collection: &Collection, scene: &SceneId) -> (String, bool) {
         )
 }
 
+/// The sources scene `scene` is heard through while it is shown (ADR-0216), by name: its
+/// visible items' sources whose audio is on, follows "when shown", is unmuted and above
+/// the fader's bottom, and those of the nested scenes it holds the same way. A keyframe
+/// scene is heard through its parent's items. Empty for a silent scene.
+pub fn heard_in(collection: &Collection, scene: &SceneId) -> Vec<String> {
+    let mut names = Vec::new();
+    heard(collection, scene, 0, &mut names);
+    names
+}
+
+/// The bottom of a source's fader, in dB: at it nothing is heard.
+const FADER_FLOOR_DB: f32 = -100.0;
+
+fn heard(collection: &Collection, scene: &SceneId, depth: u8, names: &mut Vec<String>) {
+    use jstream_control::protocol::{AudioFollow, SourceKind};
+    // Nesting is bounded, so a scene that holds itself (or a cycle) can't recurse forever.
+    if depth > 8 {
+        return;
+    }
+    let Some(info) = collection.scenes.iter().find(|s| &s.scene_id == scene) else {
+        return;
+    };
+    let items = match &info.variant_of {
+        Some(parent) if info.items.is_empty() => collection
+            .scenes
+            .iter()
+            .find(|s| &s.scene_id == parent)
+            .map_or(&info.items, |p| &p.items),
+        _ => &info.items,
+    };
+    for item in items.iter().filter(|i| i.visible) {
+        let Some(source) = collection
+            .sources
+            .iter()
+            .find(|s| s.source_id == item.source_id)
+        else {
+            continue;
+        };
+        let Some(audio) = &source.audio else {
+            continue;
+        };
+        if !audio.enabled
+            || audio.follow != AudioFollow::WhenShown
+            || audio.muted
+            || audio.gain_db.get() <= FADER_FLOOR_DB
+        {
+            continue;
+        }
+        match &source.kind {
+            SourceKind::Scene { scene_id } => heard(collection, scene_id, depth + 1, names),
+            _ if !names.contains(&source.name) => names.push(source.name.clone()),
+            _ => {}
+        }
+    }
+}
+
+/// The scene audio rows (ADR-0216): for each video track with a clip whose scene is
+/// heard, a read-only row of those clips' audio, V1's first, each clip keeping its scene
+/// clip's ID and span so a press on it acts on the scene clip.
+fn linked_rows(tracks: &[TrackView], collection: &Collection) -> Vec<TrackView> {
+    let mut video: Vec<(u8, &TrackView)> = tracks
+        .iter()
+        .filter_map(|t| match t.kind {
+            TrackKind::Program => Some((1, t)),
+            TrackKind::Overlay(n) => Some((n, t)),
+            _ => None,
+        })
+        .collect();
+    video.sort_by_key(|(n, _)| *n);
+    video
+        .into_iter()
+        .filter_map(|(n, t)| {
+            let clips: Vec<ClipView> = t
+                .clips
+                .iter()
+                .filter_map(|c| {
+                    let ClipKind::Scene(scene) = &c.kind else {
+                        return None;
+                    };
+                    let heard = heard_in(collection, &scene.as_str().into());
+                    (!heard.is_empty()).then(|| ClipView {
+                        id: c.id.clone(),
+                        start_ms: c.start_ms,
+                        len_ms: c.len_ms,
+                        label: c.label.clone(),
+                        detail: heard.join(", "),
+                        kind: ClipKind::Linked(scene.clone()),
+                        transition_in: None,
+                        timed: false,
+                        missing: false,
+                        fades: None,
+                        curve: Vec::new(),
+                    })
+                })
+                .collect();
+            (!clips.is_empty()).then(|| TrackView {
+                id: format!("linked-{}", t.id),
+                kind: TrackKind::Linked(n),
+                name: String::new(),
+                clips,
+                muted: false,
+                locked: false,
+            })
+        })
+        .collect()
+}
+
 /// A source's name, or "(missing)".
 fn source_name(collection: &Collection, source: &SourceId) -> (String, bool) {
     collection
@@ -167,6 +274,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
         tracks.push(TrackView {
             id: track.track_id.clone(),
             kind: TrackKind::Overlay(u8::try_from(n + 2).unwrap_or(u8::MAX)),
+            name: track.name.clone(),
             clips,
             muted: false,
             locked: false,
@@ -197,6 +305,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
     tracks.push(TrackView {
         id: "program".to_owned(),
         kind: TrackKind::Program,
+        name: String::new(),
         clips: program,
         muted: false,
         locked: false,
@@ -232,6 +341,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
     tracks.push(TrackView {
         id: "keyframes".to_owned(),
         kind: TrackKind::Keyframes,
+        name: String::new(),
         clips: keyframes,
         muted: false,
         locked: false,
@@ -281,11 +391,14 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
         tracks.push(TrackView {
             id: track.track_id.clone(),
             kind: TrackKind::Sequences(u8::try_from(n + 1).unwrap_or(u8::MAX)),
+            name: track.name.clone(),
             clips,
             muted: false,
             locked: false,
         });
     }
+    let linked = linked_rows(&tracks, collection);
+    tracks.extend(linked);
     for (n, track) in show.audio.iter().enumerate() {
         let clips = track
             .clips
@@ -310,6 +423,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
         tracks.push(TrackView {
             id: track.track_id.clone(),
             kind: TrackKind::Audio(u8::try_from(n + 1).unwrap_or(u8::MAX)),
+            name: track.name.clone(),
             clips,
             muted: false,
             locked: false,
@@ -332,6 +446,7 @@ pub fn view_of(show: &ShowInfo, collection: &Collection) -> ShowView {
             )
             .into_iter()
             .next(),
+            note: b.note.clone(),
         })
         .collect();
     let loops = show
@@ -417,10 +532,12 @@ pub fn action_of(command: &Command, show: Option<&str>) -> Option<Action> {
             rehearse: false,
         },
         Command::Stop => Action::ShowStop,
+        Command::Pause => Action::ShowPause,
         Command::Continue => Action::ShowContinue,
         Command::Back => Action::ShowBack,
         Command::GoTo(bookmark) => return go_to(show, bookmark),
         Command::Arm(at_ms) => Action::ShowArm { at_ms: *at_ms },
+        Command::Seek(at_ms) => Action::ShowSeek { at_ms: *at_ms },
         // Rehearsing starts the open show on preview; turning it off stops it.
         Command::Rehearse(true) => Action::ShowPlay {
             show_id: ShowId::new(show?.to_owned()),
@@ -580,5 +697,89 @@ mod tests {
             Some(Action::ShowArm { at_ms: Some(5) })
         );
         assert_eq!(action_of(&Command::Lock("friday".into(), true), None), None);
+    }
+
+    /// ADR-0216: a scene clip heard when shown gets a linked clip under it; a silent one,
+    /// or one heard only through muted, floored or "always" sources, gets none.
+    #[test]
+    fn scene_audio_is_drawn_linked_under_clips_that_are_heard() {
+        use jstream_control::protocol::{AudioFollow, Finite32, SourceAudio, SourceInfo};
+        let source = |id: &str, name: &str, audio: Option<SourceAudio>| -> SourceInfo {
+            let mut s: SourceInfo = serde_json::from_value(serde_json::json!({
+                "source_id": id, "name": name,
+                "kind": {"type": "builtin", "kind": "display"}
+            }))
+            .expect("a source");
+            s.audio = audio;
+            s
+        };
+        let shown = SourceAudio::new(AudioFollow::WhenShown);
+        let with_items = |id: &str, name: &str, items: &[&str]| -> SceneInfo {
+            let items: Vec<serde_json::Value> = items
+                .iter()
+                .map(|src| serde_json::json!({
+                    "item_id": format!("{id}-{src}"), "source_id": src,
+                    "transform": {"position": {"x": 0.0, "y": 0.0}, "scale": {"x": 1.0, "y": 1.0}, "rotation_deg": 0.0},
+                    "crop": {"left": 0, "top": 0, "right": 0, "bottom": 0},
+                    "visible": true
+                }))
+                .collect();
+            serde_json::from_value(serde_json::json!({
+                "scene_id": id, "name": name, "role": "scene", "items": items
+            }))
+            .expect("a scene")
+        };
+        let mut c = collection();
+        c.sources = vec![
+            source("cam", "Webcam", Some(shown)),
+            source("mic", "Mic", Some(SourceAudio::new(AudioFollow::Always))),
+            source(
+                "muted",
+                "Muted clip",
+                Some(SourceAudio {
+                    muted: true,
+                    ..shown
+                }),
+            ),
+            source(
+                "floor",
+                "Floored",
+                Some(SourceAudio {
+                    gain_db: Finite32::new(-100.0).unwrap_or(Finite32::ZERO),
+                    ..shown
+                }),
+            ),
+            source("art", "Art", None),
+        ];
+        c.scenes = vec![
+            with_items("soon", "Starting soon", &["mic", "muted", "floor", "art"]),
+            with_items("main", "Main", &["art", "cam"]),
+        ];
+        assert!(heard_in(&c, &"soon".into()).is_empty());
+        assert_eq!(heard_in(&c, &"main".into()), ["Webcam"]);
+        let v = view_of(&show(), &c);
+        let linked: Vec<&TrackView> = v
+            .tracks
+            .iter()
+            .filter(|t| matches!(t.kind, TrackKind::Linked(_)))
+            .collect();
+        assert_eq!(linked.len(), 1);
+        assert_eq!(linked[0].kind, TrackKind::Linked(1));
+        // Only "main"'s clip, with the scene clip's ID and span.
+        let program = v.program();
+        let main = program
+            .iter()
+            .find(|c| c.label == "Main")
+            .expect("main on program");
+        assert_eq!(linked[0].clips.len(), 1);
+        assert_eq!(
+            (
+                linked[0].clips[0].id.as_str(),
+                linked[0].clips[0].start_ms,
+                linked[0].clips[0].len_ms
+            ),
+            (main.id.as_str(), main.start_ms, main.len_ms)
+        );
+        assert_eq!(linked[0].clips[0].detail, "Webcam");
     }
 }

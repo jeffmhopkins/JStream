@@ -514,7 +514,10 @@ pub fn plan_drop(
                 length_pending,
             })
         }
-        TrackKind::Audio(_) | TrackKind::Keyframes | TrackKind::Sequences(_) => Err(wrong()),
+        TrackKind::Audio(_)
+        | TrackKind::Keyframes
+        | TrackKind::Sequences(_)
+        | TrackKind::Linked(_) => Err(wrong()),
     }
 }
 

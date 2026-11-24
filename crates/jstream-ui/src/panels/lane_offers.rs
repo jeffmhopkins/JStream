@@ -606,6 +606,8 @@ mod tests {
             },
             target: found[0].target.clone(),
             amount: None,
+            enabled: true,
+            mode: jstream_control::protocol::MappingMode::Replace,
         });
         assert_eq!(
             followed_channel(&c, &found[0].target).as_deref(),

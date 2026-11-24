@@ -221,4 +221,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0212](0212-a-warm-scenes-stills-stay-uploaded.md) | A warm scene's still images stay uploaded on the program stage | accepted | agent |  |
 | [ADR-0213](0213-number-drags-follow-live.md) | Filter settings, opacity and gains are live values, so every number drag follows live | accepted | agent |  |
 | [ADR-0214](0214-a-timer-restarts-when-shown.md) | A timer starts its count again when the program shows it again | accepted | agent |  |
+| [ADR-0215](0215-the-edit-views-ruler-moves-the-play-head.md) | The Show panel's Edit view ruler moves the play head; the Run view's strip arms | accepted | agent |  |
+| [ADR-0216](0216-a-scene-clips-audio-is-drawn-linked-under-it.md) | A scene clip's audio is drawn linked under it on the show timeline, derived, not stored | accepted | agent |  |
 <!-- @generated end adr-index -->
