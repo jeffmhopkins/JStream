@@ -25,6 +25,7 @@ pub mod filters;
 pub mod inspector;
 pub mod keyframe_timing;
 pub mod labels;
+pub mod lane_offers;
 pub mod learn;
 pub mod looks;
 pub mod mixer;

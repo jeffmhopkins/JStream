@@ -30,8 +30,8 @@ use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    BlendMode, Canvas, Crop, Edit, FilterChains, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo,
-    SceneId, SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
+    Action, BlendMode, Canvas, Crop, Edit, FilterChains, Finite32, FitMode, ItemGeometry, ItemId,
+    ItemInfo, SceneId, SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -793,6 +793,13 @@ impl Context {
         })
     }
 
+    /// Runs `action`, a failure in the problem bar.
+    fn act(self, action: Action) {
+        if let Some(s) = self.session.get() {
+            self.studio.act(&s, action);
+        }
+    }
+
     /// Sends `edits` as one batch.
     fn send(self, edits: Vec<Edit>) {
         if edits.is_empty() {
@@ -978,6 +985,17 @@ impl Context {
         };
         self.studio.apply_noting(&s, edits, note.into());
         self.studio.select_item(Some(new_item));
+    }
+}
+
+/// The line that restarts a source of `kind` from its beginning (`source.restart`): a
+/// browser page loads again and a media file plays from its start. `None` for a kind
+/// with nothing to restart.
+pub fn restart_label(kind: &SourceKind) -> Option<&'static str> {
+    match kind {
+        SourceKind::Builtin { kind } if kind == "browser" => Some("Reload page"),
+        SourceKind::Builtin { kind } if kind == "media" => Some("Play from start"),
+        _ => None,
     }
 }
 
@@ -1257,6 +1275,14 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         )),
     };
     let labels = labels_entry(cx, &facts.source_id);
+    // A page loads again, a media file plays from its start (A16); other kinds have
+    // nothing to restart, so they get no line.
+    let restart = restart_label(&facts.kind).filter(|_| !many).map(|label| {
+        let action = Action::SourceRestart {
+            source_id: facts.source_id.clone(),
+        };
+        Entry::item(label, move || cx.act(action.clone()))
+    });
     let audio = facts.audio.map(|on| {
         let source_id = facts.source_id.clone();
         Entry::item("Audio", move || {
@@ -1355,7 +1381,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     }
     // A source with no picture (5.2.9).
     if !many && !facts.picture {
-        let mut list = vec![properties, filters, Entry::Sep];
+        let mut list = vec![properties, filters];
+        list.extend(restart);
+        list.push(Entry::Sep);
         list.extend(audio);
         list.extend([labels, Entry::Sep]);
         list.extend(clip);
@@ -1379,7 +1407,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             lock,
         ]);
     } else {
-        list.extend([properties, filters, Entry::Sep]);
+        list.extend([properties, filters]);
+        list.extend(restart);
+        list.push(Entry::Sep);
         list.extend(audio);
         list.extend([visible, lock, labels]);
     }
@@ -1559,6 +1589,20 @@ mod tests {
             stack.insert(*to as usize, id);
         }
         stack
+    }
+
+    #[test]
+    fn only_a_page_or_a_media_file_offers_a_restart() {
+        let kind = |k: &str| SourceKind::Builtin { kind: k.into() };
+        assert_eq!(restart_label(&kind("browser")), Some("Reload page"));
+        assert_eq!(restart_label(&kind("media")), Some("Play from start"));
+        for other in ["image", "text", "webcam", "display", "color"] {
+            assert_eq!(restart_label(&kind(other)), None, "{other}");
+        }
+        let nested = SourceKind::Scene {
+            scene_id: SceneId::new("s"),
+        };
+        assert_eq!(restart_label(&nested), None);
     }
 
     #[test]
