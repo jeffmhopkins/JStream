@@ -770,7 +770,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
   No input fires them yet.
   A chord or trigger runs several actions in the order they were bound, and a clear can
-  name the one action to unbind (protocol 0.178,
+  name the one action to unbind (protocol 0.179,
   [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
   `output.toggle`, the start-or-stop a "go live" key binds.
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
@@ -823,7 +823,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   kind's boxes, and since 0.172 its lit models also reflect what is on screen;
   `studio.set_rendering` turns probes off and screen-space reflections (off by default)
   on app-wide, caps the
-  probes' face size and sets the screen-space steps.
+  probes' face size, sets the screen-space steps, and since 0.178 says how many pixels
+  3D models are drawn with or leaves that to the engine
+  ([ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)).
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1374,8 +1376,9 @@ A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version, for
 program stage by a thread of its own, which also keeps the warm scenes' models
 uploaded ([ADR-0177](adr/0177-models-upload-off-the-render-thread.md)), and drawn
 per placement into a canvas-sized layer (or one with fewer pixels that stands for the
-canvas, while the program's GPU is short of time,
-[ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md)),
+canvas, while the program's GPU is short of time or the rendering switches name a size,
+[ADR-0197](adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md),
+[ADR-0200](adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)),
 through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
 under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
