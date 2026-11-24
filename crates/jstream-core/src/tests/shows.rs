@@ -755,3 +755,132 @@ fn a_rehearsal_runs_the_show_on_preview_and_leaves_program_alone() {
         "program as the hand left it"
     );
 }
+
+/// The fader of `source` as the engine hears it.
+fn heard(engine: &Engine, source: &str) -> f32 {
+    let id = jstream_protocol::SourceId::new(source);
+    engine.drawn(|state| {
+        state
+            .source(&id)
+            .and_then(|s| s.audio())
+            .map_or(f32::NAN, |a| a.gain_db.get())
+    })
+}
+
+/// An audio clip of a webcam's microphone, which is heard only while shown: before
+/// its clip the show holds its fader at the floor; the clip shows it over program
+/// (heard), its fader rising over the fade in to the clip's level and falling over
+/// the fade out; after it, the floor again; a hand on the fader takes over; and when
+/// the show stops the source goes back to its own fader.
+#[test]
+fn an_audio_clip_brings_its_source_up_with_its_fades() {
+    let (engine, control) = engine_with_show();
+    apply(&control, vec![super::webcam()]);
+    let mut show = match query(&control, Query::StateGet) {
+        Ok(QueryResult::StateGet { shows, .. }) => shows[0].clone(),
+        other => panic!("not state.get: {other:?}"),
+    };
+    // No pausing bookmark, so the show plays through.
+    show.bookmarks.clear();
+    show.audio = vec![jstream_protocol::AudioTrack {
+        track_id: "a1".into(),
+        name: String::new(),
+        clips: vec![jstream_protocol::AudioClip {
+            clip_id: "mic".into(),
+            source_id: jstream_protocol::SourceId::new("webcam"),
+            start_ms: 500,
+            length_ms: 1000,
+            fade_in_ms: 200,
+            fade_out_ms: 200,
+            gain_db: jstream_protocol::Finite32::new(-6.0).expect("finite"),
+        }],
+    }];
+    apply(&control, vec![Edit::ShowSet { show }]);
+    let own = heard(&engine, "webcam");
+    assert!(own.is_finite(), "a webcam has a fader");
+    let shown = |engine: &Engine| {
+        engine.drawn(|state| {
+            let program = Some(SceneId::new("a"));
+            crate::activity::activity_gains(state, program.as_ref())
+                .get(&jstream_protocol::SourceId::new("webcam"))
+                .copied()
+                .unwrap_or(0.0)
+        })
+    };
+    act(&control, play()).expect("play");
+    step(&control, 100);
+    assert_eq!(heard(&engine, "webcam"), -100.0, "down before its clip");
+    assert_eq!(shown(&engine), 0.0, "not shown before its clip");
+    step(&control, 500);
+    let rising = heard(&engine, "webcam");
+    assert!(rising > -100.0 && rising < -6.0, "rising: {rising}");
+    assert_eq!(shown(&engine), 1.0, "its clip shows it over program");
+    step(&control, 400);
+    assert_eq!(heard(&engine, "webcam"), -6.0, "at the clip's level");
+    step(&control, 350);
+    let falling = heard(&engine, "webcam");
+    assert!(falling > -100.0 && falling < -6.0, "falling: {falling}");
+    step(&control, 200);
+    assert_eq!(heard(&engine, "webcam"), -100.0, "down after its clip");
+    assert_eq!(shown(&engine), 0.0, "hidden after its clip");
+    // A hand on the fader takes it over.
+    apply(
+        &control,
+        vec![Edit::SourceSetAudio {
+            source_id: jstream_protocol::SourceId::new("webcam"),
+            enabled: None,
+            follow: None,
+            gain_db: jstream_protocol::Finite32::new(-3.0),
+            muted: None,
+        }],
+    );
+    step(&control, 50);
+    assert_eq!(heard(&engine, "webcam"), -3.0, "the hand's level");
+    act(&control, Action::ShowStop).expect("stop");
+    assert_eq!(
+        heard(&engine, "webcam"),
+        -3.0,
+        "its own fader after the show"
+    );
+}
+
+/// Cut off by a jump, a clip's source fades down over about 0.3 s, then goes.
+#[test]
+fn a_jump_fades_a_cut_off_audio_clip_down() {
+    let (engine, control) = engine_with_show();
+    apply(&control, vec![super::webcam()]);
+    let mut show = match query(&control, Query::StateGet) {
+        Ok(QueryResult::StateGet { shows, .. }) => shows[0].clone(),
+        other => panic!("not state.get: {other:?}"),
+    };
+    show.bookmarks.clear();
+    let clip =
+        |id: &str, track: &str, start_ms: u32, length_ms: u32| jstream_protocol::AudioTrack {
+            track_id: track.into(),
+            name: String::new(),
+            clips: vec![jstream_protocol::AudioClip {
+                clip_id: id.into(),
+                source_id: jstream_protocol::SourceId::new("webcam"),
+                start_ms,
+                length_ms,
+                fade_in_ms: 0,
+                fade_out_ms: 0,
+                gain_db: jstream_protocol::Finite32::new(0.0).expect("finite"),
+            }],
+        };
+    show.audio = vec![clip("early", "a1", 0, 1000)];
+    apply(&control, vec![Edit::ShowSet { show }]);
+    act(&control, play()).expect("play");
+    step(&control, 200);
+    assert_eq!(heard(&engine, "webcam"), 0.0, "up");
+    act(&control, Action::ShowSeek { at_ms: 2000 }).expect("seek");
+    step(&control, 150);
+    let fading = heard(&engine, "webcam");
+    assert!(fading > -100.0 && fading < 0.0, "fading: {fading}");
+    step(&control, 200);
+    assert_eq!(
+        heard(&engine, "webcam"),
+        -100.0,
+        "down once the fade is done"
+    );
+}

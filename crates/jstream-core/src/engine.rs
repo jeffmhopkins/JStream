@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+mod show_audio;
 mod shows;
 
 use crate::activity_log::{self, Activity};
@@ -5047,6 +5048,8 @@ struct State {
     timelines: crate::timelines::Timelines,
     /// The show running (ADR-0210): studio state, like the program scene.
     show: Option<shows::Run>,
+    /// The faders the show's audio tracks drive (ADR-0210 decision 3).
+    show_audio: show_audio::ShowAudio,
     /// Whether the running show is switching scenes, so the switch isn't taken as a
     /// hand switch that sends it off script.
     show_switching: bool,
@@ -5714,6 +5717,7 @@ impl State {
         if self.cue_at.is_none() {
             // The show first: a sequence it starts is then ticked with the others.
             self.show_tick(wake);
+            self.show_audio_tick(wake);
             self.timeline_tick(wake);
             self.start_ticker();
         }
@@ -6035,7 +6039,7 @@ impl State {
             if let Some(shared) = self.shared.upgrade() {
                 shared.ticker.notify_all();
             }
-        } else if !self.timelines.is_empty() || self.show_ticking() {
+        } else if !self.timelines.is_empty() || self.show_ticking() || !self.show_audio.is_empty() {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
     }
@@ -7488,7 +7492,10 @@ impl State {
     /// keyframe does not build a copy: it lives on [`graph`](Self::graph), which a
     /// settings copy carries because it clones the graph (ADR-0118).
     fn refresh_shown(&mut self) -> bool {
-        let mut settings = self.gestures.drawn();
+        // The levels a show's audio tracks set first, so a drag of the fader and a value
+        // binding on it win while they move it.
+        let mut settings = self.show_audio.edits.clone();
+        settings.extend(self.gestures.drawn());
         // The value bindings' settings, after the gestures': a moved control wins
         // (ADR-0178).
         settings.extend(self.driver.edits().iter().cloned());
@@ -7706,6 +7713,13 @@ impl State {
                 .max(0);
             Instant::now() + Duration::from_nanos(u64::try_from(wait).unwrap_or(0))
         });
+        // The show's faders, after the show moved: a fade wants the next frame.
+        let fades = if self.show.is_some() || !self.show_audio.is_empty() {
+            self.show_audio_tick(wake)
+        } else {
+            None
+        };
+        let cues = [cues, fades].into_iter().flatten().min();
         let render = &self.render;
         if self
             .gestures

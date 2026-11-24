@@ -64,6 +64,8 @@ pub struct Applied<T: Ord> {
     pub keyframe: Option<usize>,
     /// The overlay clips it has up, by index.
     pub overlays: Vec<usize>,
+    /// The audio clips it has up, by index.
+    pub audio: Vec<usize>,
     /// The sequence clips it has playing, by sequence.
     pub sequences: BTreeMap<T, usize>,
     /// The last state event it applied, per state key, by event index. The key is the
@@ -77,6 +79,7 @@ impl<T: Ord> Default for Applied<T> {
             program: None,
             keyframe: None,
             overlays: Vec::new(),
+            audio: Vec::new(),
             sequences: BTreeMap::new(),
             states: BTreeMap::new(),
         }
@@ -141,6 +144,32 @@ pub enum Effect<K: ShowKeys> {
         fade_ms: u32,
         /// How far into the clip, in milliseconds.
         offset_ms: u32,
+    },
+    /// Bring an audio clip's source up, `offset_ms` into the clip (its media sought
+    /// there): the clip came up, or it stays up across a jump or a loop wrap. Its fader
+    /// follows [`AudioClip::gain_db_at`](super::AudioClip::gain_db_at) from then on.
+    AudioOn {
+        /// The clip, by index.
+        clip: usize,
+        /// Its track.
+        track: K::Track,
+        /// Its source.
+        source: K::Source,
+        /// How far into the clip, in milliseconds.
+        offset_ms: u32,
+    },
+    /// Take an audio clip's source down, its fader falling to the floor over `fade_ms`
+    /// from where it is: 0 at the clip's end, whose own fade out already brought it
+    /// down; a short fade (about 0.3 s) when a jump, a wrap or a stop cuts it off.
+    AudioOff {
+        /// The clip, by index.
+        clip: usize,
+        /// Its track.
+        track: K::Track,
+        /// Its source.
+        source: K::Source,
+        /// Fade, in milliseconds.
+        fade_ms: u32,
     },
     /// Stop a sequence the show started.
     SequenceStop {
@@ -567,6 +596,19 @@ impl<T: Ord + Clone> Runner<T> {
                 });
             }
         }
+        for &clip in &self.applied.audio {
+            if let Some(c) = plan.audio.get(clip) {
+                out.push(Step {
+                    at_ns: now_ns,
+                    effect: Effect::AudioOff {
+                        clip,
+                        track: c.track.clone(),
+                        source: c.source.clone(),
+                        fade_ms: SHORT_FADE_MS,
+                    },
+                });
+            }
+        }
         *self = Self::new();
         out
     }
@@ -637,6 +679,30 @@ impl<T: Ord + Clone> Runner<T> {
                         track: c.track.clone(),
                         scene: c.scene.clone(),
                         fade_ms: c.fade_out_ms.min(SHORT_FADE_MS),
+                    },
+                }),
+            }
+        }
+        // Audio: kept by track and source where the new plan spans one; the rest go.
+        for clip in std::mem::take(&mut self.applied.audio) {
+            let Some(c) = old.audio.get(clip) else {
+                continue;
+            };
+            let kept = target.audio.keys().copied().find(|&j| {
+                new.audio
+                    .get(j)
+                    .is_some_and(|n| n.track == c.track && n.source == c.source)
+                    && !self.applied.audio.contains(&j)
+            });
+            match kept {
+                Some(j) => self.applied.audio.push(j),
+                None => out.push(Step {
+                    at_ns: now_ns,
+                    effect: Effect::AudioOff {
+                        clip,
+                        track: c.track.clone(),
+                        source: c.source.clone(),
+                        fade_ms: SHORT_FADE_MS,
                     },
                 }),
             }
@@ -1218,6 +1284,39 @@ impl<T: Ord + Clone> Runner<T> {
             });
         }
         self.applied.overlays = target.overlays.keys().copied().collect();
+        // Audio: down first, then up. A clip that ends while playing is already down by
+        // its own fade out; one a jump, a wrap or a stop cuts off fades over the short
+        // fade (ADR-0210 decision 6). One that stays up through a jump or a wrap is sought
+        // to its place again.
+        let old = std::mem::take(&mut self.applied.audio);
+        for &clip in &old {
+            if target.audio.contains_key(&clip) {
+                continue;
+            }
+            if let Some(c) = plan.audio.get(clip) {
+                push(Effect::AudioOff {
+                    clip,
+                    track: c.track.clone(),
+                    source: c.source.clone(),
+                    fade_ms: if playing { 0 } else { SHORT_FADE_MS },
+                });
+            }
+        }
+        for (&clip, &offset_ms) in &target.audio {
+            let Some(c) = plan.audio.get(clip) else {
+                continue;
+            };
+            if old.contains(&clip) && playing {
+                continue;
+            }
+            push(Effect::AudioOn {
+                clip,
+                track: c.track.clone(),
+                source: c.source.clone(),
+                offset_ms,
+            });
+        }
+        self.applied.audio = target.audio.keys().copied().collect();
         // Sequences: stops first, then plays.
         let old = std::mem::take(&mut self.applied.sequences);
         for (timeline, &clip) in &old {
@@ -1346,6 +1445,10 @@ fn next_point<K: ShowKeys>(plan: &Plan<K>, after: Option<u32>) -> Option<u32> {
         consider(c.start_ms);
         consider(c.start_ms.saturating_add(c.length_ms));
     }
+    for c in &plan.audio {
+        consider(c.start_ms);
+        consider(c.start_ms.saturating_add(c.length_ms));
+    }
     plan.keyframes.iter().for_each(|m| consider(m.at_ms));
     plan.events.iter().for_each(|e| consider(e.at_ms));
     plan.bookmarks.iter().for_each(|b| consider(b.at_ms));
@@ -1394,6 +1497,7 @@ mod unit {
         type Bookmark = &'static str;
         type Loop = &'static str;
         type Track = u8;
+        type Source = &'static str;
         type Preset = &'static str;
         type Action = Act;
     }
@@ -1421,6 +1525,7 @@ mod unit {
                 fade_out_ms: 500,
                 timed: false,
             }],
+            audio: vec![],
             keyframes: vec![KeyframeMark {
                 at_ms: 1500,
                 keyframe: Some("b2"),
@@ -1598,6 +1703,7 @@ mod unit {
         let p = Plan::<K> {
             program: vec![],
             overlays: vec![],
+            audio: vec![],
             keyframes: vec![],
             sequences: vec![],
             events: vec![],

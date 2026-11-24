@@ -40,6 +40,7 @@ impl ShowKeys for K {
     type Bookmark = u32;
     type Loop = u8;
     type Track = u8;
+    type Source = &'static str;
     type Preset = &'static str;
     type Action = Act;
 }
@@ -52,6 +53,7 @@ fn plan(program: Vec<ProgramClip<K>>) -> Plan<K> {
     Plan {
         program,
         overlays: vec![],
+        audio: vec![],
         keyframes: vec![],
         sequences: vec![],
         events: vec![],
@@ -106,6 +108,18 @@ fn overlay(track: u8, scene: &'static str, start_ms: u32, length_ms: u32) -> Ove
     }
 }
 
+fn audio(track: u8, source: &'static str, start_ms: u32, length_ms: u32) -> AudioClip<K> {
+    AudioClip {
+        track,
+        source,
+        start_ms,
+        length_ms,
+        fade_in_ms: 0,
+        fade_out_ms: 0,
+        gain_db: 0.0,
+    }
+}
+
 fn seq(timeline: u8, start_ms: u32, length_ms: u32) -> SequenceClip<K> {
     SequenceClip {
         timeline,
@@ -139,6 +153,8 @@ struct World {
     program: Option<(usize, Option<i64>)>,
     keyframe: Option<usize>,
     overlays: BTreeMap<usize, i64>,
+    /// Audio clips up and their media origin.
+    audio: BTreeMap<usize, i64>,
     sequences: BTreeMap<u8, (usize, i64)>,
     states: BTreeMap<u8, i32>,
     shots: Vec<u32>,
@@ -155,6 +171,8 @@ struct Owned {
     keyframe: Option<usize>,
     /// Overlay clips and how far into each.
     overlays: BTreeMap<usize, i64>,
+    /// Audio clips and how far into each.
+    audio: BTreeMap<usize, i64>,
     /// Sequences, their clip and how far into it.
     sequences: BTreeMap<u8, (usize, i64)>,
 }
@@ -247,6 +265,17 @@ impl World {
             } => {
                 self.overlays.insert(*clip, p - i64::from(*offset_ms));
             }
+            Effect::AudioOff { clip, .. } => {
+                assert!(
+                    self.audio.remove(clip).is_some(),
+                    "AudioOff of clip {clip}, not up"
+                );
+            }
+            Effect::AudioOn {
+                clip, offset_ms, ..
+            } => {
+                self.audio.insert(*clip, p - i64::from(*offset_ms));
+            }
             Effect::SequenceStop { timeline, .. } => {
                 self.sequences.remove(timeline);
             }
@@ -290,6 +319,7 @@ impl World {
                 .iter()
                 .map(|(c, o)| (*c, if plan.overlays[*c].timed { t - o } else { 0 }))
                 .collect(),
+            audio: self.audio.iter().map(|(c, o)| (*c, t - o)).collect(),
             sequences: self
                 .sequences
                 .iter()
@@ -1193,6 +1223,110 @@ fn stop_takes_overlays_down_and_stops_sequences() {
 }
 
 #[test]
+fn an_audio_clip_comes_up_for_its_span_and_goes_at_its_end() {
+    let mut p = plan(vec![clip("A", 30)]);
+    p.audio = vec![audio(0, "mic", 5, 10)];
+    let mut g = Rig::new(p);
+    g.start(0, Landing::PlayOn);
+    let e = g.at(5);
+    assert!(
+        has(&e, |e| matches!(
+            e,
+            Effect::AudioOn {
+                clip: 0,
+                source: "mic",
+                offset_ms: 0,
+                ..
+            }
+        )),
+        "{e:?}"
+    );
+    assert!(g.at(10).is_empty());
+    // Playing to its end, its own fade out has brought it down: no fade of its own.
+    let e = g.at(15);
+    assert!(
+        has(&e, |e| matches!(
+            e,
+            Effect::AudioOff {
+                clip: 0,
+                fade_ms: 0,
+                ..
+            }
+        )),
+        "{e:?}"
+    );
+    assert!(g.w.audio.is_empty());
+}
+
+#[test]
+fn a_jump_cuts_audio_off_with_a_short_fade_and_seeks_what_stays_up() {
+    let mut p = plan(vec![clip("A", 100)]);
+    p.audio = vec![audio(0, "bed", 0, 100), audio(1, "sting", 10, 20)];
+    let mut g = Rig::new(p);
+    g.start(0, Landing::PlayOn);
+    g.at(15);
+    assert_eq!(g.w.audio.len(), 2);
+    let e = g.jump(60, Landing::PlayOn);
+    assert!(
+        has(&e, |e| matches!(
+            e,
+            Effect::AudioOff {
+                clip: 1,
+                fade_ms: 300,
+                ..
+            }
+        )),
+        "{e:?}"
+    );
+    // The bed stays up, sought to where the play head landed.
+    assert!(
+        has(&e, |e| matches!(
+            e,
+            Effect::AudioOn {
+                clip: 0,
+                offset_ms: 60,
+                ..
+            }
+        )),
+        "{e:?}"
+    );
+    let e = g.stop();
+    assert!(has(&e, |e| matches!(
+        e,
+        Effect::AudioOff {
+            clip: 0,
+            fade_ms: 300,
+            ..
+        }
+    )));
+    assert!(g.w.audio.is_empty());
+}
+
+#[test]
+fn an_audio_clips_level_follows_its_fades_in_amplitude() {
+    let mut c = audio(0, "mic", 0, 1000);
+    c.fade_in_ms = 100;
+    c.fade_out_ms = 200;
+    c.gain_db = -6.0;
+    assert_eq!(c.gain_db_at(0.0), AUDIO_FLOOR_DB);
+    assert_eq!(c.gain_db_at(500.0), -6.0);
+    assert_eq!(c.gain_db_at(1000.0), AUDIO_FLOOR_DB);
+    // Halfway through the fade in, half the amplitude: 6 dB under the level.
+    assert!(
+        (c.gain_db_at(50.0) - -12.02).abs() < 0.01,
+        "{}",
+        c.gain_db_at(50.0)
+    );
+    assert!(
+        (c.gain_db_at(900.0) - -12.02).abs() < 0.01,
+        "{}",
+        c.gain_db_at(900.0)
+    );
+    assert_eq!(fade_db(-6.0, AUDIO_FLOOR_DB, 1.0), AUDIO_FLOOR_DB);
+    assert_eq!(fade_db(AUDIO_FLOOR_DB, 3.0, 1.0), 3.0);
+}
+
+#[test]
 fn one_shots_are_not_replayed_on_a_jump() {
     let mut p = plan(vec![clip("A", 20)]);
     p.events = vec![ev(5, Act::Shot(1)), ev(12, Act::Shot(2))];
@@ -1304,6 +1438,7 @@ type RawSeqs = Vec<(u8, u32, u32)>;
 type RawEvents = Vec<(u32, u8, i32)>;
 type RawBookmarks = Vec<(u32, bool, usize, Option<u32>)>;
 type RawLoops = Vec<(u32, u32, bool)>;
+type RawAudio = Vec<(u8, u32, u32, u32)>;
 type RawPlan = (
     RawProgram,
     RawOverlays,
@@ -1312,6 +1447,7 @@ type RawPlan = (
     RawEvents,
     RawBookmarks,
     RawLoops,
+    RawAudio,
 );
 
 /// The show variety to generate.
@@ -1323,7 +1459,7 @@ struct Variety {
 }
 
 fn build(raw: RawPlan, end: u8, v: Variety) -> Plan<K> {
-    let (prog, ovs, marks, seqs, evs, bms, loops) = raw;
+    let (prog, ovs, marks, seqs, evs, bms, loops, auds) = raw;
     let mut p = plan(
         prog.into_iter()
             .enumerate()
@@ -1352,6 +1488,24 @@ fn build(raw: RawPlan, end: u8, v: Variety) -> Plan<K> {
             fade_in_ms: fade,
             fade_out_ms: fade,
             timed,
+        });
+    }
+    let mut auds = auds;
+    auds.sort_by_key(|a| a.1);
+    let mut track_end: BTreeMap<u8, u32> = BTreeMap::new();
+    for (track, start, len, fade) in auds {
+        if track_end.get(&track).is_some_and(|e| start < *e) {
+            continue;
+        }
+        track_end.insert(track, start + len);
+        p.audio.push(AudioClip {
+            track,
+            source: SCENES[usize::from(track)],
+            start_ms: start,
+            length_ms: len,
+            fade_in_ms: fade,
+            fade_out_ms: fade,
+            gain_db: 0.0,
         });
     }
     let mut marks = marks;
@@ -1450,6 +1604,7 @@ fn arb_plan(v: Variety) -> impl Strategy<Value = Plan<K>> {
                 0..5,
             ),
             vec((0u32..100, 1u32..40, any::<bool>()), 0..3),
+            vec((0u8..3, 0u32..100, 1u32..40, 0u32..4), 0..4),
         ),
         any::<u8>(),
     )

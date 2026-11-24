@@ -16,8 +16,10 @@ pub trait ShowKeys {
     type Bookmark: Clone + Debug + PartialEq;
     /// A loop's ID.
     type Loop: Clone + Debug + PartialEq;
-    /// An overlay track's ID.
+    /// An overlay or audio track's ID.
     type Track: Clone + Debug + PartialEq + Ord;
+    /// A source an audio clip brings up.
+    type Source: Clone + Debug + PartialEq;
     /// A transition preset.
     type Preset: Clone + Debug + PartialEq;
     /// An event's action. Its [`CueAction::state_key`] tells a state event from a
@@ -57,6 +59,75 @@ pub struct OverlayClip<K: ShowKeys> {
     pub fade_out_ms: u32,
     /// Whether its scene holds a video or audio file.
     pub timed: bool,
+}
+
+/// A clip on an audio track (A): brings its source up for its span, its fader rising to
+/// `gain_db` over `fade_in_ms` from its start and falling back over `fade_out_ms` before
+/// its end ([`AudioClip::gain_db_at`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AudioClip<K: ShowKeys> {
+    /// The track it sits on. Clips on one track don't overlap.
+    pub track: K::Track,
+    /// The source it brings up.
+    pub source: K::Source,
+    /// Its start in show time, in milliseconds.
+    pub start_ms: u32,
+    /// Its length in milliseconds; at least 1.
+    pub length_ms: u32,
+    /// Fade in, in milliseconds.
+    pub fade_in_ms: u32,
+    /// Fade out, in milliseconds.
+    pub fade_out_ms: u32,
+    /// The fader's level while it is up, in dB.
+    pub gain_db: f32,
+}
+
+/// The fader level that stands for "down": the bottom of a fader's range, −100 dB.
+pub const AUDIO_FLOOR_DB: f32 = -100.0;
+
+impl<K: ShowKeys> AudioClip<K> {
+    /// The fader level `offset_ms` into the clip, in dB: `gain_db` while it is up,
+    /// [`AUDIO_FLOOR_DB`] at its very start with a fade in and at its very end, and the
+    /// fades in between, linear in amplitude, as a fader moved by hand at an even pace
+    /// sounds. Past its end it is at the floor.
+    pub fn gain_db_at(&self, offset_ms: f32) -> f32 {
+        let length = self.length_ms as f32;
+        if !(0.0..length).contains(&offset_ms) {
+            return AUDIO_FLOOR_DB;
+        }
+        let rising = if self.fade_in_ms > 0 {
+            (offset_ms / self.fade_in_ms as f32).min(1.0)
+        } else {
+            1.0
+        };
+        let falling = if self.fade_out_ms > 0 {
+            ((length - offset_ms) / self.fade_out_ms as f32).min(1.0)
+        } else {
+            1.0
+        };
+        let fraction = rising.min(falling);
+        if fraction >= 1.0 {
+            return self.gain_db;
+        }
+        fade_db(AUDIO_FLOOR_DB, self.gain_db, fraction)
+    }
+}
+
+/// The level `fraction` (0 to 1) of the way from `from_db` to `to_db`, linear in
+/// amplitude, kept at or above [`AUDIO_FLOOR_DB`].
+pub fn fade_db(from_db: f32, to_db: f32, fraction: f32) -> f32 {
+    let amp = |db: f32| 10f32.powf(db / 20.0);
+    if fraction >= 1.0 {
+        return to_db.max(AUDIO_FLOOR_DB);
+    }
+    if fraction <= 0.0 {
+        return from_db.max(AUDIO_FLOOR_DB);
+    }
+    let a = amp(from_db) + (amp(to_db) - amp(from_db)) * fraction;
+    if a <= amp(AUDIO_FLOOR_DB) {
+        return AUDIO_FLOOR_DB;
+    }
+    (20.0 * a.log10()).max(AUDIO_FLOOR_DB)
 }
 
 /// A keyframe marker (K track): loads a keyframe of the scene on program, as a Move. It
@@ -152,6 +223,8 @@ pub struct Plan<K: ShowKeys> {
     pub program: Vec<ProgramClip<K>>,
     /// The overlay clips of every overlay track, by start.
     pub overlays: Vec<OverlayClip<K>>,
+    /// The audio clips of every audio track, by start.
+    pub audio: Vec<AudioClip<K>>,
     /// The keyframe markers, by time.
     pub keyframes: Vec<KeyframeMark<K>>,
     /// The sequence clips, by start.
@@ -177,6 +250,8 @@ pub enum InvalidPlan {
     Unsorted(usize),
     /// Two clips on one overlay track overlap; the later one's index.
     OverlayOverlap(usize),
+    /// Two clips on one audio track overlap; the later one's index.
+    AudioOverlap(usize),
     /// The loop at this index is empty or overlaps the one before it.
     Loop(usize),
     /// The end names a bookmark the show doesn't have.
@@ -208,12 +283,17 @@ impl<K: ShowKeys> Plan<K> {
             .sequences
             .iter()
             .map(|c| c.start_ms.saturating_add(c.length_ms));
+        let audio = self
+            .audio
+            .iter()
+            .map(|c| c.start_ms.saturating_add(c.length_ms));
         let keyframes = self.keyframes.iter().map(|m| m.at_ms);
         let events = self.events.iter().map(|e| e.at_ms);
         let bookmarks = self.bookmarks.iter().map(|b| b.at_ms);
         let loops = self.loops.iter().map(|l| l.to_ms);
         overlays
             .chain(sequences)
+            .chain(audio)
             .chain(keyframes)
             .chain(events)
             .chain(bookmarks)
@@ -227,13 +307,15 @@ impl<K: ShowKeys> Plan<K> {
             self.program.iter().position(|c| c.length_ms == 0),
             self.overlays.iter().position(|c| c.length_ms == 0),
             self.sequences.iter().position(|c| c.length_ms == 0),
+            self.audio.iter().position(|c| c.length_ms == 0),
         ];
         if let Some(i) = checks.into_iter().flatten().next() {
             return Err(InvalidPlan::EmptyClip(i));
         }
         let unsorted = |times: &[u32]| times.windows(2).position(|w| w[1] < w[0]).map(|i| i + 1);
-        let lists: [Vec<u32>; 5] = [
+        let lists: [Vec<u32>; 6] = [
             self.overlays.iter().map(|c| c.start_ms).collect(),
+            self.audio.iter().map(|c| c.start_ms).collect(),
             self.keyframes.iter().map(|m| m.at_ms).collect(),
             self.sequences.iter().map(|c| c.start_ms).collect(),
             self.events.iter().map(|e| e.at_ms).collect(),
@@ -249,6 +331,15 @@ impl<K: ShowKeys> Plan<K> {
             });
             if overlaps {
                 return Err(InvalidPlan::OverlayOverlap(j));
+            }
+        }
+        for (j, later) in self.audio.iter().enumerate() {
+            let overlaps = self.audio[..j].iter().any(|earlier| {
+                earlier.track == later.track
+                    && earlier.start_ms.saturating_add(earlier.length_ms) > later.start_ms
+            });
+            if overlaps {
+                return Err(InvalidPlan::AudioOverlap(j));
             }
         }
         let mut previous_end = None;

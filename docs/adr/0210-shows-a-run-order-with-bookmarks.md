@@ -63,7 +63,15 @@ no new way of doing anything, only a saved order of the actions that exist.
    - **audio tracks** (A, at most 8, optional): clips that bring one source's fader up to a
      level for their span, with fades, moving the fader as a sequence lane does, so the
      mixer tells the truth and a hand on the fader takes over (latest wins). With no audio
-     track, a show changes nothing about audio.
+     track, a show changes nothing about audio. While a show runs, every source on its
+     audio tracks is its to move: at the floor (−100 dB) while no clip of it is up, and
+     the clip's level, with its fades linear in amplitude, while one is. The levels are
+     live values the collection is drawn and heard with, never edits. A clip also makes
+     its source heard and played: one that is heard only when shown, or a media file,
+     is put up by an invisible item of the show scene (decision 12) for the clip's span,
+     so a webcam's microphone is heard and an audio file plays, from its start or sought
+     to its place. A fader set by hand while the show drives it stays the person's until
+     that source's next clip comes up.
 
    Every element (clip, track, marker, cue, bookmark, loop) has an ID unique within its
    show. A clip naming a scene, source, sequence, keyframe or preset the collection doesn't

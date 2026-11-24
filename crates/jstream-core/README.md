@@ -539,6 +539,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Shows** (`engine/shows.rs`, ADR-0210): the show running, studio state beside the
   program scene, whose program clips, keyframe markers, sequence clips and cues the
   live ticker runs on the animation clock as those actions' calls ([Shows](#shows)).
+  `engine/show_audio.rs` brings its audio clips' sources up and moves their faders.
 - **Keyframe tracks** (`engine.rs`,
   [ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
   [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)): the keyframe each
@@ -1548,6 +1549,10 @@ the render parameter channel, never through the collection:
   follow as they follow a stored change. The `jstream-values` thread rebuilds it when
   those edits change, at most about 30 times a second, or 60 while a value is moving
   (ADR-0190).
+- **A show's audio tracks** put their faders' levels in `shown` the same way, before
+  the gestures' values and the bindings' edits, so a drag or a moved control wins
+  ([Shows](#shows)); the live ticker rebuilds it when they change, a frame at a time
+  while a fade runs.
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
@@ -1941,6 +1946,23 @@ show or hide transition. `studio.get`'s `overlays` lists the scenes shown over p
 A batch can't delete the show scene (`not_found`, as for a scene it can't see). The
 overlay scene sources are still listed with the collection's sources, and an overlay's
 place among the others follows the order the items were made, not later track order.
+An audio clip (`engine/show_audio.rs`, ADR-0210 decision 3) brings its source up for its
+span. A source whose audio follows `when_shown` (a webcam's microphone, a nested scene)
+or that is a `media` file gets an item of the show scene at opacity 0 ("show-audio-<n>",
+made as an overlay's is), shown while a clip of it is up: the show scene is drawn over
+program, so the source is shown on the Program mix and heard, and the plan reaches it, so
+a file plays from its start as it comes up. A clip brought up part way in, or again
+across a jump or a loop wrap, seeks it to its place (`LiveSources::seek`). An `always`
+source gets no item. While a show runs, every source on its audio tracks is the show's:
+its fader follows the clip up (`AudioClip::gain_db_at`: up to the clip's level over its
+fade in, down over its fade out, linear in amplitude), sits at −100 dB while no clip of
+it is up, and falls over about 0.3 s when a jump, a wrap or a stop cuts a clip off, then
+the item hides. The levels are live values the collection is drawn and heard with
+(`refresh_shown`), under a live drag's and the value bindings', so the collection's own
+fader is never written; the live ticker moves them a frame at a time while a fade runs,
+and wakes at the next fade out. A source whose fader is set while the show drives it is
+left to that until its next clip comes up. When the show stops, its faders go back to
+the collection's once the clips it had up have faded. A rehearsal moves no fader.
 `src/tests/shows.rs` checks playing through, pausing before a pausing bookmark's
 point and continuing, a cue firing, a non-pausing bookmark playing through, the end,
 going to bookmarks by ID and number, Back, early Continue, arming, a hand switch going
@@ -1950,8 +1972,11 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
 span and taken down when an edit removes it, the overlay actions with no show, the
-show scene refusing a delete and being heard, the next program clip named upcoming, and
-a rehearsal on preview leaving program, its cues and off script alone.
+show scene refusing a delete and being heard, the next program clip named upcoming,
+a rehearsal on preview leaving program, its cues and off script alone, a webcam's
+audio clip held at the floor before it, heard and rising, level, falling and down
+again over its clip, a hand on its fader taking over until the show stops, and a jump
+fading a cut-off clip down over the short fade.
 `src/tests/sources.rs` checks that a show's jump into a timed clip, and within it,
 seeks its file (`a_show_jump_into_a_timed_clip_seeks_its_file`). `src/tests/timelines.rs` checks that a
 timeline played while the ticker waits for a later cue fires on time.
@@ -4605,8 +4630,8 @@ with no lock at all, as are the live values on the parameter channel. `video.sna
 reads both under the collection lock and the snapshot thread only receives them. The
 `jstream-live` thread takes the collection lock only to send due `live.changed` events,
 release committed values, fire due timeline cues (each runs as its action's call
-would under that lock, [Timelines](#timelines)) and advance the running show
-([Shows](#shows)), and waits without it (on the lock's `Shared::ticker` condvar,
+would under that lock, [Timelines](#timelines)), advance the running show and move
+its audio tracks' faders ([Shows](#shows)), and waits without it (on the lock's `Shared::ticker` condvar,
 which releases it). The
 `jstream-values` thread does the same: it takes the collection lock for each tick, reads
 the MIDI state and the live data's watches (atomics) under it, and sleeps without it; a
