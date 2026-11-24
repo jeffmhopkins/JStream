@@ -2676,3 +2676,65 @@ button.learn.chip { padding: 0 8px; border-radius: 12px; background: var(--selec
 .seq-delete { background: none; color: var(--danger-text); }
 .control-menu .menuitem.danger, .seq-panel .menuitem.danger, .chan-delete.menuitem.danger { background: transparent; border-color: transparent; color: var(--danger-text); font-weight: 400; }
 .control-menu .menuitem.danger:hover:not(:disabled), .seq-panel .menuitem.danger:hover:not(:disabled), .chan-delete.menuitem.danger:hover:not(:disabled) { background: var(--menu-hover); border-color: transparent; }
+
+/* The Map control dialog (UI-FEATURES VC-03): a source picker over a mapping's range,
+   smoothing and curve. */
+.modal.map-dialog { width: min(640px, calc(100vw - 32px)); }
+.map-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 12px 16px; overflow: hidden; }
+.map-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.map-learn.learning { border-color: var(--accent); color: var(--accent); }
+.map-pane { display: flex; flex-direction: column; gap: 8px; height: 320px; padding-right: 4px; overflow-y: auto; }
+.map-help { margin: 0; }
+.map-sender-name { margin: 4px 0; font-weight: 600; }
+.map-mods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+button.map-mod { display: flex; flex-direction: column; align-items: stretch; gap: 2px; height: auto; min-height: 46px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--text); text-align: left; }
+button.map-mod:hover { background: var(--hover); }
+button.map-mod.on { border-color: var(--accent); background: var(--selected); }
+.map-mod-name { font-weight: 600; font-size: 12px; }
+.map-mod-drives { min-height: 15px; overflow: hidden; color: var(--muted); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.map-bar { display: block; flex: none; width: 100%; height: 4px; border-radius: 2px; background: var(--meter-track); overflow: hidden; }
+.map-field .map-bar { width: 70px; }
+.map-bar-fill { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+.map-keys { display: flex; flex-wrap: wrap; gap: 4px; }
+button.map-key { height: 22px; padding: 0 8px; border: 1px solid var(--border); border-radius: 11px; background: var(--raised); color: var(--text-soft); font-size: 12px; }
+button.map-key:hover { background: var(--hover); }
+.map-list { display: flex; flex-direction: column; }
+.map-list .menuitem.map-field { justify-content: space-between; gap: 10px; padding: 0 10px; color: var(--text); }
+.map-list .menuitem.map-field.on { background: var(--selected); }
+.map-typed { display: grid; grid-template-columns: 150px 70px 80px minmax(0, 1fr) auto; align-items: center; gap: 6px; }
+.map-key-row { display: flex; align-items: flex-end; gap: 12px; }
+.map-foot { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.map-chosen { margin: 0; font-weight: 600; }
+.map-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.3fr); align-items: end; gap: 8px; }
+.map-curve { display: flex; flex-direction: column; gap: 4px; }
+.map-heard { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+button.map-key.on { border-color: var(--accent); background: var(--selected); color: var(--text); }
+.map-body .section-head { padding: 0; }
+
+/* Mapping mode (UI-FEATURES VC-04): a bar naming the armed source, every mappable
+   setting marked as a drag target, and a mapping's amount in the accent colour. */
+.mapping-bar {
+  display: flex; align-items: center; gap: 10px; padding: 6px 12px;
+  background: var(--selected); border-bottom: 1px solid var(--accent); font-size: 13px;
+}
+.mapping-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.mapping-bar-name { font-weight: 600; color: var(--text); }
+.mapping-bar-help { flex: 1; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.mapping-mode :has(> button.learn) { cursor: ns-resize; }
+body.mapping-mode :has(> button.learn):hover { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 4px; }
+body.mapping-mode :has(> button.learn) * { cursor: ns-resize; }
+body.mapping-mode button.learn { border-color: var(--accent); }
+button.learn.amount { color: var(--accent); border-color: var(--accent); padding: 0 6px; font-variant-numeric: tabular-nums; font-size: 12px; width: auto; }
+/* A field a control can be mapped onto (VC-05): its mappings' offset as a tag on its top
+   edge, and a drag target in mapping mode. */
+.number-field[data-map] .stepper { position: relative; }
+.stepper[data-map-amount]::after {
+  content: attr(data-map-amount);
+  position: absolute; right: 2px; top: -8px; z-index: 1;
+  padding: 0 4px; border-radius: 6px; line-height: 13px;
+  background: var(--selected); color: var(--accent);
+  font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+.stepper[data-map-amount] { border-color: var(--accent); }
+body.mapping-mode .number-field[data-map], body.mapping-mode .number-field[data-map] * { cursor: ns-resize; }
+body.mapping-mode .number-field[data-map]:hover .stepper { outline: 1px solid var(--accent); outline-offset: 1px; }

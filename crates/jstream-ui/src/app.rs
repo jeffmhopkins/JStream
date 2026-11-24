@@ -324,8 +324,14 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     // Each dialog's place for this page. Not the engine's UI settings (ADR-0084).
     provide_context(crate::dialog::DialogPlaces::new());
     provide_context(crate::settings::SettingsDialog::new());
+    // A right-click on a setting opens its control menu, and the Map control dialog.
+    let control_menu = crate::panels::learn::ControlMenuAt::new();
+    provide_context(control_menu);
+    provide_context(crate::panels::map_control::MapControlDialog::new());
+    // Mapping mode: the armed source, and the drag on a setting that maps it.
+    provide_context(crate::panels::mapping_mode::MappingMode::new());
     view! {
-        <div class="shell">
+        <div class="shell" on:contextmenu=move |event| { crate::panels::learn::row_context(control_menu, &event); }>
             <Header info=info disconnect=disconnect />
             <crate::updates::LaunchNotice />
             {move || studio.problem.get().map(|problem| view! {
@@ -334,6 +340,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
                     <button on:click=move |_| studio.problem.set(None)>"Dismiss"</button>
                 </div>
             })}
+            <crate::panels::mapping_mode::MappingBar />
             <Workspace />
             <Toast />
             <Hotkeys />
@@ -344,6 +351,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <FilterSettings />
             <AddFilter />
             <crate::settings::Settings />
+            <crate::panels::map_control::MapControlHost />
             <crate::agents::AgentPrompt />
             <ContextMenu />
         </div>
