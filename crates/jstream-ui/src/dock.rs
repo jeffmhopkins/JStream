@@ -436,7 +436,7 @@ pub struct ZoneState {
 /// Which panels sit where, and how big each zone is.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Arrangement {
-    /// The zones, in the workspace's reading order ([`Zone::order`]): the four inner
+    /// The zones, in the workspace's reading order (`Zone::order`): the four inner
     /// ones always, and each edge's bands, at least one.
     pub zones: Vec<ZoneState>,
 }
