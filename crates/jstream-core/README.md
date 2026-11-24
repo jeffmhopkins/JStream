@@ -2392,7 +2392,10 @@ showing one no plan showed yet), and after each tick's draws the program stage u
 whole each one its cache holds no texture of, at most two a tick, asking for the pixels
 when they are gone, and keeps it as it keeps a drawn still's upload
 (`snapshot::keep_warm_stills`, ADR-0212, #1737;
-`a_warm_still_draws_on_the_first_program_frame_after_the_cut`); the
+`a_warm_still_draws_on_the_first_program_frame_after_the_cut`). The show scene is never
+warm: the stills its shown items draw are uploaded with the program's, and one an item
+shows for the first time since the program stage opened can still come some frames
+late, as on a scene that isn't warm; the
 render thread only reads atomics and unparks the thread, never decodes, and never frees
 the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). The
 decode takes the still's own decode lock, never the one `frame_if_held` takes, so a
