@@ -4378,6 +4378,7 @@ fn render_loop(job: RenderJob) {
             match tick {
                 Ok(Ok(freed)) => {
                     // The totals it replaces go to the collector (R-RT-003).
+                    meter.submitted(jstream_render::submits_on_this_thread());
                     meter.end_frame(started.elapsed(), Instant::now(), |old| {
                         collector.free(Garbage::Profile(old));
                     });

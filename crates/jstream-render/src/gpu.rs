@@ -1,6 +1,7 @@
 //! Opening a wgpu device. The platform's [`GpuContext`](jstream_platform::GpuContext) is
 //! preferred; this module is the path when interop is absent.
 
+use std::cell::Cell;
 use std::future::Future;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 use std::task::{Context, Poll, Waker};
@@ -208,11 +209,31 @@ pub fn adapter_available() -> bool {
         .is_none_or(|adapters| !adapters.is_empty())
 }
 
+thread_local! {
+    /// The submits this thread has made through this crate.
+    static SUBMITS: Cell<u64> = const { Cell::new(0) };
+}
+
+/// How many submits this crate has made to a GPU queue on the calling thread, since the
+/// thread started. A drawing thread reads it at the end of each frame, and the
+/// difference is what the frame cost in submits: each one is a fixed cost on the
+/// thread and in the driver, however little work it carries. Submits other crates make
+/// on a queue of their own accord are not counted.
+pub fn submits_on_this_thread() -> u64 {
+    SUBMITS.get()
+}
+
+/// Counts one submit this thread is making ([`submits_on_this_thread`]).
+pub(crate) fn count_submit() {
+    SUBMITS.set(SUBMITS.get().saturating_add(1));
+}
+
 impl Gpu {
     /// Submits `work`, a command buffer of the compositor's own, bracketed by the
     /// timestamps of a span while the drawer times a unit (`spans.rs`). The caller holds
     /// the submit lock, as for any submit.
     pub(crate) fn submit_work(&self, work: wgpu::CommandBuffer) -> wgpu::SubmissionIndex {
+        count_submit();
         match self.spans.span() {
             Some(span) => self.queue.submit([
                 span.stamp(&self.device, 0),
@@ -445,5 +466,17 @@ mod tests {
             .expect_err("neither opens");
         let text = both.to_string();
         assert!(text.contains("hung") && text.contains("none"), "{text}");
+    }
+
+    /// The count is the calling thread's own: another thread's submits don't move it.
+    #[test]
+    fn submits_are_counted_on_the_thread_that_makes_them() {
+        let before = super::submits_on_this_thread();
+        super::count_submit();
+        super::count_submit();
+        std::thread::spawn(super::count_submit)
+            .join()
+            .expect("the other thread counts");
+        assert_eq!(super::submits_on_this_thread(), before + 2);
     }
 }
