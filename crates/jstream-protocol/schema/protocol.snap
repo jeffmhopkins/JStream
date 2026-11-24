@@ -1302,7 +1302,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, a `media` file plays from its start, and a `timer` countdown or\nstopwatch starts its count again (ADR-0214, since 0.179), as it does when the\nprogram shows it again. Other kinds, a `timer` clock among them, have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+          "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, a `media` file plays from its start, and a `timer` countdown or\nstopwatch starts its count again (ADR-0214, since 0.181), as it does when the\nprogram shows it again. Other kinds, a `timer` clock among them, have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -1320,7 +1320,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), a `timer` counts on as if it had started `at_ms` ago (since 0.179), and a\nkind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` or a `timer` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
+          "description": "Plays a source on from `at_ms` into it (since 0.177): a `media` file goes to\nthat point of its timeline and plays on from there, as `source.restart` plays it\nfrom its start. On a looping file a point past the end lands where that many\nplays would reach; on one that doesn't loop, on its last frame. A kind with\nnothing to seek starts over as `source.restart` starts it (a `browser` page loads\nagain), a `timer` counts on as if it had started `at_ms` ago (since 0.181), and a\nkind with nothing to restart does nothing. A seek made before the\nprogram shows the source holds: being shown doesn't start it again from its\nstart, as `restart_on_show` or a `timer` would, so a switch and a seek may come in either\norder. Runtime state like `source.restart`: it changes no `rev` and is never\nundone. Fails with `not_found` for a source the collection doesn't hold.",
           "properties": {
             "at_ms": {
               "description": "Where to play on from, in milliseconds from the start of its timeline.",
@@ -19084,5 +19084,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.179"
+  "title": "JStream protocol 0.181"
 }
