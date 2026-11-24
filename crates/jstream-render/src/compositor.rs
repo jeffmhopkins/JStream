@@ -1576,6 +1576,9 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
+        // Its pixel-unit settings count in the input's extent: scaled to its texels
+        // before the pass says its reach or draws (#1680).
+        filter.fit(input);
         let padding = filter.pad();
         let (pass, scratch) = filter.parts();
         let timing = match (&mut self.timer, pass.timed()) {
