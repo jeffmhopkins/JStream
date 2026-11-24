@@ -77,7 +77,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
   `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
   cap since 0.165, with `PROBE_RESOLUTIONS`, and its screen-space reflection switch and
-  steps since 0.172, with `SCREEN_SPACE_STEPS`),
+  steps since 0.172, with `SCREEN_SPACE_STEPS`, and its `model_resolution` since 0.178,
+  with `MODEL_RESOLUTIONS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -138,7 +139,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch`, and
   `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
   [Controller bindings](#bindings).
-- **Shows** (`show.rs`, since 0.178,
+- **Shows** (`show.rs`, since 0.179,
   [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)): `ShowInfo`, a
   saved run order of scenes on tracks in show time: the program track's `ProgramClip`s end
   to end, `OverlayTrack`s, `KeyframeMarker`s, `SequenceTrack`s of `ShowCue`s and
@@ -207,7 +208,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
   (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets, and
-  since 0.178 `state.get` the `shows` and `studio.get` the running `show` and the
+  since 0.179 `state.get` the `shows` and `studio.get` the running `show` and the
   `overlays` up ([Shows](#shows)). `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
@@ -293,7 +294,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `plugin.uninstalled` (0.163),
-  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, `show.changed` (with `ShowChange`, since 0.178), and `timeline.changed` (with `TimelineChange`)
+  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, `show.changed` (with `ShowChange`, since 0.179), and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
   `KindsCause`, 0.107), `agent.approval_requested` and `agent.approval_resolved`
@@ -394,10 +395,15 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.178 because a collection holds shows: `show.set` and
+`PROTOCOL_VERSION` is 0.179 because a collection holds shows: `show.set` and
 `show.delete`, `state.get`'s `shows`, the `show.*` actions that run one, `studio.get`'s
 `show` and `overlays`, the `overlay.*` actions and the `show.changed` event
-([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)); 0.177 because of `source.seek`, which plays a `media` file on
+([ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)); 0.178 because the rendering switches say how many pixels 3D models
+are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
+drawer's profile reports the size they were drawn at, `DrawerProfile`'s
+`model_resolution` and `model_frames_reduced`
+([ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md));
+0.177 because of `source.seek`, which plays a `media` file on
 from a point into it and holds through the program showing it, and `SourceSize`'s and
 `source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
 the release queue sets); 0.176 because `profile.get`'s drawers report
@@ -1801,8 +1807,9 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
   floor_reflections?, reflection_probes?, max_probe_resolution?,
-  screen_space_reflections?, screen_space_steps?}` (0.147, `reflection_probes` and
-  `max_probe_resolution` since 0.165, the last two since 0.172,
+  screen_space_reflections?, screen_space_steps?, model_resolution?}` (0.147,
+  `reflection_probes` and `max_probe_resolution` since 0.165, the two screen-space ones
+  since 0.172, `model_resolution` since 0.178,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -1815,13 +1822,20 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   `screen_space_reflections` off, no scene reflects what is on screen and its surfaces
   reflect their probes and environment only. `screen_space_steps` is how many steps a
   screen-space reflection's ray takes: 16, 32 or 64 (`SCREEN_SPACE_STEPS`, the default
-  16, ADR-0185), and any other count is `invalid_argument` on `screen_space_steps`. All are on
+  16, ADR-0185), and any other count is `invalid_argument` on `screen_space_steps`.
+  `model_resolution` is how many pixels 3D models are drawn with, a percentage of their
+  canvas's width and of its height: 0, the default, lets the engine choose, lowering it
+  while the GPU is short of time
+  ([ADR-0197](../../docs/adr/0197-3d-models-draw-with-fewer-pixels-when-the-gpu-is-short-of-time.md),
+  [ADR-0200](../../docs/adr/0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md)), and 100, 85, 75, 67 or 50 always draws them at that (`MODEL_RESOLUTIONS`); any
+  other value is `invalid_argument` on `model_resolution`. All are on
   until set but `screen_space_reflections`, which is off (`RenderFeatures::DEFAULT`,
   [ADR-0185](../../docs/adr/0185-how-reflections-landed-off-by-default.md)). An application setting, like
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
-  reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, and steps it leaves out as 16.
+  reads as on (`screen_space_reflections` as off), a cap it leaves out as 512, steps it
+  leaves out as 16, and a `model_resolution` it leaves out as 0.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1885,7 +1899,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   missing, also from a pre-0.168 server, parses as empty), every channel (`channels`,
   ordered by ID; omitted when there are none, so missing, also from a pre-0.169 server,
   parses as empty), every show (`shows`, ordered by ID; omitted when there are none, so
-  missing, also from a pre-0.178 server, parses as empty), the
+  missing, also from a pre-0.179 server, parses as empty), the
   master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
@@ -1942,8 +1956,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
-  sets, since 0.165 the probe switch and face-size cap, and since 0.172 the screen-space
-  reflection switch and steps. Since 0.178 `show` is the running show (`RunningShow`:
+  sets, since 0.165 the probe switch and face-size cap, since 0.172 the screen-space
+  reflection switch and steps, and since 0.178 `model_resolution`. Since 0.179 `show` is
+  the running show (`RunningShow`:
   its play head `at_ms`, its `state` `playing`, `paused` or `off_script`, the bookmark it
   waits at and `waited_ms`, the scene that took it `off_script`, its `loop_id` and
   `pass`, the `armed_ms` spot and whether it rehearses), omitted while none runs, and
@@ -2023,7 +2038,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   thread's (`program`, `preview`) frames, their average, 95th percentile and longest
   time, the frames over `frame_budget_ms`, the program's skipped ticks, since 0.176 the
   pictures only preview streams take that the program skipped (`preview_skipped`, which
-  `stats.tick`'s `drops` leave out) and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  `stats.tick`'s `drops` leave out), since 0.178 the
+  size its 3D models were drawn at when the window ended (`model_resolution`, a
+  percentage, 100 from an older server) and the frames drawn with them below 100
+  (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the
@@ -2587,7 +2605,7 @@ After `welcome`, the server pushes every event to every client.
 - `timeline.changed {timeline_id, scene_id, change, playing, position_ms, pass}` and
   `timeline.cue_fired {timeline_id, cue, pass, at_ms, error?}` (0.87) are described
   under [Timelines](#timelines). Neither is sent once a frame: a cue fires once a pass.
-- `show.changed {show_id, change, running, at_ms, bookmark_id?, loop_id?}` (0.178,
+- `show.changed {show_id, change, running, at_ms, bookmark_id?, loop_id?}` (0.179,
   [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md)) says the running
   show `started`, `paused` at a bookmark, `continued`, `jumped`, `looped`, went
   `off_script`, `ended` or `stopped`. Runtime state, so no `rev`, and never once a frame.
@@ -3016,7 +3034,7 @@ after 1.0:
   `collection.save_as` names it.
   0.96 adds `binding` the same way, named only by an error answering a `binding.*`
   edit. 0.169 adds `channel` the same way, named only by an error answering a
-  `channel.*` edit or action. 0.178 adds `show` the same way, named only by an error
+  `channel.*` edit or action. 0.179 adds `show` the same way, named only by an error
   answering a `show.*` edit or action, or a binding naming a show; a show's cue holds its
   action as plain JSON, as a timeline's does, and its enums (`ShowEnd`, `LoopLeave`,
   `NextMonitor`, `ShowState`, `ShowChange`) parse an unknown value as `Unknown`, which
@@ -3278,7 +3296,7 @@ covers = ["crates/jstream-protocol/src/show.rs"]
 depends_on = ["docs/adr/0210-shows-a-run-order-with-bookmarks.md"]
 -->
 
-A show (since 0.178, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md))
+A show (since 0.179, [ADR-0210](../../docs/adr/0210-shows-a-run-order-with-bookmarks.md))
 is a saved run order of scenes in show time, in milliseconds. `show.set` stores a whole
 `ShowInfo` (new, or in place of the one with its `show_id`) and `show.delete` removes it;
 `state.get` lists `shows`. A collection holds at most 64.
