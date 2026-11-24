@@ -21,7 +21,7 @@ traits, ported from spikes S1 to S3. Layer 2, and one of the crates allowed `uns
 the traits' safe APIs (and the credential store's own), with RAII types for COM objects,
 events, wave formats and credentials Windows returns
 ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)). It uses Microsoft's `windows` crate
-([R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)), except for NVENC and AMF, which have no maintained binding: their few entries are declared by hand from the vendors' MIT-licensed headers, with their layouts asserted at compile time ([ADR-0215](../../docs/adr/0215-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)). The backends exist only on Windows;
+([R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)), except for NVENC and AMF, which have no maintained binding: their few entries are declared by hand from the vendors' MIT-licensed headers, with their layouts asserted at compile time ([ADR-0217](../../docs/adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)). The backends exist only on Windows;
 elsewhere the crate builds just its platform-independent helpers, which are tested on
 every platform.
 
@@ -35,7 +35,7 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `WindowsProcessCpu`, `WindowsThreadCpu`, `WindowsThreadPriority` | `ProcessCpu`, `ThreadCpu`, `ThreadPriority` | `process.rs` | CPU time, each thread's under its description or, without one, the module it started in, and MMCSS for the real-time threads |
 | `WasapiAudio` | `AudioIo` | `audio/` | endpoints, inputs, outputs, loopback and process loopback; event-driven, shared mode, one MMCSS "Pro Audio" thread per stream |
 | `WgcCapture` | `Capture` | `capture/` | Windows.Graphics.Capture of displays and windows, on the CPU path or the GPU path (`on_gpu`) |
-| `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback, and the H.264 decoder MFT for the engine's own streams ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). On the context's encode targets it tries the GPU vendor's own encoder first, NVENC or AMF through the driver's runtime DLL (`codec/direct/`), and opens the MFT when that refuses; `JSTREAM_DIRECT_ENCODERS=off` keeps every GPU encoder on Media Foundation ([ADR-0215](../../docs/adr/0215-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)) |
+| `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback, and the H.264 decoder MFT for the engine's own streams ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). On the context's encode targets it tries the GPU vendor's own encoder first, NVENC or AMF through the driver's runtime DLL (`codec/direct/`), and opens the MFT when that refuses; `JSTREAM_DIRECT_ENCODERS=off` keeps every GPU encoder on Media Foundation ([ADR-0217](../../docs/adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)) |
 | `MfVideoDevices`, `MfMjpegDecoder` | `VideoDevices`, `CaptureDecoder` | `video_device/` | webcams and capture cards, paired with their microphones, their camera controls (`IAMVideoProcAmp` and `IAMCameraControl` on the media source), and MJPEG decoding; a raw frame is copied in one pass into memory the engine handed back |
 | `MfMediaDecoders` | `MediaDecoders` | `decode/` | local media files through the Source Reader |
 | `WindowsGpu` | `GpuInterop` | `gpu/` | the DX12 wgpu device on the media adapter, a D3D11 device beside it, shared NV12 encode targets and fences ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)). The first open also asks Windows for the process's highest GPU scheduling class (`realtime`, else `high`) and the `high` CPU priority class, so the engine's work comes before other programs'; `JSTREAM_GPU_PRIORITY` and `JSTREAM_CPU_PRIORITY` lower either (`gpu_priority.rs`, [ADR-0195](../../docs/adr/0195-the-engine-runs-at-top-priority.md)) |
@@ -74,7 +74,7 @@ frames, as the engine's render thread and encode thread do; one that falls behin
 in its failure where the time went. `keeps_up_with_1080p30_directly` runs the same feed
 through the GPU vendor's own encoder (NVENC or AMF), and the `_directly` GPU encode tests
 repeat the encode-target tests through it, with a forced keyframe; run the two live
-tests with `--nocapture` to compare their reports ([ADR-0215](../../docs/adr/0215-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)). HEVC and AV1 run only on a GPU that encodes them (AV1
+tests with `--nocapture` to compare their reports ([ADR-0217](../../docs/adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)). HEVC and AV1 run only on a GPU that encodes them (AV1
 needs an NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer).
 
 <a id="open-questions"></a>

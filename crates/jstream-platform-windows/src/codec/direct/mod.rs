@@ -1,4 +1,4 @@
-//! Direct vendor encoders on the GPU path (ADR-0215): NVIDIA's NVENC and AMD's AMF,
+//! Direct vendor encoders on the GPU path (ADR-0217): NVIDIA's NVENC and AMD's AMF,
 //! reached through the vendor's own runtime DLL, which its display driver installs, and
 //! tried before the Media Foundation hardware MFT for the same GPU.
 //!

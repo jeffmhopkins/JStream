@@ -219,5 +219,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0212](0212-a-warm-scenes-stills-stay-uploaded.md) | A warm scene's still images stay uploaded on the program stage | accepted | agent |  |
 | [ADR-0213](0213-number-drags-follow-live.md) | Filter settings, opacity and gains are live values, so every number drag follows live | accepted | agent |  |
 | [ADR-0214](0214-a-timer-restarts-when-shown.md) | A timer starts its count again when the program shows it again | accepted | agent |  |
-| [ADR-0215](0215-direct-nvenc-and-amf-encoders-on-the-gpu-path.md) | Direct NVENC and AMF encoders on the Windows GPU path, before the Media Foundation MFTs | accepted | agent |  |
+| [ADR-0217](0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md) | Direct NVENC and AMF encoders on the Windows GPU path, before the Media Foundation MFTs | accepted | agent |  |
 <!-- @generated end adr-index -->

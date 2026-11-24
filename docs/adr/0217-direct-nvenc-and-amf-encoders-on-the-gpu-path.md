@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0215"
+id = "ADR-0217"
 title = "Direct NVENC and AMF encoders on the Windows GPU path, before the Media Foundation MFTs"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0215: Direct NVENC and AMF encoders on the Windows GPU path, before the Media Foundation MFTs
+# ADR-0217: Direct NVENC and AMF encoders on the Windows GPU path, before the Media Foundation MFTs
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

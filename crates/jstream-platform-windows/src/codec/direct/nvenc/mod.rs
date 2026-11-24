@@ -1,5 +1,5 @@
 //! NVIDIA's NVENC, reached directly through the driver's `nvEncodeAPI64.dll`
-//! (ADR-0215), on the context's D3D11 device.
+//! (ADR-0217), on the context's D3D11 device.
 //!
 //! The session opens NVENC API 12.0 (driver 522 or later, which every GPU with an AV1
 //! encoder has) on the context's D3D11 device, starts from the P5 preset tuned for high

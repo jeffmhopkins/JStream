@@ -1,5 +1,5 @@
 //! The part of NVIDIA's NVENC API (`nvEncodeAPI.h`, Video Codec SDK 12.0, API version
-//! 12.0) that the direct encoder calls, declared by hand (ADR-0215).
+//! 12.0) that the direct encoder calls, declared by hand (ADR-0217).
 //!
 //! Transcribed from `nvEncodeAPI.h` as FFmpeg's `nv-codec-headers` ship it at tag
 //! `n12.0.16.1`, which NVIDIA publishes under the MIT licence ("Copyright (c) 2010-2022

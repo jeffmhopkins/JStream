@@ -1352,7 +1352,7 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    fallback for an adapter that rejects planar render targets.
 5. **Encode:** the NV12 texture is shared back to D3D11 for the hardware encoders
    (fence-synchronized): the GPU vendor's own NVENC or AMF where it opens, else the Media
-   Foundation MFT ([ADR-0215](adr/0215-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)).
+   Foundation MFT ([ADR-0217](adr/0217-direct-nvenc-and-amf-encoders-on-the-gpu-path.md)).
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.

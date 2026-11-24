@@ -111,7 +111,7 @@
 //!   (ADR-0140); media files decode through `MfMediaDecoders`. `Require` is
 //!   `Unsupported`, and so is a machine with no H.264 decoder MFT (an N edition without
 //!   the Media Feature Pack).
-//! - **Direct vendor encoders** (ADR-0215, `codec/direct/`): on the GPU path the
+//! - **Direct vendor encoders** (ADR-0217, `codec/direct/`): on the GPU path the
 //!   adapter's vendor encoder is tried before the MFTs, NVENC on NVIDIA and AMF on AMD,
 //!   through the runtime DLL the display driver installs. It reads the encode targets
 //!   the same way (a GPU copy into a texture of its own, eight at most, `Busy` when it
@@ -771,7 +771,7 @@ mod device_tests {
     }
 
     /// As [`keeps_up_with_1080p30_from_encode_targets`], through the GPU vendor's own
-    /// encoder: run both with `--nocapture` to compare their reports (ADR-0215).
+    /// encoder: run both with `--nocapture` to compare their reports (ADR-0217).
     #[test]
     #[ignore = "needs an NVIDIA or AMD GPU with NV12 textures and a hardware H.264 encoder"]
     fn keeps_up_with_1080p30_directly() {
@@ -799,7 +799,7 @@ mod device_tests {
 
     #[allow(
         clippy::print_stderr,
-        reason = "the report is the measurement ADR-0215 asks for; --nocapture shows it"
+        reason = "the report is the measurement ADR-0217 asks for; --nocapture shows it"
     )]
     fn live_1080p30(gpu_path: bool, policy: Policy) {
         use std::collections::VecDeque;
