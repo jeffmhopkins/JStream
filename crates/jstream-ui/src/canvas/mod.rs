@@ -2503,7 +2503,11 @@ pub fn Canvas() -> impl IntoView {
                 aria-label=move || format!("Scene canvas, {}", scene_name())
                 on:keydown=on_key
                 on:keyup=on_key_up
-                on:blur=move |_| fly_keys.set_value(fly::Keys::default())
+                on:blur=move |_| {
+                    fly_keys.set_value(fly::Keys::default());
+                    fly_shifted.set_value(false);
+                    fly_shift_from.set_value(None);
+                }
             >
                 <canvas
                     node_ref=screen
@@ -2684,6 +2688,9 @@ pub fn Canvas() -> impl IntoView {
                                     title="Level (R) · roll the camera back to 0, so the scene's up is up again"
                                     on:click=move |_| {
                                         turn_camera(&|camera, _| fly::level(camera));
+                                        if let Some(element) = stage.get_untracked() {
+                                            let _focused = element.focus();
+                                        }
                                     }
                                 >
                                     "Level"
