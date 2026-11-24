@@ -318,6 +318,8 @@ source: crates/jstream-mcp/src/tests.rs
                   "item.show",
                   "item.hide",
                   "item.toggle",
+                  "source.mute",
+                  "bus.mute",
                   "ptz.drive",
                   "ptz.aim",
                   "ptz.home",
@@ -1279,7 +1281,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "ValueTarget": {
-            "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive. Serialized with an internal `type` tag.",
+            "description": "The number a value binding drives (ADR-0178, since 0.168): one setting anywhere in\nthe collection that isn't an item's or a camera's, which their own motion modifiers\ndrive, or since 0.187 a switch: a mute, or whether a placement shows its item\n(ADR-0207). Serialized with an internal `type` tag.",
             "oneOf": [
               {
                 "description": "A `live` number or `bool` setting of a source, which every place that draws it\nshows.",
@@ -1388,6 +1390,71 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "source_id",
                   "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An audio source's mute, a switch: muted at one half or more (ADR-0207, since\n0.187). A `scene` source has none.",
+                "properties": {
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source."
+                  },
+                  "type": {
+                    "const": "source_mute",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A bus's mute, the master's included, a switch: muted at one half or more\n(ADR-0207, since 0.187).",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus."
+                  },
+                  "type": {
+                    "const": "bus_mute",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Whether a placement shows its item, a switch: shown at one half or more\n(ADR-0207, since 0.187), as `item.set_visible` would set it, so it cuts, with no\nappear or disappear effect.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item it drives, as `item.set_visible`'s\n`scene_id`: omitted for the item's own."
+                  },
+                  "type": {
+                    "const": "item_visible",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               },
@@ -1549,7 +1616,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `bus` operation: set `op.type` to one of `bus.create` (edit), `bus.rename` (edit), `bus.set_fader` (edit), `bus.set_monitor` (edit), `bus.delete` (edit), `bus.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `bus` operation: set `op.type` to one of `bus.create` (edit), `bus.rename` (edit), `bus.set_fader` (edit), `bus.set_monitor` (edit), `bus.delete` (edit), `bus.mute` (action), `bus.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BusId": {
@@ -1592,6 +1659,36 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "post_filters",
                 "description": "The bus after its filters, fader and mute: \"after FX\", what the bus feeds.",
+                "type": "string"
+              }
+            ]
+          },
+          "MuteTo": {
+            "description": "What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.187). Serialized as\na snake_case string.\n\n`push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the\naction, and releasing it runs [`MuteTo::released`]'s\n([`Action::on_release`](crate::Action::on_release)). Sent as a call, with nothing\nheld, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.",
+            "oneOf": [
+              {
+                "const": "muted",
+                "description": "Mutes it.",
+                "type": "string"
+              },
+              {
+                "const": "unmuted",
+                "description": "Unmutes it.",
+                "type": "string"
+              },
+              {
+                "const": "toggle",
+                "description": "Mutes it if it is unmuted, and unmutes it if it is muted.",
+                "type": "string"
+              },
+              {
+                "const": "push_to_talk",
+                "description": "Unmutes it while held, and mutes it on release.",
+                "type": "string"
+              },
+              {
+                "const": "push_to_mute",
+                "description": "Mutes it while held, and unmutes it on release.",
                 "type": "string"
               }
             ]
@@ -1756,6 +1853,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Mutes or unmutes a bus, the master included (ADR-0207, since 0.187), as\n`bus.set_fader`'s `muted` would, with `source.mute`'s rules. Fails with\n`not_found` for a bus not in the collection.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus."
+                  },
+                  "to": {
+                    "$ref": "#/$defs/MuteTo",
+                    "description": "What to do to its mute."
+                  },
+                  "type": {
+                    "const": "bus.mute",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id",
+                  "to"
                 ],
                 "type": "object"
               },
@@ -2100,6 +2220,16 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "toggle",
                 "description": "Switches it on if it is off, and off if it is on.",
+                "type": "string"
+              },
+              {
+                "const": "hold_on",
+                "description": "Switches it on while a key or note is held, and off on release (ADR-0207, since\n0.187; [`Action::on_release`](crate::Action::on_release)). Sent as a call, with\nnothing held, it switches it on.",
+                "type": "string"
+              },
+              {
+                "const": "hold_off",
+                "description": "Switches it off while a key or note is held, and on on release (ADR-0207, since\n0.187). Sent as a call, it switches it off.",
                 "type": "string"
               }
             ]
@@ -4373,6 +4503,8 @@ source: crates/jstream-mcp/src/tests.rs
                   "item.show",
                   "item.hide",
                   "item.toggle",
+                  "source.mute",
+                  "bus.mute",
                   "ptz.drive",
                   "ptz.aim",
                   "ptz.home",
@@ -10583,6 +10715,8 @@ source: crates/jstream-mcp/src/tests.rs
                   "item.show",
                   "item.hide",
                   "item.toggle",
+                  "source.mute",
+                  "bus.mute",
                   "ptz.drive",
                   "ptz.aim",
                   "ptz.home",
@@ -11493,7 +11627,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.restart` (action), `source.seek` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.mute` (action), `source.restart` (action), `source.seek` (action), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioFollow": {
@@ -11523,6 +11657,36 @@ source: crates/jstream-mcp/src/tests.rs
           "LabelId": {
             "description": "A label that sources carry (ADR-0024 §4).",
             "type": "string"
+          },
+          "MuteTo": {
+            "description": "What `source.mute` and `bus.mute` do to a mute (ADR-0207, since 0.187). Serialized as\na snake_case string.\n\n`push_to_talk` and `push_to_mute` are for a held key or note: pressing it runs the\naction, and releasing it runs [`MuteTo::released`]'s\n([`Action::on_release`](crate::Action::on_release)). Sent as a call, with nothing\nheld, they are the press alone: `push_to_talk` unmutes and `push_to_mute` mutes.",
+            "oneOf": [
+              {
+                "const": "muted",
+                "description": "Mutes it.",
+                "type": "string"
+              },
+              {
+                "const": "unmuted",
+                "description": "Unmutes it.",
+                "type": "string"
+              },
+              {
+                "const": "toggle",
+                "description": "Mutes it if it is unmuted, and unmutes it if it is muted.",
+                "type": "string"
+              },
+              {
+                "const": "push_to_talk",
+                "description": "Unmutes it while held, and mutes it on release.",
+                "type": "string"
+              },
+              {
+                "const": "push_to_mute",
+                "description": "Mutes it while held, and unmutes it on release.",
+                "type": "string"
+              }
+            ]
           },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
@@ -11827,6 +11991,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Mutes or unmutes a source's audio (ADR-0207, since 0.187), as `source.set_audio`'s\n`muted` would: `to` says how, and [`MuteTo`] says what a held key or note does\nwith `push_to_talk` and `push_to_mute`. It is collection state, as `item.show` is:\n`rev` moves on by one, `state.changed` follows and the collection saves it, but it\nis an action, so it is never a step of the sender's undo history, and another\nclient's undo that would overwrite it fails with `undo_conflict`. Setting the mute\nit already has succeeds and changes nothing. The mixer ramps the change over one\nblock, so it never clicks, and nothing is reopened. Fails with `not_found` for a\nsource not in the collection, and `invalid_argument` on `source_id` for one\nwithout audio or a `scene` source, which has no mute of its own. An action takes\nno `expected_rev` or idempotency key, so a caller that may retry sends `muted` or\n`unmuted`, not `toggle`.",
+                "properties": {
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source."
+                  },
+                  "to": {
+                    "$ref": "#/$defs/MuteTo",
+                    "description": "What to do to its mute."
+                  },
+                  "type": {
+                    "const": "source.mute",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "to"
                 ],
                 "type": "object"
               },
@@ -12157,6 +12344,8 @@ source: crates/jstream-mcp/src/tests.rs
                   "item.show",
                   "item.hide",
                   "item.toggle",
+                  "source.mute",
+                  "bus.mute",
                   "ptz.drive",
                   "ptz.aim",
                   "ptz.home",

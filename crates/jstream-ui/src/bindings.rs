@@ -11,8 +11,8 @@
 
 use crate::store::Collection;
 use jstream_control::protocol::{
-    Action, ChannelSwitch, Chord, Edit, Finite32, ItemId, OutputId, OutputKind, SceneId, ShowId,
-    SourceId, TimelineId, Trigger,
+    Action, BusId, ChannelSwitch, Chord, Edit, Finite32, ItemId, MuteTo, OutputId, OutputKind,
+    SceneId, ShowId, SourceId, TimelineId, Trigger,
 };
 
 /// What fires a row: a key chord, or a MIDI trigger.
@@ -178,6 +178,8 @@ pub fn describe(action: &Action, c: &Collection) -> String {
                 ChannelSwitch::On => "Switch on",
                 ChannelSwitch::Off => "Switch off",
                 ChannelSwitch::Toggle => "Switch on or off",
+                ChannelSwitch::HoldOn => "Hold on",
+                ChannelSwitch::HoldOff => "Hold off",
             },
             c.channel_name(channel_id)
         ),
@@ -234,8 +236,30 @@ pub fn describe(action: &Action, c: &Collection) -> String {
         Action::OverlayToggle { scene_id } => {
             format!("Show or hide overlay {}", scene(scene_id))
         }
+        Action::SourceMute { source_id, to } => mute_words(*to, &c.source_name(source_id)),
+        Action::BusMute { bus_id, to } => mute_words(*to, &bus_name(c, bus_id)),
         other => humanize(other.name()),
     }
+}
+
+/// A mute action on `name` as people read it (ADR-0207): "Mute Mic", "Push to talk on Mic".
+fn mute_words(to: MuteTo, name: &str) -> String {
+    match to {
+        MuteTo::Muted => format!("Mute {name}"),
+        MuteTo::Unmuted => format!("Unmute {name}"),
+        MuteTo::Toggle => format!("Mute or unmute {name}"),
+        MuteTo::PushToTalk => format!("Push to talk on {name}"),
+        MuteTo::PushToMute => format!("Push to mute {name}"),
+        _ => format!("Mute {name}"),
+    }
+}
+
+/// A bus as people read it: its name, or its ID while it has none.
+fn bus_name(c: &Collection, id: &BusId) -> String {
+    c.buses
+        .iter()
+        .find(|b| &b.bus_id == id)
+        .map_or_else(|| id.to_string(), |b| b.name.clone())
 }
 
 /// `value`, 0 to 1, as a percent: `0.5` is `50 %`.
@@ -910,6 +934,30 @@ mod tests {
         assert_eq!(
             describe(&Pick::ChannelNudge.actions(&c, "fog", -10.0)[0], &c),
             "Nudge fog by -10 %"
+        );
+    }
+
+    #[test]
+    fn a_mute_reads_as_what_it_does() {
+        let c = collection();
+        let mic = |to| Action::SourceMute {
+            source_id: SourceId::new("mic"),
+            to,
+        };
+        assert_eq!(
+            describe(&mic(MuteTo::PushToTalk), &c),
+            "Push to talk on mic"
+        );
+        assert_eq!(describe(&mic(MuteTo::Toggle), &c), "Mute or unmute mic");
+        assert_eq!(
+            describe(
+                &Action::BusMute {
+                    bus_id: BusId::master(),
+                    to: MuteTo::PushToMute,
+                },
+                &c
+            ),
+            "Push to mute master"
         );
     }
 

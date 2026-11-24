@@ -20,6 +20,7 @@
 
 #![forbid(unsafe_code)]
 
+mod action_bindings;
 mod activity;
 mod activity_log;
 mod aim;

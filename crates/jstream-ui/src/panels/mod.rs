@@ -38,6 +38,7 @@ pub mod mapping_mode;
 pub mod mappings;
 pub mod mixer;
 pub mod motion;
+pub mod mute_keys;
 pub mod number;
 pub mod outputs;
 pub mod properties;

@@ -244,6 +244,7 @@ fn deleted_object(edit: &Edit) -> Option<(EntityKind, &str)> {
         Edit::OutputDelete { output_id } => Some((EntityKind::Output, output_id.as_str())),
         Edit::EncoderDelete { profile_id } => Some((EntityKind::Encoder, profile_id.as_str())),
         Edit::TransitionDelete { preset_id } => Some((EntityKind::Transition, preset_id.as_str())),
+        Edit::BusDelete { bus_id } => Some((EntityKind::Bus, bus_id.as_str())),
         Edit::ShowDelete { show_id } => Some((EntityKind::Show, show_id.as_str())),
         _ => None,
     }

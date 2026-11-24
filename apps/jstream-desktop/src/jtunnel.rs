@@ -3,9 +3,11 @@
 //! machine's accepted senders, as the daemon's `--jtunnel-accept` gives them.
 //!
 //! - **The setting** is `jtunnel.json` in the data folder, `{"on": true, "accepted":
-//!   [{"name": "Bitwig", "address": "192.168.1.5:9000", "state": true}]}`, user-only.
-//!   `state` is "Use this sender's state" (ADR-0171 decision 1), on when left out, as it is for a
-//!   newly accepted sender. Only the person
+//!   [{"name": "Bitwig", "address": "192.168.1.5:9000", "state": true, "midi": false}]}`,
+//!   user-only. `state` is "Use this sender's state" (ADR-0171 decision 1), on when left
+//!   out, as it is for a newly accepted sender. `midi` is "Use this sender's MIDI"
+//!   (ADR-0123 decision 3): off when left out, and only on does the sender's MIDI run
+//!   action bindings (ADR-0207). Only the person
 //!   changes it, from the app's own window: the page calls `set_jtunnel` through
 //!   `setJtunnel` on `__JSTREAM_DESKTOP__` (`bootstrap.rs`), a Tauri command that no
 //!   engine client (an agent, a plugin or a paired device) can reach. Per machine, never
@@ -43,6 +45,10 @@ pub struct Entry {
     /// off, and on in a file from before it.
     #[serde(default = "state_on")]
     pub state: bool,
+    /// "Use this sender's MIDI" (ADR-0123 decision 3): off unless the person turns it
+    /// on, and off in a file from before it. On, its MIDI runs action bindings.
+    #[serde(default)]
+    pub midi: bool,
 }
 
 const fn state_on() -> bool {
@@ -77,7 +83,8 @@ impl Setting {
                 let addr = entry.address.trim().parse().map_err(|err| {
                     format!("`{}` is not an address and port: {err}", entry.address)
                 })?;
-                AcceptedSender::new(&entry.name, addr).map(|s| s.with_state(entry.state))
+                AcceptedSender::new(&entry.name, addr)
+                    .map(|s| s.with_state(entry.state).with_midi(entry.midi))
             })
             .collect::<Result<Vec<_>, String>>()?;
         JtunnelSetup::new(accepted).map(Some)
@@ -225,6 +232,7 @@ mod tests {
             name: name.into(),
             address: address.into(),
             state: true,
+            midi: false,
         }
     }
 
@@ -246,6 +254,27 @@ mod tests {
         assert!(
             setup.accepted[0].uses_state(),
             "an accepted sender's state is used"
+        );
+        assert!(
+            !setup.accepted[0].uses_midi(),
+            "its MIDI runs no bindings until the person says so (ADR-0123 §3)"
+        );
+        // "Use this sender's MIDI" turned on is saved and reaches the engine.
+        let midi = Setting {
+            on: true,
+            accepted: vec![Entry {
+                midi: true,
+                ..entry("Bitwig", "192.168.1.5:9000")
+            }],
+        };
+        write(&file, &midi).expect("saved");
+        assert!(
+            read(&file)
+                .setup()
+                .expect("valid")
+                .expect("a setup")
+                .accepted[0]
+                .uses_midi()
         );
         // "Use this sender's state" (ADR-0171 decision 1) turned off is saved and reaches
         // the engine; a file from before it has none, and reads as on.
@@ -271,7 +300,7 @@ mod tests {
             r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"}]}"#,
         )
         .expect("an older file");
-        assert_eq!(read(&file), on, "no state reads as on");
+        assert_eq!(read(&file), on, "no state reads as on, no midi as off");
         write(&file, &on).expect("saved");
         // Off keeps the list, and opens nothing.
         let off = Setting { on: false, ..on };

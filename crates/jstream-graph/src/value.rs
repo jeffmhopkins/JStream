@@ -2,9 +2,11 @@
 //! `binding.clear_value` edits, what number a binding's target takes
 //! ([`ValueRange`]), and the setter edit that gives it a value ([`value_edit`]).
 //!
-//! A value binding names a source setting, a filter setting on any chain, a fader or a
-//! send, or (ADR-0209) one axis of a PTZ camera's position, which the engine turns into
-//! aims rather than edits ([`value_edit`] gives none). `binding.set_value` checks the target exists and takes a number: a setting its
+//! A value binding names a source setting, a filter setting on any chain, a fader, a
+//! send, since 0.187 a switch: a source's or bus's mute, or whether a placement shows
+//! its item (ADR-0207), which take a `bool`, or (ADR-0209) one axis of a PTZ camera's
+//! position, which the engine turns into aims rather than edits ([`value_edit`] gives
+//! none). `binding.set_value` checks the target exists and takes a number: a setting its
 //! kind marks `live` of type `int`, `float` or `bool`, an audio source's fader (not a
 //! `scene` source's), a bus's, or a send that exists. Unlike an action binding, a value
 //! binding is not removed with the object it names: it is left driving nothing, as a
@@ -102,6 +104,23 @@ pub fn value_edit(target: &ValueTarget, range: ValueRange, value: f64) -> Option
             source_id: source_id.clone(),
             bus_id: bus_id.clone(),
             gain_db: gain()?,
+        },
+        ValueTarget::SourceMute { source_id } => Edit::SourceSetAudio {
+            source_id: source_id.clone(),
+            enabled: None,
+            follow: None,
+            gain_db: None,
+            muted: Some(range.json(value).as_bool()?),
+        },
+        ValueTarget::BusMute { bus_id } => Edit::BusSetFader {
+            bus_id: bus_id.clone(),
+            gain_db: None,
+            muted: Some(range.json(value).as_bool()?),
+        },
+        ValueTarget::ItemVisible { item_id, scene_id } => Edit::ItemSetVisible {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            visible: range.json(value).as_bool()?,
         },
         _ => return None,
     })
@@ -334,6 +353,31 @@ fn range(
                 .bus(bus_id)
                 .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
             return Ok(fader);
+        }
+        // Switches (ADR-0207): the setter checks the rest (a source without audio, a
+        // `scene` source's mute, a placement its scene can't change).
+        ValueTarget::SourceMute { source_id } => {
+            state
+                .source(source_id)
+                .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            return Ok(ValueRange::Switch);
+        }
+        ValueTarget::BusMute { bus_id } => {
+            state
+                .bus(bus_id)
+                .ok_or_else(|| not_found(EntityKind::Bus, bus_id.as_str()))?;
+            return Ok(ValueRange::Switch);
+        }
+        ValueTarget::ItemVisible { item_id, scene_id } => {
+            state
+                .item(item_id)
+                .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))?;
+            if let Some(scene_id) = scene_id {
+                state
+                    .scene(scene_id)
+                    .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+            }
+            return Ok(ValueRange::Switch);
         }
         // The head's own counts (ADR-0146 §5, ADR-0209): whole numbers over the range
         // the protocol carries.

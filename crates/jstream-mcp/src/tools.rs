@@ -148,13 +148,15 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// and the media clock held for a frame-by-frame render (ADR-0172: `clock.release` lets
 /// it run again, and it never holds while an output runs), and a channel's live value
 /// (ADR-0183: nothing stores it, and another `channel.set_value` or `channel.switch` puts
-/// it back), and an overlay put up or taken down (ADR-0210: nothing stores it, and the
-/// opposite `overlay.*` action puts it back). A tool whose actions are all
+/// it back), a mute (ADR-0207: the opposite `source.mute` or `bus.mute` puts it back),
+/// and an overlay put up or taken down (ADR-0210: nothing stores it, and the opposite
+/// `overlay.*` action puts it back). A tool whose actions are all
 /// here is not `destructiveHint`. Every other action is: going live or stopping, setting
 /// or clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 32] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 34] = [
     "audio.reset_loudness",
+    "bus.mute",
     "channel.nudge",
     "channel.set_value",
     "channel.switch",
@@ -181,6 +183,7 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 32] = [
     "scene.switch",
     "scene.switch_and_watch",
     "scene.zoom_camera",
+    "source.mute",
     "source.restart",
     "source.seek",
     "studio.set_preview",

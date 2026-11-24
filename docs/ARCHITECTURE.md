@@ -772,7 +772,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   bus's monitor, an output device and a tap point (protocol 0.42).
   `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
   ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene,
-  output or transition preset an action names removes its bindings in the same edit, the batch result lists
+  source, output, bus or transition preset an action names removes its bindings in the same edit, the batch result lists
   them as `removed_hotkeys`, and undo restores them
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
   `hotkey.set_labels` sets a binding's labels (protocol 0.100,
@@ -781,7 +781,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)) do the same
   for a controller `Trigger` (a MIDI note, controller or program change), with the
   hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
-  No input fires them yet.
+  Since 0.187 the engine fires them from the MIDI inputs the host lets run bindings (a
+  JTunnel sender with "Use this sender's MIDI" on, ADR-0123 §3), and a held note or
+  control releases an action that has a release (`Action::on_release`), as a client
+  does for a held key ([ADR-0207](adr/0207-mute-actions-and-held-triggers.md)).
   A chord or trigger runs several actions in the order they were bound, and a clear can
   name the one action to unbind (protocol 0.181,
   [ADR-0208](adr/0208-several-actions-per-key-or-trigger.md)), which also adds
@@ -789,7 +792,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `binding.set_value` and `binding.clear_value` (protocol 0.168,
   [ADR-0178](adr/0178-value-bindings-drive-any-number.md)) set and remove a value binding:
   a `midi` or `data` reading, as a motion modifier's, driving a source's or filter's live
-  setting, a fader or a send, drawn and heard without being stored, or since 0.182 one
+  setting, a fader or a send, since 0.187 a mute or a placement's visibility as a
+  switch (ADR-0207), drawn and heard without being stored, or since 0.182 one
   axis of a PTZ head, aimed rather than stored
   ([ADR-0209](adr/0209-value-bindings-aim-ptz-cameras.md)); `midi.last_controls`
   reports each input's latest control change, for learning one.
@@ -931,6 +935,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` and `state.changed` but no undo step, so a hotkey can show or hide an item. On
   program the engine plays the item's own appear or disappear effect as a Move that
   pairs every other item with itself.
+- **Mutes from an action** (protocol 0.187,
+  [ADR-0207](adr/0207-mute-actions-and-held-triggers.md)): `source.mute` and `bus.mute`
+  set a mute as `source.set_audio` and `bus.set_fader` do, on the same terms, to muted,
+  unmuted, toggled, or held for push to talk or push to mute, so a key or a pad can mute.
 - **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
   action `pairing.start` answers a one-time code (an action result, the one place it is
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own, and

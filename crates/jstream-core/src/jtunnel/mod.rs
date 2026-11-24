@@ -117,6 +117,10 @@ pub struct AcceptedSender {
     /// "Use this sender's state" (ADR-0171 decision 1): on once the sender is accepted,
     /// unless the person turns it off.
     state: bool,
+    /// "Use this sender's MIDI" ([ADR-0123](../../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+    /// §3): off until the person turns it on. Its MIDI is drawn either way; only on
+    /// does it run action bindings (ADR-0207).
+    midi: bool,
 }
 
 impl AcceptedSender {
@@ -161,7 +165,23 @@ impl AcceptedSender {
             name: name.to_owned(),
             addr,
             state: true,
+            midi: false,
         })
+    }
+
+    /// The same sender with "Use this sender's MIDI" on or off (ADR-0123 §3). Off is
+    /// the default; on, its notes and control changes run the action bindings that
+    /// listen to it or to every input (ADR-0207).
+    #[must_use]
+    pub fn with_midi(mut self, on: bool) -> Self {
+        self.midi = on;
+        self
+    }
+
+    /// Whether its MIDI runs action bindings.
+    #[must_use]
+    pub fn uses_midi(&self) -> bool {
+        self.midi
     }
 
     /// The same sender with "Use this sender's state" on or off (ADR-0171 decision 1).
@@ -1105,6 +1125,11 @@ impl Run {
                 // MIDI is drawn whether or not a source records the audio, stamped at
                 // its sample within the frame.
                 if let Some(feed) = &mut stream.midi {
+                    // A frame the sender really sent keeps its held presses held; one
+                    // concealed for a gap doesn't (ADR-0207).
+                    if !due.concealed {
+                        feed.alive(due.time_ns);
+                    }
                     for (offset, event) in due.events() {
                         if let wire::Event::Midi(message) = event {
                             let ns = due.time_ns.saturating_add(

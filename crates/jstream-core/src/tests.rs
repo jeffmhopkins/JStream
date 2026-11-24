@@ -21,6 +21,7 @@ mod item_actions;
 mod keyframe_tracks;
 mod keyframes;
 mod live_values;
+mod mute;
 mod packs;
 mod page_api;
 mod preview;

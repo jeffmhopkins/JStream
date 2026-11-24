@@ -585,6 +585,11 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
     ));
     assert_eq!(midi.any().held(0, 60), 100);
     assert!(eventually(|| receiver.stats().midi == 4));
+    // Each frame it plays keeps the sender alive, MIDI or not, so a press it holds stays
+    // held while it is linked (ADR-0207).
+    assert!(eventually(|| keys.alive_ms().is_some_and(|at| at
+        >= first_ms
+        && keys.last_ms().is_some_and(|last| at > last))));
     // Its clock runs the input's tempo (ADR-0142 §3).
     let tempo = keys.tempo().expect("a tempo from the sender's clock");
     assert!(tempo.playing);

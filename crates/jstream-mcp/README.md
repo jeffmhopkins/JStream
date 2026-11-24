@@ -169,7 +169,11 @@ and another seek puts back), `scene.set_keyframe`
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md), which another switch puts back
 and nothing stores), `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
-opposite action takes back), `studio.set_warm` (ADR-0117 §7: how many scenes stay
+opposite action takes back), `source.mute` and `bus.mute`
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md), which the opposite
+mute takes back), `channel.set_value`, `channel.nudge` and `channel.switch`
+([ADR-0183](../../docs/adr/0183-virtual-control-channels.md), which another channel
+action takes back and nothing stores), `studio.set_warm` (ADR-0117 §7: how many scenes stay
 ready, which another call puts back), `studio.set_rendering`
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md): which
 costly 3D effects draw, which another call puts back) and `clock.hold`, `clock.step` and `clock.release`

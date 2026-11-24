@@ -20,6 +20,9 @@ use leptos::prelude::*;
 
 /// The throw a learned fader gets, in dB: wide enough to fade out, short of the top.
 pub const FADER_THROW: (f64, f64) = (-60.0, 6.0);
+/// The range of a switch (a `bool` setting, a mute, a placement's visibility): on at one
+/// half or more (ADR-0207).
+pub const SWITCH: (f64, f64) = (0.0, 1.0);
 
 /// What owns the settings a form shows, for the learn button beside each.
 #[derive(Clone, Debug, PartialEq)]

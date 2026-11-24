@@ -176,6 +176,14 @@ impl std::fmt::Debug for MidiFeed {
 }
 
 impl MidiFeed {
+    /// Records that the input's sender was heard from at `at_ns` on the media clock,
+    /// as [`MidiState::alive`] says.
+    pub fn alive(&self, at_ns: u64) {
+        if let Some(own) = &self.own {
+            own.alive(at_ns / 1_000_000);
+        }
+    }
+
     /// Records `message`, which arrived at `at_ns` on the media clock, in the input's
     /// state and the every-input one. A clock, start, stop, continue or song position
     /// also moves the input's tempo, which both publish (the every-input state's from

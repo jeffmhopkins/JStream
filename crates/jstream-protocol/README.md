@@ -94,9 +94,11 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`, `channel.set_value`, `channel.switch`, `channel.nudge`, `show.play`, `show.stop`, `show.pause`, `show.continue`, `show.back`, `show.skip`, `show.go_to`, `show.go_to_number`, `show.seek`, `show.arm`, `overlay.show`, `overlay.hide`, `overlay.toggle`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `source.seek`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`, and since 0.187
+  `source.mute` and `bus.mute` with `MuteTo` in `audio.rs`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
-  wheel chord may run it, 0.104),
+  wheel chord may run it, 0.104), `Action::on_release` (what a held key or note runs
+  when let go, 0.187, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)),
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
   and say what state it sets ([Timelines](#timelines)), and `Action::show_problem`,
@@ -134,13 +136,15 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   `Trigger`, a MIDI note, control change or program change, on one channel or any, from
   one input or any (`Trigger::problem`, shared by every implementation), and `Binding`,
   a trigger and its action as reads report it; since 0.168 a `ValueBinding`, a control
-  or live-data field driving a `ValueTarget` (ADR-0178), and `MidiControlInfo`, an
+  or live-data field driving a `ValueTarget` (ADR-0178; since 0.187 also a switch: a
+  source's or bus's mute or a placement's visibility, ADR-0207), and `MidiControlInfo`, an
   input's latest control change. See [Controller bindings](#bindings).
 - **Channels** (`channel.rs`, since 0.169,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelInfo`, a named
   value 0 to 1 that up to `MAX_CHANNEL_INPUTS` (8) `midi`, `data` or `channel` inputs
   drive, combined by `ChannelCombine`, averaged, faded, curved and switched on or off
-  (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch`, and
+  (`ChannelInfo::problem`, shared by every implementation); `ChannelSwitch` (with
+  `hold_on` and `hold_off` since 0.187, ADR-0207), and
   `ChannelValueInfo` with its `ChannelDriver`, what `channel.values` reports. See
   [Controller bindings](#bindings).
 - **Shows** (`show.rs`, since 0.180,
@@ -167,7 +171,9 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   bus's monitor, with its shared check (`BusMonitor::problem`, 0.42); the fader range and
   its shared check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
-  a `meters.tick` carries.
+  a `meters.tick` carries; and `MuteTo` (0.187,
+  [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)), what `source.mute`
+  and `bus.mute` do, with `MuteTo::muted` and `MuteTo::released`.
 - **Organisation** (`organise.rs`,
   [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
   `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
@@ -401,7 +407,13 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.188 because `preview.show` moves an open preview stream to
 another scene, or the program, on its channel, keeping its encoder where nothing else
-shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.186 because a value binding and a reader motion row (`midi`,
+shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.187 because a source's or bus's mute can be set by an action,
+`source.mute` and `bus.mute`, whose `to` (`MuteTo`) mutes, unmutes, toggles, or holds it
+for push to talk or push to mute; `channel.switch` gains `hold_on` and `hold_off`; a key
+or note bound to one of those runs `Action::on_release` when it is let go; and a value
+binding can drive a mute or a placement's visibility as a switch (`ValueTarget`'s
+`source_mute`, `bus_mute` and `item_visible`)
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)); 0.186 because a value binding and a reader motion row (`midi`,
 `data`, `channel` or `audio`, on an item or a scene camera) take a `mode`, `add` or
 `replace`; a value binding's target sums its `add` bindings onto the last moved
 `replace` binding's value or its stored value, a binding gains `enabled`, and a
@@ -938,7 +950,12 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 The classification rule: **if the command's whole effect is a change to the collection
 state, and its inverse can be computed from the state before it, it is an edit.
 Otherwise it is an action.** A command that does both is split into an edit and an
-action. A **query** (`Query`) changes nothing and is neither.
+action. A **query** (`Query`) changes nothing and is neither. A few actions stand for
+an edit, so that a key or a trigger, which runs actions only, can make it: `item.show`,
+`item.hide` and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md))
+and `source.mute` and `bus.mute`
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)) apply the edit they
+stand for and move `rev` by one, and are still never undoable or batchable.
 
 The types enforce the split: a `Batch` holds only `Edit`s, an action travels alone, and
 `Call` (tagged by `kind`) has exactly four forms: `batch`, `action`, `query` and
@@ -1092,6 +1109,17 @@ Deleting a bus removes the sends into it, and deleting a source removes its send
 the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
+
+**Mute actions** (0.187, [ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md)):
+`source.mute { source_id, to }` and `bus.mute { bus_id, to }` set a mute as
+`source.set_audio` and `bus.set_fader` do, as actions a key or a MIDI trigger can run.
+`to` (`MuteTo`) is `muted`, `unmuted`, `toggle`, `push_to_talk` or `push_to_mute`; the
+last two are for a held key or note, whose release runs the opposite
+([`Action::on_release`](#bindings)), and as a plain call they are their press alone
+(`push_to_talk` unmutes, `push_to_mute` mutes). Like `item.show`, they change the
+collection (`rev`, `state.changed`, saved) but are never an undo step; setting the mute
+a target already has changes nothing. They refuse what the edit refuses: a source without
+audio or a `scene` source is `invalid_argument`, a missing one `not_found`.
 
 **Output buses** (0.59): an output carries the audio of the buses in its
 `audio_buses`, one per audio track, in track order. Every output writes one audio track
@@ -1578,8 +1606,14 @@ decision 1): a `Trigger` bound to one or more `Action`s. A key chord stays a hot
 `state.get`'s `hotkeys` lists chords only, as a client that registers them with the OS
 expects; every other trigger is a binding, in `bindings`. Where a client listens for a
 chord and sends its action, a controller's messages come from an input the engine reads,
-so the engine runs the action itself, on the first frame at or after the message's time.
-No input feeds bindings yet; the MIDI and JTunnel inputs add them.
+so the engine runs the action itself. Since 0.187 it does
+([ADR-0207](../../docs/adr/0207-mute-actions-and-held-triggers.md) decision 4): about 30
+times a second (60 while a value moves) it reads what each MIDI and JTunnel input sent since its last look, in
+the order sent, so a press and a release between two looks both run; nothing sent before
+its first look runs. It reads only an input the host lets run bindings: a JTunnel sender
+once the person turns on its "Use this sender's MIDI", off by default
+([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md) §3). A trigger with no
+`input` listens to each of those.
 - **Triggers** are tagged by `kind`: `midi_note {note}`, `midi_cc {controller}` and
   `midi_program {program}`, each 0 to 127, with an optional `channel` (1 to 16, as a
   device's panel shows it; missing for any channel) and an optional `input` (the name of
@@ -1589,6 +1623,12 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
   the same exactly when they are equal, so channel 1 and any channel are two bindings,
   and a message matching both fires both. Anything else is `invalid_argument` on
   `trigger.<field>`, with `Trigger::problem`'s reason.
+- **Releases** (0.187): a note's note-off (or note-on at velocity 0), and a control
+  change falling back from 64 or above to 63 or below, run the bound action's
+  `Action::on_release`, if it has one: `source.mute` and `bus.mute` with `push_to_talk`
+  or `push_to_mute`, and `channel.switch` with `hold_on` or `hold_off`. A trigger running
+  several actions releases each that has one. A program change has no release. A client
+  that runs hotkeys does the same when a chord's key goes up.
 - **`binding.set {trigger, action}`** binds a trigger to an action; its inverse is
   `binding.clear` naming that action. Like a chord, a trigger runs several actions in
   bind order (0.181, ADR-0208): it is refused with `already_exists` (entity `binding`,
@@ -1616,18 +1656,21 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
   modifier's own check refuses, as `binding.<field>`.
 - **`ValueTarget`**, tagged by `type`: `source_setting {source_id, param}`,
   `filter_setting {owner, filter_id, param}` (any `FilterOwner`), `source_gain
-  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}` and (0.182,
+  {source_id}`, `bus_gain {bus_id}`, `send_gain {source_id, bus_id}`, (0.182,
   [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md)) `ptz_axis {camera,
   axis}`, one axis (`PtzAxis`: `pan`, `tilt`, `zoom`, `focus`) of a PTZ camera's
-  position in the head's own counts, whole numbers within `PtzAxis::range`. A
-  `ptz_axis` names the camera by name, as a shot does; `ValueBinding::problem` refuses a
-  name `ptz.*` would refuse, at `binding.target.camera`.
+  position in the head's own counts, whole numbers within `PtzAxis::range`, and since
+  0.187 three switches, on at one half or more: `source_mute {source_id}`, `bus_mute
+  {bus_id}` and `item_visible {item_id, scene_id?}` (which cuts, with no appear or
+  disappear effect). A `ptz_axis` names the camera by name, as a shot does;
+  `ValueBinding::problem` refuses a name `ptz.*` would refuse, at `binding.target.camera`.
 - **`binding.set_value {binding}`** sets a binding by ID, whole, a new one (inverse
   `binding.clear_value`) or in place of one (inverse `binding.set_value` with the old).
   A `ptz_axis` target is not looked up: the camera belongs to the machine. Otherwise
   the collection refuses, at `binding.target` or `binding.target.param`, a setting its
   kind doesn't mark `live` or that isn't an `int`, `float` or `bool`, a `scene` source's
-  fader and a send that doesn't exist; `not_found` for a missing source, filter or bus;
+  fader or mute, a source without audio's mute, and a send that doesn't exist;
+  `not_found` for a missing source, filter, bus, item or scene;
   and `invalid_argument` at `binding` for a 257th ([`MAX_VALUE_BINDINGS`]).
 - **`binding.clear_value {binding_id}`** removes one, or is `not_found` (entity
   `binding`).
@@ -1671,7 +1714,9 @@ controls into one live value, 0 to 1, that anything bindable follows, listed in
   `scene_id` goes back to its default each time that scene goes on program.
 - **`channel.set_value {channel_id, value, fade_ms?}`** (0 to 1),
   **`channel.nudge {channel_id, by, fade_ms?}`** (-1 to 1) and **`channel.switch
-  {channel_id, to}`** (`on`, `off`, `toggle`) change it until an input moves again
+  {channel_id, to}`** (`on`, `off`, `toggle`, and since 0.187 `hold_on` and `hold_off`,
+  on or off while a key or note is held and back on release, ADR-0207) change it until
+  an input moves again
   (`fade_ms` ≤ 60,000). A hotkey, a controller binding and a timeline cue may run them.
 - **`channel.values`** answers `ChannelValueInfo {channel_id, value, on, driver?}` for
   each channel, where `driver` is `{by: "input", index}` or `{by: "action"}`.
@@ -1925,7 +1970,9 @@ depends_on = ["docs/RULES.md#R-API-004"]
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
 
 - `rev` is the collection state revision. Every applied batch increments it by exactly
-  one, however many edits it holds. Actions and queries never change it.
+  one, however many edits it holds. Queries never change it, nor do actions, but the
+  few that apply the edit they stand for (`item.show`, `item.hide`, `item.toggle`,
+  `source.mute` and `bus.mute`; see [Edits, actions and queries](#calls)), each by one.
 - A batch is atomic: the engine applies its edits in order, each against the state the
   previous one left. If any edit fails, nothing is applied, `rev` is unchanged, and the
   error names the failing edit's field (`edits.2.name`).
@@ -2777,7 +2824,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey, binding, channel and studio
   edits, among them a scene's folder, metadata and transitions, a source's metadata, a
   hotkey binding's labels (ADR-0133), an
-  item's transition settings, the `transition.*` presets and `studio.set_preview`,
+  item's transition settings, the `transition.*` presets and `studio.set_preview`, the
+  `source.mute` and `bus.mute` actions (ADR-0207, as `source.set_audio` and
+  `bus.set_fader`),
   a camera's motion and follow camera, the group it rides with (ADR-0164), a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
@@ -3147,6 +3196,11 @@ after 1.0:
   preset, an item or a keyframe's timing uses one.
   0.182 adds the `ValueTarget` value `ptz_axis` (ADR-0209) on the same terms: a client
   older than 0.182 can't parse `state.get` once a value binding aims a PTZ head's axis.
+  0.187 adds the `ValueTarget` types `source_mute`, `bus_mute` and `item_visible`
+  (ADR-0207) on the same terms: a client older than 0.187 can't parse `state.get` once a
+  value binding drives one. Its `MuteTo` values and `ChannelSwitch`'s `hold_on` and
+  `hold_off` travel only inside actions, which hotkeys, bindings and cues hold as plain
+  JSON, so they break no older client's reads.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

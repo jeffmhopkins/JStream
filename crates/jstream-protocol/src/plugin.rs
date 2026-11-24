@@ -289,6 +289,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("channel.switch", Class(L)),
     ("channel.nudge", Class(L)),
     ("source.restart", Class(L)),
+    // A mute, as `source.set_audio` and `bus.set_fader` set it (ADR-0207).
+    ("source.mute", Class(E)),
+    ("bus.mute", Class(E)),
     // A show switches program and runs cues, as a timeline does (ADR-0210), so writing
     // or running one is "never" until a PR decides which class may.
     ("show.set", N),

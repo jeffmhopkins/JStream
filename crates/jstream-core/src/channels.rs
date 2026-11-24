@@ -604,8 +604,9 @@ impl ChannelDriver {
     pub(crate) fn switch(&mut self, channel_id: &str, to: ChannelSwitch) -> Result<(), NoChannel> {
         let followed = self.followed.get_mut(channel_id).ok_or(NoChannel)?;
         followed.on = match to {
-            ChannelSwitch::On => true,
-            ChannelSwitch::Off => false,
+            // Held, it is on; the release switches it off (ADR-0207).
+            ChannelSwitch::On | ChannelSwitch::HoldOn => true,
+            ChannelSwitch::Off | ChannelSwitch::HoldOff => false,
             ChannelSwitch::Toggle => !followed.on,
         };
         Ok(())

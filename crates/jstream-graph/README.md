@@ -500,8 +500,9 @@ that does not want to change the graph it has.
   whole: the binding must exist, then each label, each once (`checked_labels`); an
   empty list removes them, and the inverse sets the old ones. Clearing or removing a
   binding takes its labels with it, and its inverse is `hotkey.set` then
-  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile or
-  transition preset (a `scene.switch` may name one) removes the bindings that name it, and
+  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile, bus (a
+  `bus.mute` names one, ADR-0207) or transition preset (a `scene.switch` may name one)
+  removes the bindings that name it, and
   any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names,
   or a timeline a `timeline.play`, `timeline.stop` or `timeline.seek` names, removes
   those bindings too (`remove_missing_items`,
@@ -529,7 +530,8 @@ that does not want to change the graph it has.
   `binding_id` (inverse `binding.clear_value`, or `binding.set_value` with the one it
   replaced) after `ValueBinding::problem` (`invalid_argument` at `binding.<field>`), the
   limit of 256 (at `binding`), and its target: `not_found` for a source, filter (found as
-  `filter.set_settings` finds it) or bus that doesn't exist, and `invalid_argument` at
+  `filter.set_settings` finds it), bus, item or scene that doesn't exist (the switch
+  targets `source_mute`, `bus_mute` and `item_visible`, ADR-0207, need only that), and `invalid_argument` at
   `binding.target.param` for a setting its kind lacks, doesn't mark `live`, or that isn't
   an `int`, `float` or `bool`. Last, the setter the engine will drive it with
   (`value_edit`) is applied to a copy of the state, and a refusal (a `scene` source's
@@ -541,7 +543,9 @@ that does not want to change the graph it has.
   `Graph::stored_value` the number it holds as stored (a setting's own or its kind's
   default, a gain in dB, a switch as 0 or 1), which `add` bindings add to
   ([ADR-0203](../../docs/adr/0203-mappings-add-or-replace.md)), and `value_edit` the
-  setter edit that gives it a value, clamped, rounded or switched. A motion modifier's
+  setter edit that gives it a value, clamped, rounded or switched: for a switch target
+  (ADR-0207) the `source.set_audio` or `bus.set_fader` mute, or `item.set_visible` with
+  the binding's `scene_id`. A motion modifier's
   `mode` becomes `jstream_anim::Modifier::replace` (`motion.rs`), a camera's too.
   A PTZ head's axis (`ptz_axis`, [ADR-0209](../../docs/adr/0209-value-bindings-aim-ptz-cameras.md))
   is bound with no lookup and no setter probe, since the camera list is the machine's,
@@ -616,7 +620,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 19), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 22), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -669,6 +673,8 @@ with `property` `source` and their `source` target, which drive a setting of the
 own source. A scene's `reflections` (ADR-0170), omitted while `false`, is
 `schema_version` 18. Version 19 (ADR-0178) adds the `value_bindings`, ordered by ID and
 omitted when there are none, and motion modifiers with `property` `width` or `height`.
+Versions 20, 21 and 22 add the `channels`, a timeline's `lanes`, `starts` and `stops`,
+and the `shows` with the `show_scene` marker (see Channels, Timelines and Shows above).
 Loading puts the value bindings in last, each after its own shape check, without looking
 up its target, so one whose target is gone or of a kind not installed loads as it was
 saved. Loading creates the folders top level first, then
