@@ -117,6 +117,30 @@ impl Layout {
             .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?)))
     }
 
+    /// [`Self::boxes`] that the canvas shows and a press can reach: the visible items, and
+    /// a hidden one only while it is `selected`. A hidden item draws nothing, so it takes
+    /// no clicks and no marquee or snap over what is drawn there (#1732).
+    pub fn seen_boxes<'a>(
+        &'a self,
+        selected: &'a [ItemId],
+    ) -> impl DoubleEndedIterator<Item = (&'a ItemId, &'a ItemGeometry)> {
+        self.items
+            .iter()
+            .filter(|item| item.visible || selected.contains(&item.item_id))
+            .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?)))
+    }
+
+    /// [`Self::shapes`] of [`Self::seen_boxes`]' items.
+    pub fn seen_shapes<'a>(
+        &'a self,
+        selected: &'a [ItemId],
+    ) -> impl DoubleEndedIterator<Item = (&'a ItemId, &'a ItemGeometry, &'a Shape)> {
+        self.items
+            .iter()
+            .filter(|item| item.visible || selected.contains(&item.item_id))
+            .filter_map(|item| Some((&item.item_id, item.geometry.as_ref()?, &item.shape)))
+    }
+
     /// [`Self::boxes`], each with what a 3D scene outlines and hits it by
     /// ([`CanvasItem::shape`]).
     pub fn shapes(&self) -> impl DoubleEndedIterator<Item = (&ItemId, &ItemGeometry, &Shape)> {
@@ -583,6 +607,25 @@ mod tests {
         let boxes: Vec<_> = layout.boxes().map(|(id, _)| id.clone()).collect();
         assert_eq!(boxes, vec![ItemId::from("box")]);
         assert_eq!(layout.items[1].name, "Camera");
+    }
+
+    /// A hidden item is left out of what the canvas shows and hits, unless selected (#1732).
+    #[test]
+    fn a_hidden_item_is_seen_only_while_selected() {
+        let control = engine();
+        let mut layout = load(&control, "s2");
+        let ids = |seen: Vec<(&ItemId, &ItemGeometry)>| -> Vec<ItemId> {
+            seen.into_iter().map(|(id, _)| id.clone()).collect()
+        };
+        let boxed = ItemId::from("box");
+        assert_eq!(ids(layout.seen_boxes(&[]).collect()), vec![boxed.clone()]);
+        layout.items[1].visible = false;
+        assert!(layout.seen_boxes(&[]).next().is_none());
+        assert_eq!(layout.seen_shapes(&[]).count(), 0);
+        let selected = [boxed.clone()];
+        assert_eq!(ids(layout.seen_boxes(&selected).collect()), vec![boxed]);
+        assert_eq!(layout.seen_shapes(&selected).count(), 1);
+        assert_eq!(layout.boxes().count(), 1, "boxes() still lists every box");
     }
 
     /// The gestures `live.list` reports open.
