@@ -70,7 +70,7 @@ pub trait Source: Send {
     }
 
     /// Whether the source counts from its time zero and starts again by counting from a
-    /// new one: a `timer` (ADR-0212). The engine restarts such a source itself, for a
+    /// new one: a `timer` (ADR-0214). The engine restarts such a source itself, for a
     /// show, a `source.restart` and a `source.seek`, by moving its time zero, so a build
     /// that keeps its time ([`SourceKind::keeps_time`]) keeps the restart too; it calls
     /// none of [`show`](Self::show), [`restart`](Self::restart) or [`seek`](Self::seek)

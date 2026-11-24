@@ -207,7 +207,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   mix shows their frames and advances animations and videos on the media clock, and
   tells a source when it shows it again, unless `source.seek` played it on from a point
   since (`LiveSources::seek`, see *Timelines*); a `timer` countdown or stopwatch
-  starts its count again then (ADR-0212, see *Snapshots*). `media` sources play through the injected
+  starts its count again then (ADR-0214, see *Snapshots*). `media` sources play through the injected
   backends' media files, and report their length when it is known
   (`LiveSources::duration_ms`, `source.sizes`' `duration_ms`). A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
@@ -1059,7 +1059,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   counting when it is on both scenes of a switch
   (`a_timer_on_both_scenes_keeps_counting_through_a_switch`), and starts again for
   `source.restart` and counts on from a `source.seek`
-  (`source_restart_and_seek_start_a_timer_again`, ADR-0212), and a `media` file's
+  (`source_restart_and_seek_start_a_timer_again`, ADR-0214), and a `media` file's
   `duration_ms` in `source.sizes` and a `source.seek` that holds whether it comes just
   before or just after the switch that shows the file, also on a file held at its start
   on the upcoming scene, and is `not_found` for a missing source
@@ -1782,7 +1782,7 @@ preset changed in one batch that one undo takes back.
   instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
   an effect pack's stand-in starts its program again. A `timer`
   (`Source::counts_from_zero`) is started again by moving its time zero instead
-  (`Entry::rezero`, [ADR-0212](../../docs/adr/0212-a-timer-restarts-when-shown.md)). A
+  (`Entry::rezero`, [ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). A
   source with no running instance has nothing to restart.
 - **`source.seek`** (since 0.177; not a cue, so `action_now` is the clock's now) is
   `not_found` for a source the collection doesn't hold, and otherwise calls
@@ -3033,7 +3033,7 @@ the first time it is shown, and a `timer` countdown or stopwatch
 (`Source::counts_from_zero`) starts its count again: its time zero moves to the plan's
 time, shared with the thread's paint under one lock (`Running::zero`) so a paint for
 the old zero can't land after the new one, and it is painted there before the plan
-shows it (ADR-0212). Neither happens when `source.seek` sought it since the program last
+shows it (ADR-0214). Neither happens when `source.seek` sought it since the program last
 reached it (`LiveSources::seek`'s `sought`): then it plays on from the seek, and the
 plan clears the mark. Each source also remembers the last plan any mix looked at
 it in (the program's, a video mix's, or a scene or source preview's, all drawn in the

@@ -52,7 +52,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source counts from its time zero, so the engine restarts it for a show,
   `source.restart` and `source.seek` by moving that zero instead of calling `show`,
   `restart` or `seek`, and a build that keeps its time keeps the restart
-  ([ADR-0212](../../docs/adr/0212-a-timer-restarts-when-shown.md)). `duration()` is one play's length, for `SourceSize`'s `duration_ms`: a
+  ([ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). `duration()` is one play's length, for `SourceSize`'s `duration_ms`: a
   `media` file's, when known; the default is `None`. `sound()` gives a kind's sound that
   plays while the program shows it (`MediaAudio`, a `media` file's), for the engine to
   mix; the default is `None`. `update(settings)` applies a change
@@ -550,7 +550,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   live. A countdown or stopwatch also starts again, with no edit, whenever the program
   shows it again after plans that didn't (its scene goes on program, or its item is
   shown), and for `source.restart`; `source.seek` counts on as if it had started that
-  long ago ([ADR-0212](../../docs/adr/0212-a-timer-restarts-when-shown.md)). The engine
+  long ago ([ADR-0214](../../docs/adr/0214-a-timer-restarts-when-shown.md)). The engine
   does each by moving the time zero (`counts_from_zero`). A `clock` shows the wall-clock time of day
   (`clock_format` `24h`, `12h` with AM or PM, or either without seconds) in the
   machine's time zone, or the IANA zone `time_zone` names, through `jiff` (with no zone

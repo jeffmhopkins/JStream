@@ -386,7 +386,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.179 because a `timer` countdown or stopwatch starts its count
 again when the program shows it again, and `source.restart` and `source.seek` start or
-move its count (ADR-0212, a placeholder number the release queue sets); 0.177 because of `source.seek`, which plays a `media` file on
+move its count (ADR-0214, a placeholder number the release queue sets); 0.177 because of `source.seek`, which plays a `media` file on
 from a point into it and holds through the program showing it, and `SourceSize`'s and
 `source.size_changed`'s `duration_ms`, a `media` file's length (a placeholder number
 the release queue sets); 0.176 because `profile.get`'s drawers report
@@ -3235,7 +3235,7 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`, and
   since 0.179 starts a `timer` countdown or stopwatch counting again from its start
-  (ADR-0212); other kinds, a `timer` clock among them, have nothing to restart. Plugins
+  (ADR-0214); other kinds, a `timer` clock among them, have nothing to restart. Plugins
   need the `live` class for it.
 - **`source.seek {source_id, at_ms}`** (since 0.177) plays a `media` file on from
   `at_ms` into its timeline: past the end of a looping file it lands where that many

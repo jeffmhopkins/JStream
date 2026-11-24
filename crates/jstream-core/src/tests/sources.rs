@@ -516,7 +516,7 @@ fn a_countdown_on_a() -> (Engine, FakeClock, crate::InProcessControl, Settings) 
     (engine, clock, control, countdown)
 }
 
-/// ADR-0212: a countdown starts again each time its scene goes on program, and a
+/// ADR-0214: a countdown starts again each time its scene goes on program, and a
 /// rebuild for its look after that keeps the new count.
 #[test]
 fn a_timer_starts_again_when_its_scene_goes_on_program() {
@@ -551,7 +551,7 @@ fn a_timer_starts_again_when_its_scene_goes_on_program() {
     );
 }
 
-/// ADR-0212: a countdown the program shows through a switch, on both scenes, keeps
+/// ADR-0214: a countdown the program shows through a switch, on both scenes, keeps
 /// counting: only being shown again starts it again.
 #[test]
 fn a_timer_on_both_scenes_keeps_counting_through_a_switch() {
@@ -564,7 +564,7 @@ fn a_timer_on_both_scenes_keeps_counting_through_a_switch() {
     timer_reaches(&engine, &timer_frame(&countdown, 1.0, 12_000), "00:48");
 }
 
-/// ADR-0212: `source.restart` starts a countdown on program again, and `source.seek`
+/// ADR-0214: `source.restart` starts a countdown on program again, and `source.seek`
 /// counts it on from a point.
 #[test]
 fn source_restart_and_seek_start_a_timer_again() {

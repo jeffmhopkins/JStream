@@ -2137,7 +2137,7 @@ pub enum Action {
     ClockRelease,
     /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
     /// loads again, a `media` file plays from its start, and a `timer` countdown or
-    /// stopwatch starts its count again (ADR-0212, since 0.179), as it does when the
+    /// stopwatch starts its count again (ADR-0214, since 0.179), as it does when the
     /// program shows it again. Other kinds, a `timer` clock among them, have nothing to
     /// restart, so for them it succeeds and does nothing, as it does for a source no mix
     /// shows yet. Runtime state like a scene switch's restart: it changes no `rev` and is

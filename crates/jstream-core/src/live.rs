@@ -180,7 +180,7 @@ impl Entry {
     }
 
     /// Starts a source that counts from its time zero ([`Source::counts_from_zero`], a
-    /// `timer`, ADR-0212) again from `zero`: the running instance's time zero moves
+    /// `timer`, ADR-0214) again from `zero`: the running instance's time zero moves
     /// there, and so does the one a build in flight keeps, so the build keeps the
     /// restart. It is painted for `now` at once, so the next plan shows the new count.
     /// Returns `false`, doing nothing, for any other source or one not running; the
@@ -216,7 +216,7 @@ struct Running {
     start: MediaTime,
     /// `start`, shared with the thread's [`Painted`] entry and held while either paints
     /// the source, so a paint for a time zero moved since (a `timer` started again,
-    /// ADR-0212) never lands after the paint for the new one.
+    /// ADR-0214) never lands after the paint for the new one.
     zero: Arc<Mutex<MediaTime>>,
     shown: Option<(Arc<VideoFrame>, Frame)>,
     /// The still image it shows and the frame plans show it by, for a source whose one
@@ -1143,7 +1143,7 @@ impl LiveSources {
         versions: &mut u64,
         reach: bool,
     ) -> Option<Look> {
-        // Shown again by the program, a timer starts its count again (ADR-0212), unless
+        // Shown again by the program, a timer starts its count again (ADR-0214), unless
         // it was sought since; any other kind restarts in its own `show`.
         let plan = self.plan;
         if reach

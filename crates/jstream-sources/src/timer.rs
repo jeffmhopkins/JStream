@@ -7,7 +7,7 @@
 //! and the `restart` counter, [`SourceKind::keeps_time`]) and when it draws it at another density, so
 //! editing a timer's look or resizing its item keeps the count going. The engine moves
 //! that zero to start a countdown or stopwatch again when the program shows it again,
-//! and for `source.restart` ([`Source::counts_from_zero`], ADR-0212). A clock shows the
+//! and for `source.restart` ([`Source::counts_from_zero`], ADR-0214). A clock shows the
 //! wall-clock time in the machine's time zone, or the one `time_zone` names.
 //!
 //! Every frame has one size: the text is laid out in a fixed box, measured when the
@@ -299,7 +299,7 @@ impl Source for TimerSource {
 
     /// A countdown or stopwatch counts from its time zero, so the engine starts it again
     /// when the program shows it again, and for `source.restart`, by moving that zero
-    /// (ADR-0212). A clock shows the wall clock, which a new zero doesn't change.
+    /// (ADR-0214). A clock shows the wall clock, which a new zero doesn't change.
     fn counts_from_zero(&self) -> bool {
         true
     }

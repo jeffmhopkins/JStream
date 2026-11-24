@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0212"
+id = "ADR-0214"
 title = "A timer starts its count again when the program shows it again"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0212: A timer starts its count again when the program shows it again
+# ADR-0214: A timer starts its count again when the program shows it again
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
