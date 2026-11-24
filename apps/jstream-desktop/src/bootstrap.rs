@@ -16,7 +16,7 @@
 //! asks the `set_network` command to save it (`network.rs`), resolving to whether it was
 //! saved (false when the command fails too); it applies at the next start.
 //! `jtunnel` is "Receive from JTunnel senders" as the app read it at start (`{on,
-//! accepted: [{name, address}]}`, `jtunnel.rs`), and `setJtunnel(setting)` asks the
+//! accepted: [{name, address, state}], live}`, `jtunnel.rs`), and `setJtunnel(setting)` asks the
 //! `set_jtunnel` command to save one, resolving to `null` when it was saved or the
 //! reason it wasn't; it too applies at the next start. `ptz` and `setPtz(setting)` are
 //! "Accept a PTZ controller" the same way (`{on, endpoints: [{address, transport, visca,
@@ -330,6 +330,7 @@ mod tests {
                         state: false,
                         midi: true,
                     }],
+                    live: Some("</script>".into()),
                 },
                 ptz: &crate::ptz::Setting {
                     on: true,

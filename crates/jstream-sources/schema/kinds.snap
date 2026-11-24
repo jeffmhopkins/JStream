@@ -2413,7 +2413,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "max_len": 31,
         "default": "",
         "label": "Sender",
-        "description": "The sender's name, as its plugin shows it. JStream receives only from senders accepted on this machine.",
+        "description": "The sender's name, as its plugin shows it, or empty for the live sender (the first accepted). JStream receives only from senders accepted on this machine.",
         "live": false
       },
       {

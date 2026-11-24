@@ -1518,6 +1518,8 @@ fn a_network_audio_source_records_an_accepted_jtunnel_sender_once_it_is_heard() 
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);
@@ -1565,6 +1567,8 @@ fn a_jtunnel_senders_clock_publishes_the_tempo_values() {
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // No discovery: nothing joins mDNS's group or asks the network.
+    setup.discover = None;
     let engine = engine(&audio, &clock);
     engine.start_jtunnel(&setup).expect("a receiver");
     let control = connected(&engine);

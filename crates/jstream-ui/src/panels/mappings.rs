@@ -1295,7 +1295,7 @@ mod tests {
             senders: vec![sender(0.6)],
             ..before.clone()
         };
-        assert_eq!(moved_key(&turned, &before), Some(mod_key(Some("DAW"), 2)));
+        assert_eq!(moved_key(&turned, &before), Some(mod_key(None, 2)));
         let pressed = Feed {
             controls: vec![control(21, 127, 2)],
             ..before.clone()

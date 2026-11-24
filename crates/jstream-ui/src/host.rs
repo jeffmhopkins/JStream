@@ -49,7 +49,11 @@ pub struct HostEngine {
 
 /// The desktop app's global: this page's own, else its opener's when the opener is a
 /// page of the same origin (reading a property of a cross-origin opener throws).
+/// Off wasm (native unit tests) there is no page, so no desktop app.
 fn global() -> Option<JsValue> {
+    if cfg!(not(target_arch = "wasm32")) {
+        return None;
+    }
     let own = |target: &JsValue| {
         Reflect::get(target, &JsValue::from_str(DESKTOP_GLOBAL))
             .ok()
@@ -196,6 +200,9 @@ pub struct JtunnelSetting {
     pub on: bool,
     /// The accepted senders.
     pub accepted: Vec<JtunnelSender>,
+    /// The accepted sender JStream receives from, one at a time; the others stand by.
+    /// `None`, or a name not accepted, means the first accepted.
+    pub live: Option<String>,
 }
 
 /// One accepted JTunnel sender.
@@ -242,7 +249,20 @@ impl JtunnelSetting {
         Self {
             on: value.get("on").and_then(serde_json::Value::as_bool) == Some(true),
             accepted,
+            live: value
+                .get("live")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
         }
+    }
+
+    /// The name of the sender JStream receives from: the one `live` names if it is
+    /// accepted, else the first accepted, as the desktop app reads it.
+    pub fn live_name(&self) -> Option<&str> {
+        self.live
+            .as_deref()
+            .filter(|name| self.accepted.iter().any(|sender| sender.name == *name))
+            .or_else(|| self.accepted.first().map(|sender| sender.name.as_str()))
     }
 
     /// The setting as the desktop app's `setJtunnel` takes it.
@@ -261,6 +281,7 @@ impl JtunnelSetting {
                     })
                 })
                 .collect::<Vec<_>>(),
+            "live": self.live,
         })
         .to_string()
     }

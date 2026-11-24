@@ -4,6 +4,10 @@
 //!
 //! - **The switch** turns the JTunnel receiver on for this machine. Off until the person
 //!   turns it on.
+//! - **One live sender.** Any number of senders may be accepted, but JStream receives
+//!   from one at a time, so what reads it names no sender ([`bound_input`]). The live one is marked **Live**; each other one stands by with
+//!   **Make live**, which switches to it. A sender added or accepted becomes the live
+//!   one, replacing the one before, which stays accepted.
 //! - **The accepted senders** are listed by tunnel name and the address and port they
 //!   send from, each with **Use this sender's state** (ADR-0171 decision 1, on once
 //!   the sender is accepted, until the person unticks it: the DAW's transport, tracks and clips become live data that
@@ -13,12 +17,14 @@
 //!   app checks the sender as the engine would (a private IPv4 address, a name no other
 //!   sender has) and the page shows why it refused one.
 //! - **Senders on this network** (protocol 0.114): while the app's receiver runs, the
-//!   senders that answered its mDNS query (`jtunnel.senders`), read again on each
+//!   senders heard on the LAN over mDNS (`jtunnel.senders`), read again on each
 //!   `jtunnel.senders_changed`. Each one not on the list has Accept…, which asks first
 //!   (ADR-0123 §3: the first use of a sender is explicit), naming the sender and its
-//!   address and what accepting lets it do; confirming adds it as the add row would. A
-//!   name is the sender's own text, shown as text. Listing a sender trusts it with
-//!   nothing.
+//!   address and what accepting lets it do; confirming adds it and makes it live. A
+//!   sender already accepted by its name that is now heard at another address (its
+//!   DAW restarted on another port) asks the same way, and confirming moves it there.
+//!   An accepted one standing by has Make live. A name is the sender's own text, shown
+//!   as text. Listing a sender trusts it with nothing.
 //! - **Saving.** Each change asks the app to save the whole setting
 //!   (`host::set_jtunnel`, the app's own command, which no engine client reaches). A
 //!   refused change is undone on the page. The app applies a saved change at once,
@@ -33,6 +39,21 @@ use jstream_control::Control;
 use jstream_control::protocol::{Call, CallResult, JtunnelSenderInfo, Query, QueryResult};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+
+/// The input a reader learned from `input` names: none when `input` is a JTunnel sender
+/// this app accepts, since the app receives from one sender at a time and a reader
+/// naming no input reads the live one, whatever its tunnel name (ADR-0221); `input`
+/// itself for anything else (a MIDI port), or outside the desktop app.
+pub fn bound_input(input: &str) -> Option<String> {
+    let jtunnel = crate::host::desktop_jtunnel()
+        .is_some_and(|setting| setting.accepted.iter().any(|s| s.name == input));
+    bound_input_of(input, jtunnel)
+}
+
+/// [`bound_input`] once it is known whether `input` is an accepted JTunnel sender.
+pub fn bound_input_of(input: &str, jtunnel: bool) -> Option<String> {
+    (!jtunnel && !input.is_empty()).then(|| input.to_owned())
+}
 
 /// `jtunnel.senders`: whether the receiver runs, and the senders it heard.
 ///
@@ -86,7 +107,36 @@ pub fn with_sender(
         state: true,
         midi: false,
     });
+    next.live = Some(name.to_owned());
     Ok(next)
+}
+
+/// The setting with a sender heard on the LAN accepted and live: added, or, when a
+/// sender of that name is accepted at another address, moved there with its "Use this
+/// sender's state" kept.
+pub fn with_heard(
+    setting: &JtunnelSetting,
+    name: &str,
+    address: &str,
+) -> Result<JtunnelSetting, &'static str> {
+    let Some(at) = setting
+        .accepted
+        .iter()
+        .position(|sender| sender.name == name)
+    else {
+        return with_sender(setting, name, address);
+    };
+    let mut next = setting.clone();
+    address.trim().clone_into(&mut next.accepted[at].address);
+    next.live = Some(name.to_owned());
+    Ok(next)
+}
+
+/// The setting with `name` the live sender.
+pub fn with_live(setting: &JtunnelSetting, name: &str) -> JtunnelSetting {
+    let mut next = setting.clone();
+    next.live = Some(name.to_owned());
+    next
 }
 
 /// The switch and the accepted senders. Shows nothing outside the desktop app.
@@ -126,8 +176,13 @@ pub fn JtunnelSettingView() -> impl IntoView {
     let remove = move |gone: String| {
         let mut next = setting.get_untracked();
         next.accepted.retain(|sender| sender.name != gone);
+        if next.live.as_deref() == Some(gone.as_str()) {
+            // The first one left takes over.
+            next.live = None;
+        }
         save(next, false);
     };
+    let make_live = move |name: String| save(with_live(&setting.get_untracked(), &name), false);
     let use_state = move |name: String, on: bool| {
         let mut next = setting.get_untracked();
         for sender in &mut next.accepted {
@@ -181,7 +236,7 @@ pub fn JtunnelSettingView() -> impl IntoView {
     }
     let accept = move |name: String, address: String| {
         pending.set(None);
-        match with_sender(&setting.get_untracked(), &name, &address) {
+        match with_heard(&setting.get_untracked(), &name, &address) {
             Ok(next) => save(next, false),
             Err(why) => problem.set(Some(why.to_owned())),
         }
@@ -211,25 +266,35 @@ pub fn JtunnelSettingView() -> impl IntoView {
                     {senders.into_iter().map(|sender| {
                         let name = sender.remote_name.clone();
                         let address = sender.address.clone();
-                        let known = {
-                            let (name, address) = (name.clone(), address.clone());
-                            move || setting.with(|now| accepts(now, &name, &address))
-                        };
                         let ask = (name.clone(), address.clone());
+                        let shown = (name.clone(), address.clone());
                         view! {
                             <li class="device">
                                 <span class="device-name">{name}</span>
                                 <span class="device-dates">{address}</span>
-                                {move || if known() {
-                                    view! { <span class="device-dates">"Accepted"</span> }.into_any()
-                                } else {
-                                    let ask = ask.clone();
-                                    view! {
-                                        <button type="button" on:click=move |_| pending.set(Some(ask.clone()))>
-                                            "Accept…"
-                                        </button>
+                                {move || {
+                                    let (name, address) = shown.clone();
+                                    let (known, live) = setting.with(|now| {
+                                        (accepts(now, &name, &address), now.live_name() == Some(name.as_str()))
+                                    });
+                                    if known && live {
+                                        view! { <span class="jtunnel-live">"Live"</span> }.into_any()
+                                    } else if known {
+                                        view! {
+                                            <button type="button" on:click=move |_| make_live(name.clone())>
+                                                "Make live"
+                                            </button>
+                                        }
+                                        .into_any()
+                                    } else {
+                                        let ask = ask.clone();
+                                        view! {
+                                            <button type="button" on:click=move |_| pending.set(Some(ask.clone()))>
+                                                "Accept…"
+                                            </button>
+                                        }
+                                        .into_any()
                                     }
-                                    .into_any()
                                 }}
                             </li>
                         }
@@ -242,11 +307,32 @@ pub fn JtunnelSettingView() -> impl IntoView {
     let confirm_view = move || {
         let (name, address) = pending.get()?;
         let (n, a) = (name.clone(), address.clone());
+        let replaces = setting.with(|now| {
+            let moved = now
+                .accepted
+                .iter()
+                .find(|sender| sender.name == name)
+                .map(|sender| sender.address.clone());
+            let live = now
+                .live_name()
+                .filter(|live| *live != name)
+                .map(str::to_owned);
+            match (moved, live) {
+                (Some(before), _) => {
+                    format!(" It moves from {before}, and becomes the live sender.")
+                }
+                (None, Some(live)) => {
+                    format!(" It becomes the live sender in place of {live}, which stays accepted.")
+                }
+                (None, None) => " It becomes the live sender.".to_owned(),
+            }
+        });
         Some(view! {
             <div class="jtunnel-confirm" role="alertdialog" aria-label="Accept this sender?">
                 <p>
                     "Accept the JTunnel sender "<strong>{name}</strong>" at "<code>{address}</code>
                     "? Its audio can then feed a network audio source that names it, and its MIDI the MIDI sources. Only accept a sender you know is yours: anyone on this network can announce a name."
+                    {replaces}
                 </p>
                 <button type="button" class="primary" on:click=move |_| accept(n.clone(), a.clone())>"Accept"</button>
                 <button type="button" on:click=move |_| pending.set(None)>"Cancel"</button>
@@ -265,7 +351,7 @@ pub fn JtunnelSettingView() -> impl IntoView {
                 <span>
                     <span class="settings-check-label">"Receive from JTunnel senders"</span>
                     <span class="settings-check-note">
-                        "When on, JStream takes audio and MIDI from the JTunnel senders below, over UDP on this network, and the DAW's state from each sender unless you untick it. Only the senders you accept here get in, each from the address and port it sends from. Off until you turn it on."
+                        "When on, JStream takes audio and MIDI from the live JTunnel sender below, over UDP on this network, and the DAW's state from it unless you untick it. You can accept several senders, but only one is live at a time; the others stand by. Only the senders you accept here get in, each from the address and port it sends from. Off until you turn it on."
                     </span>
                 </span>
             </label>
@@ -280,12 +366,24 @@ pub fn JtunnelSettingView() -> impl IntoView {
                             let gone = sender.name.clone();
                             let named = sender.name.clone();
                             let midi_named = sender.name.clone();
-                            let label = format!("Use the state of {}", sender.name);
                             let midi_label = format!("Use the MIDI of {}", sender.name);
+                            let picked = sender.name.clone();
+                            let label = format!("Use the state of {}", sender.name);
+                            let live = setting.with(|now| now.live_name() == Some(sender.name.as_str()));
                             view! {
-                                <li class="device">
+                                <li class="device" class:jtunnel-is-live=live>
                                     <span class="device-name">{sender.name}</span>
                                     <span class="device-dates">{sender.address}</span>
+                                    {if live {
+                                        view! { <span class="jtunnel-live">"Live"</span> }.into_any()
+                                    } else {
+                                        view! {
+                                            <button type="button" title="Receive from this sender instead of the live one" on:click=move |_| make_live(picked.clone())>
+                                                "Make live"
+                                            </button>
+                                        }
+                                        .into_any()
+                                    }}
                                     <label class="jtunnel-state" title="Take the DAW's state from this sender (its transport, tracks and clips), for bindings and sources to read. On once the sender is accepted.">
                                         <input
                                             type="checkbox"
@@ -395,5 +493,48 @@ mod tests {
         assert!(with_sender(&none, "  ", "192.168.1.5:9000").is_err());
         assert!(with_sender(&none, "Bitwig", "").is_err());
         assert!(with_sender(&one, "Bitwig", "192.168.1.6:9000").is_err());
+    }
+
+    /// One live sender: an added or accepted one becomes live, a sender heard at a new
+    /// address moves there, and with none named the first is live.
+    #[test]
+    fn one_sender_is_live_and_a_moved_one_follows_its_new_address() {
+        let one =
+            with_sender(&JtunnelSetting::default(), "Bitwig", "192.168.1.57:47000").expect("added");
+        assert_eq!(one.live_name(), Some("Bitwig"));
+        let two = super::with_heard(&one, "Live", "192.168.1.58:47000").expect("accepted");
+        assert_eq!(two.live_name(), Some("Live"), "the accepted one goes live");
+        assert_eq!(two.accepted.len(), 2, "the one before stays accepted");
+        let back = super::with_live(&two, "Bitwig");
+        assert_eq!(back.live_name(), Some("Bitwig"));
+        let mut off = two.clone();
+        off.accepted[1].state = false;
+        let moved = super::with_heard(&off, "Live", "192.168.1.58:47001").expect("moved");
+        assert_eq!(moved.accepted.len(), 2);
+        assert_eq!(moved.accepted[1].address, "192.168.1.58:47001");
+        assert!(!moved.accepted[1].state, "its state switch is kept");
+        let unnamed = JtunnelSetting {
+            live: None,
+            ..two.clone()
+        };
+        assert_eq!(unnamed.live_name(), Some("Bitwig"));
+        let gone = JtunnelSetting {
+            live: Some("Removed".into()),
+            ..two
+        };
+        assert_eq!(gone.live_name(), Some("Bitwig"));
+        assert_eq!(JtunnelSetting::parse(&moved.to_json()), moved);
+    }
+
+    /// ADR-0221: a reader learned from an accepted JTunnel sender names no input, so it
+    /// follows whichever sender is live; a MIDI port keeps its name.
+    #[test]
+    fn a_reader_learned_from_a_jtunnel_sender_names_no_input() {
+        assert_eq!(super::bound_input_of("Bitwig", true), None);
+        assert_eq!(
+            super::bound_input_of("Pads", false),
+            Some("Pads".to_owned())
+        );
+        assert_eq!(super::bound_input_of("", false), None);
     }
 }
