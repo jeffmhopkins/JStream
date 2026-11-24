@@ -218,7 +218,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene goes on program and on preview when it is created, and a deleted program or
   preview scene gives way to the first scene left.
 - The **show scene** is an ordinary scene the engine marks as internal
-  (`State::show_scene`, runtime state on the graph, not a revision): wherever `Program`
+  (`State::show_scene`, not a revision; the collection file keeps it in its `show_scene`
+  marker, ADR-0210): wherever `Program`
   is drawn (every output, recording and virtual camera, and the program monitor), it is
   drawn over program, with program, any transition included, as its bottom layer and
   its items above, so overlays are its nested-scene items. Scene lists (`scene.list`,

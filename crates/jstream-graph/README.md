@@ -53,8 +53,8 @@ protocol's types (`Overrides`).
   carries audio. `State::show_scene` names the internal show scene, an ordinary scene of
   `scenes` the engine draws over program (ARCH › Data model): `Graph::set_show_scene`
   sets it, refusing a scene that doesn't exist or that a `scene` source, a settings
-  reference or a video mix already shows; it is not a revision, a batch keeps it, and a
-  batch that deletes its scene clears it. While it is set, `source.create` of a `scene`
+  reference or a video mix already shows; it is not a revision, a batch keeps it, a
+  batch that deletes its scene clears it, and the collection file saves it (see Shows). While it is set, `source.create` of a `scene`
   source, a settings value referencing it and a video mix showing it are
   `invalid_argument` (`not_the_show_scene`), and `scene.list` and `state.get` leave it out.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
