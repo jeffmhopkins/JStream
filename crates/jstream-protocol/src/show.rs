@@ -75,8 +75,8 @@ pub struct ShowInfo {
     /// program while they last. At most 8. Omitted for none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<OverlayTrack>,
-    /// The keyframe track (K): markers that load a keyframe of the scene on program, in
-    /// time order. At most 1024. Omitted for none.
+    /// The keyframe track (K): markers that switch program to a keyframe of the scene on
+    /// program, in time order. At most 1024. Omitted for none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keyframes: Vec<KeyframeMarker>,
     /// Sequence tracks (S): cues that play a sequence or run one event. At most 8.
@@ -182,8 +182,8 @@ fn is_zero(ms: &u32) -> bool {
     *ms == 0
 }
 
-/// A marker on the keyframe track: it loads a keyframe of the scene on program, as a
-/// Move, the way `scene.set_keyframe` does.
+/// A marker on the keyframe track: it switches program to a keyframe scene of the scene
+/// on program (or back to that scene's own values), as a Move with its preset's timing.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct KeyframeMarker {
     /// Its ID, unique within the show.

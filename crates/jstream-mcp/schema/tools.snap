@@ -6293,7 +6293,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -8571,7 +8571,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -16269,7 +16269,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -18547,7 +18547,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -29092,7 +29092,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -31370,7 +31370,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -41506,7 +41506,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -43778,7 +43778,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -54777,7 +54777,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -57055,7 +57055,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },
@@ -65576,7 +65576,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "KeyframeMarker": {
-            "description": "A marker on the keyframe track: it loads a keyframe of the scene on program, as a\nMove, the way `scene.set_keyframe` does.",
+            "description": "A marker on the keyframe track: it switches program to a keyframe scene of the scene\non program (or back to that scene's own values), as a Move with its preset's timing.",
             "properties": {
               "at_ms": {
                 "description": "When it fires, in milliseconds of show time.",
@@ -67854,7 +67854,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "integer"
               },
               "keyframes": {
-                "description": "The keyframe track (K): markers that load a keyframe of the scene on program, in\ntime order. At most 1024. Omitted for none.",
+                "description": "The keyframe track (K): markers that switch program to a keyframe of the scene on\nprogram, in time order. At most 1024. Omitted for none.",
                 "items": {
                   "$ref": "#/$defs/KeyframeMarker"
                 },

@@ -3290,11 +3290,12 @@ is a saved run order of scenes in show time, in milliseconds. `show.set` stores 
 - **Overlay tracks** (`overlays`, at most 8) hold scene clips anywhere, none overlapping on
   one track, drawn over program for their span; **sequence tracks** (`sequences`, at most
   8) hold `ShowCue`s, each one action a timeline's cue may run except `scene.switch`;
-  the **keyframe track** (`keyframes`) holds markers that load a keyframe of the scene on
-  program; **audio tracks** (`audio`, at most 8) hold clips that bring a source's fader
+  the **keyframe track** (`keyframes`) holds markers that switch program to a keyframe
+  scene of the scene on program, as a Move; **audio tracks** (`audio`, at most 8) hold clips that bring a source's fader
   up to `gain_db` for their span, with fades that fit in it.
 - **Bookmarks** are in time order, no two at one time; a pausing one (the default) waits
-  for `show.continue`, or `continue_after_ms`. Its `note` is the operator's show notes,
+  for `show.continue`, or `continue_after_ms`, and one at a clip's start waits with that
+  clip already on program. Its `note` is the operator's show notes,
   Markdown of at most 16 KiB. **Loops** are in time order, at least
   100 ms, none overlapping another, and `leave` says how Continue leaves them. `end` is
   `stop` (the default), `loop` or `go_to` a bookmark the show holds.
