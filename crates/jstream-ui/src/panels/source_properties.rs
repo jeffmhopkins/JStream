@@ -396,6 +396,25 @@ fn PropertiesBody(
             view! { <SourcePreview kind_id=kind_id.clone() source_id=source_id.clone() draft=draft /> }
         })
     });
+    // Reload page or Play from start, for a kind with something to restart (A16).
+    let restart_button = crate::item_menu::restart_label(&source.kind).map(|label| {
+        let source_id = source_id.clone();
+        let restart = move |_| {
+            if let Some(s) = session.get() {
+                studio.act(
+                    &s,
+                    Action::SourceRestart {
+                        source_id: source_id.clone(),
+                    },
+                );
+            }
+        };
+        view! {
+            <button type="button" class="secondary props-restart" on:click=restart>
+                {label}
+            </button>
+        }
+    });
     let title = source.name.clone();
     let subtitle = format!("{type_name} source");
     let form = {
@@ -464,6 +483,7 @@ fn PropertiesBody(
                     <input type="text" bind:value=name />
                 </label>
                 {shader_button}
+                {restart_button}
                 {form}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
             </PropertiesAndFilters>
