@@ -408,7 +408,7 @@ pub fn Canvas() -> impl IntoView {
             let (width, height) = stage.get_untracked().map_or((640.0, 360.0), |stage| {
                 (stage.client_width() as f32, stage.client_height() as f32)
             });
-            let ratio = window().device_pixel_ratio() as f32;
+            let ratio = crate::ui_scale::pixel_ratio() as f32;
             let mut first = preview::Stream::first(
                 preview::stage((width, height, ratio), own_engine()),
                 screen::Screen::supports_h264(),
@@ -519,7 +519,7 @@ pub fn Canvas() -> impl IntoView {
             (
                 element.client_width() as f32,
                 element.client_height() as f32,
-                window().device_pixel_ratio() as f32,
+                crate::ui_scale::pixel_ratio() as f32,
             ),
             own_engine(),
         );
@@ -787,12 +787,15 @@ pub fn Canvas() -> impl IntoView {
     let canvas_at = move |x: i32, y: i32| -> Option<(Viewport, Point)> {
         measure();
         let fit = viewport.get_untracked()?;
-        let frame = stage.get_untracked()?.get_bounding_client_rect();
+        // In the stage's CSS pixels, as the fit is, at every UI scale (`ui_scale.rs`).
+        let stage = stage.get_untracked()?;
+        let frame = crate::ui_scale::rect(&stage);
+        let css = crate::ui_scale::css;
         Some((
             fit,
             fit.to_canvas(
-                (f64::from(x) - frame.left()) as f32,
-                (f64::from(y) - frame.top()) as f32,
+                (css(f64::from(x)) - frame.left()) as f32,
+                (css(f64::from(y)) - frame.top()) as f32,
             ),
         ))
     };

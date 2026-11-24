@@ -1369,8 +1369,8 @@ fn Lanes(
                             menu.set(Some(PointMenu {
                                 lane: n,
                                 point: p,
-                                x: f64::from(e.client_x()),
-                                y: f64::from(e.client_y()),
+                                x: crate::ui_scale::pointer(&e).0,
+                                y: crate::ui_scale::pointer(&e).1,
                             }));
                         };
                         // From the keyboard: Enter, Space, the Menu key or Shift+F10
@@ -1383,7 +1383,7 @@ fn Lanes(
                                 let Some(dot) = e.current_target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) else {
                                     return;
                                 };
-                                let r = dot.get_bounding_client_rect();
+                                let r = crate::ui_scale::rect(&dot);
                                 menu.set(Some(PointMenu {
                                     lane: n,
                                     point: p,

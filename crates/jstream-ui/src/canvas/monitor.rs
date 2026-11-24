@@ -101,7 +101,7 @@ pub fn ProgramMonitor() -> impl IntoView {
             (frame.client_width() as f32, frame.client_height() as f32)
         });
         preview::stage(
-            (width, height, window().device_pixel_ratio() as f32),
+            (width, height, crate::ui_scale::pixel_ratio() as f32),
             crate::host::own_engine(connected),
         )
     };
