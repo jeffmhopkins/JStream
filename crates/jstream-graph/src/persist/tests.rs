@@ -1004,6 +1004,12 @@ fn v22_graph() -> Graph {
                     ..ShowInfo::new("evening")
                 },
             },
+            // The scene the engine would make to draw overlays over program.
+            Edit::SceneCreate {
+                scene_id: SceneId::new("show"),
+                name: "Show".into(),
+                role: None,
+            },
             Edit::HotkeySet {
                 chord: Chord::new("F8"),
                 action: Action::ShowGoTo {
@@ -1015,7 +1021,7 @@ fn v22_graph() -> Graph {
         None,
     );
     assert!(applied.is_ok(), "{applied:?}");
-    graph.set_show_scene(Some(SceneId::new("b")));
+    assert!(graph.set_show_scene(Some(SceneId::new("show"))));
     graph
 }
 
@@ -1032,7 +1038,7 @@ fn the_v22_fixture_loads_exactly() {
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
     assert_eq!(
         loaded.as_ref().ok().and_then(|g| g.state().show_scene()),
-        Some(&SceneId::new("b"))
+        Some(&SceneId::new("show"))
     );
 }
 
@@ -1065,6 +1071,16 @@ fn a_version_21_show_or_show_scene_is_refused() {
 fn a_show_scene_marker_naming_no_scene_is_dropped() {
     let mut file: Value = serde_json::from_str(V22).expect("the v22 fixture");
     file["show_scene"] = json!("gone");
+    let loaded = load(&file.to_string()).expect("loads");
+    assert_eq!(loaded.state().show_scene(), None);
+}
+
+/// A show scene marker naming a scene something shows (here `b`, which `b_src` places
+/// in `a`) is dropped too, as `Graph::set_show_scene` refuses it.
+#[test]
+fn a_show_scene_marker_naming_a_shown_scene_is_dropped() {
+    let mut file: Value = serde_json::from_str(V22).expect("the v22 fixture");
+    file["show_scene"] = json!("b");
     let loaded = load(&file.to_string()).expect("loads");
     assert_eq!(loaded.state().show_scene(), None);
 }

@@ -217,6 +217,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene, set by `studio.set_preview`; a switch doesn't move it. The collection's first
   scene goes on program and on preview when it is created, and a deleted program or
   preview scene gives way to the first scene left.
+- The **show scene** is an ordinary scene the engine marks as internal
+  (`State::show_scene`, not a revision; the collection file keeps it in its `show_scene`
+  marker, ADR-0210): wherever `Program`
+  is drawn (every output, recording and virtual camera, and the program monitor), it is
+  drawn over program, with program, any transition included, as its bottom layer and
+  its items above, so overlays are its nested-scene items. Scene lists (`scene.list`,
+  `state.get`) leave it out, and nothing may show it: a `scene` source, a settings
+  reference, a `VideoMix`, program or preview naming it is `invalid_argument`, so no
+  scene can contain it and program never contains itself. A `Scene(id)` mix, the
+  editing canvas and a scene's preview never draw it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
@@ -1783,7 +1793,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
   `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
   `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
-  a marker naming a scene the file doesn't hold is dropped on load. `jstream-core`
+  a marker naming a scene the file doesn't hold, or one something shows, is dropped on load. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

@@ -9,7 +9,7 @@
 use crate::Graph;
 use crate::apply::{invalid, not_found};
 use crate::model::State;
-use jstream_protocol::{Edit, EntityKind, MAX_SHOWS, ProtocolError, SceneId, ShowId, ShowInfo};
+use jstream_protocol::{Edit, EntityKind, MAX_SHOWS, ProtocolError, ShowId, ShowInfo};
 
 impl Graph {
     /// Every show (ADR-0210), ordered by ID.
@@ -20,20 +20,6 @@ impl Graph {
     /// The show with `show_id`, if the collection holds it.
     pub fn show(&self, show_id: &ShowId) -> Option<&ShowInfo> {
         self.state.shows.get(show_id)
-    }
-
-    /// Marks `scene_id` as the internal show scene (ADR-0210 decision 12), or clears the
-    /// marker. Only the engine sets it; it is saved in the collection file, and is not an
-    /// edit or a revision.
-    pub fn set_show_scene(&mut self, scene_id: Option<SceneId>) {
-        self.state.show_scene = scene_id;
-    }
-}
-
-impl State {
-    /// The internal show scene (ADR-0210 decision 12), if the engine has made one.
-    pub fn show_scene(&self) -> Option<&SceneId> {
-        self.show_scene.as_ref()
     }
 }
 

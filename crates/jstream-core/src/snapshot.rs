@@ -783,6 +783,11 @@ pub(crate) struct Shot {
     mixes: BTreeMap<VideoMixId, SceneId>,
     /// [`schedule`] of each scene a mix shows, other than the program scene.
     mix_passes: BTreeMap<SceneId, Vec<Pass>>,
+    /// [`schedule`] of the internal show scene, drawn over program wherever the program
+    /// mix is drawn: the program, transitions included, goes into
+    /// [`GpuKey::UnderShow`] and is placed under the show scene's items. Empty without
+    /// a show scene, or while it shows nothing, when program is drawn as it is.
+    show: Vec<Pass>,
     /// The cache key of each frame in `frames`, built once so a frame's uploads look
     /// them up without allocating.
     uploads: Vec<(GpuKey, SourceId)>,
@@ -1138,6 +1143,7 @@ impl Default for Shot {
             passes: Vec::new(),
             mixes: BTreeMap::new(),
             mix_passes: BTreeMap::new(),
+            show: Vec::new(),
             uploads: Vec::new(),
             captures: captures(&[]),
             transition: None,
@@ -1196,11 +1202,30 @@ impl Shot {
             .unwrap_or(&self.passes)
     }
 
+    /// Every pass a frame of the shot may draw: the program's, each mix's and the show
+    /// scene's.
+    fn drawn_passes(&self) -> impl Iterator<Item = &Pass> {
+        self.passes
+            .iter()
+            .chain(self.mix_passes.values().flatten())
+            .chain(&self.show)
+    }
+
     /// Whether `mix` shows the program mix, and so a running transition.
     fn shows_program(&self, mix: Option<&VideoMixId>) -> bool {
         mix.and_then(|id| self.mixes.get(id))
             .and_then(|scene| self.mix_passes.get(scene))
             .is_none()
+    }
+
+    /// The show scene's passes when `mix` draws them over program: its root last, the
+    /// scenes its items nest before it. `None` when `mix` shows a scene of its own, or
+    /// the show scene shows nothing.
+    fn show_of(&self, mix: Option<&VideoMixId>) -> Option<(&Pass, &[Pass])> {
+        if !self.shows_program(mix) {
+            return None;
+        }
+        self.show.split_last()
     }
 
     /// The scene `mix` shows, for tests: [`Shot::passes_of`]'s root.
@@ -1301,9 +1326,7 @@ impl Shot {
             ChainStep::Pass(pass) => Some(&**pass),
             ChainStep::Run(_) | ChainStep::Box(_) => None,
         });
-        self.passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
+        self.drawn_passes()
             .chain(chain_passes)
             .flat_map(|pass| &pass.layers)
             .any(|layer| !layer.motion.is_still() || links_move(layer.groups.as_deref()))
@@ -1353,9 +1376,7 @@ impl Shot {
             ChainStep::Run(_) | ChainStep::Box(_) => None,
         });
         let layers = self
-            .passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
+            .drawn_passes()
             .chain(chain_passes)
             .flat_map(|pass| &pass.layers)
             // A 3D group's item is drawn through its children (ADR-0164).
@@ -1603,6 +1624,12 @@ impl Shot {
         self.transition.as_ref().map(|t| t.tracks.len())
     }
 
+    /// Whether it draws the internal show scene over program, for tests.
+    #[cfg(test)]
+    pub(crate) fn draws_show(&self) -> bool {
+        !self.show.is_empty()
+    }
+
     /// The camera each of the running transition's tracks is seen through
     /// `elapsed_ms` into it, in drawing order, or `None` without one, for tests.
     #[cfg(test)]
@@ -1812,6 +1839,7 @@ impl PartialEq for Shot {
             && self.chains == other.chains
             && self.captures == other.captures
             && self.transition == other.transition
+            && self.show == other.show
             && self.boxes == other.boxes
             && self.stages == other.stages
             && self.moves == other.moves
@@ -1832,11 +1860,14 @@ impl PartialEq for Shot {
 /// schedules them. Items show the frames in `frames`.
 #[cfg(test)]
 pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
+    let show = graph.state().show_scene();
     let first = graph
         .state()
         .scenes()
-        .first()
-        .map(|scene| scene.id().clone());
+        .iter()
+        .map(|scene| scene.id())
+        .find(|id| Some(*id) != show)
+        .cloned();
     plan_with(
         graph,
         first.as_ref(),
@@ -2159,6 +2190,20 @@ fn plan_inner(
         let passes = schedule(&shot, &root);
         shot.mix_passes.insert(root, passes);
     }
+    // The show scene over program, for every output: only when it shows something, so
+    // a frame without overlays is drawn as it always was. A shot of one scene alone
+    // (`mixes` false: a preview stream) never draws it.
+    if mixes
+        && let Some(show) = state.show_scene()
+        && program.as_ref() != Some(show)
+    {
+        let mut path = BTreeSet::new();
+        planner.collect(show, &mut shot, &mut path);
+        let passes = schedule(&shot, show);
+        if passes.last().is_some_and(|root| !root.layers.is_empty()) {
+            shot.show = passes;
+        }
+    }
     shot.uploads = shot
         .frames
         .keys()
@@ -2173,8 +2218,9 @@ fn plan_inner(
             .collect(),
         None => captures(&shot.passes),
     };
-    shot.captures
-        .extend(placed_captures(shot.mix_passes.values().flatten()));
+    shot.captures.extend(placed_captures(
+        shot.mix_passes.values().flatten().chain(&shot.show),
+    ));
     // An item's effects read what the item shows, though the layers show their output.
     shot.captures
         .extend(shot.boxes.values().filter_map(|boxed| match &boxed.source {
@@ -3965,6 +4011,9 @@ pub(crate) enum GpuKey {
     Layer(SceneId, usize),
     /// The program scene at the canvas size, when the output is another size.
     Program,
+    /// The program mix at the canvas size, transitions included, under the internal
+    /// show scene's items: the show scene's bottom layer.
+    UnderShow,
     /// The output of a source's or a scene's video chain: what its items show.
     Filtered(ChainOwner),
     /// The output of the filter at that index of a video chain, which the next one
@@ -4393,9 +4442,7 @@ impl Shot {
         }
         let extent = [size.width(), size.height()];
         let layers = self
-            .passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
+            .drawn_passes()
             .flat_map(|pass| &pass.layers)
             .filter(|layer| layer.image == key)
             .map(|layer| magnification(layer.placement, layer.crop, extent));
@@ -4418,12 +4465,7 @@ impl Shot {
     /// [`legacy_quad`](jstream_protocol::legacy_quad) gives it no quad (#1168).
     pub(crate) fn scales(&self) -> BTreeMap<SourceId, f32> {
         let mut scales: BTreeMap<SourceId, f32> = BTreeMap::new();
-        for layer in self
-            .passes
-            .iter()
-            .chain(self.mix_passes.values().flatten())
-            .flat_map(|pass| &pass.layers)
-        {
+        for layer in self.drawn_passes().flat_map(|pass| &pass.layers) {
             let GpuKey::Frame(id) = &layer.image else {
                 continue;
             };
@@ -6512,6 +6554,18 @@ pub(crate) fn compose_metered(
         }
     };
     let direct = target == canvas;
+    // The internal show scene over program, transitions included: its root, and the
+    // scenes its items nest, drawn with program's.
+    let show = shot.show_of(view.mix);
+    let (show_root, show_nested) = match show {
+        Some((root, nested)) => (Some(root), nested),
+        None => (None, &[][..]),
+    };
+    // A scene program nests at the same depth is drawn once, with program's.
+    let show_nested: Vec<&Pass> = show_nested
+        .iter()
+        .filter(|pass| !nested.iter().any(|drawn| drawn.key == pass.key))
+        .collect();
     claim_layers(compositor, (&mut *cache, &mut *chains), shot, view, output)?;
     // The sky backdrops of the 3D scenes this frame draws (ADR-0167), before their
     // items borrow the cache.
@@ -6519,7 +6573,12 @@ pub(crate) fn compose_metered(
         (Some(root), None) => Some(root),
         _ => None,
     };
-    for pass in nested.iter().chain(root_pass) {
+    for pass in nested
+        .iter()
+        .chain(root_pass)
+        .chain(show_nested.iter().copied())
+        .chain(show_root)
+    {
         if !chains.holds_layer(&pass.key) {
             meter.gpu_unit_pass(compositor, &pass.scene);
             draw_sky(
@@ -6551,7 +6610,7 @@ pub(crate) fn compose_metered(
             })
         };
         let mut items: Vec<Item<'_>> = Vec::new();
-        for pass in nested {
+        for pass in nested.iter().chain(show_nested.iter().copied()) {
             // The chains drew this scene at this depth already this frame, for a
             // chain that reads it: the same pass, so its layer holds what this one
             // would draw (#1070).
@@ -6604,6 +6663,24 @@ pub(crate) fn compose_metered(
             }
         }
         .over_black(shot.blending);
+        // With the show scene up, program goes into its bottom layer, and its items
+        // are placed over that. Its own background is never drawn: program fills it.
+        if let Some(show_root) = show_root {
+            let under = image(&GpuKey::UnderShow)?;
+            compositor.render_into(&scene(canvas, clear, &items), under)?;
+            let mut over = Vec::new();
+            let camera = fill_items(
+                &mut over,
+                (cache, chains),
+                (shot, show_root),
+                (at, canvas),
+                (live, captures),
+            );
+            under_sky(&mut over, (cache, chains), show_root, canvas, camera);
+            items.clear();
+            items.push(fitted(under, canvas, canvas));
+            items.extend(over);
+        }
         match &stage {
             Some(stage) => {
                 compositor.render_into(&scene(canvas, clear, &items), image(&stage.mixed)?)?;
@@ -8010,13 +8087,7 @@ fn scene_pass<'s>(shot: &'s Shot, id: &SceneId) -> Option<&'s Pass> {
             ChainStep::Pass(pass) if &pass.scene == id => Some(&**pass),
             _ => None,
         })
-        .or_else(|| shot.passes.iter().find(|pass| &pass.scene == id))
-        .or_else(|| {
-            shot.mix_passes
-                .values()
-                .flatten()
-                .find(|pass| &pass.scene == id)
-        })
+        .or_else(|| shot.drawn_passes().find(|pass| &pass.scene == id))
 }
 
 /// Whether `item` is drawn into a shadow map (ADR-0179): a model's layer, or a card
@@ -8784,6 +8855,18 @@ pub(crate) fn claim_layers(
     };
     for pass in nested {
         cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+    }
+    // The show scene over program: the scenes its items nest, and program under it.
+    if let Some((_, show)) = shot.show_of(mix) {
+        for pass in show {
+            cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+        }
+        cache.layer(
+            compositor,
+            &GpuKey::UnderShow,
+            canvas.width(),
+            canvas.height(),
+        )?;
     }
     if output != canvas && !staged {
         cache.layer(
