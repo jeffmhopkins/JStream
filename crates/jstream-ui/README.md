@@ -2036,7 +2036,10 @@ each time its scene changes.
   projectors ask the same way. JPEG frames go through `createImageBitmap` one at a
   time, and while one decodes only the newest that arrives waits, so the last picture
   is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
-  canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
+  canvas's own fit, so the picture lies exactly under the boxes. The `<canvas>` is sized
+  to a picture only as that picture is drawn (`Painter::fit`): a resize clears it, so
+  sizing it when a frame arrived, before its decode, showed it black until the picture
+  came. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why, and the channel is still read for the taps. Showing another scene moves the open
   stream to it on the same channel (`preview.show`, `Stream::showing`), once the change

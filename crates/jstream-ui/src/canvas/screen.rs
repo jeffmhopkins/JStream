@@ -122,6 +122,8 @@ mod web {
 
     /// Draws decoded pictures into the canvas's 2D context.
     struct Painter {
+        /// The `<canvas>`, sized to each picture as it is drawn.
+        canvas: JsValue,
         context: JsValue,
         /// A picture has been drawn.
         drew: Cell<bool>,
@@ -137,6 +139,10 @@ mod web {
         /// Draws `image` (a `VideoFrame` or an `ImageBitmap`), then closes it.
         fn draw(&self, image: JsValue) {
             if !self.closed.get() {
+                // Sized here, with the picture drawn in the same task: setting a canvas's
+                // size clears it, so sizing it when the frame arrives, before its decode
+                // has finished, showed it black (or empty) until the picture came.
+                self.fit(&image);
                 let zero = JsValue::from_f64(0.0);
                 if call(
                     &self.context,
@@ -152,6 +158,31 @@ mod web {
                 }
             }
             let _closed = call(&image, "close", &[]);
+        }
+    }
+
+    impl Painter {
+        /// Sizes the canvas to `image` (a `VideoFrame`'s display size or an
+        /// `ImageBitmap`'s), if it isn't already: a resize clears the canvas.
+        fn fit(&self, image: &JsValue) {
+            let side = |display: &str, plain: &str| {
+                get(image, display)
+                    .ok()
+                    .and_then(|value| value.as_f64())
+                    .or_else(|| get(image, plain).ok().and_then(|value| value.as_f64()))
+                    .filter(|value| *value > 0.0)
+            };
+            let (Some(width), Some(height)) = (
+                side("displayWidth", "width"),
+                side("displayHeight", "height"),
+            ) else {
+                return;
+            };
+            for (key, value) in [("width", width), ("height", height)] {
+                if get(&self.canvas, key).ok().and_then(|now| now.as_f64()) != Some(value) {
+                    let _sized = set(&self.canvas, key, &JsValue::from_f64(value));
+                }
+            }
         }
     }
 
@@ -221,7 +252,6 @@ mod web {
 
     /// The `<canvas>` the preview is drawn in, and the decoders that feed it.
     pub struct Screen {
-        canvas: JsValue,
         painter: Rc<Painter>,
         /// The `VideoDecoder`, once an H.264 keyframe configured it.
         decoder: Option<JsValue>,
@@ -254,6 +284,7 @@ mod web {
                 return None;
             }
             let painter = Rc::new(Painter {
+                canvas: canvas.clone(),
                 context,
                 drew: Cell::new(false),
                 on_first: Box::new(on_first),
@@ -277,7 +308,6 @@ mod web {
                 slot: RefCell::new(JpegSlot::default()),
             });
             Some(Screen {
-                canvas,
                 painter,
                 decoder: None,
                 feed: H264Feed::default(),
@@ -299,7 +329,8 @@ mod web {
             self.feed.take_keyframe_ask()
         }
 
-        /// Shows one frame: sizes the canvas to the picture, then decodes and draws it.
+        /// Shows one frame: decodes it, and draws it once decoded, sizing the canvas to it
+        /// then ([`Painter::fit`]).
         ///
         /// # Errors
         /// What the browser refused, as text.
@@ -308,11 +339,6 @@ mod web {
             let (width, height) = (u32::from(header.width), u32::from(header.height));
             if width == 0 || height == 0 {
                 return Ok(());
-            }
-            for (key, value) in [("width", width), ("height", height)] {
-                if get(&self.canvas, key)?.as_f64() != Some(f64::from(value)) {
-                    set(&self.canvas, key, &JsValue::from(value))?;
-                }
             }
             match header.codec {
                 Some(PreviewCodec::H264) => self.h264(header, payload),
