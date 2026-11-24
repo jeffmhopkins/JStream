@@ -385,9 +385,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.179 because a `timer` countdown or stopwatch starts its count
+`PROTOCOL_VERSION` is 0.181 because a `timer` countdown or stopwatch starts its count
 again when the program shows it again, and `source.restart` and `source.seek` start or
-move its count (ADR-0214, a placeholder number the release queue sets); 0.178 because the rendering switches say how many pixels 3D models
+move its count (ADR-0214, a placeholder number the release queue sets); 0.179 because `profile.get` counts each drawing thread's GPU
+submits per frame (`DrawerProfile`'s `submits`); 0.178 because the rendering switches say how many pixels 3D models
 are drawn with, `RenderFeatures`' `model_resolution` (with `MODEL_RESOLUTIONS`), and a
 drawer's profile reports the size they were drawn at, `DrawerProfile`'s
 `model_resolution` and `model_frames_reduced`
@@ -2022,7 +2023,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `stats.tick`'s `drops` leave out), since 0.178 the
   size its 3D models were drawn at when the window ended (`model_resolution`, a
   percentage, 100 from an older server) and the frames drawn with them below 100
-  (`model_frames_reduced`), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  (`model_frames_reduced`), since 0.179 the GPU submits it made per frame (`submits`:
+  each costs the thread a fixed time however little work it carries, and only the
+  compositor's own are counted), and the time per phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
   owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
   effects, a placed scene's chain, the composite, the master or an output's chain) with
   its frames, average and recent longest time and share of its drawer's time; the
@@ -3251,13 +3254,13 @@ Since 0.87 a scene holds timelines
   `timeline.cue_fired` each cue, with the error its action got.
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`, and
-  since 0.179 starts a `timer` countdown or stopwatch counting again from its start
+  since 0.181 starts a `timer` countdown or stopwatch counting again from its start
   (ADR-0214); other kinds, a `timer` clock among them, have nothing to restart. Plugins
   need the `live` class for it.
 - **`source.seek {source_id, at_ms}`** (since 0.177) plays a `media` file on from
   `at_ms` into its timeline: past the end of a looping file it lands where that many
   plays would reach, and on one that doesn't loop, on its last frame. A kind with nothing
-  to seek starts over as `source.restart` starts it, a `timer` (since 0.179) counts on
+  to seek starts over as `source.restart` starts it, a `timer` (since 0.181) counts on
   as if it had started `at_ms` ago, and others do nothing. A seek made before the
   program shows the source holds through the show, so the source isn't started again
   from its start by `restart_on_show` or a `timer`'s show: a switch and a seek can come in
