@@ -109,12 +109,10 @@ fn event_ms(event: &ev::PointerEvent) -> f64 {
     event.time_stamp()
 }
 
-/// The window's inner size in CSS pixels. Zero when the page has no size yet.
+/// The window's inner size in the page's CSS pixels, at its UI scale (`ui_scale.rs`).
+/// Zero when the page has no size yet.
 fn viewport() -> (f64, f64) {
-    let size = |value: Result<leptos::wasm_bindgen::JsValue, _>| {
-        value.ok().and_then(|value| value.as_f64()).unwrap_or(0.0)
-    };
-    (size(window().inner_width()), size(window().inner_height()))
+    crate::ui_scale::window_size()
 }
 
 /// A drag's start: the pointer, the offset then, and the box already on screen.
@@ -216,9 +214,9 @@ impl CaptureKeys {
     }
 }
 
-/// The point a pointer event names.
+/// The point a pointer event names, in the page's CSS pixels.
 fn at_pointer(event: &ev::PointerEvent) -> (f64, f64) {
-    (f64::from(event.client_x()), f64::from(event.client_y()))
+    crate::ui_scale::pointer(event)
 }
 
 /// A modal dialog.
@@ -253,21 +251,33 @@ pub fn Modal(
             }
         }
     };
-    // Focus the dialog's first field, so Enter and Escape reach it at once, and pull a
-    // remembered place back on screen in case the window shrank.
+    // Focus the dialog's first field, so Enter and Escape reach it at once, unless
+    // something in it took the focus first (a click or a key on a row before the first
+    // frame keeps it, #1703), and pull a remembered place back on screen in case the
+    // window shrank.
     request_animation_frame(move || {
+        // A dialog closed before the next frame (a quick Cancel or Escape) is gone, and
+        // so is its state: reading it would panic (#1703).
+        if drag.is_disposed() {
+            return;
+        }
         if let Some(dialog) = dialog.get_untracked() {
             let first = dialog
                 .query_selector("input:not([type=radio]), select, textarea")
                 .ok()
                 .flatten()
                 .and_then(|e| e.dyn_into::<leptos::web_sys::HtmlElement>().ok());
-            let _ = match first {
-                Some(field) => field.focus(),
-                None => dialog.focus(),
-            };
+            let focused_inside = document()
+                .active_element()
+                .is_some_and(|active| dialog.contains(Some(&active)));
+            if !focused_inside {
+                let _ = match first {
+                    Some(field) => field.focus(),
+                    None => dialog.focus(),
+                };
+            }
             if drag.get_value().is_none() {
-                let rect = dialog.get_bounding_client_rect();
+                let rect = crate::ui_scale::rect(&dialog);
                 let (vw, vh) = viewport();
                 let (dx, dy) = offset.get_untracked();
                 place((
@@ -400,7 +410,7 @@ pub fn Modal(
             return;
         }
         let _ = dialog.set_pointer_capture(event.pointer_id());
-        let rect = dialog.get_bounding_client_rect();
+        let rect = crate::ui_scale::rect(&dialog);
         let (vw, vh) = viewport();
         let (dx, dy) = offset.get_untracked();
         drag.set_value(Some(Drag {
@@ -485,13 +495,13 @@ pub fn Info(
         let Some(mark) = mark.get_untracked() else {
             return;
         };
-        let at = mark.get_bounding_client_rect();
+        let at = crate::ui_scale::rect(&mark);
         let (vw, vh) = viewport();
         let (bottom, right) = mark
             .parent_element()
             .and_then(|p| p.closest(TIP_BOUNDS).ok().flatten())
             .map_or((vh, vw), |b| {
-                let r = b.get_bounding_client_rect();
+                let r = crate::ui_scale::rect(&b);
                 (r.bottom(), r.right())
             });
         side.set(tip_side(bottom - at.bottom(), right - at.left()));

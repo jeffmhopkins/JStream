@@ -867,7 +867,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a timeline action. The objects a cue names aren't checked, so a deleted one leaves the
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
-  `source.restart` reloads a page or plays a file from its start. Since 0.170
+  `source.restart` reloads a page or plays a file from its start, and `source.seek`
+  (0.177) plays a file on from a point, holding through the switch that shows it; it
+  is runtime state a hotkey, MCP or a `live` plugin can run, but not a cue. Since 0.170
   ([ADR-0184](adr/0184-sequences-lanes-and-triggers.md)) a timeline with `lanes` is a
   sequence: each lane moves one channel through points as one more input of it, from
   the channel's value when it starts where it has no point at 0, so nothing jumps; its
@@ -1050,7 +1052,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
   and absolute path; `source.sizes` (protocol 0.40) → each source's current
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4), and a
-  3D model's depth (0.157, [ADR-0107](adr/0107-3d-models.md) decision 8);
+  3D model's depth (0.157, [ADR-0107](adr/0107-3d-models.md) decision 8) and a media
+  file's length once known (`duration_ms`, 0.177);
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
   `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
