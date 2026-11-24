@@ -388,6 +388,78 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
             "type": "string"
           },
+          "DataOn": {
+            "description": "When a [`Trigger::Data`] fires (ADR-0202). Each fires when its condition starts to\nhold and releases when it stops, except `changes`, which only fires. What a field\nholds when the engine starts listening, or when a key first arrives, is where it\nstarts from and fires nothing.",
+            "oneOf": [
+              {
+                "description": "The field equals `value`: the same text, or a number or `true`/`false` that\n`value` spells.",
+                "properties": {
+                  "type": {
+                    "const": "equals",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "What it equals, at most [`MAX_DATA_VALUE_LEN`] bytes.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "value"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The field takes any other value.",
+                "properties": {
+                  "type": {
+                    "const": "changes",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The field is a number at `level` or above.",
+                "properties": {
+                  "level": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The level it crosses upward."
+                  },
+                  "type": {
+                    "const": "rises",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "level"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The field is a number below `level`.",
+                "properties": {
+                  "level": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The level it crosses downward."
+                  },
+                  "type": {
+                    "const": "falls",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "level"
+                ],
+                "type": "object"
+              }
+            ]
+          },
           "FilterId": {
             "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
             "type": "string"
@@ -805,6 +877,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "program"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "One field of a JTunnel sender's live data meeting a condition (ADR-0202, since\n0.189): a Bitwig scene selected or launched, a Mod crossing a level. It reads what\na `data` motion modifier reads, only from a sender whose state is used.",
+                "properties": {
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path into the message (`selectedScene`, `values.19`), or empty for\nthe whole message.",
+                    "type": "string"
+                  },
+                  "input": {
+                    "description": "The sender, or missing for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The message's key: `grid`, `params`, `track/3`. A `*` segment matches any\none segment, so `track/*` listens to every track, and the condition holds\nwhile it holds for any of them.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "on": {
+                    "$ref": "#/$defs/DataOn",
+                    "description": "When it fires."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key",
+                  "on"
                 ],
                 "type": "object"
               }
@@ -7328,7 +7435,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Runs one `midi` operation: set `op.type` to one of `midi.last_controls` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `midi` operation: set `op.type` to one of `midi.last_controls` (query), `midi.last_notes` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -7340,6 +7447,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "properties": {
                   "type": {
                     "const": "midi.last_controls",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Each MIDI input's latest note-on (since 0.189, ADR-0202), by input name: what a\nclient that learns a note for a binding watches. Runtime state, so no `rev`; an\ninput whose latest notes hold no note-on is left out. It reads each input's last\n16 note events, so a note-off doesn't move it.",
+                "properties": {
+                  "type": {
+                    "const": "midi.last_notes",
                     "type": "string"
                   }
                 },

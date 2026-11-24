@@ -1727,6 +1727,22 @@ impl Engine {
             Query::ChannelValues => Some(QueryResult::ChannelValues {
                 channels: lock(&self.shared.state).channels.values(),
             }),
+            Query::MidiLastNotes => Some(QueryResult::MidiLastNotes {
+                notes: lock(&self.shared.state)
+                    .live
+                    .midi()
+                    .map(|midi| midi.last_notes())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(input, (count, note))| jstream_protocol::MidiNoteInfo {
+                        input,
+                        channel: note.channel + 1,
+                        note: note.key,
+                        velocity: note.velocity,
+                        count,
+                    })
+                    .collect(),
+            }),
             Query::MidiLastControls => Some(QueryResult::MidiLastControls {
                 controls: lock(&self.shared.state)
                     .live
@@ -5166,6 +5182,8 @@ struct State {
     driver: crate::value_bindings::ValueDriver,
     /// How far the action bindings have read each MIDI input (ADR-0122, ADR-0207).
     action_bindings: crate::action_bindings::ActionBindings,
+    /// What each data trigger's field last read, and its held press (ADR-0202).
+    data_triggers: crate::data_triggers::DataTriggers,
     /// Whether the `jstream-values` thread is running: it ticks [`State::channels`],
     /// [`State::action_bindings`] and [`State::driver`] while the collection holds a
     /// channel, an action binding or a value binding.
@@ -7974,7 +7992,9 @@ impl State {
             .tick(&self.graph, midi.as_deref(), data, heard, now);
         // The action bindings a MIDI input fired since the last tick (ADR-0122, ADR-0207),
         // each run as its call would be, credited to the engine.
-        let fired = self.action_bindings.tick(&self.graph, midi.as_deref());
+        let mut fired = self.action_bindings.tick(&self.graph, midi.as_deref());
+        // Then the data triggers (ADR-0202), from senders whose state is used.
+        fired.extend(self.data_triggers.tick(&self.graph, data, now));
         let binding = ClientId::new(crate::history::ENGINE_CLIENT);
         for action in fired {
             let name = action.name();

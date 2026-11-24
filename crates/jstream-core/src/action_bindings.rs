@@ -166,6 +166,10 @@ impl ActionBindings {
         let mut inputs: BTreeMap<String, Vec<(&Trigger, &Action)>> = BTreeMap::new();
         let bindable = midi.bindable();
         for (trigger, action) in graph.state().bindings() {
+            // A data trigger reads live data, not MIDI (`data_triggers.rs`).
+            if !trigger.is_midi() {
+                continue;
+            }
             for name in &bindable {
                 if trigger.input().is_none_or(|input| input == name) {
                     inputs

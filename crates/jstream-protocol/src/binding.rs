@@ -11,8 +11,11 @@
 
 use crate::command::Action;
 use crate::filter::FilterOwner;
+use crate::finite::Finite32;
 use crate::id::{BusId, FilterId, ItemId, SceneId, SourceId};
-use crate::motion::{MAX_MOTION_PARAM_LEN, MotionKind, check_motion_id};
+use crate::motion::{
+    MAX_DATA_FIELD_LEN, MAX_DATA_KEY_LEN, MAX_MOTION_PARAM_LEN, MotionKind, check_motion_id,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -70,7 +73,94 @@ pub enum Trigger {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         input: Option<String>,
     },
+    /// One field of a JTunnel sender's live data meeting a condition (ADR-0202, since
+    /// 0.189): a Bitwig scene selected or launched, a Mod crossing a level. It reads what
+    /// a `data` motion modifier reads, only from a sender whose state is used.
+    Data {
+        /// The sender, or missing for any.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+        /// The message's key: `grid`, `params`, `track/3`. A `*` segment matches any
+        /// one segment, so `track/*` listens to every track, and the condition holds
+        /// while it holds for any of them.
+        key: String,
+        /// A dotted path into the message (`selectedScene`, `values.19`), or empty for
+        /// the whole message.
+        #[serde(default)]
+        field: String,
+        /// When it fires.
+        on: DataOn,
+    },
 }
+
+/// When a [`Trigger::Data`] fires (ADR-0202). Each fires when its condition starts to
+/// hold and releases when it stops, except `changes`, which only fires. What a field
+/// holds when the engine starts listening, or when a key first arrives, is where it
+/// starts from and fires nothing.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DataOn {
+    /// The field equals `value`: the same text, or a number or `true`/`false` that
+    /// `value` spells.
+    Equals {
+        /// What it equals, at most [`MAX_DATA_VALUE_LEN`] bytes.
+        value: String,
+    },
+    /// The field takes any other value.
+    Changes,
+    /// The field is a number at `level` or above.
+    Rises {
+        /// The level it crosses upward.
+        level: Finite32,
+    },
+    /// The field is a number below `level`.
+    Falls {
+        /// The level it crosses downward.
+        level: Finite32,
+    },
+}
+
+// A level is finite, so its bits order and hash it as a whole trigger needs.
+impl Eq for DataOn {}
+
+impl std::hash::Hash for DataOn {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            DataOn::Equals { value } => value.hash(state),
+            DataOn::Changes => {}
+            DataOn::Rises { level } | DataOn::Falls { level } => level.get().to_bits().hash(state),
+        }
+    }
+}
+
+impl PartialOrd for DataOn {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DataOn {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let rank = |on: &DataOn| match on {
+            DataOn::Equals { .. } => 0,
+            DataOn::Changes => 1,
+            DataOn::Rises { .. } => 2,
+            DataOn::Falls { .. } => 3,
+        };
+        match (self, other) {
+            (DataOn::Equals { value: a }, DataOn::Equals { value: b }) => a.cmp(b),
+            (DataOn::Rises { level: a }, DataOn::Rises { level: b })
+            | (DataOn::Falls { level: a }, DataOn::Falls { level: b }) => {
+                a.get().total_cmp(&b.get())
+            }
+            _ => rank(self).cmp(&rank(other)),
+        }
+    }
+}
+
+/// The longest `value` a [`DataOn::Equals`] holds, in bytes.
+pub const MAX_DATA_VALUE_LEN: usize = 255;
 
 impl Trigger {
     /// Why this is not a valid trigger, as the field and the reason, or `None` if it is.
@@ -78,6 +168,12 @@ impl Trigger {
     /// same one.
     pub fn problem(&self) -> Option<(&'static str, String)> {
         let (field, number, channel, input) = match self {
+            Trigger::Data {
+                input,
+                key,
+                field,
+                on,
+            } => return data_problem(input.as_deref(), key, field, on),
             Trigger::MidiNote {
                 note,
                 channel,
@@ -130,8 +226,14 @@ impl Trigger {
         match self {
             Trigger::MidiNote { input, .. }
             | Trigger::MidiCc { input, .. }
-            | Trigger::MidiProgram { input, .. } => input.as_deref(),
+            | Trigger::MidiProgram { input, .. }
+            | Trigger::Data { input, .. } => input.as_deref(),
         }
+    }
+
+    /// Whether a MIDI message fires it, rather than live data.
+    pub fn is_midi(&self) -> bool {
+        !matches!(self, Trigger::Data { .. })
     }
 
     /// The channel the trigger is limited to, 1 to 16, if any.
@@ -140,16 +242,98 @@ impl Trigger {
             Trigger::MidiNote { channel, .. }
             | Trigger::MidiCc { channel, .. }
             | Trigger::MidiProgram { channel, .. } => *channel,
+            Trigger::Data { .. } => None,
         }
     }
 }
 
+/// Why a data trigger isn't valid, as [`Trigger::problem`] gives it.
+fn data_problem(
+    input: Option<&str>,
+    key: &str,
+    field: &str,
+    on: &DataOn,
+) -> Option<(&'static str, String)> {
+    if let Some(problem) = input.and_then(input_problem) {
+        return Some(problem);
+    }
+    let printable = |s: &str| !s.chars().any(char::is_control);
+    if key.is_empty() || key.len() > MAX_DATA_KEY_LEN || !printable(key) {
+        return Some((
+            "key",
+            format!("must be 1 to {MAX_DATA_KEY_LEN} bytes with no control characters"),
+        ));
+    }
+    if key.split('/').any(|seg| seg.contains('*') && seg != "*") {
+        return Some(("key", "a `*` must be a whole segment: `track/*`".into()));
+    }
+    if field.len() > MAX_DATA_FIELD_LEN || !printable(field) {
+        return Some((
+            "field",
+            format!("must be at most {MAX_DATA_FIELD_LEN} bytes with no control characters"),
+        ));
+    }
+    if let DataOn::Equals { value } = on
+        && (value.len() > MAX_DATA_VALUE_LEN || !printable(value))
+    {
+        return Some((
+            "on.value",
+            format!("must be at most {MAX_DATA_VALUE_LEN} bytes with no control characters"),
+        ));
+    }
+    None
+}
+
+/// Why an input name isn't valid, as a trigger names one.
+fn input_problem(name: &str) -> Option<(&'static str, String)> {
+    if name.is_empty() {
+        return Some((
+            "input",
+            "must not be empty: leave it out for any input".into(),
+        ));
+    }
+    if name.len() > MAX_INPUT_NAME_LEN {
+        return Some((
+            "input",
+            format!("must be at most {MAX_INPUT_NAME_LEN} bytes"),
+        ));
+    }
+    if name.chars().any(char::is_control) {
+        return Some(("input", "must not hold control characters".into()));
+    }
+    None
+}
+
 impl fmt::Display for Trigger {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Trigger::Data {
+            input,
+            key,
+            field,
+            on,
+        } = self
+        {
+            let path = if field.is_empty() {
+                key.clone()
+            } else {
+                format!("{key} {field}")
+            };
+            match on {
+                DataOn::Equals { value } => write!(f, "data {path} equal to {value}")?,
+                DataOn::Changes => write!(f, "data {path} changing")?,
+                DataOn::Rises { level } => write!(f, "data {path} rising to {}", level.get())?,
+                DataOn::Falls { level } => write!(f, "data {path} falling below {}", level.get())?,
+            }
+            return match input {
+                Some(input) => write!(f, " from {input}"),
+                None => Ok(()),
+            };
+        }
         let (what, n) = match self {
             Trigger::MidiNote { note, .. } => ("note", note),
             Trigger::MidiCc { controller, .. } => ("CC", controller),
             Trigger::MidiProgram { program, .. } => ("program", program),
+            Trigger::Data { .. } => return Ok(()),
         };
         write!(f, "MIDI {what} {n}")?;
         match self.channel() {
@@ -206,6 +390,22 @@ pub struct MidiControlInfo {
     pub value: u8,
     /// How many control changes the input has sent since the engine started: a client
     /// learning a controller waits for it to change.
+    pub count: u64,
+}
+
+/// One MIDI input's latest note-on, in `midi.last_notes` (since 0.189, ADR-0202).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MidiNoteInfo {
+    /// The input, a MIDI port or a JTunnel sender by name, as a binding names it.
+    pub input: String,
+    /// Its channel, 1 to 16.
+    pub channel: u8,
+    /// The note number, 0 to 127.
+    pub note: u8,
+    /// Its velocity, 1 to 127.
+    pub velocity: u8,
+    /// How many note events (on and off) the input has sent since the engine started:
+    /// a client learning a note waits for it to grow.
     pub count: u64,
 }
 

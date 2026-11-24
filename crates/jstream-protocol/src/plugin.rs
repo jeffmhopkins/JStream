@@ -97,6 +97,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("data.get", N),
     // What the person plays on their controllers (ADR-0178), as their DAW's state is.
     ("midi.last_controls", N),
+    ("midi.last_notes", N),
     // A channel's value follows the person's controllers (ADR-0183), as they are.
     ("channel.values", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).

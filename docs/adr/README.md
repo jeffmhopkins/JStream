@@ -212,6 +212,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0199](0199-a-carried-pass-compares-file-modes.md) | A carried review pass also compares the PR's file modes | accepted | agent |  |
 | [ADR-0200](0200-the-size-3d-models-are-drawn-at-is-a-rendering-switch.md) | The size 3D models are drawn at is a rendering switch | accepted | agent |  |
 | [ADR-0201](0201-a-layer-is-redrawn-only-over-the-boxes-of-the-items-that-changed.md) | A layer is redrawn only over the boxes of the items that changed | accepted | agent |  |
+| [ADR-0202](0202-live-data-triggers-and-note-learn.md) | Live data triggers fire bindings, and a client learns notes | accepted | agent |  |
 | [ADR-0203](0203-mappings-add-or-replace.md) | A mapping adds to the value it drives or replaces it, and can be bypassed | accepted | agent |  |
 | [ADR-0206](0206-audio-level-drives-channels-and-bindings.md) | An audio level drives channels and value bindings | accepted | agent |  |
 | [ADR-0207](0207-mute-actions-and-held-triggers.md) | Mute actions, held triggers that release, and switches as value targets | accepted | agent |  |

@@ -74,6 +74,8 @@ pub fn midi_label(trigger: &Trigger) -> String {
         Trigger::MidiNote { note, .. } => format!("Note {note}"),
         Trigger::MidiCc { controller, .. } => format!("CC {controller}"),
         Trigger::MidiProgram { program, .. } => format!("Program {program}"),
+        // A live-data trigger (ADR-0202) says what it reads as the protocol writes it.
+        Trigger::Data { .. } => return trigger.to_string(),
     };
     let mut parts = vec![what];
     parts.push(match trigger.channel() {

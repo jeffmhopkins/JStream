@@ -547,6 +547,17 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   change, a toggle ignoring its note-off, an input not let run bindings, and a held
   press let go by each of those four, one of a trigger's two actions let go when it alone
   is unbound, and a held key kept held for a port.
+- **Data triggers** (`data_triggers.rs`,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)): `DataTriggers`
+  runs each binding whose trigger is `data`, right after the MIDI bindings on each
+  `jstream-values` tick. It reads the trigger's field from `LiveData`, which holds only
+  the state of senders whose state is used (ADR-0171 decision 1), across every key a `*`
+  segment matches. `equals`, `rises` and `falls` run the action when the condition
+  starts to hold for any key and its release when it stops; `changes` runs it on each
+  new value. A trigger's first read and a key's first arrival fire nothing, a key that
+  goes counts as not holding, a trigger fires at most once every `MIN_GAP` (50 ms) (a press
+  that limit holds back fires once it is over if its condition still holds), and a held press is let go when its binding changes or goes. `ActionBindings` skips data
+  triggers. `midi.last_notes` answers from `MidiInputs::last_notes`.
 - **Channels** (`channels.rs`,
   [ADR-0183](../../docs/adr/0183-virtual-control-channels.md)): `ChannelDriver` follows
   each channel's inputs with the same readers and smoothing (an `audio` input's
@@ -1359,7 +1370,8 @@ outside it, taking only the audio sources' wanted-set mutex to clone the receive
 the live data's own lock. `midi.last_controls` (0.168, ADR-0178) is answered on the same
 path, before the queries the graph answers: it takes the collection lock only to reach
 the MIDI inputs, and reads each one's latest control change under `MidiInputs`' leaf
-lock.
+lock. `midi.last_notes` (ADR-0202) is answered the same way, reading each input's
+latest note-on.
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -4775,9 +4787,10 @@ is the live sources' snapshot, taken with no lock), and sleeps without it; a
 binding it starts to follow looks up its MIDI input under `MidiInputs`' leaf lock, or
 takes the live data's lock briefly, last, to find or make its watch, as a plan does. A
 `jstream-values` tick also plays the timelines whose wait is over and those a trigger
-fired, moves the lanes, and runs the MIDI action bindings that fired, each as its call
-would, all under the same collection lock; the note and control logs it reads are
-lock-free. A
+fired, moves the lanes, and runs the MIDI action bindings and data triggers that fired,
+each as its call would, all under the same collection lock; the note and control logs it
+reads are lock-free, and a data trigger takes the live data's leaf lock briefly, last, to
+read its key's message (ADR-0202). A
 channel's level is one atomic (`ChannelCell`); the cell map's lock is a leaf, taken
 briefly to find or make a cell, by a plan, a binding or the channel driver. A channel
 action takes the collection lock, then the channel driver's state under it. The WASM plugins' registry lock
@@ -4844,8 +4857,8 @@ the host's error) and an `info` with how many effects it found. A `tempo.*` valu
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
 `warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
 answers; only its event is missing). A `jstream-values` thread that can't start is a
-`warn`; the value bindings, channels and MIDI action bindings then wait for the next
-batch or channel action to start it. An action a MIDI binding runs logs as any call
+`warn`; the value bindings, channels, MIDI action bindings and data triggers then wait for the next
+batch or channel action to start it. An action a MIDI binding or a data trigger runs logs as any call
 does, its failure at `debug` with the error code (ADR-0207).
 
 <a id="audit-log"></a>

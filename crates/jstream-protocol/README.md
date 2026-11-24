@@ -194,7 +194,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `midi.last_controls` (since 0.168, with `MidiControlInfo` in `binding.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `midi.last_controls` (since 0.168, with `MidiControlInfo` in `binding.rs`), `midi.last_notes` (since 0.189, with `MidiNoteInfo` in `binding.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `channel.values` (since 0.169, with `ChannelValueInfo` in `channel.rs`), `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -409,6 +409,11 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 scene's keyframe scenes and timelines (`FolderInfo.scene_id`, `folder.create`'s
 `scene_id`, `TimelineInfo.folder`, and `scene.set_folder` on a keyframe scene;
 [ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md));
+0.189 because a binding's trigger may be `data`, one field of a
+JTunnel sender's live data that is `equals` a value, `changes`, `rises` to a level or
+`falls` below it, with `*` key segments matching any (`DataOn`), and `midi.last_notes`
+answers each MIDI input's latest note-on (`MidiNoteInfo`)
+([ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md));
 0.188 because `preview.show` moves an open preview stream to
 another scene, or the program, on its channel, keeping its encoder where nothing else
 shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.187 because a source's or bus's mute can be set by an action,
@@ -1628,6 +1633,17 @@ once the person turns on its "Use this sender's MIDI", off by default
   the same exactly when they are equal, so channel 1 and any channel are two bindings,
   and a message matching both fires both. Anything else is `invalid_argument` on
   `trigger.<field>`, with `Trigger::problem`'s reason.
+- **Data triggers** (0.189,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md)): `data {input?,
+  key, field, on}` reads what a `data` motion modifier reads, from senders whose state is
+  used. `key` is 1 to 63 bytes, where a whole `*` segment matches any one segment
+  (`track/*`); `field` is a dotted path, empty for the whole message. `on` is tagged by
+  `type`: `equals {value}` (the same text, or the number or `true`/`false` it spells, at
+  most 255 bytes), `changes`, `rises {level}` (a number at the level or above) or `falls
+  {level}` (below it). Each fires when its condition starts to hold, for any matching key,
+  and releases when it stops; `changes` fires on each new value and never releases. What
+  a field holds when the engine starts following it, or when a key first arrives, fires
+  nothing, and a trigger fires at most once every 50 ms.
 - **Releases** (0.187): a note's note-off (or note-on at velocity 0), and a control
   change falling back from 64 or above to 63 or below, run the bound action's
   `Action::on_release`, if it has one: `source.mute` and `bus.mute` with `push_to_talk`
@@ -1692,6 +1708,10 @@ driving one number, listed in `state.get`'s `value_bindings` by ID.
 - A value binding's input may also be `kind` `audio` (since 0.186,
   [ADR-0206](../../docs/adr/0206-audio-level-drives-channels-and-bindings.md)): an
   audio modifier's fields, its attack and release following the level.
+- **`midi.last_notes`** (0.189, ADR-0202) answers `MidiNoteInfo {input, channel, note,
+  velocity, count}` for each MIDI input whose latest notes hold a note-on, for a client
+  that learns a note: the input whose `count` (its note events, on and off) grows played
+  it. A note-off doesn't move the note it reports.
 - A value binding's input may also be `kind` `channel` (since 0.169), and its optional
   `amount` names a channel that scales it: its value is `from + (value - from) ×
   amount`, so a channel at 0 holds it at `from` (a missing channel scales by 1).
@@ -2137,6 +2157,12 @@ Queries read and never change `rev`. Those that read the collection state carry 
   {input, channel, controller, value, count}`, its latest one with the value it holds
   now and how many it has sent since the engine started. A client learning a control for
   a value binding reads it once, then until a `count` grows. Runtime state, so no `rev`.
+- `midi.last_notes` (0.189,
+  [ADR-0202](../../docs/adr/0202-live-data-triggers-and-note-learn.md) decision 6): each
+  MIDI input whose last 16 note events hold a note-on, ordered by name, as `MidiNoteInfo
+  {input, channel, note, velocity, count}`, its latest note-on and how many note events
+  it has pushed. A note-off doesn't move it, but its `count` grows. Runtime state, so no
+  `rev`.
   A plugin can't read it.
 - `data.list` and `data.get {input, key}` (0.140,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
@@ -2849,7 +2875,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `overlay.toggle`, ADR-0210) and `outputs` (`output.start`, `output.stop`, `output.toggle`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
-  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), `channel.values` (what the person plays, ADR-0183), creating, deleting and retargeting outputs, their encoders and stream
+  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), `midi.last_controls` (what the person plays, ADR-0178), `midi.last_notes` (what the person plays, ADR-0202), `channel.values` (what the person plays, ADR-0183), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` and `studio.set_rendering` (application settings), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated

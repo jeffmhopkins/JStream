@@ -685,6 +685,21 @@ impl MidiInputs {
             .collect()
     }
 
+    /// Each named input's latest note-on, with how many note events it has sent, by
+    /// name: what a client learning a note watches (ADR-0202). An input whose latest
+    /// notes hold no note-on is left out.
+    pub fn last_notes(&self) -> Vec<(String, (u64, NoteEvent))> {
+        let mut recent = Vec::with_capacity(16);
+        lock(&self.named)
+            .iter()
+            .filter_map(|(name, state)| {
+                state.recent(&mut recent, 16);
+                let on = recent.iter().rev().find(|n| n.velocity > 0)?;
+                Some((name.clone(), (state.pushed(), *on)))
+            })
+            .collect()
+    }
+
     /// The state a source whose `input` setting is `name` draws: every input's for an
     /// empty name.
     pub fn drawn(&self, name: &str) -> Arc<MidiState> {

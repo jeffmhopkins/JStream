@@ -1280,6 +1280,8 @@ pub fn midi_text(trigger: &Trigger) -> String {
         Trigger::MidiNote { note, .. } => ("Note", note),
         Trigger::MidiCc { controller, .. } => ("CC", controller),
         Trigger::MidiProgram { program, .. } => ("Program", program),
+        // A live-data trigger (ADR-0202) says what it reads as the protocol writes it.
+        Trigger::Data { .. } => return trigger.to_string(),
     };
     let on = trigger
         .channel()
