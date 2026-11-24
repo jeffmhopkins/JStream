@@ -47,6 +47,7 @@ mod query;
 mod rendering;
 mod schema;
 mod settings;
+mod show;
 mod timeline;
 mod transition;
 mod values;
@@ -115,7 +116,7 @@ pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey,
-    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
+    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, ShowId, SourceId, TimelineId,
     TransitionPresetId, VideoMixId,
 };
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
@@ -186,6 +187,14 @@ pub use query::{
 pub use rendering::{PROBE_RESOLUTIONS, RenderFeatures, RenderFeaturesChange, SCREEN_SPACE_STEPS};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
+pub use show::{
+    AudioClip, AudioTrack, DEFAULT_IMAGE_MS, KeyframeMarker, LoopLeave, MAX_PROGRAM_CLIPS,
+    MAX_SHOW_BOOKMARKS, MAX_SHOW_FADE_MS, MAX_SHOW_LOOPS, MAX_SHOW_MS, MAX_SHOW_NAME_LEN,
+    MAX_SHOW_NOTE_LEN, MAX_SHOW_TRACKS, MAX_SHOW_WAIT_MS, MAX_SHOWS, MAX_TRACK_ENTRIES,
+    MIN_SHOW_LOOP_MS, NextMonitor, OverlayClip, OverlayTrack, ProgramClip, RunningShow,
+    SHOW_NUMBERED_BOOKMARKS, SequenceTrack, ShowBookmark, ShowChange, ShowCue, ShowEnd, ShowInfo,
+    ShowLoop, ShowState,
+};
 pub use timeline::{
     ChannelEdge, KeyframeEdge, LaneCurve, LanePoint, LaneTarget, MAX_CUES, MAX_LANE_POINTS,
     MAX_LANES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,

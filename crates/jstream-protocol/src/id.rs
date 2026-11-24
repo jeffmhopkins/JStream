@@ -61,6 +61,11 @@ opaque_id!(
     TimelineId
 );
 opaque_id!(
+    /// A show in the collection (ADR-0210): 1 to 64 bytes of ASCII letters, digits, `_`
+    /// and `-`.
+    ShowId
+);
+opaque_id!(
     /// A scene item: one placement of a source inside a scene. Unique across scenes.
     ItemId
 );
