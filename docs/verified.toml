@@ -678,7 +678,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:4d22be13483248e1", by = "agent:claude", note = "Schema size bullet: group tools keep own ops whole, nested action/edit unions are stubs, describe_api takes name; measured tools.snap from 2.06 MB to 385 KB compact (#1718)" }
+stamp = { hash = "b3:eb3c0f35f728a77e", by = "agent:claude", note = "People-only bullet still holds with the nested refusal (#1758); detail is in the jstream-mcp README | kept from the merged side: Schema size bullet: group tools keep own ops whole, nested action/edit unions are stubs, describe_api takes name; measured tools.snap from 2.06 MB to 385 KB compact (#1718)" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/build.rs"]
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
@@ -711,7 +711,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:07e4da6ed67479c5", by = "agent:claude", note = "Schema size bullet: group tools keep own ops whole, nested action/edit unions are stubs, describe_api takes name; measured tools.snap from 2.06 MB to 385 KB compact (#1718)" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:307ec0479441a6fb", by = "agent:claude", note = "Schema size bullet: group tools keep own ops whole, nested action/edit unions are stubs, describe_api takes name; measured tools.snap from 2.06 MB to 385 KB compact (#1718) | kept from the merged side: Re-read against the MCP README, tools.snap, design.rs and tools.rs: source.seek joins the source tool and REVERSIBLE_ACTIONS, so source stays openWorld but not destructive as listed; tools/list grows about 10 KB, still about 1.45 MB; holds." }
+stamp = { hash = "b3:3ea225a60ffa4407", by = "agent:claude", note = "People-only bullet still holds with the nested refusal (#1758); detail is in the jstream-mcp README | kept from the merged side: Schema size bullet: group tools keep own ops whole, nested action/edit unions are stubs, describe_api takes name; measured tools.snap from 2.06 MB to 385 KB compact (#1718) | kept from the merged side: Re-read against the MCP README, tools.snap, design.rs and tools.rs: source.seek joins the source tool and REVERSIBLE_ACTIONS, so source stays openWorld but not destructive as listed; tools/list grows about 10 KB, still about 1.45 MB; holds." }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:592f50d7cdca5d87", by = "agent:dxc-packaging", note = "Re-read against dist.rs: DXC DLLs beside the exes, --dxc-dir/--no-dxc, pinned BLAKE3 checks before the build, CRT import refusal, dxc folder with licences and DXC-VERSION.txt, README paragraph, and after-review's DXC download step" }
@@ -3339,7 +3339,7 @@ stamp = { hash = "b3:f372f4393411319f", by = "agent:claude", note = "New crate: 
 stamp = { hash = "b3:70b18ef3f311952a", by = "agent:claude", note = "wire gains PacketType::Names, MOD_SLOTS, MAX_MOD_NAME, is_mod_name and write_names, and the layout test; README lists them" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:66ffa6af97003578", by = "agent:claude", note = "Tool table: describe_api takes optional name; schema paragraph explains Edit/Action stubs in tools, server-side full check, ~385 KB tools.snap compact size measured (#1718)" }
+stamp = { hash = "b3:b66889655a341ba3", by = "agent:claude", note = "People-only paragraph: nested people-only/deprecated ops (hotkey/binding action, cues, batch edits) refused with invalid_argument at their path (#1758); rest is the train's #1718 text | kept from the merged side: Tool table: describe_api takes optional name; schema paragraph explains Edit/Action stubs in tools, server-side full check, ~385 KB tools.snap compact size measured (#1718)" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:501c4f620321323e", by = "agent:claude", note = "Tool table: describe_api takes optional name; schema paragraph explains Edit/Action stubs in tools, server-side full check, ~385 KB tools.snap compact size measured (#1718)" }
@@ -3381,10 +3381,10 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:07e4da6ed67479c5", by = "agent:claude", note = "Tool table: describe_api takes optional name; schema paragraph explains Edit/Action stubs in tools, server-side full check, ~385 KB tools.snap compact size measured (#1718)" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:307ec0479441a6fb", by = "agent:claude", note = "Tool table: describe_api takes optional name; schema paragraph explains Edit/Action stubs in tools, server-side full check, ~385 KB tools.snap compact size measured (#1718) | kept from the merged side: the destructiveHint list now names source.seek beside source.restart, matching REVERSIBLE_ACTIONS and the tools.snap source tool" }
+stamp = { hash = "b3:3ea225a60ffa4407", by = "agent:claude", note = "People-only paragraph: nested people-only/deprecated ops (hotkey/binding action, cues, batch edits) refused with invalid_argument at their path (#1758); rest is the train's #1718 text | kept from the merged side: Tool table: describe_api takes optional name; schema paragraph explains Edit/Action stubs in tools, server-side full check, ~385 KB tools.snap compact size measured (#1718) | kept from the merged side: the destructiveHint list now names source.seek beside source.restart, matching REVERSIBLE_ACTIONS and the tools.snap source tool" }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:421b36ed0d2c68e0", by = "agent:claude", note = "Tools bullet names SHARED_UNIONS stubs and Tools::describe answering describe_api whole or by name (#1718); rest unchanged" }
+stamp = { hash = "b3:74e62f3dbc3cb734", by = "agent:claude", note = "Tools bullet: refusal of people-only or deprecated ops nested in a tool's arguments (#1758) on top of the train's #1718 text | kept from the merged side: Tools bullet names SHARED_UNIONS stubs and Tools::describe answering describe_api whole or by name (#1718); rest unchanged" }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -3414,7 +3414,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:07e4da6ed67479c5", by = "agent:claude", note = "Tools bullet names SHARED_UNIONS stubs and Tools::describe answering describe_api whole or by name (#1718); rest unchanged" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:307ec0479441a6fb", by = "agent:claude", note = "Tools bullet names SHARED_UNIONS stubs and Tools::describe answering describe_api whole or by name (#1718); rest unchanged | kept from the merged side: tools.rs adds source.seek to REVERSIBLE_ACTIONS and design.rs a line on it; the contents list still names both files' roles" }
+stamp = { hash = "b3:3ea225a60ffa4407", by = "agent:claude", note = "Tools bullet: refusal of people-only or deprecated ops nested in a tool's arguments (#1758) on top of the train's #1718 text | kept from the merged side: Tools bullet names SHARED_UNIONS stubs and Tools::describe answering describe_api whole or by name (#1718); rest unchanged | kept from the merged side: tools.rs adds source.seek to REVERSIBLE_ACTIONS and design.rs a line on it; the contents list still names both files' roles" }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:9503adad5cd5aa4f", by = "agent:capture-cost", note = "Edited: the Video bullet says a plane still shared gives no buffer from Plane::into_data, so nothing is copied for it (video.rs: into_data now returns an Option and is None for a shared plane or a range of a longer buffer); the rest of the bullet and crate are unchanged." }
