@@ -26,6 +26,8 @@
 #![forbid(unsafe_code)]
 
 mod admitted;
+#[cfg(feature = "tls")]
+pub mod announce;
 mod approvals;
 mod config;
 mod devices;
@@ -116,6 +118,8 @@ struct Network {
     local_addr: SocketAddr,
     acceptor: tokio_rustls::TlsAcceptor,
     identity: Arc<identity::Identity>,
+    /// Whether to announce it on mDNS (ADR-0233).
+    announce: bool,
 }
 
 /// What every connection handler shares.
@@ -238,6 +242,7 @@ impl Server {
                     local_addr,
                     acceptor,
                     identity: Arc::clone(&network.identity),
+                    announce: network.announce,
                 };
                 (Some(network), gate)
             }
@@ -413,6 +418,17 @@ impl Server {
                 Limited::new(network.listener, max_tcp_connections, header_read_timeout),
                 network.acceptor,
             );
+            if network.announce {
+                // The certificate's first name is the host name, unless the OS gave none.
+                let host = network
+                    .identity
+                    .names()
+                    .iter()
+                    .find(|name| name.parse::<std::net::IpAddr>().is_err())
+                    .map_or("", String::as_str);
+                let what = announce::Announcement::new(host, network.local_addr.port());
+                tokio::spawn(announce::run(what, shutdown.subscribe()));
+            }
             let service = router.into_make_service_with_connect_info::<Accepted>();
             let mut stopping = shutdown.subscribe();
             let stop = async move {

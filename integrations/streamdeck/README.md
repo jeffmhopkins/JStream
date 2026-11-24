@@ -9,7 +9,7 @@ review_every = "90d"
 # Stream Deck plugin
 
 A plugin for Elgato's Stream Deck app that controls JStream over the network. Its keys run
-shows, switch scenes, place keyframes, show, hide and mute sources, play sequences, turn
+shows, switch scenes, go to keyframes, show, hide and mute sources, play sequences, turn
 effects on and off, start streams and recordings, flip channels and run hotkey actions.
 Each key lights up from JStream's live state, so the deck shows what is on program, what
 is live, what plays and what is muted. It lives outside the Cargo workspace
@@ -45,10 +45,18 @@ Stream Deck and JStream can run on different computers on the same network.
 Every key shares that one pairing, so this happens once per Stream Deck computer.
 JStream lists the Stream Deck under **Paired devices**, where it can be revoked. A revoked
 or expired pairing turns the keys' badges red, and the connection line says to pair again.
-**Forget** clears the pairing on the Stream Deck side.
+A certificate other than the paired one stops the keys too, since retrying won't change
+it: if JStream renewed its certificate, pair again; otherwise something on the network is
+pretending to be JStream. **Forget** clears the pairing on the Stream Deck side only. The
+Stream Deck stays paired in JStream until you revoke it under **Settings › Devices ›
+Paired devices**.
 
-**Find JStream** lists JStream only while JStream announces itself on the network. It
-always works to type the address.
+**Find JStream** lists every JStream that announces itself on the network: one whose
+**Allow devices on my network** is on and whose **Let devices find JStream on my network**,
+just under it, is on too (it is unless turned off; the daemon announces unless started
+with `--lan-quiet`, [ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
+Finding JStream lets nothing in: pairing still takes the code and the fingerprint. Typing
+the address always works, for example where the network drops multicast.
 
 <a id="keys"></a>
 ## Keys
@@ -64,8 +72,8 @@ refuses flashes Stream Deck's alert.
 | Key | Does | Lit while |
 |---|---|---|
 | **Show** | Play a show (or rehearse it on preview), Continue, Pause, Stop, Back, Skip, go to a bookmark, or go to bookmark 1 to 8 of the running show (`show.*`; a JStream without shows lists none) | Play: the show plays (ringed while it waits). Continue: the show waits for Continue. Pause: paused. Stop: a show runs |
-| **Switch scene** | `scene.switch`, with an optional transition | on program (red) or preview (green) |
-| **Place keyframe** | `scene.set_keyframe` on the keyframe's scene, with an optional transition | that keyframe is placed |
+| **Switch scene** | `scene.switch`, with an optional transition. With a **Keyframe** picked from the scene's own, it first moves the scene to that keyframe (`scene.set_keyframe`), so program lands on it; if the scene is already on program, it moves there with the transition | on program (red; with a keyframe, while the scene is at it) or preview (green) |
+| **Go to keyframe** | `scene.set_keyframe` on the keyframe's scene, with an optional transition. It moves the scene to a keyframe made in JStream and never creates one; on program, the move is seen live | the scene is at that keyframe |
 | **Show or hide source** | `item.toggle`, `item.show` or `item.hide` on one item of a scene | the item is shown |
 | **Mute source** | `source.set_audio` with `muted` | the source is muted (red) |
 | **Sequence** | `timeline.play` or `timeline.stop` | it plays (ringed while it waits to start) |
@@ -87,15 +95,15 @@ depends_on = ["docs/adr/0104-network-listener-over-tls.md", "docs/adr/0044-pairi
 - **One connection.** The plugin keeps one WebSocket connection to JStream for every key
   (`hub.ts`, `jstream/client.ts`). It says `hello` as `Stream Deck (<computer name>)` at
   protocol 0.169, the oldest minor that has every call it makes, and reconnects after
-  1, 2, 5, 10 and then every 20 seconds. A `401` (a revoked or lapsed device) stops the
-  retries until the person pairs again.
+  1, 2, 5, 10 and then every 20 seconds. A `401` (a revoked or lapsed device) or a
+  certificate other than the paired one stops the retries until the person pairs again.
 - **Trust.** JStream's network listener has a self-signed certificate
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), so the plugin trusts
   its SHA-256 fingerprint, which the person compared with the one JStream shows. Every
   connection, the pairing request included, completes the TLS handshake and checks the
   fingerprint before it writes a byte of HTTP (`jstream/tls.ts`). So no token and no code
-  reaches any other server. A mismatch is refused with a message that says to pair again
-  if JStream renewed its certificate.
+  reaches any other server. A mismatch is refused, and not retried, with a message that
+  says to pair again if JStream renewed its certificate.
 - **Pairing** is ADR-0044's exchange: `POST /api/v1/pair` with the code and a name, which
   answers with a device token. The token, the fingerprint, the host and the port are kept
   in the plugin's global settings, which the Stream Deck app stores for the plugin on that
@@ -107,8 +115,9 @@ depends_on = ["docs/adr/0104-network-listener-over-tls.md", "docs/adr/0044-pairi
   `output.state_changed` updates one output. No event reports a channel's switch, so
   `channel.values` is read every second, only while a channel key is on screen.
 - **Discovery** (`jstream/discovery.ts`) asks mDNS for `_jstream._tcp.local` for 2.5
-  seconds and lists each instance's name, address and port. Finding JStream proves
-  nothing about it: the fingerprint check and the code still decide.
+  seconds and lists each instance's name, address and port, as JStream announces them
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)). Finding
+  JStream proves nothing about it: the fingerprint check and the code still decide.
 - **Key images** are SVG drawn per state (`render.ts`). The plugin sets an image or a
   title only when it changed.
 
@@ -134,7 +143,8 @@ npm run pack                # validates, then writes dist/io.github.jeffmhopkins
 
 - `test/unit.test.ts` covers the lists, labels, key images, fingerprints and discovery
   answers.
-- `test/daemon.test.ts` runs against a real `jstream-daemon --lan`. It probes the
+- `test/daemon.test.ts` runs against a real `jstream-daemon --lan`. It finds the daemon
+  by its mDNS announcement, probes the
   certificate, refuses a wrong fingerprint, pairs, and drives a scene, keyframe, item,
   mute, effect, sequence, output and hotkey key's calls while watching the state they
   light from. Last, it revokes the device and checks the refusal. A second test runs a
@@ -142,7 +152,14 @@ npm run pack                # validates, then writes dist/io.github.jeffmhopkins
   It skips on a JStream without shows.
 - `test/plugin.test.ts` runs the built plugin as the Stream Deck app does, against a
   stand-in for the app's socket. A key appears offline, the property inspector pairs it,
-  and a press switches program and lights the key.
+  and a press switches program and lights the key. A second scene key, with a keyframe
+  picked, puts program on its scene at that keyframe.
+
+The dependencies are exact pins with the lockfile committed (ADR-0232). Their licences are
+checked by hand against `deny.toml`'s allow list, since `cargo deny` doesn't read npm's
+lockfile. All are on it except `tslib` (0BSD), a build-only dependency of
+`@rollup/plugin-typescript` that isn't in the packaged plugin; 0BSD asks even less than
+MIT.
 
 `npm run watch` rebuilds and restarts the plugin in a Stream Deck app on the same computer
 (`streamdeck link io.github.jeffmhopkins.jstream.sdPlugin` once first). The images under

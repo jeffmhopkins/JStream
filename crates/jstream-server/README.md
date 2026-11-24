@@ -95,6 +95,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   TLS-only listener for devices on the network
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), on rustls with the
   ring provider, with its own pool of open connections.
+- **Announcement** (`announce.rs`, `tls` feature): the mDNS responder that announces the
+  network listener as `_jstream._tcp.local` while `NetworkConfig::announce` is set
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
 - **Certificate** (`identity.rs`, `tls` feature): the network listener's key and
   self-signed certificate, made on the host and kept in one user-only file beside the
   token file (`identity_file`), its SHA-256 fingerprint, and the machine's names and
@@ -455,6 +458,21 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   address and fingerprint.
 - **Where it listens.** Wherever `NetworkConfig::bind` says: the daemon binds every
   interface on port 4456 unless told otherwise (#1129 N3), and says so in its help.
+- **Announcing it** (`announce.rs`,
+  [ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)). With
+  `NetworkConfig::announce`, `serve_with_shutdown` also runs a small mDNS responder: one
+  DNS-SD instance, `<host name>._jstream._tcp.local`, as a PTR, an SRV with the
+  listener's port and the host's `.local` name, and a TXT `v=1`, nothing more (no
+  address records: a device uses the address the answer came from). It shares UDP 5353
+  with the system's responder (address reuse) on `224.0.0.251`, announces three times a
+  second apart and then once a minute with a TTL of 120 s, answers queries for the
+  service or the instance from the local network only (a private, link-local or
+  loopback source, `announce::on_link`, as `jstream_core::lan::is_lan`) to the group at
+  most once a second, answers a one-shot query from another port to its sender with
+  its question repeated, and says goodbye with TTL 0 when the server stops. A query is read with bounds on its
+  size, questions, labels and compression pointers (backwards only). If 5353 can't be
+  opened it logs at `warn` and the listener works as before. The daemon announces with
+  `--lan` unless `--lan-quiet`; the desktop app unless its setting is off.
 
 ### Sessions
 
@@ -689,7 +707,9 @@ the server forbids `unsafe`, and the daemon links that crate anyway. With the `t
 feature only: `rustls` (ring provider, already in the tree for `jstream-outputs`' RTMPS)
 and `tokio-rustls`, the rustls project's async adapter, for the network listener;
 `rcgen` (ring) for its certificate, a normal dependency here where it was the RTMPS
-tests' dev-dependency (#1129 N2); `ring` for the certificate's SHA-256 fingerprint.
+tests' dev-dependency (#1129 N2); `ring` for the certificate's SHA-256 fingerprint;
+`socket2`, already the workspace's for the JTunnel receiver, for the mDNS socket that
+shares port 5353 (address reuse) and joins the group ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)).
 
 ### Open questions
 

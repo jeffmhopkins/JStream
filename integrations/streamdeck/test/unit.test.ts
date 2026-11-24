@@ -45,6 +45,7 @@ test("the lists name every target a key can pick, from the live state", () => {
 	const l = lists(STATE) as Record<string, any>;
 	assert.deepEqual(l.scenes, [{ value: "scn_1", label: "Main" }]);
 	assert.deepEqual(l.keyframes, [{ value: "scn_1_wide", label: "Main, wide", group: "Main" }]);
+	assert.deepEqual(l.sceneKeyframes, { scn_1: [{ value: "scn_1_wide", label: "Main, wide" }] });
 	assert.deepEqual(l.items.scn_1, [
 		{ value: "itm_1", label: "Camera" },
 		{ value: "itm_2", label: "Mic" },

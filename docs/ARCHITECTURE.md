@@ -1211,7 +1211,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   listener is plain `ws://`. A host can also open the network listener
   ([ADR-0104](adr/0104-network-listener-over-tls.md), the daemon's `--lan`): TLS only,
   with a self-signed certificate the person trusts by its fingerprint, admitting paired
-  devices only and never the control token. An upgrade with no `Origin` header is allowed,
+  devices only and never the control token, and announced on mDNS as
+  `_jstream._tcp.local` unless turned off, so a device can find it
+  ([ADR-0233](adr/0233-announce-the-network-listener-on-mdns.md)). An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
   serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same

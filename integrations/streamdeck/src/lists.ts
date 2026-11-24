@@ -21,6 +21,11 @@ export function lists(state: StateSnapshot | undefined): JsonObject {
 	const keyframes: Option[] = state.scenes
 		.filter((s) => s.variant_of)
 		.map((s) => ({ value: s.scene_id, label: s.name, group: sceneName.get(s.variant_of!) ?? s.variant_of! }));
+	// Each scene's own keyframes, for the Switch scene key's keyframe picker.
+	const sceneKeyframes: Record<string, Option[]> = {};
+	for (const s of state.scenes.filter((s) => s.variant_of)) {
+		(sceneKeyframes[s.variant_of!] ??= []).push({ value: s.scene_id, label: s.name });
+	}
 	const items: Record<string, Option[]> = {};
 	for (const scene of state.scenes.filter((s) => !s.variant_of)) {
 		items[scene.scene_id] = (scene.items ?? []).map((i) => ({
@@ -49,7 +54,7 @@ export function lists(state: StateSnapshot | undefined): JsonObject {
 		bookmarks[show.show_id] = (show.bookmarks ?? []).map((b) => ({ value: b.bookmark_id, label: b.name || b.bookmark_id }));
 	}
 	const transitions: Option[] = (state.transitions?.presets ?? []).map((t) => ({ value: t.preset_id, label: t.name || t.preset_id }));
-	return { shows, bookmarks, scenes, keyframes, items, sources, sequences, effects, outputs, channels, hotkeys, transitions } as unknown as JsonObject;
+	return { shows, bookmarks, scenes, keyframes, sceneKeyframes, items, sources, sequences, effects, outputs, channels, hotkeys, transitions } as unknown as JsonObject;
 }
 
 /** A name for an output, which has none of its own: what it records to or streams to. */

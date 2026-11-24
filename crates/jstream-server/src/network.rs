@@ -45,6 +45,10 @@ pub struct NetworkConfig {
     /// The certificate and key, made on the host ([`Identity::load_or_create`]). Its
     /// names are also the `Host` names the listener accepts.
     pub identity: Arc<Identity>,
+    /// Whether to announce the listener on the local network over mDNS, as
+    /// `_jstream._tcp.local`, so devices find it without its address (ADR-0233). It
+    /// admits no one: pairing still needs the code and the fingerprint.
+    pub announce: bool,
 }
 
 /// The TLS setup for `identity` (ADR-0104 §2, #1129 N2).

@@ -1,5 +1,5 @@
 /**
- * The plugin's connection against a real `jstream-daemon --lan`: probing the
+ * The plugin's connection against a real `jstream-daemon --lan`: finding it, probing the
  * certificate, pairing with a code, connecting over the pinned TLS listener with the
  * device token, reading the studio, and the actions and edits each key sends, with the
  * state they light up from.
@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { JStreamClient } from "../src/jstream/client.ts";
+import { discover } from "../src/jstream/discovery.ts";
 import { Studio, effectKey, findEffect } from "../src/jstream/studio.ts";
 import { FingerprintMismatch, pair, probeFingerprint } from "../src/jstream/tls.ts";
 import { call, fingerprint, lanHost, lanPort, skip, startDaemon, stopDaemon, until } from "./daemon.ts";
@@ -20,6 +21,16 @@ before(async () => {
 	if (!skip) await startDaemon();
 });
 after(stopDaemon);
+
+test("the plugin finds JStream on the network by its mDNS announcement", { skip }, async () => {
+	// The daemon announces `_jstream._tcp.local` with `--lan` (ADR-0233). Several daemons
+	// may answer on a shared network; this one is the one on its own port.
+	const found = await discover(3000);
+	const mine = found.find((f) => f.port === lanPort);
+	assert.ok(mine, `found ${JSON.stringify(found)}, not port ${lanPort}`);
+	assert.ok(mine.name.length > 0);
+	assert.ok(mine.host.length > 0);
+});
 
 test("a Stream Deck pairs over the network and drives JStream", { skip }, async (t) => {
 	const host = lanHost();
@@ -90,6 +101,13 @@ test("a Stream Deck pairs over the network and drives JStream", { skip }, async 
 	await until("the connection refused", () => client.status.state === "error" && /Pair again/.test(client.status.message), 8000);
 	assert.equal((client.status as { retryInMs?: number }).retryInMs, undefined, "a refused token is not retried");
 	client.close();
+
+	// A certificate other than the paired one isn't retried either.
+	const pinned = new JStreamClient("Stream Deck (test)");
+	t.after(() => pinned.close());
+	pinned.setEndpoint({ host, port: lanPort, fingerprint: wrong, token: paired.token });
+	await until("the certificate refused", () => pinned.status.state === "error" && /certificate has changed/.test(pinned.status.message), 8000);
+	assert.equal((pinned.status as { retryInMs?: number }).retryInMs, undefined, "a changed certificate is not retried");
 });
 
 test("show keys run a show, and the studio says when it plays and waits", { skip }, async (t) => {

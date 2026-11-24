@@ -167,6 +167,10 @@ a stolen token, local denial of service.
     so it is also reachable on public Wi-Fi or a VPN the machine joins: `--lan-bind`
     picks one address. On Windows and macOS, the first start can raise the OS firewall's
     prompt.
+  - **Announced** unless turned off: while it is open, the host announces it on mDNS
+    ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md); see
+    [Pairing](#pairing)). The daemon's `--lan-quiet`, or the desktop app's "Let devices
+    find JStream on my network" unticked, keeps it quiet.
   The desktop app serves only its window, on an OS-picked port with a token kept in
   memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
   (4455 by default), turns MCP on and takes its token from a token file with the
@@ -255,6 +259,7 @@ covers = [
   "crates/jstream-server/src/pair.rs",
   "crates/jstream-server/src/pair_page.rs",
   "crates/jstream-server/src/gate.rs",
+  "crates/jstream-server/src/announce.rs",
 ]
 depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md", "docs/adr/0104-network-listener-over-tls.md"]
 -->
@@ -289,6 +294,20 @@ that connection ([ADR-0104](../adr/0104-network-listener-over-tls.md)). With `--
 on the network can void each open code with five wrong guesses, so pairing can be
 denied while they keep at it, never won; ADR-0044's five are kept rather than giving the
 network its own allowance.
+
+**Accepted** ([ADR-0233](../adr/0233-announce-the-network-listener-on-mdns.md)): while
+the network listener is open, the host announces it on mDNS as `_jstream._tcp.local`
+(the host name, the port and `v=1`; no fingerprint, version or project), unless the
+desktop app's "Let devices find JStream on my network" is off or the daemon runs with
+`--lan-quiet`. That tells anyone on the link, unasked, that this machine runs JStream
+and where; the port was already reachable to anyone who tried it. The responder on UDP
+5353 only answers queries for that service, and only from a private, link-local or
+loopback source, so a host with a public address that can reach the port learns
+nothing (#1799 B1); one on a private network routed to this one (a VPN, say) still can,
+as with the JTunnel socket. It answers the group at most once a second, reads each query with bounds on
+its size, questions and labels, and admits no one: a device it points somewhere still checks the
+fingerprint and pairs with a code, so a spoofed answer can only send a device to an
+address the fingerprint check refuses.
 
 **Gaps:** the devices file's Windows DACL, like the token file's, waits on a Windows
 hardware run (#546, for #344).
@@ -742,7 +761,9 @@ somewhere it shouldn't.
   LAN address's port 5353, into the same parser and list as below, and drops the rest
   uncounted; it reads at most 16 datagrams per turn of the thread, so other programs'
   mDNS traffic can't hold up playout. Another local program on 5353 sees the same
-  group traffic it always did; JStream adds nothing to it.
+  group traffic it always did; the receiver adds nothing to it. (The network listener's
+  own mDNS announcement, while network access is on, is a separate socket on the same
+  port that answers only for `_jstream._tcp.local`; see [Pairing](#pairing).)
 - In the desktop app one accepted sender is live at a time (ADR-0221): only it is
   subscribed to, so a reader naming no input reads only that sender's data.
 - A names packet ([ADR-0181](../adr/0181-jstream-names-a-jtunnel-senders-params.md))

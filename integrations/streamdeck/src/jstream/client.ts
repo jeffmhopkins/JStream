@@ -8,7 +8,7 @@ import { EventEmitter } from "node:events";
 import WebSocket from "ws";
 
 import { type Action, type Call, type Edit, JStreamError, PROTOCOL, type ServerEvent, type ServerMessage, WS_PATH } from "./protocol.ts";
-import { pinnedConnection, urlHost } from "./tls.ts";
+import { FingerprintMismatch, pinnedConnection, urlHost } from "./tls.ts";
 
 /** Where JStream is and the credentials pairing gave. */
 export type Endpoint = {
@@ -51,6 +51,8 @@ export class JStreamClient extends EventEmitter<ClientEvents> {
 
 	constructor(clientName: string) {
 		super();
+		// One listener per key action and the hub, more than Node's default 10.
+		this.setMaxListeners(50);
 		this.#clientName = clientName;
 	}
 
@@ -160,6 +162,9 @@ export class JStreamClient extends EventEmitter<ClientEvents> {
 			// The first error of an attempt says why; what follows it is its consequence.
 			if (socket === this.#socket && this.#lastError === undefined) {
 				this.#lastError = err.message;
+				// A certificate other than the paired one won't turn into it by retrying, and
+				// may be an impostor: stop until the person pairs again, as after a 401.
+				this.#refused = err instanceof FingerprintMismatch || err.name === "FingerprintMismatch";
 			}
 		});
 		socket.on("close", () => {

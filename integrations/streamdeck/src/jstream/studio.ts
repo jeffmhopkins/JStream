@@ -31,6 +31,8 @@ export class Studio extends EventEmitter<StudioEvents> {
 
 	constructor(client: JStreamClient) {
 		super();
+		// One listener per key action and the hub, more than Node's default 10.
+		this.setMaxListeners(50);
 		this.#client = client;
 		client.on("welcome", () => void this.refresh());
 		client.on("status", (status) => {

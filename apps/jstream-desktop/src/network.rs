@@ -7,6 +7,11 @@
 //!   Tauri command that no engine client (an agent, a plugin or a paired device) can
 //!   reach. A missing or unreadable file means off. It takes effect when the app next
 //!   starts.
+//! - **Announcing.** `{"announce": false}` beside it stops the host announcing the
+//!   network listener on mDNS as `_jstream._tcp.local` (ADR-0233): "Let devices find
+//!   JStream on my network", on unless turned off. The page saves it through
+//!   `setAnnounce` and the `set_network_announce` command; it too applies at the next
+//!   start. Each save keeps the file's other key.
 //! - **On**, the host opens the network listener on every interface on
 //!   [`NETWORK_PORT`], the daemon's default, with the certificate beside the token file
 //!   (`jstream_server::identity`, made the first time, never renewed silently), and
@@ -51,15 +56,54 @@ pub fn allowed(file: &Path) -> bool {
     }
 }
 
-/// Saves the setting, user-only, replacing the file whole.
+/// Whether the host announces the network listener on mDNS (ADR-0233): on unless the
+/// file says `"announce": false`. A missing or unreadable file is on, since the listener
+/// it announces is off then anyway.
+pub fn announced(file: &Path) -> bool {
+    saved(file)
+        .get("announce")
+        .and_then(serde_json::Value::as_bool)
+        != Some(false)
+}
+
+/// The file's keys, or none when it is missing or isn't a JSON object.
+fn saved(file: &Path) -> serde_json::Map<String, serde_json::Value> {
+    std::fs::read_to_string(file)
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| match value {
+            serde_json::Value::Object(map) => Some(map),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+/// Saves `key` as `on`, user-only, keeping the file's other setting, and replacing the
+/// file whole.
+fn save(file: &Path, key: &str, on: bool) -> std::io::Result<()> {
+    let mut map = saved(file);
+    map.retain(|name, value| (name == "allow" || name == "announce") && value.is_boolean());
+    map.insert(key.to_owned(), serde_json::Value::Bool(on));
+    let text = serde_json::Value::Object(map).to_string();
+    let temporary = file.with_extension("json.tmp");
+    write_private(&temporary, text.as_bytes())?;
+    std::fs::rename(&temporary, file)
+}
+
+/// Saves "Allow devices on my network".
 ///
 /// # Errors
 /// When the file can't be written.
 pub fn set_allowed(file: &Path, allow: bool) -> std::io::Result<()> {
-    let text = serde_json::json!({ "allow": allow }).to_string();
-    let temporary = file.with_extension("json.tmp");
-    write_private(&temporary, text.as_bytes())?;
-    std::fs::rename(&temporary, file)
+    save(file, "allow", allow)
+}
+
+/// Saves "Let devices find JStream on my network" (ADR-0233).
+///
+/// # Errors
+/// When the file can't be written.
+pub fn set_announced(file: &Path, announce: bool) -> std::io::Result<()> {
+    save(file, "announce", announce)
 }
 
 /// Writes `bytes` to a new file only this user can read (on Unix; on Windows the data
@@ -79,12 +123,13 @@ pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 /// The network listener's configuration: every interface on [`NETWORK_PORT`], with
-/// the certificate kept beside `token_file` (made the first time). A certificate that
+/// the certificate kept beside `token_file` (made the first time), announced on mDNS
+/// when `announce` (ADR-0233). A certificate that
 /// doesn't name all of today's names is kept and logged, as the daemon keeps it.
 ///
 /// # Errors
 /// When the certificate can't be read, made or saved.
-pub fn config(token_file: &Path) -> anyhow::Result<jstream_server::NetworkConfig> {
+pub fn config(token_file: &Path, announce: bool) -> anyhow::Result<jstream_server::NetworkConfig> {
     use jstream_server::identity::{Identity, Made, identity_file, machine_names};
     let ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
     let names = machine_names(ip);
@@ -105,6 +150,7 @@ pub fn config(token_file: &Path) -> anyhow::Result<jstream_server::NetworkConfig
     Ok(jstream_server::NetworkConfig {
         bind: SocketAddr::new(ip, NETWORK_PORT),
         identity: Arc::new(identity),
+        announce,
     })
 }
 
@@ -128,12 +174,32 @@ pub(crate) fn set_network(setting: tauri::State<'_, Setting>, allow: bool) -> bo
     }
 }
 
-/// The setting's file, the state `set_network` writes.
+/// `set_network_announce`: saves "Let devices find JStream on my network" from the
+/// app's own window (ADR-0233). Answers whether it was saved.
+#[cfg(webview)]
+#[tauri::command]
+pub(crate) fn set_network_announce(setting: tauri::State<'_, Setting>, announce: bool) -> bool {
+    match set_announced(&setting.0, announce) {
+        Ok(()) => {
+            tracing::info!(
+                announce,
+                "network announcement setting saved; it applies when the app restarts"
+            );
+            true
+        }
+        Err(error) => {
+            tracing::warn!(%error, "could not save the network announcement setting");
+            false
+        }
+    }
+}
+
+/// The setting's file, the state `set_network` and `set_network_announce` write.
 pub struct Setting(pub PathBuf);
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed, set_allowed, setting_file};
+    use super::{allowed, announced, set_allowed, set_announced, setting_file};
 
     fn folder(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
@@ -185,6 +251,28 @@ mod tests {
         }
         std::fs::write(&file, r#"{"allow":true}"#).expect("written");
         assert!(allowed(&file));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Announcing is on until turned off, and each switch keeps the other (ADR-0233).
+    #[test]
+    fn announcing_is_on_until_turned_off_and_keeps_allow() {
+        let dir = folder("announce");
+        let file = setting_file(&dir);
+        assert!(announced(&file), "a missing file announces");
+        set_allowed(&file, true).expect("saved");
+        assert!(announced(&file));
+        set_announced(&file, false).expect("saved");
+        assert!(!announced(&file));
+        assert!(allowed(&file), "turning announcing off kept allow");
+        set_allowed(&file, false).expect("saved");
+        assert!(!announced(&file), "turning allow off kept announce");
+        set_announced(&file, true).expect("saved");
+        assert!(announced(&file) && !allowed(&file));
+        std::fs::write(&file, "not json").expect("written");
+        assert!(announced(&file));
+        set_announced(&file, false).expect("saved over a broken file");
+        assert!(!announced(&file) && !allowed(&file));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

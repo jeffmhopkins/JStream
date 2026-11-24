@@ -380,6 +380,51 @@ pub fn NetworkAccessSetting() -> impl IntoView {
                 {move || problem.get().map(|problem| view! { <span class="problem" role="alert">{problem}</span> })}
             </span>
         </label>
+        <AnnounceSetting />
+    }
+    .into_any()
+}
+
+/// "Let devices find JStream on my network", under "Allow devices on my network", in a
+/// desktop app that has it (ADR-0233): whether the network listener is announced on
+/// mDNS, so a device such as a Stream Deck finds JStream without its address.
+#[component]
+fn AnnounceSetting() -> impl IntoView {
+    let Some(started) = crate::host::desktop_announce() else {
+        return ().into_any();
+    };
+    let on = RwSignal::new(started);
+    let problem = RwSignal::new(None::<&'static str>);
+    let save = move |announce: bool| {
+        on.set(announce);
+        spawn_local(async move {
+            if crate::host::set_announce(announce).await {
+                problem.try_set(None);
+            } else {
+                on.try_set(!announce);
+                problem.try_set(Some("The setting could not be saved."));
+            }
+        });
+    };
+    view! {
+        <label class="settings-check">
+            <input
+                type="checkbox"
+                aria-label="Let devices find JStream on my network"
+                prop:checked=move || on.get()
+                on:change=move |event| save(event_target_checked(&event))
+            />
+            <span>
+                <span class="settings-check-label">"Let devices find JStream on my network"</span>
+                <span class="settings-check-note">
+                    "While devices are allowed, JStream announces itself on this network (mDNS), so a device such as a Stream Deck finds it without typing its address. Finding it lets nothing in: a device still needs a pairing code. On unless you turn it off."
+                </span>
+                {move || (on.get() != started).then(|| view! {
+                    <span class="settings-check-note" role="status">"Restart JStream to apply this."</span>
+                })}
+                {move || problem.get().map(|problem| view! { <span class="problem" role="alert">{problem}</span> })}
+            </span>
+        </label>
     }
     .into_any()
 }

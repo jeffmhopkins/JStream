@@ -220,6 +220,7 @@ pub fn start(
             vcam: vcam.as_str(),
             collection: collection.as_ref(),
             network: network::allowed(&network::setting_file(data)),
+            announce: network::announced(&network::setting_file(data)),
             network_open: host.network().is_some(),
             wheel_focus_only: wheel_focus_only() || !host.global_wheel(),
             jtunnel: &jtunnel::read(&jtunnel::setting_file(data)),
@@ -259,11 +260,12 @@ fn wheel_focus_only() -> bool {
 /// file as the daemon keeps them. A certificate that can't be used is logged, and the
 /// app starts without network access.
 fn network_access(data: &Path) -> Option<host::Network> {
-    if !network::allowed(&network::setting_file(data)) {
+    let file = network::setting_file(data);
+    if !network::allowed(&file) {
         return None;
     }
     let token_file = data.join(host::TOKEN_FILE);
-    match network::config(&token_file) {
+    match network::config(&token_file, network::announced(&file)) {
         Ok(config) => Some(host::Network {
             config,
             device_file: jstream_server::token_file::device_file(&token_file),

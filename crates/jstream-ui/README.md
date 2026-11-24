@@ -113,6 +113,8 @@ Contents ([Design](#design) explains the choices):
   which picks the wording of a wheel chord's "focus only" note, `browse`,
   which calls the global's `browse` to open a native dialog, and `desktop_network()`
   and `allow_network`, which read and save the app's "Allow devices on my network",
+  `desktop_announce()` and `set_announce`, which read and save its "Let devices find
+  JStream on my network" (ADR-0233),
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
   JTunnel senders" as a `JtunnelSetting` of `JtunnelSender`s, each with its "Use this
   sender's state" and "Use this sender's MIDI" (its JSON tested natively), and `desktop_ptz()`
@@ -419,7 +421,7 @@ Contents ([Design](#design) explains the choices):
 - **Pairing** (`pairing.rs`): `Pairing`, the Paired devices section on the Settings
   dialog's Devices page, which says no device can pair unless the server pairs devices
   (list and revoke devices, and Pair a device…, whose `PairDialog` shows the code), `NetworkAccessSetting`, the desktop app's "Allow devices on my
-  network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
+  network" switch above it with "Let devices find JStream on my network" under it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
   JTunnel senders" switch, accepted senders (each with its "Use this sender's state"
@@ -501,7 +503,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
-  `network`, `networkOpen`, `wheelFocusOnly`, `browse`, `allowNetwork`, `jtunnel`,
+  `network`, `networkOpen`, `announce`, `wheelFocusOnly`, `browse`, `allowNetwork`,
+  `setAnnounce`, `jtunnel`,
   `setJtunnel`, `ptz`, `setPtz`, `ptzCameras` and `setPtzCameras`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
@@ -1690,7 +1693,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   turn it on; a failed save puts the box back and says so, and while the box differs
   from the setting the app started with it says to restart JStream. When the setting
   was on but the listener didn't open (`networkOpen` false: its port taken), it says
-  devices can't connect. Its note says Windows may ask about its firewall. Below it,
+  devices can't connect. Its note says Windows may ask about its firewall. Under it,
+  "Let devices find JStream on my network"
+  ([ADR-0233](../../docs/adr/0233-announce-the-network-listener-on-mdns.md)), shown only
+  when the global has `announce` and `setAnnounce`, saves the same way through
+  `setAnnounce`, with the same restart note; its note says finding JStream lets nothing
+  in. Below them,
   "Receive from JTunnel senders" ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3), shown only when the global has `jtunnel` and `setJtunnel`: the
   switch, the accepted senders (name and `address:port`, each with a "Use this sender's
