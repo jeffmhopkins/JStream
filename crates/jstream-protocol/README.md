@@ -405,7 +405,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.188 because `preview.show` moves an open preview stream to
+`PROTOCOL_VERSION` is 0.190 because a folder may belong to one scene and hold that
+scene's keyframe scenes and timelines (`FolderInfo.scene_id`, `folder.create`'s
+`scene_id`, `TimelineInfo.folder`, and `scene.set_folder` on a keyframe scene;
+[ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md));
+0.188 because `preview.show` moves an open preview stream to
 another scene, or the program, on its channel, keeping its encoder where nothing else
 shares it, and `preview.request_keyframe` asks a stream for a keyframe at once; 0.187 because a source's or bus's mute can be set by an action,
 `source.mute` and `bus.mute`, whose `to` (`MuteTo`) mutes, unmutes, toggles, or holds it
@@ -1040,8 +1044,9 @@ keeps the addressing of the edit it undoes.
   (ADR-0049 §2). A batch that changed nothing is no undo step.
 - Everything else follows the parent, so the edits that add or order a scene's own
   things refuse a variant with `invalid_argument` on `scene_id`: `item.add`, `item.move`
-  into it, and `scene.set_folder` (a variant is listed under its parent, never in a
-  folder). `item.set_transform`, `scene.set_role`, renames, transitions and metadata
+  into it, and, until 0.190, `scene.set_folder` (a variant is listed under its parent;
+  since 0.190 it may sit in one of its parent's own folders, ADR-0222).
+  `item.set_transform`, `scene.set_role`, renames, transitions and metadata
   work as on any scene.
 - **Dropped overrides** (ADR-0040 §1): an edit that takes an item out of a variant's
   tree drops its override there in the same edit: `item.remove` of it, `item.move` of
@@ -1733,7 +1738,14 @@ rendering, switching or nesting. Folders organise the scene list as a tree: an o
 list of `{ folder_id, name, parent? }`, where a folder's children show in folder order,
 and a scene names at most one folder (`scene.set_folder`) while keeping its place in the
 flat display order. `folder.set_parent` refuses a parent that would put the folder
-inside itself. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
+inside itself. Since 0.190 a folder may instead belong to one scene (`scene_id`,
+[ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md)): it shows under that scene and
+holds its keyframe scenes (`scene.set_folder`) and its timelines (`TimelineInfo.folder`,
+written with `timeline.set`; a keyframe scene's timelines file in its parent's
+folders). A folder's parent belongs to the same scene or, like it, to none; a keyframe
+scene goes only in its parent's folders and any other scene only in the scene list's;
+a keyframe scene has no folders of its own; each else `invalid_argument`. A scene's
+folders go with it when it is deleted, and its undo puts them back. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
 source carries a set of them, with a favourite flag (`source.set_meta`); they belong to
 the source, so every item placing it shares them, and `source.duplicate` copies them.
 A scene's `SceneMeta` (`scene.set_meta`) is its `labels` (since 0.45,
@@ -1804,12 +1816,13 @@ bytes). Since 0.100 hotkey bindings ([Hotkeys](#hotkeys)) and timelines
 `label.members {label_id}` lists everything that carries one: its scenes in display
 order, each with its parent when it is a keyframe scene, its sources by ID, its bindings
 by chord with their actions, and its timelines by scene then ID, each with its scene;
-`not_found` for a label that doesn't exist. A folder that holds a scene or folder, and a
-label anything carries, can't be deleted: the `invalid_argument` lists the `blockers`
-(`folder`, `parent` or `labels`; for a label, its sources first, then its scenes, its
-bindings and its timelines), and `delete.plan` with a `folder` or `label` target returns
-the batch that moves what the folder holds up to its parent, or takes the label off
-each, in that order, then deletes it.
+`not_found` for a label that doesn't exist. A folder that holds a scene, timeline or
+folder, and a label anything carries, can't be deleted: the `invalid_argument` lists the
+`blockers` (`folder`, `parent` or `labels`; for a folder, its scenes, then its timelines,
+then its folders; for a label, its sources first, then its scenes, its bindings and its
+timelines), and `delete.plan` with a `folder` or `label` target returns the batch that
+moves what the folder holds up to its parent (a timeline with `timeline.set`), or takes
+the label off each, in that order, then deletes it.
 `state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
 `state.get` and `source.list` report each scene's and source's fields, each omitted
 while it has its default, so an older client reads the collection as before.
@@ -3387,7 +3400,11 @@ Since 0.87 a scene holds timelines
   a timeline carries `labels` too, omitted for none
   ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)): each must exist
   (`not_found`) and be listed once (`invalid_argument` on `timeline.labels`), and they
-  are kept ordered by ID ([Folders, labels and scene options](#organisation)).
+  are kept ordered by ID ([Folders, labels and scene options](#organisation)). Since
+  0.190 a timeline may name a `folder`, omitted for none: one of its scene's own folders,
+  or its parent's for a keyframe scene's timeline (`invalid_argument` on
+  `timeline.folder` otherwise, [ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md)).
+  It only organises the scene's rows.
 - **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
   `scene.set_keyframe` (since 0.88, [Keyframe tracks](#keyframe-tracks)), `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
   `source.restart`, `timeline.play`, `timeline.stop` and `timeline.seek`, and since 0.169

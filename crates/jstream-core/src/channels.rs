@@ -1389,6 +1389,7 @@ mod tests {
 
     fn lane_timeline(id: &str, value: f32) -> jstream_protocol::TimelineInfo {
         jstream_protocol::TimelineInfo {
+            folder: None,
             timeline_id: jstream_protocol::TimelineId::new(id),
             name: String::new(),
             duration_ms: 1000,

@@ -86,8 +86,9 @@ protocol's types (`Overrides`).
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
   parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
   audio chain is always empty; a keyframe scene has none.
-- `Folder` and `Label`: a folder has an ID, a name and an optional parent folder, and a
-  label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
+- `Folder` and `Label`: a folder has an ID, a name, an optional parent folder and an
+  optional scene it belongs to (ADR-0222: it then holds that scene's keyframe scenes and
+  timelines), and a label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
   only. `Graph::with_sample_labels` gives a graph with no labels the prototype's four
   samples (Intro / outro, Gameplay, Overlay, Sponsor) without changing its `rev`; the
   engine calls it when it creates a collection file.
@@ -392,8 +393,9 @@ that does not want to change the graph it has.
   own that names a keyframe scene as the fix. `State::shown_items` and `State::items_through` draw an item with its
   overridden effects. An override names an item in the
   parent's tree (`State::tree_items`: its own, or a child of a group placed in it, at
-  any depth, protocol 0.55, #846), and any other is refused. `item.add`, `item.move` into a variant
-  and `scene.set_folder` of one are refused. After every edit of a batch,
+  any depth, protocol 0.55, #846), and any other is refused. `item.add` and `item.move` into a variant
+  are refused, and `scene.set_folder` of one names only one of its parent's folders
+  (ADR-0222). After every edit of a batch,
   `keyframe::drop_orphans` drops each override whose item is no longer in its
   variant's tree (`drop_unless`), reports it in `Applied::dropped_overrides`, and
   restores it in the inverse after the edit's own
@@ -411,7 +413,16 @@ that does not want to change the graph it has.
   ordered lists with unique, non-empty IDs and non-empty names. `folder.create` takes an
   optional `parent` that must exist, and `folder.set_parent` refuses a parent that would
   put the folder inside itself (`invalid_argument`, field `parent`, naming the chain).
-  `scene.set_folder` names an existing folder or none. `label.create` and
+  `scene.set_folder` names an existing folder or none. A folder that belongs to a scene
+  ([ADR-0222](../../docs/adr/0222-a-scenes-own-folders.md), `folder.create`'s `scene_id`)
+  names an existing scene that isn't a keyframe scene, and every owner is checked by
+  `check_folder_owner`: a folder's parent has its owner, a keyframe scene goes only in
+  its parent's folders and any other scene only in the scene list's, and a timeline's
+  `folder` (checked by `timeline.set`) is one of its scene's family's. A folder holding a
+  timeline is blocked like one holding a scene, and its plan moves the timeline up with
+  `timeline.set`. `scene.delete` takes the scene's folders with it
+  (`remove_scene_folders`), and its inverse puts them back in place before the
+  timelines. `label.create` and
   `label.update` check the colour (`#rrggbb`) and icon (1 to 64 bytes; ADR-0024 §4)
   with the protocol's `check_color` and `check_icon`, and `scene.set_meta` checks the
   same through `SceneMeta::problem`. `source.set_meta` replaces a source's labels (each

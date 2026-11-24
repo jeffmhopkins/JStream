@@ -106,11 +106,17 @@ const V20: &str = include_str!("fixtures/v20.json");
 /// falling stops (ADR-0184). It must keep loading as version 1 must.
 const V21: &str = include_str!("fixtures/v21.json");
 
-/// A collection file at schema version 22, the current one: version 21 with a show that
-/// plays scene `a` then `b` with a pausing bookmark and a cue playing the sequence, a
-/// hotkey bound to its `show.go_to`, and scene `b` marked as the show scene (ADR-0210).
-/// The same rule applies once version 23 exists.
+/// A collection file at schema version 22: version 21 with a show that plays scene `a`
+/// then `b` with a pausing bookmark and a cue playing the sequence, a hotkey bound to
+/// its `show.go_to`, and scene `b` marked as the show scene (ADR-0210). It must keep
+/// loading as version 1 must.
 const V22: &str = include_str!("fixtures/v22.json");
+
+/// A collection file at schema version 23, the current one: version 22 with scene
+/// `a`'s own folders (ADR-0222), `looks` and `intro` inside it, keyframe `k` filed in
+/// `intro` and the sequence `power_up` in `looks`, and a scene-list folder `shows` after
+/// them in folder order. The same rule applies once version 24 exists.
+const V23: &str = include_str!("fixtures/v23.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -418,6 +424,7 @@ fn v6_graph() -> Graph {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    folder: None,
                     lanes: Vec::new(),
                     starts: Vec::new(),
                     stops: Vec::new(),
@@ -926,6 +933,7 @@ fn v21_graph() -> Graph {
         &[Edit::TimelineSet {
             scene_id: SceneId::new("a"),
             timeline: TimelineInfo {
+                folder: None,
                 timeline_id: TimelineId::new("power_up"),
                 name: "Power up".into(),
                 duration_ms: 3000,
@@ -1034,9 +1042,96 @@ fn v22_graph() -> Graph {
     graph
 }
 
+/// Version 22 with scene `a`'s folders (see [`V23`]).
+fn v23_graph() -> Graph {
+    let mut graph = v22_graph();
+    let folder = |id: &str, scene: Option<&str>, parent: Option<&str>| Edit::FolderCreate {
+        folder_id: FolderId::new(id),
+        name: id.to_uppercase(),
+        parent: parent.map(FolderId::new),
+        scene_id: scene.map(SceneId::new),
+    };
+    let Some((_, timeline)) = graph
+        .state()
+        .timeline(&jstream_protocol::TimelineId::new("power_up"))
+    else {
+        panic!("v22 has the sequence");
+    };
+    let timeline = jstream_protocol::TimelineInfo {
+        folder: Some(FolderId::new("looks")),
+        ..timeline.clone()
+    };
+    let applied = graph.apply(
+        &[
+            folder("looks", Some("a"), None),
+            folder("intro", Some("a"), Some("looks")),
+            folder("shows", None, None),
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("k"),
+                folder_id: Some(FolderId::new("intro")),
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v22_graph().to_collection_json(), V22);
+    assert_eq!(v23_graph().to_collection_json(), V23);
+}
+
+#[test]
+fn the_v23_fixture_loads_exactly() {
+    let expected = v23_graph();
+    let loaded = load(V23);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(21)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 23 adds a scene's own folders (ADR-0222): a folder's `scene`, a keyframe
+/// scene's `folder` and a timeline's `folder` in a version 22 file are each refused,
+/// as version 22 refused them.
+#[test]
+fn a_version_22_scene_folder_is_refused() {
+    let current: Value = serde_json::from_str(V23).expect("the v23 fixture");
+    let older = |edit: &dyn Fn(&mut Value)| {
+        let mut file: Value = serde_json::from_str(V22).expect("the v22 fixture");
+        edit(&mut file);
+        load(&file.to_string())
+    };
+    let folders = older(&|file| file["folders"] = current["folders"].clone());
+    assert!(
+        matches!(folders, Err(LoadError::Migration { from: 22, .. })),
+        "{folders:?}"
+    );
+    let keyframe = older(&|file| {
+        for scene in file["scenes"].as_array_mut().into_iter().flatten() {
+            if scene["id"] == "k" {
+                scene["folder"] = json!("intro");
+            }
+        }
+    });
+    assert!(
+        matches!(keyframe, Err(LoadError::Migration { from: 22, .. })),
+        "{keyframe:?}"
+    );
+    let timeline = older(&|file| {
+        for scene in file["scenes"].as_array_mut().into_iter().flatten() {
+            for t in scene["timelines"].as_array_mut().into_iter().flatten() {
+                t["folder"] = json!("looks");
+            }
+        }
+    });
+    assert!(
+        matches!(timeline, Err(LoadError::Migration { from: 22, .. })),
+        "{timeline:?}"
+    );
 }
 
 #[test]
@@ -2893,11 +2988,13 @@ fn folders_labels_and_metadata_round_trip() {
     let applied = graph.apply(
         &[
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new("shows"),
                 name: "Shows".into(),
                 parent: None,
             },
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new("intros"),
                 name: "Intros".into(),
                 parent: Some(FolderId::new("shows")),

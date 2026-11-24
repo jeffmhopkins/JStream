@@ -224,7 +224,7 @@ pub fn scene_for<'a>(collection: &'a Collection, file: &DroppedFile) -> Option<&
 
 /// The "Show media" folder, if the collection has one: a top-level one first.
 pub fn show_media_folder(collection: &Collection) -> Option<&FolderInfo> {
-    let named = |f: &&FolderInfo| f.name == SHOW_MEDIA_FOLDER;
+    let named = |f: &&FolderInfo| f.name == SHOW_MEDIA_FOLDER && f.scene_id.is_none();
     collection
         .folders
         .iter()
@@ -336,6 +336,7 @@ pub fn scene_edits(
         Some(folder) => folder.folder_id.clone(),
         None => {
             edits.push(Edit::FolderCreate {
+                scene_id: None,
                 folder_id: ids.folder.clone(),
                 name: SHOW_MEDIA_FOLDER.to_owned(),
                 parent: None,

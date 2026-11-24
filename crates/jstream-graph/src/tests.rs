@@ -1717,6 +1717,7 @@ mod property {
                 },
             },
             54 => Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new(pool(rng, "f")),
                 name: pool(rng, "folder "),
                 parent: maybe_folder(rng),
@@ -4228,6 +4229,7 @@ mod cameras;
 mod channels;
 mod filters;
 mod keyframes;
+mod scene_folders;
 mod timelines;
 mod values;
 

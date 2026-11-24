@@ -2356,6 +2356,8 @@ impl Collection {
                     });
                 }
                 let scene = self.scenes.remove(index);
+                // Its folders go with it (ADR-0222), and come back before its timelines.
+                let folders = self.remove_scene_folders(&scene.id)?;
                 let mut inverse = vec![match &scene.variant_of {
                     Some(parent) => Edit::SceneCreateVariant {
                         scene_id: scene.id.clone(),
@@ -2442,6 +2444,7 @@ impl Collection {
                         follow: scene.camera_follow.clone(),
                     });
                 }
+                inverse.extend(folders);
                 inverse.extend(scene.timelines.iter().map(|timeline| Edit::TimelineSet {
                     scene_id: scene.id.clone(),
                     timeline: timeline.clone(),
@@ -3779,6 +3782,14 @@ impl Collection {
         if let Some((field, reason)) = timeline.problem() {
             return Err(invalid(at, &format!("timeline.{field}"), reason));
         }
+        // Its folder is one of its scene's family's (ADR-0222).
+        if let Some(folder) = &timeline.folder {
+            let family = self.scenes[index]
+                .variant_of
+                .clone()
+                .unwrap_or_else(|| scene_id.clone());
+            self.check_folder_owner(folder, Some(&family), at, "timeline.folder")?;
+        }
         let id = timeline.timeline_id.clone();
         let inverse = match self.timeline_at(&id) {
             Some((s, _)) if s != index => {
@@ -4467,6 +4478,7 @@ mod tests {
         let engine = MockEngine::new();
         let control = connected(&engine);
         let timeline = |id: &str, ms: u32| TimelineInfo {
+            folder: None,
             timeline_id: TimelineId::new(id),
             name: id.to_uppercase(),
             duration_ms: ms,
@@ -7282,6 +7294,7 @@ mod tests {
         }
         fn folder(id: &str, parent: Option<&str>) -> Edit {
             Edit::FolderCreate {
+                scene_id: None,
                 folder_id: FolderId::new(id),
                 name: id.to_uppercase(),
                 parent: parent.map(FolderId::new),

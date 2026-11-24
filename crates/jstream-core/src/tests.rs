@@ -1638,6 +1638,7 @@ fn organise_script() -> Vec<Call> {
     }
     fn folder(id: &str, parent: Option<&str>) -> Edit {
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new(id),
             name: format!("Folder {id}"),
             parent: parent.map(FolderId::new),

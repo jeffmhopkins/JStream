@@ -228,4 +228,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0218](0218-autofocus-meets-a-model-at-its-surface.md) | Autofocus meets a 3D model at the surface it draws | accepted | agent |  |
 | [ADR-0219](0219-a-big-items-effects-layer-is-placed-at-its-boxs-size.md) | A big item's effects layer is placed at its box's size | accepted | agent |  |
 | [ADR-0220](0220-every-midi-reader-goes-through-the-senders-switch.md) | Every MIDI reader goes through "Use this sender's MIDI" | accepted | agent |  |
+| [ADR-0222](0222-a-scenes-own-folders.md) | A scene's own folders | accepted | agent |  |
 <!-- @generated end adr-index -->

@@ -57,6 +57,7 @@ fn studio(control: &dyn Control) -> (Vec<TimelineId>, Vec<TimelineId>) {
 
 fn timeline(id: &str, duration_ms: u32) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         timeline_id: TimelineId::new(id),
         name: String::new(),
         duration_ms,

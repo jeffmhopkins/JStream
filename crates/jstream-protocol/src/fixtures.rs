@@ -451,14 +451,23 @@ pub(crate) fn edits() -> Vec<Edit> {
             mix_id: VideoMixId::new("mix_old"),
         },
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new("fld_shows"),
             name: "Shows".into(),
             parent: None,
         },
         Edit::FolderCreate {
+            scene_id: None,
             folder_id: FolderId::new("fld_intro"),
             name: "Intros".into(),
             parent: Some(FolderId::new("fld_shows")),
+        },
+        // A folder under one scene for its keyframes and sequences (ADR-0222).
+        Edit::FolderCreate {
+            scene_id: Some(SceneId::new("scn_main")),
+            folder_id: FolderId::new("fld_looks"),
+            name: "Looks".into(),
+            parent: None,
         },
         Edit::FolderRename {
             folder_id: FolderId::new("fld_intro"),
@@ -2505,6 +2514,7 @@ fn volley() -> TimelineInfo {
         curve,
     };
     TimelineInfo {
+        folder: None,
         lanes: vec![
             crate::TimelineLane {
                 target: crate::LaneTarget {
@@ -2647,6 +2657,7 @@ fn volley() -> TimelineInfo {
 /// A short timeline that toggles an item, repeating as `looping` says.
 fn pulse(looping: TimelineLoop) -> TimelineInfo {
     TimelineInfo {
+        folder: None,
         lanes: Vec::new(),
         starts: Vec::new(),
         stops: Vec::new(),
@@ -3662,14 +3673,22 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             video_mixes: mix_infos(),
             folders: vec![
                 FolderInfo {
+                    scene_id: None,
                     folder_id: FolderId::new("fld_shows"),
                     name: "Shows".into(),
                     parent: None,
                 },
                 FolderInfo {
+                    scene_id: None,
                     folder_id: FolderId::new("fld_intro"),
                     name: "Intros".into(),
                     parent: Some(FolderId::new("fld_shows")),
+                },
+                FolderInfo {
+                    scene_id: Some(SceneId::new("scn_main")),
+                    folder_id: FolderId::new("fld_looks"),
+                    name: "Looks".into(),
+                    parent: None,
                 },
             ],
             labels: vec![LabelInfo {
