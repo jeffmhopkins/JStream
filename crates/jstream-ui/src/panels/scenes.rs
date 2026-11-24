@@ -412,6 +412,31 @@ pub fn Scenes() -> impl IntoView {
     let folded = RwSignal::new(HashSet::<SceneId>::new());
 
     let menus = use_context::<Menus>();
+    // A scene dragged out of the list towards the Show panel's tracks.
+    let show_panel = use_context::<crate::panels::show::ShowPanel>();
+    let carry = move |event: &leptos::ev::PointerEvent, dropped: bool| {
+        let Some(panel) = show_panel else { return };
+        let Some(Node::Scene(scene)) = reorder.dragged.get_untracked().map(|k| Node::of(&k)) else {
+            if dropped {
+                panel.carry.set(None);
+            }
+            return;
+        };
+        let name = studio
+            .collection
+            .with_untracked(|c| {
+                c.as_ref()
+                    .and_then(|c| c.scene(&scene).map(|s| s.name.clone()))
+            })
+            .unwrap_or_default();
+        panel.carry.set(Some(crate::panels::show::Carry {
+            scene: scene.to_string(),
+            name,
+            x: f64::from(event.client_x()),
+            y: f64::from(event.client_y()),
+            dropped,
+        }));
+    };
     let dock = use_context::<DockState>();
     let scene_dialog = use_context::<SceneDialog>();
     let pasting = crate::clipboard::Pasting::from_page();
@@ -1632,9 +1657,20 @@ pub fn Scenes() -> impl IntoView {
             <ul
                 class="rows tree-rows"
                 class:reordering=move || reorder.dragged.with(Option::is_some)
-                on:pointermove=move |event| reorder.moved(&event)
-                on:pointerup=move |_| reorder.up(drop)
-                on:pointercancel=move |_| reorder.cancel()
+                on:pointermove=move |event| {
+                    reorder.moved(&event);
+                    carry(&event, false);
+                }
+                on:pointerup=move |event| {
+                    carry(&event, true);
+                    reorder.up(drop);
+                }
+                on:pointercancel=move |_| {
+                    if let Some(panel) = show_panel {
+                        panel.carry.set(None);
+                    }
+                    reorder.cancel();
+                }
             >
                 <For each=shown_rows key=|row| row.clone() children=row />
             </ul>

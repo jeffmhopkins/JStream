@@ -71,8 +71,9 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
   the JTunnel setting as it was at start with `setJtunnel`, which saves it, the PTZ
   controller setting with `setPtz`, the PTZ camera list with `setPtzCameras`,
-  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands, and
-  `setZoom`, which zooms the window for the UI scale.
+  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands,
+  `setZoom`, which zooms the window for the UI scale, and `drop_script`, the event that
+  tells the page about files dragged onto the window.
 - **The person's folders** (`folders.rs`, `screenshots.rs`;
   [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   the default project in `Documents\JStream`, which `host::startup_project` moves the
@@ -91,7 +92,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   panels), saving the
   network setting (`network.rs`), the JTunnel setting (`jtunnel.rs`), the PTZ
   controller setting (`ptz.rs`) and the PTZ camera list (`ptz_cameras.rs`), and saving, opening and showing a screenshot
-  (`screenshots.rs`).
+  (`screenshots.rs`); and the main window's drags of files from the desktop, passed on
+  to the page as `bootstrap::drop_script` events ([Design](#design)).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -580,6 +582,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `open` or `xdg-open` as one argument, and Show in folder runs Explorer's `/select`,
   `open -R`, or `xdg-open` on its folder. `setZoom(factor)` calls `set_zoom` and
   returns at once (see *UI scale*).
+- **Files dragged onto the window.** Tauri handles a drag of files from the desktop
+  natively, so the page gets no HTML drop with paths. `shell.rs` hears the main
+  window's drag events and runs `bootstrap::drop_script` in its webview for each step:
+  it dispatches `jstream-desktop-drop` on `window` with `{ kind, paths, x, y }`, `kind`
+  `over` (the drag entered or moved), `drop` or `leave`, `paths` the dragged files'
+  UTF-8 paths (Tauri names them as the drag enters and at the drop; the app keeps them
+  between), and `x`, `y` the pointer in the page's CSS pixels. Only WebView2 reports
+  physical pixels, so on Windows the position is divided by the window's scale factor;
+  WKWebView and WebKitGTK already report logical points. The detail is a JSON string
+  the page parses, so no file name can end the script. The app reads no dropped file
+  and grants no command for it: the page decides what to do with the paths, over the
+  WebSocket API as with a picked one (`jstream-ui`'s `host::on_file_drop`). A projector
+  window isn't told.
 - **UI scale** (`zoom.rs`). View › UI scale and Ctrl with `=`, `-` or `0` scale the UI
   from 50 % to 150 % (`jstream-ui`'s `ui_scale.rs`). In the app, the UI asks `set_zoom`
   to zoom the main window's webview, as a browser's own zoom does, so the device pixel

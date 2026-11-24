@@ -218,7 +218,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene goes on program and on preview when it is created, and a deleted program or
   preview scene gives way to the first scene left.
 - The **show scene** is an ordinary scene the engine marks as internal
-  (`State::show_scene`, saved in the collection file but not a revision): wherever `Program`
+  (`State::show_scene`, not a revision; the collection file keeps it in its `show_scene`
+  marker, ADR-0210): wherever `Program`
   is drawn (every output, recording and virtual camera, and the program monitor), it is
   drawn over program, with program, any transition included, as its bottom layer and
   its items above, so overlays are its nested-scene items. Scene lists (`scene.list`,
@@ -1802,7 +1803,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (ADR-0184) a timeline's `lanes`, `starts` and `stops` and `timeline.play`'s
   `delay_ms`, refused the same way. Version 22 (ADR-0210) adds `shows`, the
   `show_scene` marker and the `show.*` actions a binding may run, refused the same way;
-  a marker naming a scene the file doesn't hold is dropped on load. A chord or trigger
+  a marker naming a scene the file doesn't hold, or one something shows, is dropped on load. A chord or trigger
   with several actions (ADR-0208) is stored as one entry per action with no version
   bump: an older file loads as before, and an older engine refuses a newer file that
   repeats a chord with `already_exists`, as it does any collection it can't rebuild.

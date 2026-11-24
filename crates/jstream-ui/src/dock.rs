@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 pub const EDITING: &str = "Editing";
 /// The name of the layout for streaming.
 pub const LIVE: &str = "Live";
+/// The name of the layout for running a show: the Show panel along the bottom.
+pub const SHOW: &str = "Show";
 /// What a layout's name gets once it is changed.
 const MODIFIED: &str = " (modified)";
 
@@ -82,7 +84,8 @@ impl Zone {
             Zone::OuterLeft | Zone::OuterRight | Zone::Left => (180.0, 560.0),
             Zone::Right => (200.0, 560.0),
             Zone::Top => (90.0, 400.0),
-            Zone::Bottom => (90.0, 440.0),
+            // Tall enough for the Show panel's Run view and its tracks.
+            Zone::Bottom => (90.0, 720.0),
             Zone::CanvasTop | Zone::CanvasBottom => (80.0, 400.0),
         }
     }
@@ -188,11 +191,13 @@ pub enum PanelId {
     Mappings,
     /// Live control of the machine's PTZ cameras (ADR-0146, ADR-0209).
     Ptz,
+    /// A show: its timeline (Edit) or its show-time controls (Run).
+    Show,
 }
 
 impl PanelId {
     /// Every panel, in the View menu's order.
-    pub const ALL: [PanelId; 15] = [
+    pub const ALL: [PanelId; 16] = [
         PanelId::Scenes,
         PanelId::Objects,
         PanelId::Inspector,
@@ -208,6 +213,7 @@ impl PanelId {
         PanelId::Sequence,
         PanelId::Mappings,
         PanelId::Ptz,
+        PanelId::Show,
     ];
 
     /// The panel's title, on its tab and in the View menu.
@@ -228,6 +234,7 @@ impl PanelId {
             PanelId::Sequence => "Sequence",
             PanelId::Mappings => "Mappings",
             PanelId::Ptz => "PTZ cameras",
+            PanelId::Show => "Show",
         }
     }
 
@@ -249,6 +256,7 @@ impl PanelId {
             PanelId::Sequence => "sequence",
             PanelId::Mappings => "mappings",
             PanelId::Ptz => "ptz",
+            PanelId::Show => "show",
         }
     }
 
@@ -268,7 +276,8 @@ impl PanelId {
             | PanelId::Outputs
             | PanelId::Transitions
             | PanelId::Sequence
-            | PanelId::Mappings => Zone::Bottom,
+            | PanelId::Mappings
+            | PanelId::Show => Zone::Bottom,
         }
     }
 
@@ -378,6 +387,23 @@ pub fn live() -> Arrangement {
     )
 }
 
+/// The layout for running a show: Scenes on the left, the Inspector on the right, and
+/// the Show panel alone along the bottom, tall enough for its Run view and its tracks.
+pub fn show() -> Arrangement {
+    use PanelId::*;
+    let mut sizes = SIZES;
+    sizes[Zone::Left.index()] = 260.0;
+    sizes[Zone::Bottom.index()] = 560.0;
+    arrangement(
+        sizes,
+        &[
+            (Zone::Left, vec![(vec![Scenes], 1.0)]),
+            (Zone::Right, vec![(vec![Inspector], 1.0)]),
+            (Zone::Bottom, vec![(vec![Show], 1.0)]),
+        ],
+    )
+}
+
 /// A zone's groups in a built-in layout: each group's tabs, the first active, and its
 /// weight.
 type Groups = Vec<(Vec<PanelId>, f64)>;
@@ -408,7 +434,7 @@ pub struct Dock {
     pub arrangement: Arrangement,
     /// The layout's name, with " (modified)" once it was changed.
     pub current: String,
-    /// The saved layouts, Editing and Live first.
+    /// The saved layouts, Editing, Live and Show first.
     pub saved: Vec<Layout>,
     /// The next group ID.
     next_id: u32,
@@ -434,6 +460,10 @@ impl Dock {
                 Layout {
                     name: LIVE.into(),
                     arrangement: live(),
+                },
+                Layout {
+                    name: SHOW.into(),
+                    arrangement: show(),
                 },
             ],
             next_id: 100,
@@ -684,9 +714,13 @@ impl Dock {
         self.modified();
     }
 
-    /// Saves what is on screen as "My layout N" and makes it current.
+    /// Saves what is on screen as "My layout N", the first N no saved layout has, and
+    /// makes it current.
     pub fn save_as_new(&mut self) {
-        let name = format!("My layout {}", self.saved.len().saturating_sub(1));
+        let name = (1..)
+            .map(|n| format!("My layout {n}"))
+            .find(|name| !self.saved.iter().any(|l| &l.name == name))
+            .unwrap_or_default();
         let mut arrangement = self.arrangement.clone();
         for group in arrangement.zones.iter_mut().flatten() {
             group.id = 0;
@@ -755,6 +789,13 @@ impl Dock {
         }
         if saved.is_empty() {
             return None;
+        }
+        // A built-in layout newer than the stored dock joins its saved ones.
+        if !saved.iter().any(|l| l.name == SHOW) {
+            saved.push(Layout {
+                name: SHOW.into(),
+                arrangement: show(),
+            });
         }
         dock.saved = saved;
         dock.adopt(arrangement);
@@ -871,7 +912,7 @@ mod tests {
         assert_eq!(dock.size(Zone::Right), 340.0);
         assert_eq!(dock.size(Zone::Bottom), 190.0);
         let names: Vec<_> = dock.saved.iter().map(|l| l.name.as_str()).collect();
-        assert_eq!(names, ["Editing", "Live"]);
+        assert_eq!(names, ["Editing", "Live", "Show"]);
     }
 
     #[test]
@@ -1003,7 +1044,7 @@ mod tests {
         dock.resize_zone(Zone::Right, 340.0, 40.0, 0.0);
         assert_eq!(dock.size(Zone::Right), 300.0);
         dock.resize_zone(Zone::Bottom, 190.0, 0.0, -1000.0);
-        assert_eq!(dock.size(Zone::Bottom), 440.0);
+        assert_eq!(dock.size(Zone::Bottom), 720.0);
         dock.resize_zone(Zone::CanvasTop, 140.0, 0.0, -1000.0);
         assert_eq!(dock.size(Zone::CanvasTop), 80.0);
         assert_eq!(dock.current, "Editing");
@@ -1021,6 +1062,21 @@ mod tests {
         dock.resize_between(Zone::Left, 1, (1.0, 1.0), -10_000.0, 540.0);
         let least = 2.0 * 70.0 / 540.0;
         assert!((dock.groups(Zone::Left)[0].weight - least).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_dock_stored_before_the_show_layout_gains_it() {
+        let mut value = Dock::new().to_value();
+        if let Some(saved) = value["saved"].as_array_mut() {
+            saved.retain(|l| l["name"] != SHOW);
+        }
+        let dock = Dock::from_value(&value).expect("a dock");
+        let names: Vec<_> = dock.saved.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["Editing", "Live", "Show"]);
+        let mut dock = dock;
+        dock.apply(SHOW);
+        assert_eq!(dock.groups(Zone::Bottom)[0].tabs, [Show]);
+        assert_eq!(dock.size(Zone::Bottom), 560.0);
     }
 
     #[test]
@@ -1047,7 +1103,7 @@ mod tests {
         dock.reset();
         assert_eq!(dock.current, "Editing");
         assert_eq!(shape(&dock), shape(&Dock::new()));
-        assert_eq!(dock.saved.len(), 4);
+        assert_eq!(dock.saved.len(), 5);
     }
 
     #[test]

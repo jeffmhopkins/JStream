@@ -542,7 +542,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
   Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
-  menu's fourteen panels, adding Live chat, which says it waits on YouTube sign-in.
+  menu's sixteen panels, adding Live chat, which says it waits on YouTube sign-in.
+- **Show** (`show.spec.js`, the Show panel alone in a tall bottom dock): a new show from
+  the empty panel, named in place; Intro and Main dragged from the Scenes panel onto V1,
+  with the drop slot showing during the drag and a pausing bookmark at each end; a
+  bookmark (B), a loop drawn on the ruler (L) and a trim of Main's right end, each one
+  `show.set`, and Edit › Undo taking them back one at a time; the cut badge's transition
+  menu; an audio track and an audio clip from its menu, removed with Delete; a video
+  file dropped as a browser URI list, made into a source and scene in the same batch
+  as the show; the lock refusing Delete; a trim held mid-drag and let go with Escape,
+  sending nothing; and the picker's menu duplicating, renaming and deleting a show.
 - **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

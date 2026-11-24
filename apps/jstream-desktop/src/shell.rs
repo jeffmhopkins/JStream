@@ -17,12 +17,17 @@
 //!   ([`crate::network`]), and no other. The UI calls them through the bootstrap
 //!   global's `browse` and `allowNetwork`, and talks to the engine only over the
 //!   WebSocket API. The scheme's one other answer is the update check.
+//! - Files dragged from the desktop onto the main window are handled by Tauri, not the
+//!   page, so the page gets no HTML drop with paths. Each step of the drag (over, drop,
+//!   leave) is handed to the page instead as an event with the paths and the pointer's
+//!   position in CSS pixels ([`bootstrap::drop_script`]). The app reads no dropped file.
 //! - Closing the main window quits the app, closing any projector with it. When the app
 //!   exits, the host stops: the server closes its connections and the engine stops, each
 //!   step against a deadline and logged with how long it took (`Host::stop`).
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
+use crate::bootstrap::{self, DropKind};
 use crate::host::Host;
 use crate::links;
 use crate::ui::{self, Ui};
@@ -32,7 +37,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::http::{Response, StatusCode};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{AppHandle, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
+use tauri::{
+    AppHandle, DragDropEvent, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent, Wry,
+};
 
 /// The window's label.
 const MAIN: &str = "main";
@@ -159,6 +167,57 @@ fn open_projector(
     }
 }
 
+/// The dragged paths the page can hold: a path that isn't UTF-8 is left out, as a
+/// picked one is (`pick.rs`).
+fn utf8_paths(paths: Vec<PathBuf>) -> Vec<String> {
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            path.into_os_string()
+                .into_string()
+                .inspect_err(|_| tracing::warn!("a dragged path is not UTF-8, so it is left out"))
+                .ok()
+        })
+        .collect()
+}
+
+/// Tells the page in window `label` a step of a drag of files over it
+/// ([`bootstrap::drop_script`]). Tauri's native drag handling means the webview gets no
+/// HTML drop with paths, so this is how a panel learns of one. `dragged` keeps the
+/// paths from the drag's start, as Tauri names them only then and at the drop.
+fn forward_drag(app: &AppHandle<Wry>, label: &str, drag: DragDropEvent, dragged: &mut Vec<String>) {
+    let Some(window) = app.get_webview_window(label) else {
+        return;
+    };
+    // Only WebView2 reports physical pixels (`bootstrap::css_position`).
+    let scale = if cfg!(windows) {
+        window.scale_factor().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let (kind, position) = match drag {
+        DragDropEvent::Enter { paths, position } => {
+            *dragged = utf8_paths(paths);
+            (DropKind::Over, Some(position))
+        }
+        DragDropEvent::Over { position } => (DropKind::Over, Some(position)),
+        DragDropEvent::Drop { paths, position } => {
+            *dragged = utf8_paths(paths);
+            (DropKind::Drop, Some(position))
+        }
+        DragDropEvent::Leave => (DropKind::Leave, None),
+        _ => return,
+    };
+    let (x, y) = position.map_or((0.0, 0.0), |p| bootstrap::css_position(p.x, p.y, scale));
+    let script = bootstrap::drop_script(kind, dragged, x, y);
+    if kind != DropKind::Over {
+        dragged.clear();
+    }
+    if let Err(error) = window.eval(script) {
+        tracing::warn!(%error, "could not tell the page about a file drag");
+    }
+}
+
 /// A scheme reply as the response the webview takes. A builder failure is an empty 500.
 fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
     let mut response =
@@ -264,7 +323,14 @@ pub fn run(
         })?;
     let mut host = host;
     let mut ptz_controllers = ptz_controllers;
+    // The paths of the drag over the main window: Tauri names them only when it enters.
+    let mut dragged: Vec<String> = Vec::new();
     app.run(move |app, event| match event {
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::DragDrop(drag),
+            ..
+        } if label == MAIN => forward_drag(app, &label, drag, &mut dragged),
         RunEvent::WindowEvent {
             label,
             event: WindowEvent::CloseRequested { .. },

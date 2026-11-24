@@ -229,12 +229,6 @@ pub struct State {
     pub(crate) channels: BTreeMap<String, jstream_protocol::ChannelInfo>,
     /// The shows (ADR-0210), by ID.
     pub(crate) shows: BTreeMap<jstream_protocol::ShowId, jstream_protocol::ShowInfo>,
-    /// The internal show scene (ADR-0210 decision 12): an ordinary scene in `scenes`
-    /// that the engine made to draw overlays over program, with program as its bottom
-    /// layer and its items above it. Nothing may place it, show it on program or point a
-    /// video mix at it, so no scene can contain it. Saved in the file, set only by the
-    /// engine through [`Graph::set_show_scene`](crate::Graph::set_show_scene).
-    pub(crate) show_scene: Option<SceneId>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -244,6 +238,13 @@ pub struct State {
     /// [`Graph::apply`](crate::Graph::apply) keeps it, nothing saves it, and it is not a
     /// revision. Empty until a switch sets it.
     pub(crate) placed_keyframes: BTreeMap<SceneId, SceneId>,
+    /// The internal show scene (ADR-0210 decision 12), if the engine made one: the scene
+    /// drawn over program for every output, with program as its bottom layer and its
+    /// items above it. It is an ordinary scene of `scenes`, but nothing may place it,
+    /// show it on program or point a video mix at it, so no scene can contain it. Saved
+    /// in the collection file, set only by the engine through
+    /// [`Graph::set_show_scene`](crate::Graph::set_show_scene), and not a revision.
+    pub(crate) show_scene: Option<SceneId>,
 }
 
 impl Default for State {
@@ -270,10 +271,10 @@ impl Default for State {
             value_bindings: BTreeMap::new(),
             channels: BTreeMap::new(),
             shows: BTreeMap::new(),
-            show_scene: None,
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),
+            show_scene: None,
         }
     }
 }
@@ -311,6 +312,11 @@ impl State {
     /// (ADR-0080 §1): a video chain over each mix an output draws, and an audio chain.
     pub fn master(&self) -> &Chains {
         &self.master
+    }
+
+    /// The internal show scene, drawn over program for every output, if there is one.
+    pub fn show_scene(&self) -> Option<&SceneId> {
+        self.show_scene.as_ref()
     }
 
     /// Every scene, in display order.

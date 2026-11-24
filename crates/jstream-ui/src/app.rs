@@ -311,6 +311,12 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(crate::clipboard::TransformClip(RwSignal::new(None)));
     provide_context(AddSourceDialog::new());
     provide_context(crate::project::OpenProject::new());
+    // The Show panel's state lives with the shell, so the Inspector reads what it
+    // selected and closing the panel keeps its view.
+    provide_context(crate::panels::show::ShowPanel::connected(
+        studio,
+        expect_context::<SessionContext>(),
+    ));
     provide_context(PropertiesDialog::new());
     provide_context(SceneDialog::new());
     provide_context(FilterDialogs::new());

@@ -2272,7 +2272,7 @@ pub enum Action {
         at_ms: u32,
     },
     /// Arms a spot in the running show for the next `show.continue` (ADR-0210 decision
-    /// 14, since 0.177), which a click on the ruler does while a show runs, so a click
+    /// 14, since 0.179), which a click on the ruler does while a show runs, so a click
     /// never jumps program on air. `studio.get` reports it in `show.armed_ms`; arming
     /// again moves it, and omitting `at_ms` disarms it. With no show running it succeeds
     /// and does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.

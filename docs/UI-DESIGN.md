@@ -48,6 +48,15 @@ A source's kind has a mark too, a dot on its chip in the Mappings panel: MIDI
 `--code-keyword`, JTunnel and other live data `--code-type`, a channel `--accent` and a key
 `--warn`, only to tell the kinds apart.
 
+The Show panel's timeline is the other: its `--show-*` tokens tell its elements apart,
+each with one job. Bookmarks and Continue are yellow (`--show-bookmark`), loops and
+keyframes violet (`--show-loop`, `--show-keyframe`), the armed spot light blue
+(`--show-armed`) and the play head white (`--show-head`); program clips take five dark
+colours in turn (`--show-clip-c0` to `c4`, and the Run view's strip `--show-seg-0` to
+`4`), and overlay, sequence and audio clips have their own (`--show-overlay`,
+`--show-seq`, `--show-audio`). A pausing bookmark's line is dashed and one that plays
+through is solid, so the difference isn't colour alone.
+
 <a id="buttons"></a>
 ## Buttons
 <!-- @section

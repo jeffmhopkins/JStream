@@ -1578,7 +1578,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -11651,7 +11651,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -24582,7 +24582,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -37108,7 +37108,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -50490,7 +50490,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -59249,7 +59249,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -61395,7 +61395,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+                "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
                 "properties": {
                   "at_ms": {
                     "description": "Where, in milliseconds of show time. Omitted to disarm.",

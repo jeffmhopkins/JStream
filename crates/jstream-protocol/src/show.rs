@@ -879,8 +879,8 @@ pub struct RunningShow {
     pub at_ms: u32,
     /// Whether it plays, waits at a pausing bookmark, or was taken off script.
     pub state: ShowState,
-    /// The pausing bookmark it waits at. Omitted unless `state` is `paused`, and when
-    /// `show.pause` paused it between bookmarks.
+    /// The pausing bookmark it waits at. Omitted unless `state` is `paused` at a
+    /// bookmark, so also omitted while `show.pause` holds it between bookmarks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bookmark_id: Option<String>,
     /// How long it has waited at `bookmark_id`, in milliseconds. Omitted unless `state`

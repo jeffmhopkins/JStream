@@ -123,7 +123,7 @@ no new way of doing anything, only a saved order of the actions that exist.
     nested-scene items over it, and outputs draw it in place of program. It is an ordinary
     scene of the collection, made by the engine, never listed, selected, edited, put on
     program or used as a source. The collection file saves which scene it is in a top-level
-    `show_scene` marker; a marker naming a scene the file doesn't hold is dropped on load.
+    `show_scene` marker; a marker naming a scene the file doesn't hold, or one something shows, is dropped on load.
     Overlays also work with no show running: `overlay.show`, `overlay.hide` and
     `overlay.toggle` put a scene over program on the show scene's top layer, or take it
     down, through its fade, from a key, a pad or MCP, since a client can't name the show

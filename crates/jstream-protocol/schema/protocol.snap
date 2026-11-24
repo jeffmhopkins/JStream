@@ -1478,7 +1478,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.177), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
+          "description": "Arms a spot in the running show for the next `show.continue` (ADR-0210 decision\n14, since 0.179), which a click on the ruler does while a show runs, so a click\nnever jumps program on air. `studio.get` reports it in `show.armed_ms`; arming\nagain moves it, and omitting `at_ms` disarms it. With no show running it succeeds\nand does nothing. Fails with `invalid_argument` at `at_ms` past 24 hours.",
           "properties": {
             "at_ms": {
               "description": "Where, in milliseconds of show time. Omitted to disarm.",
@@ -7867,7 +7867,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "show",
-          "description": "A show (0.177, ADR-0210). Only an error answering a `show.*` command names it, so\na client that sends none never reads it.",
+          "description": "A show (0.179, ADR-0210). Only an error answering a `show.*` command names it, so\na client that sends none never reads it.",
           "type": "string"
         }
       ]
@@ -16786,7 +16786,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         },
         "bookmark_id": {
-          "description": "The pausing bookmark it waits at. Omitted unless `state` is `paused`, and when\n`show.pause` paused it between bookmarks.",
+          "description": "The pausing bookmark it waits at. Omitted unless `state` is `paused` at a\nbookmark, so also omitted while `show.pause` holds it between bookmarks.",
           "type": [
             "string",
             "null"

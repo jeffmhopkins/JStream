@@ -53,8 +53,8 @@ protocol's types (`Overrides`).
   carries audio. `State::show_scene` names the internal show scene, an ordinary scene of
   `scenes` the engine draws over program (ARCH › Data model): `Graph::set_show_scene`
   sets it, refusing a scene that doesn't exist or that a `scene` source, a settings
-  reference or a video mix already shows; it is not a revision, a batch keeps it, and a
-  batch that deletes its scene clears it. While it is set, `source.create` of a `scene`
+  reference or a video mix already shows; it is not a revision, a batch keeps it, a
+  batch that deletes its scene clears it, and the collection file saves it (see Shows). While it is set, `source.create` of a `scene`
   source, a settings value referencing it and a video mix showing it are
   `invalid_argument` (`not_the_show_scene`), and `scene.list` and `state.get` leave it out.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
@@ -561,7 +561,7 @@ that does not want to change the graph it has.
   read them; the collection file saves them in `shows` (schema version 22) and loads them
   after the channels, before the replayed bindings. The file's `show_scene` marks the
   engine's internal show scene (`State::show_scene`, set by `Graph::set_show_scene`), and
-  is dropped on load when it names no scene.
+  is dropped on load when it names no scene, or one `set_show_scene` refuses (one something shows).
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its

@@ -67,6 +67,8 @@ pub struct Collection {
     /// The channels, ordered by ID (ADR-0183): named live values that controls set and
     /// settings follow.
     pub channels: Vec<jstream_control::protocol::ChannelInfo>,
+    /// The shows, ordered by ID (ADR-0210): what the Show panel lists and edits.
+    pub shows: Vec<jstream_control::protocol::ShowInfo>,
 }
 
 impl Collection {
@@ -90,6 +92,7 @@ impl Collection {
                 transitions,
                 value_bindings,
                 channels,
+                shows,
                 ..
             } => {
                 let mut scenes = scenes;
@@ -135,6 +138,7 @@ impl Collection {
                     transitions: *transitions,
                     value_bindings: *value_bindings,
                     channels: *channels,
+                    shows: *shows,
                 })
             }
             _ => None,
@@ -841,6 +845,10 @@ pub struct Studio {
     /// it ([`Studio::act`]): where it was, and when (`performance.now()`, in ms), so a
     /// play head can run on between reports.
     pub playing: RwSignal<HashMap<jstream_control::protocol::TimelineId, Playing>>,
+    /// The running show as the engine last reported it (ADR-0210), and when the UI heard
+    /// it (`performance.now()`, in ms), so the Show panel's play head can run on between
+    /// reports. `None` while no show runs.
+    pub show: RwSignal<Option<(jstream_control::protocol::RunningShow, f64)>>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
@@ -931,6 +939,7 @@ impl Studio {
             channel: RwSignal::new(None),
             sequence: RwSignal::new(None),
             playing: RwSignal::new(HashMap::new()),
+            show: RwSignal::new(None),
             refresh: StoredValue::new((false, false)),
             studio_seq: StoredValue::new(0),
             timeline_seq: StoredValue::new(0),
@@ -984,11 +993,13 @@ impl Studio {
             program_scene,
             preview_scene,
             timelines,
+            show,
             ..
         }) = query(session, Query::StudioGet).await
         {
             if self.timeline_seq.get_value() == timelines_asked {
                 let at = now_ms();
+            self.show.set(show.map(|s| (*s, at)));
                 self.playing.set(
                     timelines
                         .into_iter()
@@ -1176,6 +1187,33 @@ impl Studio {
                     } else {
                         map.remove(timeline_id);
                     }
+                });
+            }
+            // A show started, paused, continued, jumped, looped or stopped (ADR-0210): the
+            // play head moves to where it is now at once, and `studio.get` then reports the
+            // rest (its state, the bookmark it waits at, the loop and the armed spot).
+            Event::ShowChanged {
+                show_id,
+                running,
+                at_ms,
+                ..
+            } => {
+                let at = now_ms();
+                if *running {
+                    self.show.update(|show| match show {
+                        Some((s, heard)) if &s.show_id == show_id => {
+                            s.at_ms = *at_ms;
+                            *heard = at;
+                        }
+                        _ => {}
+                    });
+                } else {
+                    self.show.set(None);
+                }
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move {
+                    studio.read_studio(&session).await;
                 });
             }
             Event::KindsChanged { .. } => {

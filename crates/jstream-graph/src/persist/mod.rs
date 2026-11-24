@@ -734,7 +734,7 @@ struct File {
     shows: Vec<jstream_protocol::ShowInfo>,
     /// The internal show scene the engine draws overlays in (ADR-0210 decision 12), one
     /// of `scenes`; omitted while the engine has made none. A marker naming a scene the
-    /// file doesn't hold is dropped on load.
+    /// file doesn't hold, or one something shows, is dropped on load.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     show_scene: Option<SceneId>,
     /// Transition presets and the default (ADR-0029); omitted while they are the one
@@ -1444,9 +1444,9 @@ impl Graph {
                 error: Box::new(error),
             })?;
         }
-        graph.state.show_scene = file
-            .show_scene
-            .filter(|id| graph.state.scenes.iter().any(|scene| &scene.id == id));
+        // A marker naming no scene, or a scene something shows, is dropped (ADR-0210):
+        // `set_show_scene` refuses both and leaves none.
+        graph.set_show_scene(file.show_scene);
         graph.rev = file.rev;
         Ok(graph)
     }

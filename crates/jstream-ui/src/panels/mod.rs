@@ -2,7 +2,7 @@
 //! pages (properties, then outputs) on the right, and the audio mixer (`mixer.rs`) along
 //! the bottom. The scene list and the sources list share their search, filter, star and
 //! drag reordering (`tree.rs`). The Filters panel shows the selected source's filter chains
-//! (`filters.rs`). The Agent activity panel lists what agents did (`agent.rs`), and the Stream stats panel one output's live stats (`stats.rs`). The Add source, Properties and Add filter dialogs and the Filters window open
+//! (`filters.rs`). The Agent activity panel lists what agents did (`agent.rs`), and the Stream stats panel one output's live stats (`stats.rs`). The Show panel runs and edits a show (`show/`). The Add source, Properties and Add filter dialogs and the Filters window open
 //! over them. They read the
 //! shared state from [`Studio`](crate::store::Studio) context and call the engine through the open session from
 //! [`SessionContext`](crate::app::SessionContext); the mixer reads its own state.
@@ -43,6 +43,7 @@ pub mod ptz;
 pub mod scene_properties;
 pub(crate) mod scenes;
 pub mod sequence;
+pub mod show;
 pub mod source_properties;
 mod sources;
 pub mod stats;
