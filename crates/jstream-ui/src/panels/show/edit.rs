@@ -491,12 +491,15 @@ pub fn EditView() -> impl IntoView {
     let continue_ = move |_| send(Command::Continue);
     let next = move || {
         let head = panel.run.with(|r| r.at_ms);
-        let at_too = !running.get() || paused();
-        // Stopped, what Play brings in from where it will start.
+        let cursor = panel.cursor.get();
+        // Stopped, what Play brings in from where it will start: what is at 0 too while no
+        // spot is chosen. Once the head sits somewhere, Next is what starts after it, so
+        // each click skips on to the next start rather than back onto the one it is on.
+        let at_too = !running.get() && cursor.is_none();
         let from = if running.get() {
             head
         } else {
-            panel.cursor.get().unwrap_or(0)
+            cursor.unwrap_or(0)
         };
         let (at, names) = show.with(|s| {
             s.as_ref()
@@ -517,7 +520,11 @@ pub fn EditView() -> impl IntoView {
             .collect_view();
         Some(view! {
             <button type="button" class="show-next"
-                title=format!("Skip ahead to {}: the play head jumps there", clock(at))
+                title=if running.get_untracked() {
+                    format!("Skip ahead to {}: the play head jumps there", clock(at))
+                } else {
+                    format!("Skip ahead to {}: Play starts there", clock(at))
+                }
                 on:click=move |_| panel.move_head(at)>
                 "Next: "{names}
             </button>

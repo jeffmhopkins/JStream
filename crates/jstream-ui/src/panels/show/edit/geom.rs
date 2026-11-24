@@ -554,6 +554,10 @@ mod tests {
         assert_eq!(next_up(&show, 0, true)[0], "scene Starting soon");
         assert!(next_up(&show, 660_000, false).is_empty());
         assert_eq!(next_at(&show, 0, true), Some(0));
+        // The head on a start: Next is what starts after it, so a skip moves on.
+        let on = next_at(&show, 330_000, true).unwrap_or_default();
+        assert_eq!(on, 330_000);
+        assert!(next_at(&show, on, false).is_some_and(|after| after > on));
         assert_eq!(next_at(&show, 660_000, false), None);
     }
 

@@ -119,6 +119,9 @@ test('a show is built on the timeline, one undo step per gesture', async ({ page
   await expect(next).toHaveText('Next: scene Main');
   await next.click();
   await expect(show.locator('.show-head em')).toHaveText('0:30 · Play starts here');
+  // On Main's start, Next is what starts after it: nothing does, so it goes away rather
+  // than pointing back at Main.
+  await expect(next).toHaveCount(0);
   expect(sets()).toBe(afterDrops);
 
   // The Bookmark tool (B): a click in Intro's middle adds a pausing bookmark there.
