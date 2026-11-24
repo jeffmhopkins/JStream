@@ -1948,6 +1948,15 @@ pub(crate) fn actions() -> Vec<Action> {
             source_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
+        Action::PreviewShow {
+            channel: 1,
+            scene_id: Some(SceneId::new("scn_2")),
+        },
+        Action::PreviewShow {
+            channel: 1,
+            scene_id: None,
+        },
+        Action::PreviewRequestKeyframe { channel: 1 },
         Action::PreviewReport {
             view: "projector:program".into(),
             counts: crate::ViewCounts {

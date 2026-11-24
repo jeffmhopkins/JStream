@@ -14,4 +14,4 @@ mod retire;
 #[cfg(target_os = "macos")]
 pub use metal::MetalGpu;
 #[cfg(target_os = "macos")]
-pub(crate) use metal::SurfaceGpu;
+pub(crate) use metal::{EncodeInput, SurfaceGpu};

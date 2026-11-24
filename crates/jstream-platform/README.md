@@ -340,10 +340,13 @@ value. A device that can't export them has none. On one whose render node no VA-
 encoder runs on, `Codecs::on_context` gives no GPU encoder, and the engine encodes CPU
 frames ([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 On macOS, `MetalGpu` opens the device on Metal, and ScreenCaptureKit capture
-(`ScreenCaptureKitCapture::on_context`) wraps each frame's own IOSurface as a texture,
-with no copy; its `FrameSync` signals the context's shared event after render's read,
-and the frame keeps its pixel buffer until the event gets there. It has no encode
-targets yet, so the encoders take CPU frames
+(`ScreenCaptureKitCapture::on_context`) and the AVFoundation webcams
+(`AvFoundationVideoDevices::on_context`, which ask for BGRA) wrap each frame's own
+IOSurface as a texture, with no copy; its `FrameSync` signals the context's shared event after render's read,
+and the frame keeps its pixel buffer until the event gets there. Its encode targets are
+planar frames (`GpuFrame::planar`) over NV12 IOSurfaces, whose write signals the same
+event; the VideoToolbox encoder it reached through `Codecs::on_context` waits for that
+value on the CPU and encodes the pixel buffer itself
 ([jstream-platform-macos](../jstream-platform-macos/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
