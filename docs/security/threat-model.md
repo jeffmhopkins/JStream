@@ -260,7 +260,6 @@ covers = [
   "crates/jstream-server/src/admitted.rs",
   "crates/jstream-server/src/pair.rs",
   "crates/jstream-server/src/pair_page.rs",
-  "crates/jstream-server/src/asks.rs",
   "crates/jstream-server/src/gate.rs",
   "crates/jstream-server/src/announce.rs",
 ]

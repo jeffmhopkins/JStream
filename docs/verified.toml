@@ -9143,9 +9143,6 @@ stamp = { hash = "b3:05c720d239e1c60c", by = "agent:claude", note = "new Accepte
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/announce.rs"]
 stamp = { hash = "b3:badf58c8282ce911", by = "agent:claude", note = "Re-read against the gate and admitted changes: device tokens are accepted while the network listener is open or pairing is on, still only on loopback or TLS; the code's attempts and the mDNS paragraph hold. | kept from the merged side: the ADR-0233 paragraph: what is announced, the exposure, local-network-only and throttled answers, bounded parsing, a spoofed answer meets the fingerprint check (re-stamped after merging the train, whose changes don't touch this section's inputs)" }
 
-["THREAT-MODEL#pairing"."file:crates/jstream-server/src/asks.rs"]
-stamp = { hash = "b3:e1cb46aeefcbc7bb", by = "agent:claude", note = "new Accepted paragraph for ADR-0235: who can ask, limits (4, one per address, 2 min), TOFU, name as data, logging; asks.rs covered" }
-
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:09820a94bf06514c", by = "agent:claude", note = "new Accepted paragraph for ADR-0235: who can ask, limits (4, one per address, 2 min), TOFU, name as data, logging; asks.rs covered" }
 
