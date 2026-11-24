@@ -1920,7 +1920,8 @@ held at its first frame and the cut to it starts nothing; it clears when the sho
 stops. `show.continue` is ignored while a scene
 switch's transition plays. A `scene.switch` that the show didn't make takes the
 running show off script. `show.stop`, deleting the show and opening a collection stop
-it. A show that starts on the scene already on program restarts every `timer` source
+it, taking its overlays down and stopping its sequences (a deleted show by the plan it
+ran, `Run::plan`). A show that starts on the scene already on program restarts every `timer` source
 that scene draws (`source.restart`), as the cut to it would have.
 `studio.get`'s `show` reports it, and `show.changed` says what it did. `show.play` with
 `rehearse` runs the show on preview instead (ADR-0210 decision 13, `rehearse` in the
@@ -1952,7 +1953,7 @@ off script, stopping, deleting, refused calls, a sequence clip's cue firing with
 `show.pause` holding show time until `show.continue` or `show.play` plays on,
 keyframe markers moving program to a keyframe scene and back, an edit of the running
 show cutting program to the clip now under the play head, an overlay clip up for its
-span and taken down when an edit removes it, the overlay actions with no show, the
+span and taken down when an edit removes it or the show is deleted, the overlay actions with no show, the
 show scene refusing a delete and being heard, the next program clip named upcoming (the
 loop's first at its last clip), and
 a rehearsal on preview leaving program, its cues and off script alone.
